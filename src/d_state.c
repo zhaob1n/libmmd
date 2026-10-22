@@ -3,6 +3,8 @@
  * Layout reuses flow_layout via a pre-sized Graph (dgraph.h). */
 #include <stdio.h>
 
+#include <math.h>
+
 #include "dgraph.h"
 #include "diagrams.h"
 #include "text.h"
@@ -328,6 +330,8 @@ constexpr double C_PAD = 16;   /* composite inner padding */
 constexpr double C_TITLE = 26; /* composite title bar */
 constexpr double R_PAD = 10;   /* region padding */
 
+constexpr double NOTE_GAP = 30;
+
 typedef struct Scope {
     Graph lg;
     int32_t *elem;      /* local node -> element (node v >= 0, cluster s -> -(s+2)) */
@@ -361,6 +365,8 @@ typedef struct Ctx {
     double *ax, *ay;   /* absolute centre per global node */
     double *cx, *cy, *cw, *ch; /* absolute box per cluster */
     double *relx;      /* region x offset inside its composite */
+    double *npad, *nph; /* per global node: horizontal note reservation each side, note height */
+    double *cpad, *cph; /* same per cluster */
     double fs;
 } Ctx;
 
@@ -407,14 +413,16 @@ static cmm_status layout_scope(Ctx *c, int32_t cl) {
         } while (0)
     for (size_t v = 0; v < g->nn; v++)
         if (g->nparent[v] == cl && p->ccl.v[v] == NONE)
-            ADD_ELEM((int32_t)v, g->nid[v], g->nw[v], g->nh[v], g->nshape[v]);
+            ADD_ELEM((int32_t)v, g->nid[v], g->nw[v] + 2 * c->npad[v], g->nh[v] > c->nph[v] ? g->nh[v] : c->nph[v],
+                     g->nshape[v]);
     for (size_t r = 0; r < g->ns; r++) {
         if (g->sparent[r] != cl || g->sclass[r].n) continue;
         const Scope *rs = &c->sc[sc_ix((int32_t)r)];
         double w = rs->w + 2 * C_PAD, h = rs->h + 2 * C_PAD + C_TITLE, tw = text_width(g->stitle[r], c->fs) + 30;
         if (w < tw) w = tw;
         if (w < 60) w = 60;
-        ADD_ELEM(el_cl((int32_t)r), g->sid[r], w, h, SH_RECT);
+        c->cw[r] = w, c->ch[r] = h; /* true size; the layout node may be widened for notes */
+        ADD_ELEM(el_cl((int32_t)r), g->sid[r], w + 2 * c->cpad[r], h > c->cph[r] ? h : c->cph[r], SH_RECT);
     }
     #undef ADD_ELEM
     for (size_t e = 0; e < g->ne; e++) {
@@ -428,6 +436,23 @@ static cmm_status layout_scope(Ctx *c, int32_t cl) {
     if (!lg->nn) { s->w = s->h = 0; s->bx0 = s->by0 = 0; return CMM_OK; }
     cmm_status st = flow_layout(lg);
     if (st) return st;
+    /* re-clip edge ends at the true box of elements widened to reserve note space */
+    for (size_t e = 0; e < lg->ne; e++) {
+        uint32_t np = lg->eptn[e];
+        if (np < 2 || lg->efrom[e] == lg->eto[e]) continue;
+        double *P = lg->pts.v + lg->eptoff[e];
+        for (unsigned end = 0; end < 2; end++) {
+            int32_t lv = end ? lg->eto[e] : lg->efrom[e], el = s->elem[lv];
+            double pad = el >= 0 ? c->npad[el] : c->cpad[-el - 2];
+            if (pad <= 0) continue;
+            double hw = (lg->nw[lv] - 2 * pad) / 2, hh = (el >= 0 ? g->nh[el] : c->ch[-el - 2]) / 2;
+            double *E0 = end ? P + 2 * (np - 1) : P, *Q = end ? P + 2 * (np - 2) : P + 2;
+            double cx = lg->nx[lv], cy = lg->ny[lv], dx = Q[0] - cx, dy = Q[1] - cy;
+            double tx = fabs(dx) > 1e-9 ? hw / fabs(dx) : 1e300, ty = fabs(dy) > 1e-9 ? hh / fabs(dy) : 1e300;
+            double t = tx < ty ? tx : ty;
+            if (t < 1) E0[0] = cx + dx * t, E0[1] = cy + dy * t;
+        }
+    }
     BBox bb = dg_bbox(lg);
     s->bx0 = bb.x0, s->by0 = bb.y0, s->w = bb.x1 - bb.x0, s->h = bb.y1 - bb.y0;
     return CMM_OK;
@@ -460,7 +485,9 @@ static void place(Ctx *c, int32_t cl, double ox, double oy, unsigned depth) {
         double x = lg->nx[lv], y = lg->ny[lv], w = lg->nw[lv], h = lg->nh[lv];
         if (e >= 0) { c->ax[e] = x, c->ay[e] = y; continue; }
         int32_t r = -e - 2;
-        c->cx[r] = x - w / 2, c->cy[r] = y - h / 2, c->cw[r] = w, c->ch[r] = h;
+        (void)w;
+        h = c->ch[r];
+        c->cx[r] = x - c->cw[r] / 2, c->cy[r] = y - h / 2;
         const Scope *rs = &c->sc[sc_ix(r)];
         double ix = x - rs->w / 2, iy = y - h / 2 + C_TITLE + C_PAD; /* centre content horizontally */
         place(c, r, ix - rs->bx0, iy - rs->by0, depth + 1);
@@ -542,6 +569,24 @@ DIAG_FN(state_render) {
         }
         c.eloc[e] = (EdgeLoc){.scope = scope, .ra = pa[k], .rb = pb[k]};
     }
+    c.npad = ANEW(a, double, N); c.nph = ANEW(a, double, N);
+    c.cpad = ANEW(a, double, S + 1); c.cph = ANEW(a, double, S + 1);
+    double *nx = ANEW(a, double, p.notes.n + 1), *ny = ANEW(a, double, p.notes.n + 1),
+           *nw = ANEW(a, double, p.notes.n + 1), *nh = ANEW(a, double, p.notes.n + 1);
+    if (!c.npad || !c.nph || !c.cpad || !c.cph || !nx || !ny || !nw || !nh) return CMM_ERR_NOMEM;
+    for (size_t v = 0; v < N; v++) c.npad[v] = c.nph[v] = 0;
+    for (size_t r = 0; r <= S; r++) c.cpad[r] = c.cph[r] = 0;
+    for (size_t i = 0; i < p.notes.n; i++) { /* reserve note space beside its state in the layout */
+        const Note *no = &p.notes.v[i];
+        double tw;
+        unsigned ln;
+        label_measure(no->text, fs, &tw, &ln);
+        nw[i] = tw + 20, nh[i] = (ln ? ln : 1) * lh + 12;
+        int32_t v = no->v, r = p.ccl.v[v];
+        double *pad = r != NONE ? &c.cpad[r] : &c.npad[v], *ph = r != NONE ? &c.cph[r] : &c.nph[v];
+        if (nw[i] + NOTE_GAP > *pad) *pad = nw[i] + NOTE_GAP;
+        if (nh[i] > *ph) *ph = nh[i];
+    }
     int32_t maxd = 0;
     for (size_t r = 0; r < S; r++) {
         int32_t d = 1;
@@ -558,19 +603,12 @@ DIAG_FN(state_render) {
     BBox bb = BB_EMPTY;
     for (size_t r = 0; r <= S; r++) if (c.sc[r].lg.nn) { BBox b2 = dg_bbox(&c.sc[r].lg); bb_add(&bb, b2.x0, b2.y0, b2.x1, b2.y1); }
     for (size_t r = 0; r < S; r++) if (c.cw[r] > 0) bb_add(&bb, c.cx[r], c.cy[r], c.cx[r] + c.cw[r], c.cy[r] + c.ch[r]);
-    double *nx = ANEW(a, double, p.notes.n + 1), *ny = ANEW(a, double, p.notes.n + 1),
-           *nw = ANEW(a, double, p.notes.n + 1), *nh = ANEW(a, double, p.notes.n + 1);
-    if (!nx || !ny || !nw || !nh) return CMM_ERR_NOMEM;
     for (size_t i = 0; i < p.notes.n; i++) {
         const Note *no = &p.notes.v[i];
-        double tw;
-        unsigned ln;
-        label_measure(no->text, fs, &tw, &ln);
-        nw[i] = tw + 20, nh[i] = (ln ? ln : 1) * lh + 12;
         int32_t v = no->v;
         double vw = g->nw[v];
         if (p.ccl.v[v] != NONE) { int32_t r = p.ccl.v[v]; c.ax[v] = c.cx[r] + c.cw[r] / 2; c.ay[v] = c.cy[r] + c.ch[r] / 2; vw = c.cw[r]; }
-        nx[i] = no->left ? c.ax[v] - vw / 2 - 30 - nw[i] : c.ax[v] + vw / 2 + 30;
+        nx[i] = no->left ? c.ax[v] - vw / 2 - NOTE_GAP - nw[i] : c.ax[v] + vw / 2 + NOTE_GAP;
         ny[i] = c.ay[v] - nh[i] / 2;
         bb_add(&bb, nx[i], ny[i], nx[i] + nw[i], ny[i] + nh[i]);
     }
