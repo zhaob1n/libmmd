@@ -186,6 +186,22 @@ static void bc_sort(size_t n, BcItem a[static n], BcItem tmp[static n]) {
     while (i < h) a[k++] = tmp[i++];
 }
 
+/* one key per cluster, shared by all layers (mean normalised slot of its members), so sibling clusters keep
+ * the same relative order in every layer -> cluster boxes can be made rectangular without overlap */
+static void cluster_keys(const Lay *L, size_t S, double gk[static S + 1], uint32_t cnt[static S + 1]) {
+    memset(gk, 0, (S + 1) * sizeof *gk);
+    memset(cnt, 0, (S + 1) * sizeof *cnt);
+    for (size_t r = 0; r < L->R; r++) {
+        size_t a = L->loff[r], n = L->loff[r + 1] - a;
+        for (size_t i = 0; i < n; i++) {
+            int32_t v = L->lay[a + i];
+            double t = ((double)i + 0.5) / (double)n;
+            for (int32_t c = L->cl[v]; c != NONE; c = L->g->sparent[c]) gk[c] += t, cnt[c]++;
+        }
+    }
+    for (size_t c = 0; c < S; c++) if (cnt[c]) gk[c] /= cnt[c];
+}
+
 /* ---------- one barycenter sweep over layer r ---------- */
 static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint32_t *idx, uint32_t *tmp,
                         double *csum, uint32_t *ccnt, bool clusters) {
@@ -220,14 +236,7 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint3
         (void)idx; (void)tmp;
         return;
     }
-    {
-        Graph *g = L->g;
-        for (size_t i = 0; i < n; i++) {
-            int32_t v = L->lay[a + i];
-            if (L->border[v]) continue;
-            for (int32_t c = L->cl[v]; c != NONE; c = g->sparent[c]) { csum[c] += L->bc[v]; ccnt[c]++; }
-        }
-    }
+    (void)ccnt; /* csum holds layer-independent cluster keys (see cluster_keys) */
     for (size_t i = 0; i < n; i++) {
         int32_t v = L->lay[a + i];
         Key *k = &keys[i];
@@ -238,7 +247,7 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint3
             for (int32_t c = L->cl[v]; c != NONE && cn < countof(chain); c = L->g->sparent[c]) chain[cn++] = c;
             while (cn && d < MAX_KEY_DEPTH - 1) {
                 int32_t c = chain[--cn];
-                k->bc[d] = ccnt[c] ? csum[c] / ccnt[c] : 0;
+                k->bc[d] = csum[c] * (double)n;
                 k->id[d] = -(c + 1);
                 d++;
             }
@@ -247,13 +256,6 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint3
         k->id[d] = v;
         k->len = d + 1;
         idx[i] = (uint32_t)i;
-    }
-    if (clusters) {
-        Graph *g = L->g;
-        for (size_t i = 0; i < n; i++) {
-            int32_t v = L->lay[a + i];
-            for (int32_t c = L->cl[v]; c != NONE; c = g->sparent[c]) { csum[c] = 0; ccnt[c] = 0; }
-        }
     }
     msort(n, idx, tmp, keys);
     for (size_t i = 0; i < n; i++) tmp[i] = (uint32_t)L->lay[a + idx[i]];
@@ -408,6 +410,15 @@ static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, 
             int32_t v = W->order[a + i];
             uint32_t k0 = off[v], k1 = off[v + 1], m = k1 - k0;
             if (!m) continue;
+            if (L->border[v]) { /* cluster side chains form one rigid block */
+                int32_t w = (int32_t)adj[k0];
+                if (prev < W->posl[w]) {
+                    W->align[w] = v;
+                    W->align[v] = W->root[v] = W->root[w];
+                    prev = W->posl[w];
+                }
+                continue;
+            }
             /* neighbours sorted by pass position */
             int32_t *ws = W->nbuf;
             for (uint32_t k = 0; k < m; k++) {
@@ -498,6 +509,24 @@ static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, 
                     }
                 }
                 k0 = k1;
+            }
+        }
+    }
+    /* segments crossing a cluster side chain may not be aligned (the chain must stay straight) */
+    for (size_t r = 1; r < R; r++) {
+        size_t a = L->loff[r], n = L->loff[r + 1] - a;
+        for (size_t i = 0; i < n; i++) {
+            int32_t b = L->lay[a + i];
+            if (!L->border[b] || L->poff[b + 1] == L->poff[b]) continue;
+            int32_t pb = L->pos[L->pidx[L->poff[b]]], ib = (int32_t)i;
+            for (size_t j = 0; j < n; j++) {
+                int32_t v = L->lay[a + j];
+                if (L->border[v]) continue;
+                for (uint32_t k = L->poff[v]; k < L->poff[v + 1]; k++) {
+                    int32_t u = (int32_t)L->pidx[k];
+                    if (((int32_t)j < ib) != (L->pos[u] < pb))
+                        if (!pset_add(A, &conf, u, v)) return false;
+                }
             }
         }
     }
@@ -910,6 +939,7 @@ static cmm_status layout_core(Graph *g) {
     memset(csum, 0, (S + 1) * sizeof *csum);
     memset(ccnt, 0, (S + 1) * sizeof *ccnt);
     bool clusters = S > 0;
+    if (clusters) cluster_keys(&L, S, csum, ccnt);
     if (clusters) /* establish cluster contiguity (borders at extremes) before any scoring */
         for (size_t r = 0; r < R; r++) sweep_layer(&L, r, false, true, keys, idx, tmp, csum, ccnt, clusters);
     uint64_t bestc = cross_all(&L, cbuf, fen);
@@ -922,6 +952,7 @@ static cmm_status layout_core(Graph *g) {
     if (!tdirty) return CMM_ERR_NOMEM;
     for (unsigned iter = 0; iter < 24 && since < 2 && bestc > 0; iter++) {
         bool down = (iter & 1u) == 0;
+        if (clusters) cluster_keys(&L, S, csum, ccnt);
         if (down) for (size_t r = 1; r < R; r++) sweep_layer(&L, r, true, false, keys, idx, tmp, csum, ccnt, clusters);
         else for (size_t r = R - 1; r-- > 0;) sweep_layer(&L, r, false, false, keys, idx, tmp, csum, ccnt, clusters);
         uint64_t c = cross_all(&L, cbuf, fen);
@@ -966,6 +997,18 @@ static cmm_status layout_core(Graph *g) {
     }
 
     PROF("bk");
+#ifdef CMM_PROFILE
+    for (size_t c = 0; c < S; c++) {
+        if (cmax[c] < cmin[c]) continue;
+        double mn[2] = {1e18, 1e18}, mx[2] = {-1e18, -1e18};
+        for (int32_t r = cmin[c]; r <= cmax[c]; r++)
+            for (unsigned side = 0; side < 2; side++) {
+                double x = L.x[bbase[c] + 2 * (size_t)(r - cmin[c]) + side];
+                mn[side] = dmin(mn[side], x), mx[side] = dmax(mx[side], x);
+            }
+        fprintf(stderr, "cl %zu ranks %d-%d left %.0f..%.0f right %.0f..%.0f\n", c, cmin[c], cmax[c], mn[0], mx[0], mn[1], mx[1]);
+    }
+#endif
     /* ---- rank axis ---- */
     double *ry = ANEW(A, double, R + 1), *rh = ANEW(A, double, R + 1);
     double *gtop = ANEW(A, double, R + 1), *gbot = ANEW(A, double, R + 1);
