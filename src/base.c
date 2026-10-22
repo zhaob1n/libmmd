@@ -165,6 +165,8 @@ void buf_num(Buf *b, double v) {
 void buf_xml(Buf *b, Str s) {
     size_t i = 0, run = 0;
     while (i < s.n) {
+        i = scan_xml_plain(s.n, s.p, i); /* bulk-skip bytes needing no escape */
+        if (i >= s.n) break;
         char c = s.p[i];
         const char *rep = nullptr;
         size_t rl = 0;

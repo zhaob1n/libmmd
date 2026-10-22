@@ -272,16 +272,22 @@ static uint64_t pair_cost(const Lay *L, int32_t u, int32_t v) {
 }
 
 /* returns crossings removed; *budget bounds the pair-cost work (early stop on huge graphs) */
-static uint64_t transpose(Lay *L, int64_t *budget) {
+static uint64_t transpose(Lay *L, int64_t *budget, uint8_t dirty[static L->R + 2]) {
+    /* dirty[r+1]: layer r changed in the last pass (dirty[0], dirty[R+1] are sentinels) */
     uint64_t gain = 0;
+    memset(dirty, 1, L->R + 2);
+    dirty[0] = dirty[L->R + 1] = 0;
     for (unsigned pass = 0; pass < 6; pass++) {
         bool improved = false;
         for (size_t r = 0; r < L->R; r++) {
+            if (!(dirty[r] | dirty[r + 1] | dirty[r + 2])) continue; /* neighbourhood unchanged: same verdicts */
+            bool ch = false;
             for (size_t i = L->loff[r]; i + 1 < L->loff[r + 1]; i++) {
                 int32_t u = L->lay[i], v = L->lay[i + 1];
                 if (L->border[u] || L->border[v] || L->cl[u] != L->cl[v]) continue;
                 uint32_t du = (L->poff[u + 1] - L->poff[u]) + (L->soff[u + 1] - L->soff[u]);
                 uint32_t dv = (L->poff[v + 1] - L->poff[v]) + (L->soff[v + 1] - L->soff[v]);
+                if (!du || !dv) continue; /* isolated in both directions: swap never matters */
                 *budget -= (int64_t)du * dv + 1;
                 if (*budget < 0) return gain;
                 uint64_t cuv = pair_cost(L, u, v), cvu = pair_cost(L, v, u);
@@ -289,11 +295,15 @@ static uint64_t transpose(Lay *L, int64_t *budget) {
                     L->lay[i] = v, L->lay[i + 1] = u;
                     L->pos[v]--, L->pos[u]++;
                     gain += cuv - cvu;
-                    improved = true;
+                    ch = true;
                 }
             }
+            dirty[r + 1] = (uint8_t)(ch ? 2 : (dirty[r + 1] == 2 ? 1 : 0));
+            improved |= ch;
         }
         if (!improved) break;
+        /* only layers changed this pass (value 2) stay dirty */
+        for (size_t r = 1; r <= L->R; r++) dirty[r] = dirty[r] == 2;
     }
     return gain;
 }
@@ -900,18 +910,16 @@ static cmm_status layout_core(Graph *g) {
     uint64_t bestc = cross_all(&L, cbuf, fen);
     memcpy(best, L.lay, placed * sizeof *best);
     unsigned since = 0;
-    /* transpose budget: generous for small graphs, bounded (~linear) for big ones */
+    /* transpose (final polish only; per-sweep transpose measured no gain on bench inputs)
+     * budget: generous for small graphs, bounded (~linear) for big ones */
     int64_t tbudget = 2000000 + 40 * (int64_t)nseg;
-    bool per_iter_tr = V <= 4000;
+    uint8_t *tdirty = ANEW(A, uint8_t, R + 2);
+    if (!tdirty) return CMM_ERR_NOMEM;
     for (unsigned iter = 0; iter < 24 && since < 4 && bestc > 0; iter++) {
         bool down = (iter & 1u) == 0;
         if (down) for (size_t r = 1; r < R; r++) sweep_layer(&L, r, true, false, keys, idx, tmp, csum, ccnt, clusters);
         else for (size_t r = R - 1; r-- > 0;) sweep_layer(&L, r, false, false, keys, idx, tmp, csum, ccnt, clusters);
         uint64_t c = cross_all(&L, cbuf, fen);
-        if (per_iter_tr && c > 0 && tbudget > 0) {
-            uint64_t gn = transpose(&L, &tbudget);
-            c = gn <= c ? c - gn : 0;
-        }
         if (c < bestc) { bestc = c; memcpy(best, L.lay, placed * sizeof *best); since = 0; }
         else since++;
     }
@@ -919,10 +927,16 @@ static cmm_status layout_core(Graph *g) {
     for (size_t r = 0; r < R; r++)
         for (size_t i = L.loff[r]; i < L.loff[r + 1]; i++) L.pos[L.lay[i]] = (int32_t)(i - L.loff[r]);
     if (bestc > 0 && tbudget > 0) { /* final polish on the kept-best order */
-        uint64_t gn = transpose(&L, &tbudget);
+        uint64_t gn = transpose(&L, &tbudget, tdirty);
+#ifdef CMM_PROFILE
+        fprintf(stderr, "  transpose gain=%llu\n", (unsigned long long)gn);
+#endif
         bestc = gn <= bestc ? bestc - gn : 0;
     }
 
+#ifdef CMM_PROFILE
+    fprintf(stderr, "  crossings=%llu tbudget_left=%lld\n", (unsigned long long)bestc, (long long)tbudget);
+#endif
     PROF("order");
     /* ---- x via Brandes-Köpf ---- */
     if (!bk(&L)) return CMM_ERR_NOMEM;

@@ -28,7 +28,7 @@ static constexpr uint8_t CC[256] = {
 static inline bool cid(char c) { return CC[(unsigned char)c] & C_ID; }
 
 static inline char pk(const P *p, size_t k) { return p->i + k < p->n ? p->s[p->i + k] : 0; }
-static inline void skip_sp(P *p) { while (p->i < p->n && (CC[(unsigned char)p->s[p->i]] & C_SP)) p->i++; }
+static inline void skip_sp(P *p) { if (p->i < p->n) p->i = scan_sp(p->n, p->s, p->i); }
 static inline bool at_eos(const P *p) {
     char c = pk(p, 0);
     return c == 0 || c == '\n' || c == ';' || (c == '%' && pk(p, 1) == '%');
@@ -42,7 +42,7 @@ static cmm_status fail(P *p, const char *m) {
 
 static Str read_word(P *p) {
     size_t st = p->i;
-    while (p->i < p->n && cid(p->s[p->i])) p->i++;
+    if (st < p->n) p->i = scan_id(p->n, p->s, st);
     return (Str){.p = p->s + st, .n = p->i - st};
 }
 static Str rest_of_line(P *p) {
