@@ -111,3 +111,12 @@ mermaid itself fails to render `block_full` and `radar_full` (partial named curv
   xlarge 54862 / 54061 / 48932. Full numbers and the mmdr comparison: `bench/results_v4.txt`, `bench/results_v5.txt`.
 - Known gap: long edges between rectangular clusters can take wide detours around them
   (e.g. `mega_event_mesh`); this comes from layout, not the router (`--no-avoid` shows the same).
+
+## v6: speed + flowchart config parity
+- Medium avoid-on 534 -> ~420 µs (v1 404); no-avoid 317 µs; large 8.3 ms (v1 8.9).
+- xlarge is ~200 ms vs v1 54 ms: the round-5 DFS feedback arc set (mermaid's default acyclicer) gives
+  far longer back-edge chains on the random xlarge input. Fidelity was chosen over speed here.
+- Flowcharts now honour `accTitle`/`accDescr` (svg `<title>`/`<desc>` + aria) and `%%{init}%%`/frontmatter
+  `themeVariables` (primaryColor, primaryBorderColor, primaryTextColor, lineColor, edgeLabelBackground,
+  clusterBkg, clusterBorder, titleColor, background, fontFamily, ...) through the same d_cfg system as the other diagrams.
+- Numbers and the mmdr comparison over all diagram types: `bench/results_v6.txt`.

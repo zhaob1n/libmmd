@@ -1,0 +1,91 @@
+v6 (taskset -c 2, min of 3 runs, µs). v1 = original baseline bench. Same machine/session.
+size    v1      O2(avoid on)  O2 no-avoid
+small   11.6    12.4          11.5
+medium  404.1   419.8         316.7
+large   8871    8309          7698
+xlarge  53643   199599        204636
+Medium avoid-on target (<= v1) NOT reached: 534 (v5) -> ~420 (v6), gap ~15 µs (noise ±5).
+xlarge regression (not from v6): bisected to round-5 0af0984 "dagre-style DFS feedback arc set"
+(xlarge 54 ms -> 257 ms): DFS FAS reverses more edges on the random xlarge graph, R 335 -> 1277 ranks,
+dummies 51k -> 427k; ordering/BK scale with dummies. Round 6 brought it 262 -> ~200 ms.
+Crossings unchanged by v6: medium 454, large 6281, xlarge 86105. 0 cluster overlaps.
+Changes: reciprocal grid cell size + -fno-math-errno; hoisted reciprocals in segment tests;
+ordering patience 1 on graphs with >256 segments; BK separations computed once for all 4 passes,
+integer medians, branchless median of 4, bloom prefilter on conflict pairs; indexed binary heap
+for visibility A*; fused x,y formatter; transpose counts both pair orders in one pass;
+flowchart accTitle/accDescr + themeVariables/background via shared d_cfg.
+
+compare.py vs mmdr (release build) over bench/inputs small+medium and all mmdr fixture types
+(lib = in-process µs, cli = process ms; large/xlarge omitted: mmdr times out):
+input                                        cmm lib us cmm cli ms mmdr lib us mmdr cli ms   lib x   cli x
+small.mmd                                          13.1       0.78    155876.0      149.97  11899x  191.1x
+medium.mmd                                        529.9       1.43  19770152.0    19774.11  37309x 13793.6x
+basic.mmd                                           1.1       0.82       584.0        2.03    531x    2.5x
+bends.mmd                                           1.2       0.58       547.0        1.91    456x    3.3x
+junctions.mmd                                       2.1       0.62       618.0        1.74    294x    2.8x
+ports.mmd                                           1.8       0.68      1007.0        1.86    559x    2.7x
+basic.mmd                                           1.3       0.77      1378.0        2.67   1060x    3.5x
+nested_groups.mmd                                   1.8       0.68      1331.0        2.66    739x    3.9x
+basic.mmd                                           4.7       0.82       549.0        1.91    117x    2.3x
+basic.mmd                                           2.9       0.71       684.0        2.01    236x    2.8x
+multiplicity.mmd                                    2.6       0.75       716.0        1.87    275x    2.5x
+basic.mmd                                           2.8       0.58      1681.0        3.05    600x    5.3x
+aspect_chain.mmd                                    4.1       0.72     14995.0       15.87   3657x   22.1x
+basic.mmd                                           4.9       0.73     19504.0       21.10   3980x   28.8x
+bidirectional_labels.mmd                            8.1       0.70     49622.0       51.56   6126x   73.7x
+complex.mmd                                        29.3       0.81    312193.0      241.57  10655x  296.8x
+cycles.mmd                                          8.7       0.83     37154.0       39.39   4271x   47.2x
+decision_shapes.mmd                                 7.4       0.69     40747.0       43.67   5506x   62.8x
+dense.mmd                                          22.2       0.85    119748.0      121.28   5394x  142.2x
+edges.mmd                                           5.2       0.78     20407.0       23.10   3924x   29.7x
+ports.mmd                                          16.5       0.82    272901.0      275.05  16539x  334.6x
+ports_arrow_pathing_regression.mmd                 19.9       0.82    142354.0      138.10   7153x  167.9x
+styles.mmd                                          3.6       0.61      1806.0        3.40    502x    5.5x
+subgraph.mmd                                        4.3       0.66     11120.0       12.65   2586x   19.1x
+subgraph_direction.mmd                              6.0       0.67     21991.0       23.48   3665x   34.9x
+subgraph_empty.mmd                                 10.4       0.76     58483.0       60.49   5623x   79.6x
+basic.mmd                                           4.1       0.68       503.0        1.78    123x    2.6x
+basic.mmd                                           1.6       0.56       609.0        1.84    381x    3.3x
+basic.mmd                                           1.3       0.56       559.0        1.84    430x    3.3x
+basic.mmd                                           0.8       0.69       523.0        1.74    654x    2.5x
+er_blog.mmd                                        13.6       0.61     12200.0       13.80    897x   22.7x
+flowchart_cycles.mmd                                8.8       0.81     38890.0       39.92   4419x   49.1x
+flowchart_dense.mmd                                10.5       0.85     50758.0       53.80   4834x   63.2x
+flowchart_opaque.mmd                               18.8       0.73    251182.0      257.21  13361x  352.6x
+flowchart_subgraph_dir.mmd                          6.1       1.04     21976.0       23.72   3603x   22.7x
+basic.mmd                                           3.7       0.76       587.0        1.84    159x    2.4x
+lr_tree.mmd                                         7.9       0.75       740.0        1.94     94x    2.6x
+tidy_tree.mmd                                      13.5       0.61       781.0        2.15     58x    3.5x
+basic.mmd                                           0.7       0.56       728.0        1.91   1040x    3.4x
+basic.mmd                                           1.5       0.67       489.0        1.73    326x    2.6x
+basic.mmd                                           1.3       0.60       567.0        1.82    436x    3.0x
+basic.mmd                                           0.9       0.59       484.0        1.63    538x    2.8x
+long_names.mmd                                      1.7       0.54       593.0        1.72    349x    3.2x
+many_curves_14.mmd                                  6.9       0.67       604.0        1.90     88x    2.8x
+mismatch_named_only.mmd                             1.1       0.60       497.0        1.78    452x    2.9x
+mismatch_named_overflow.mmd                         1.3       0.57       625.0        1.77    481x    3.1x
+mismatch_named_reordered.mmd                        1.4       0.57       488.0        1.64    349x    2.9x
+mismatch_named_subset.mmd                           1.2       0.57       610.0        1.80    508x    3.2x
+mismatch_positional_overflow.mmd                    2.5       0.64       571.0        1.82    228x    2.8x
+mismatch_short_first_curve.mmd                      1.3       0.60       652.0        1.78    502x    3.0x
+negative.mmd                                        1.4       0.63       529.0        1.70    378x    2.7x
+nonnumeric_all.mmd                                  0.9       0.60       474.0        1.87    527x    3.1x
+nonnumeric_empty_token.mmd                          0.9       0.62       558.0        1.99    620x    3.2x
+nonnumeric_first_curve.mmd                          1.3       0.58       673.0        2.03    518x    3.5x
+nonnumeric_middle.mmd                               0.9       0.56       641.0        1.96    712x    3.5x
+nonnumeric_second_curve.mmd                         2.4       0.53       508.0        1.85    212x    3.5x
+overlap_12axis.mmd                                  6.2       0.70       629.0        1.94    101x    2.8x
+short_curve.mmd                                     1.6       0.60       546.0        1.87    341x    3.1x
+basic.mmd                                           2.8       0.56       957.0        2.37    342x    4.2x
+basic.mmd                                           2.2       0.72       540.0        1.91    245x    2.6x
+basic.mmd                                           1.1       0.71       623.0        2.04    566x    2.9x
+frames.mmd                                          2.2       0.66       890.0        2.26    405x    3.4x
+nested_alt.mmd                                     10.5       0.77      2098.0        3.35    200x    4.4x
+par_alt.mmd                                         5.2       0.64      1303.0        2.65    251x    4.1x
+basic.mmd                                           3.3       0.66       715.0        2.06    217x    3.1x
+note.mmd                                            3.0       0.69       673.0        2.10    224x    3.1x
+note_block.mmd                                      5.6       0.71      1046.0        2.31    187x    3.3x
+basic.mmd                                           1.0       0.76       615.0        1.96    615x    2.6x
+basic.mmd                                           1.2       0.61       819.0        2.06    682x    3.4x
+basic.mmd                                           2.3       0.69       603.0        1.90    262x    2.7x
+basic.mmd                                             -          -       707.0        2.01       -       -
