@@ -23,7 +23,7 @@ typedef struct Blk {
 typedef struct BEdge { uint32_t a, b; Str label; bool arrow, arrow_s; } BEdge;
 typedef VEC(Blk) BlkVec;
 
-static constexpr double GAP = 24;
+static constexpr double GAP = 8; /* mermaid block.padding */
 static constexpr double PAD = 8;
 static constexpr char CSS[] =
     "#mermaid .bn{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#mermaid .bg{fill:#f4f4ff;stroke:#9370DB;stroke-width:1px;stroke-dasharray:4,2;}"
@@ -361,9 +361,22 @@ DIAG_FN(block_render) {
             double tw;
             unsigned nl;
             label_measure(b->label, fs, &tw, &nl);
-            b->w = fmax(tw + 32, 50), b->h = fmax(nl * fs * 1.5 + 16, 40);
-            if (b->shape == BS_CIRCLE) b->w = b->h = fmax(b->w, b->h);
-            if (b->shape == BS_DIAMOND) b->w = b->h = tw + nl * fs * 1.5 + 8; /* mermaid: square, side = w + h */
+            /* mermaid's natural shape sizes (block.padding = 8, label line = 1.5em) */
+            double lh = nl * fs * 1.5;
+            b->w = tw + 32, b->h = lh + 16;
+            switch (b->shape) {
+            case BS_ROUND: b->w = tw + 16; break;
+            case BS_STADIUM: case BS_ASYM: b->w = tw + 16, b->h = lh + 8; break;
+            case BS_SUB: case BS_HEX: b->w = tw + 24, b->h = lh + 8; break;
+            case BS_CYL: {
+                double w = tw + 8, ry = w / 2 / (2.5 + w / 50);
+                b->w = w, b->h = lh + 8 + 3 * ry;
+                break;
+            }
+            default: break;
+            }
+            if (b->shape == BS_CIRCLE) b->w = b->h = tw + 8; /* mermaid: r = tw/2 + padding/2 */
+            if (b->shape == BS_DIAMOND) b->w = b->h = tw + lh + 16; /* mermaid: square, side = w + h */
             continue;
         }
         uint32_t cols = group_cols(B, b);
@@ -392,9 +405,10 @@ DIAG_FN(block_render) {
         }
     }
     double top = title.n ? 40 : 0;
-    BBox bb = {B[0].x, B[0].y - top, B[0].x + B[0].w, B[0].y + B[0].h};
+    /* mermaid: viewBox = drawn content (the root group is not drawn) + 5 */
+    BBox bb = {B[0].x + PAD, B[0].y + PAD - top, B[0].x + B[0].w - PAD, B[0].y + B[0].h - PAD};
     if (!buf_reserve(out, 2048 + nb * 400 + ev.n * 300)) return CMM_ERR_NOMEM;
-    DG_HEAD(out, bb, 8, "block", CSS);
+    DG_HEAD(out, bb, 5, "block", CSS);
     buf_lit(out, DEFS);
     if (title.n) dg_text(out, title, 18, B[0].w / 2, -top / 2, "middle", "bt");
     for (size_t i = 1; i < nb; i++) {
@@ -455,7 +469,7 @@ DIAG_FN(block_render) {
             break;
         }
         case BS_CYL: {
-            double ry = fmin(8, h / 6);
+            double ry = w / 2 / (2.5 + w / 50); /* mermaid cylinder */
             buf_lit(out, "<path class=\"bn\" d=\"M"); dg_pt(out, x, y + ry);
             buf_lit(out, "a"); buf_num(out, w / 2); buf_ch(out, ','); buf_num(out, ry); buf_lit(out, " 0 0 0 "); buf_num(out, w); buf_lit(out, ",0");
             buf_lit(out, "a"); buf_num(out, w / 2); buf_ch(out, ','); buf_num(out, ry); buf_lit(out, " 0 0 0 "); buf_num(out, -w); buf_lit(out, ",0");
