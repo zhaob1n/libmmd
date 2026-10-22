@@ -296,3 +296,49 @@ bool dg_parse_num(Str s, double *out) {
     *out = neg ? -v : v;
     return true;
 }
+
+void dg_text_open(Buf *b, double x, double cy, const char *anchor, const char *cls) {
+    buf_lit(b, "<text");
+    if (cls) { buf_lit(b, " class=\""); buf_put(b, strlen(cls), cls); buf_ch(b, '"'); }
+    buf_lit(b, " x=\""); buf_num(b, x); buf_lit(b, "\" y=\""); buf_num(b, cy);
+    buf_lit(b, "\" text-anchor=\""); buf_put(b, strlen(anchor), anchor);
+    buf_lit(b, "\" dominant-baseline=\"central\">");
+}
+void dg_rect_fill(Buf *b, double x, double y, double w, double h, double rx, const char *cls, const char *fill) {
+    buf_lit(b, "<rect");
+    if (cls) { buf_lit(b, " class=\""); buf_put(b, strlen(cls), cls); buf_ch(b, '"'); }
+    buf_lit(b, " x=\""); buf_num(b, x); buf_lit(b, "\" y=\""); buf_num(b, y);
+    buf_lit(b, "\" width=\""); buf_num(b, w < 0 ? 0 : w); buf_lit(b, "\" height=\""); buf_num(b, h < 0 ? 0 : h);
+    if (rx > 0) { buf_lit(b, "\" rx=\""); buf_num(b, rx); }
+    if (fill) { buf_lit(b, "\" fill=\""); buf_put(b, strlen(fill), fill); }
+    buf_lit(b, "\"/>");
+}
+const char *dg_palette(size_t i) {
+    static const char *const P[] = {"#ECECFF", "#ffffde", "#f5ffe0", "#b8b8ff", "#ffffab", "#e4ffb8",
+                                    "#ffb8ff", "#b8ffff", "#ffe0e0", "#ff85ff", "#85ffff", "#ffb8b8"};
+    return P[i % countof(P)];
+}
+Str dg_wrap(Arena *a, Str raw, double fs, double maxw) {
+    bool ok = true;
+    Str s = label_normalize(a, raw, &ok);
+    if (!ok) return (Str){};
+    double w;
+    unsigned nl;
+    label_measure(s, fs, &w, &nl);
+    if (w <= maxw) return s;
+    char *o = arena_alloc(a, s.n + 1, 1);
+    if (!o) return (Str){};
+    memcpy(o, s.p, s.n);
+    size_t ls = 0, lastsp = SIZE_MAX;
+    for (size_t i = 0; i < s.n; i++) {
+        if (o[i] == '\n') { ls = i + 1, lastsp = SIZE_MAX; continue; }
+        if (o[i] == ' ') {
+            if (lastsp != SIZE_MAX && text_width((Str){.p = o + ls, .n = i - ls}, fs) > maxw) {
+                o[lastsp] = '\n', ls = lastsp + 1;
+            }
+            lastsp = i;
+        }
+    }
+    if (lastsp != SIZE_MAX && lastsp >= ls && text_width((Str){.p = o + ls, .n = s.n - ls}, fs) > maxw) o[lastsp] = '\n';
+    return (Str){.p = o, .n = s.n};
+}

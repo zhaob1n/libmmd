@@ -32,6 +32,13 @@ API (`include/cmermaid.h`): `cmm_render_svg(n, src, opts, &buf, &err)`, `cmm_buf
 | classDiagram | `src/d_class.c` | members, `~generics~`, visibility/`$`/`*`, annotations, all relations + lollipop, cardinality, namespaces, notes |
 | erDiagram | `src/d_er.c` | attribute tables (type/name/keys/comment), aliases, all crow's-foot cardinalities (symbolic + word forms) |
 | pie | `src/d_pie.c` | slices, showData, title, legend |
+| gantt | `src/d_gantt.c` | dayjs-style dateFormat, strftime axisFormat, tickInterval, excludes (weekends/dates), after/until deps, done/active/crit/milestone/vert |
+| journey | `src/d_journey.c` | sections, scored tasks with faces, actor legend/dots |
+| mindmap | `src/d_mindmap.c` | indentation tree, all node shapes, two-sided tidy layout, section colours |
+| timeline | `src/d_timeline.c` | sections, periods, multi-event / continuation lines, wrapping |
+| quadrantChart | `src/d_quadrant.c` | axes, quadrant labels, points with inline style and classDef |
+| xychart(-beta) | `src/d_xychart.c` | vertical/horizontal, categories or numeric range, bar + line series, nice ticks |
+| gitGraph | `src/d_gitgraph.c` | LR/TB/BT, branch order, merge, cherry-pick, tags, NORMAL/REVERSE/HIGHLIGHT |
 | text metrics | `src/text.c` | embedded Helvetica-compatible advance table, CJK/emoji wide, 8-byte ASCII fast path |
 
 ## Flowchart features (v2)
