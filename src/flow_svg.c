@@ -27,12 +27,12 @@ static void emit_css(Buf *b, const Theme *t) {
     buf_lit(b, "#mermaid{font-family:"); put_cstr(b, t->font); buf_lit(b, ";font-size:16px;fill:"); put_cstr(b, t->text); buf_lit(b, ";}");
     buf_lit(b, "#mermaid .node rect,#mermaid .node circle,#mermaid .node ellipse,#mermaid .node polygon,#mermaid .node path{fill:");
     put_cstr(b, t->node_fill); buf_lit(b, ";stroke:"); put_cstr(b, t->node_stroke); buf_lit(b, ";stroke-width:1px;}");
-    buf_lit(b, "#mermaid .flowchart-link{stroke:"); put_cstr(b, t->line); buf_lit(b, ";fill:none;}");
+    buf_lit(b, "#mermaid .flowchart-link{stroke:"); put_cstr(b, t->line); buf_lit(b, ";fill:none;stroke-width:2px;}#mermaid .thick{stroke-width:3.5px;}#mermaid .dotted{stroke-dasharray:3;}");
     buf_lit(b, "#mermaid .edgeLabel rect{fill:"); put_cstr(b, t->label_bg); buf_lit(b, ";stroke:none;}");
     buf_lit(b, "#mermaid .cluster rect{fill:"); put_cstr(b, t->cluster_fill); buf_lit(b, ";stroke:");
     put_cstr(b, t->cluster_stroke); buf_lit(b, ";stroke-width:1px;}");
     buf_lit(b, "#mermaid .marker{fill:"); put_cstr(b, t->marker); buf_lit(b, ";stroke:"); put_cstr(b, t->marker); buf_lit(b, ";}");
-    buf_lit(b, "#mermaid text{fill:"); put_cstr(b, t->text); buf_lit(b, ";}");
+    buf_lit(b, "#mermaid text{fill:"); put_cstr(b, t->text); buf_lit(b, ";text-anchor:middle;dominant-baseline:central;}");
     buf_lit(b, "#mermaid .title{font-size:18px;}");
 }
 
@@ -129,7 +129,6 @@ static void text_lines(Buf *b, Str lab, double fs, double cx, double cy, const c
     double lh = fs * 1.5, y = cy - (k - 1) * lh / 2;
     buf_lit(b, "<text");
     if (cls) { buf_lit(b, " class=\""); buf_put(b, strlen(cls), cls); buf_ch(b, '"'); }
-    buf_lit(b, " text-anchor=\"middle\" dominant-baseline=\"central\"");
     if (k == 1) {
         buf_lit(b, " x=\""); buf_num(b, cx); buf_lit(b, "\" y=\""); buf_num(b, y); buf_lit(b, "\">");
         if (rich) rich_emit_line(b, lab, &bold, &ital); else buf_xml(b, lab);
@@ -314,6 +313,8 @@ cmm_status flow_svg(const Graph *g, Buf *b) {
             buf_xml(b, g->nid[g->eto[e]]); buf_ch(b, '_'); buf_int(b, (int64_t)e);
         }
         buf_lit(b, "\" class=\"flowchart-link");
+        if (g->estroke[e] == ST_THICK) buf_lit(b, " thick");
+        else if (g->estroke[e] == ST_DOTTED) buf_lit(b, " dotted");
         if (g->eflags && (g->eflags[e] & EF_ANIM))
             put_cstr(b, (g->eflags[e] & EF_ANIM_SLOW) ? " edge-animation-slow" : " edge-animation-fast");
         buf_lit(b, "\" d=\"");
@@ -326,16 +327,17 @@ cmm_status flow_svg(const Graph *g, Buf *b) {
             buf_ch(b, 'C'); pt(b, x + r, y - q - u); buf_ch(b, ' '); pt(b, x + r, y + q + u);
             buf_ch(b, ' '); pt(b, x, y + q);
         } else basis_path(b, g->eptn[e], g->pts.v + g->eptoff[e]);
-        buf_lit(b, "\" style=\"");
-        switch (g->estroke[e]) {
-        case ST_THICK: buf_lit(b, "stroke-width:3.5px;"); break;
-        case ST_DOTTED: buf_lit(b, "stroke-width:2px;stroke-dasharray:3;"); break;
-        default: buf_lit(b, "stroke-width:2px;"); break;
-        }
-        css_out(b, lsdef, false);
-        for (size_t i = 0; i < g->linkstyles.n; i++)
-            if (g->linkstyles.v[i].idx == (int32_t)e) css_out(b, g->linkstyles.v[i].css, false);
         buf_ch(b, '"');
+        {
+            size_t mark = b->n;
+            buf_lit(b, " style=\"");
+            size_t body = b->n;
+            css_out(b, lsdef, false);
+            for (size_t i = 0; i < g->linkstyles.n; i++)
+                if (g->linkstyles.v[i].idx == (int32_t)e) css_out(b, g->linkstyles.v[i].css, false);
+            if (b->n == body) b->n = mark;
+            else buf_ch(b, '"');
+        }
         const char *ms = marker_name(g->estart[e], false), *me = marker_name(g->eend[e], true);
         if (ms) { buf_lit(b, " marker-start=\"url(#"); buf_put(b, strlen(ms), ms); buf_lit(b, ")\""); }
         if (me) { buf_lit(b, " marker-end=\"url(#"); buf_put(b, strlen(me), me); buf_lit(b, ")\""); }
