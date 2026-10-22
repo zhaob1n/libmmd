@@ -1,0 +1,6 @@
+eventmodeling
+%%{init: {"themeVariables": {"emEventFill": "#fde", "emRelationStroke": "red"}}}%%
+tf a evt X.Y.Z { }
+tf b cmd Do ->> a ->> nope [[missing]]
+rf c ui Screen ->> b ->> a
+tf d rmo View { a: 1 b: 2 }

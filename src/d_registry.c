@@ -52,6 +52,7 @@ static const DiagEnt DIAGS[] = {
     {S("venn"), venn_render},
     {S("treeView-beta"), treeview_render},
     {S("treeView"), treeview_render},
+    {S("eventmodeling"), eventmodeling_render},
 };
 
 DiagFn diag_lookup(Str kw) {
