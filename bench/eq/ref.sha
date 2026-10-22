@@ -439,9 +439,9 @@ a7ed82c11988dc3d bench/mmdr_fixtures/flowchart_small.mmd
 0b0c13f2f1776d9d tests/cases/basic.mmd
 f0d216bf71363703 tests/cases/block_full.mmd
 49330118db45e8d7 tests/cases/bt_rl.mmd
-46b6034a758d10a3 tests/cases/c4_bgcolor.mmd
-7a76f22945085de9 tests/cases/c4_full.mmd
-0c120cfb80ce4094 tests/cases/c4_styles.mmd
+5bbf48cda28267ef tests/cases/c4_bgcolor.mmd
+7b4f84af3f30daf5 tests/cases/c4_full.mmd
+a7aeba55f647d23d tests/cases/c4_styles.mmd
 974763ad18fd3f41 tests/cases/class_full.mmd
 3d8d7331eb403e8c tests/cases/class_ns_iso.mmd
 1b04ddb2e9c9ec6a tests/cases/config_keys.mmd
@@ -481,7 +481,7 @@ b115f81464558eb8 tests/cases/gantt_tz.mmd
 7fe7d9882802d9c2 tests/cases/ishikawa_basic.mmd
 affdef2922a83174 tests/cases/journey_full.mmd
 44dc50106728c8a6 tests/cases/kanban_full.mmd
-cefb6583e0330c52 tests/cases/mindmap_full.mmd
+778e50fcf5567c1c tests/cases/mindmap_full.mmd
 81cceeadf6489d09 tests/cases/packet_full.mmd
 4b4d251a6c7b3d96 tests/cases/parallel_edges.mmd
 a0e90a7be466dade tests/cases/pie_full.mmd
@@ -514,7 +514,7 @@ aa2c1a8b439e5c16 tests/cases/theme_dark.mmd
 f8b9b573fb4b877e tests/cases/theme_dark_gantt.mmd
 3c8343d95bb8f339 tests/cases/theme_dark_journey.mmd
 f6cf249a32e61eb9 tests/cases/theme_dark_kanban.mmd
-a20f2ebc997c7bc0 tests/cases/theme_dark_mindmap.mmd
+5ceca7ffbcafd2f7 tests/cases/theme_dark_mindmap.mmd
 890a1ca4b53d3ec5 tests/cases/theme_dark_pie.mmd
 76010a0e6e3ec4f4 tests/cases/theme_dark_seq.mmd
 3c30628e55baad5e tests/cases/theme_dark_state.mmd
