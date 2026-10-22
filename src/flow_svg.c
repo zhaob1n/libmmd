@@ -201,6 +201,43 @@ static void node_shape(Buf *b, const Graph *g, size_t v) {
     }
 }
 
+uint8_t flow_curve_kind(Str c) {
+    if (str_eq(c, S("linear"))) return CURVE_LINEAR;
+    if (str_eq(c, S("step"))) return CURVE_STEP;
+    if (str_eq(c, S("stepBefore"))) return CURVE_STEP_BEFORE;
+    if (str_eq(c, S("stepAfter"))) return CURVE_STEP_AFTER;
+    if (str_eq(c, S("cardinal")) || str_eq(c, S("catmullRom"))) return CURVE_CARDINAL;
+    return CURVE_BASIS; /* basis, natural, monotoneX/Y, bumpX/Y: smooth fallback */
+}
+
+/* d3 curveLinear / curveStep* / curveCardinal(tension 0) */
+static void other_path(Buf *b, uint8_t kind, size_t n, const double P[static 2 * n]) {
+    if (!n) return;
+    buf_ch(b, 'M'); pt(b, P[0], P[1]);
+    for (size_t i = 1; i < n; i++) {
+        double px = P[2 * i - 2], py = P[2 * i - 1], x = P[2 * i], y = P[2 * i + 1];
+        switch (kind) {
+        case CURVE_STEP: {
+            double mx = (px + x) / 2;
+            buf_ch(b, 'L'); pt(b, mx, py); buf_ch(b, 'L'); pt(b, mx, y); break;
+        }
+        case CURVE_STEP_BEFORE: buf_ch(b, 'L'); pt(b, px, y); break;
+        case CURVE_STEP_AFTER: buf_ch(b, 'L'); pt(b, x, py); break;
+        case CURVE_CARDINAL: {
+            /* Catmull-Rom-style tangents (k = 1/6 of the neighbour chord), clamped at the ends */
+            double ax = i >= 2 ? P[2 * i - 4] : px, ay = i >= 2 ? P[2 * i - 3] : py;
+            double bx = i + 1 < n ? P[2 * i + 2] : x, by = i + 1 < n ? P[2 * i + 3] : y;
+            buf_ch(b, 'C'); pt(b, px + (x - ax) / 6, py + (y - ay) / 6);
+            buf_ch(b, ' '); pt(b, x - (bx - px) / 6, y - (by - py) / 6);
+            buf_ch(b, ' '); pt(b, x, y);
+            continue;
+        }
+        default: break;
+        }
+        buf_ch(b, 'L'); pt(b, x, y);
+    }
+}
+
 /* d3 curveBasis */
 static void basis_path(Buf *b, size_t n, const double P[static 2 * n]) {
     double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
@@ -333,7 +370,8 @@ cmm_status flow_svg(const Graph *g, Buf *b) {
             buf_ch(b, 'M'); pt(b, x, y - q);
             buf_ch(b, 'C'); pt(b, x + r, y - q - u); buf_ch(b, ' '); pt(b, x + r, y + q + u);
             buf_ch(b, ' '); pt(b, x, y + q);
-        } else basis_path(b, g->eptn[e], g->pts.v + g->eptoff[e]);
+        } else if (g->curve != CURVE_BASIS) other_path(b, g->curve, g->eptn[e], g->pts.v + g->eptoff[e]);
+        else basis_path(b, g->eptn[e], g->pts.v + g->eptoff[e]);
         buf_ch(b, '"');
         {
             size_t mark = b->n;

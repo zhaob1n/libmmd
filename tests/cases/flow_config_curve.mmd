@@ -1,0 +1,12 @@
+---
+config:
+  flowchart:
+    curve: stepAfter
+    nodeSpacing: 90
+    rankSpacing: 30
+    cycleRemoval: greedy
+---
+flowchart TD
+  A --> B --> C --> A
+  A --> D
+  B --> D

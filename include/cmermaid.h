@@ -44,6 +44,8 @@ typedef enum cmm_theme {
 enum {
     CMM_F_ROUTE_AVOID = 1u, /* (default since v3; kept for compatibility) */
     CMM_F_NO_AVOID = 2u,    /* flowchart: disable re-routing edges around non-incident nodes */
+    CMM_F_FAS_DFS = 4u,     /* cycle removal: always mermaid/dagre DFS (default: auto hybrid) */
+    CMM_F_FAS_GREEDY = 8u,  /* cycle removal: always greedy (Eades) */
 };
 
 typedef struct cmm_options {

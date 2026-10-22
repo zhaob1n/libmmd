@@ -169,6 +169,15 @@ static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n],
                    .theme = (uint8_t)(opt && opt->theme ? opt->theme : cfg.theme ? cfg.theme : CMM_THEME_DEFAULT),
                    .flags = opt ? opt->flags : 0, .node_sep = cfg.node_sep,
                    .rank_sep = cfg.rank_sep, .font_size = fs};
+        /* config: flowchart.nodeSpacing / rankSpacing (init or frontmatter; API options win), cycleRemoval */
+        if (!(opt && opt->node_spacing > 0)) g.node_sep = dcfg_num("flowchart.nodeSpacing", g.node_sep);
+        if (!(opt && opt->rank_spacing > 0)) g.rank_sep = dcfg_num("flowchart.rankSpacing", g.rank_sep);
+        Str cr = dcfg_get("flowchart.cycleRemoval");
+        g.acyclicer = str_eq(cr, S("dfs")) ? CMM_ACYC_DFS : str_eq(cr, S("greedy")) ? CMM_ACYC_GREEDY : CMM_ACYC_AUTO;
+        if (g.flags & CMM_F_FAS_DFS) g.acyclicer = CMM_ACYC_DFS;
+        if (g.flags & CMM_F_FAS_GREEDY) g.acyclicer = CMM_ACYC_GREEDY;
+        Str cv = dcfg_get("flowchart.curve");
+        g.curve = flow_curve_kind(cv);
         if ((st = flow_parse(&g, n, src, off, &eoff, msg))) goto fail;
         if ((st = flow_layout(&g))) goto fail;
         if (!buf_reserve(&b, 256 + g.nn * 320 + g.ne * 200)) { st = CMM_ERR_NOMEM; goto fail; }

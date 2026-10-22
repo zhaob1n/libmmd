@@ -716,6 +716,10 @@ static void port_sort(size_t n, PortKey a[static n]) {
     }
 }
 
+/* hybrid cycle removal thresholds (see results_v7): greedy only for big graphs with many back edges */
+constexpr size_t ACYC_GREEDY_MIN_N = 1500;
+constexpr size_t ACYC_GREEDY_REV_DIV = 20; /* DFS reverses >= 5% of nodes' worth of edges */
+
 static cmm_status layout_core(Graph *g) {
     Arena *A = g->arena;
     size_t N = g->nn, E = g->ne, S = g->ns;
@@ -796,10 +800,10 @@ static cmm_status layout_core(Graph *g) {
         if (!valid || !hid) return CMM_ERR_NOMEM;
         for (size_t e = 0; e < E; e++) valid[e] = EVALID(e);
         for (size_t v = 0; v < N; v++) hid[v] = (g->nflags[v] & NF_HIDDEN) ? 1 : 0;
-        (void)valid;
         /* dagre default (mermaid): DFS feedback arc set in node/edge insertion order */
         memset(state, 0, N * sizeof *state);
         for (size_t e = 0; e < E; e++) rev[e] = 0;
+        size_t nrev = 0;
         for (size_t r = 0; r < N; r++) {
             if (state[r] || hid[r]) continue;
             size_t sp = 0;
@@ -809,10 +813,18 @@ static cmm_status layout_core(Graph *g) {
                 if (it[u] == ooff[u + 1]) { state[u] = 2; sp--; continue; }
                 uint32_t e = oidx[it[u]++], w = (uint32_t)et[e];
                 if (hid[w]) continue;
-                if (state[w] == 1) rev[e] = 1;
+                if (state[w] == 1) rev[e] = 1, nrev++;
                 else if (!state[w]) { state[w] = 1; it[w] = ooff[w]; stk[sp++] = w; }
             }
         }
+        /* hybrid: DFS reverses arbitrary back edges, which on big cyclic graphs stretches the ranking
+         * (xlarge: 335 -> 1277 ranks, 8x dummies). Above the threshold use greedy Eades FAS instead. */
+        bool greedy = g->acyclicer == CMM_ACYC_GREEDY ||
+                      (g->acyclicer == CMM_ACYC_AUTO && N >= ACYC_GREEDY_MIN_N && nrev * ACYC_GREEDY_REV_DIV >= N);
+#ifdef CMM_PROFILE
+        fprintf(stderr, "  fas: N=%zu dfs_rev=%zu -> %s\n", N, nrev, greedy ? "greedy" : "dfs");
+#endif
+        if (greedy && !greedy_fas(A, N, E, ef, et, valid, hid, rev)) return CMM_ERR_NOMEM;
     }
     /* effective DAG CSR */
     #define EU(e) (rev[e] ? et[e] : ef[e])
@@ -1321,7 +1333,7 @@ static Box content_box(const Graph *g) {
 
 [[nodiscard]] static bool gsub_alloc(Graph *d, const Graph *g, Dir dir, size_t nn, size_t ne, size_t ns) {
     Arena *A = g->arena;
-    *d = (Graph){.arena = g->arena, .dir = dir, .theme = g->theme, .flags = g->flags, .node_sep = g->node_sep,
+    *d = (Graph){.arena = g->arena, .dir = dir, .theme = g->theme, .flags = g->flags, .acyclicer = g->acyclicer, .node_sep = g->node_sep,
                  .rank_sep = g->rank_sep, .font_size = g->font_size, .nn = nn, .ne = ne, .ns = ns,
                  .ncap = nn, .ecap = ne, .scap = ns};
     d->nid = ANEW(A, Str, nn + 1); d->nlabel = ANEW(A, Str, nn + 1); d->nclass = ANEW(A, Str, nn + 1);
