@@ -13,12 +13,13 @@ typedef struct Commit { Str id, tag, msg; uint32_t lane, p1, p2; uint8_t type; }
 typedef struct Branch { Str name; double order; uint32_t head, idx; bool has_head; } Branch;
 
 static constexpr char CSS[] =
-    "#mermaid .bl{stroke-width:2px;stroke-dasharray:2 2;}#mermaid .ar{fill:none;stroke-width:4px;}"
+    "#mermaid .bl{stroke:#333;stroke-width:1px;stroke-dasharray:2;}#mermaid .ar{fill:none;stroke-width:8px;stroke-linecap:round;}"
     "#mermaid .cl{font-size:10px;fill:#000;}#mermaid .clb{fill:#ffffde;opacity:0.5;}"
-    "#mermaid .bn{font-size:14px;fill:#000;}#mermaid .tg{font-size:10px;fill:#131300;}"
+    "#mermaid .bn{font-size:14px;fill:#000;}#mermaid .bnx{fill:inherit;}#mermaid .tg{font-size:10px;fill:#131300;}"
     "#mermaid .tgb{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#mermaid .ttl{font-size:18px;}";
-static const char *const COL[] = {"#9370DB", "#e6d46c", "#78d070", "#e0a0c0", "#70b0e8", "#e08850", "#70d0c8", "#b07ae0"};
-static const char *const LCOL[] = {"#e8e0ff", "#fff8c8", "#e0f8dc", "#f8e0ec", "#ddeefa", "#fbe5d6", "#ddf6f4", "#efe2fb"};
+/* mermaid 11 default theme git0..git7 (hsl(h, 100%, 46.27%)) and their branch-label text colours */
+static const char *const COL[] = {"#0000ec", "#dede00", "#9dec00", "#0076ec", "#00ecec", "#00ec76", "#ec00ec", "#ec0000"};
+static const char *const LTXT[] = {"#fff", "#000", "#000", "#fff", "#000", "#000", "#000", "#000"};
 
 typedef struct Attr { Str id, tag, msg, parent; uint8_t type; double order; bool has_type, has_order; } Attr;
 static bool attrs(Str s, Attr *at) {
@@ -169,7 +170,9 @@ DIAG_FN(gitgraph_render) {
     double qlen = q0 + (double)br.n * lanesep;
 #define PX(p, q) (dir == 0 ? (p) : (q))
 #define PY(p, q) (dir == 0 ? (q) : dir == 1 ? (p) : plen - (p))
-    BBox bb = dir == 0 ? (BBox){0, 0, plen, qlen + 10} : (BBox){0, title.n ? -40 : 0, qlen, plen};
+    double hang = 10; /* rotated commit labels hang below the last lane */
+    for (size_t i = 0; i < cm.n; i++) if (lane[cm.v[i].lane] + 1 == (double)br.n || br.n == 0) hang = fmax(hang, text_width(cm.v[i].id, 10) * 0.72 + 8 - lanesep / 2);
+    BBox bb = dir == 0 ? (BBox){0, 0, plen, qlen + hang} : (BBox){0, title.n ? -40 : 0, qlen, plen};
     if (!buf_reserve(out, 4096 + cm.n * 900)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 4, "gitGraph", CSS);
     if (title.n) dg_text(out, title, 18, dir == 0 ? plen / 2 : qlen / 2, dir == 0 ? 20 : -20, "middle", "ttl");
@@ -183,8 +186,10 @@ DIAG_FN(gitgraph_render) {
         buf_lit(out, "\"/>");
         double tw = text_width(br.v[b].name, 14);
         double lx = dir == 0 ? p0 - 20 - tw : q - tw / 2, ly = dir == 0 ? q : (dir == 1 ? p0 - 35 : plen - p0 + 35);
-        dg_rect_fill(out, lx - 6, ly - 11, tw + 12, 22, 4, nullptr, LCOL[lane[b] % countof(LCOL)]);
-        dg_text(out, br.v[b].name, 14, lx + tw / 2, ly, "middle", "bn");
+        dg_rect_fill(out, lx - 6, ly - 11, tw + 12, 22, 4, nullptr, col);
+        buf_lit(out, "<g fill=\""); buf_put(out, strlen(LTXT[lane[b] % countof(LTXT)]), LTXT[lane[b] % countof(LTXT)]); buf_lit(out, "\">");
+        dg_text(out, br.v[b].name, 14, lx + tw / 2, ly, "middle", "bn bnx");
+        buf_lit(out, "</g>");
     }
     /* connections */
     for (size_t i = 0; i < cm.n; i++) {
@@ -262,9 +267,17 @@ DIAG_FN(gitgraph_render) {
         }
         Str lab = c->id;
         double tw = text_width(lab, 10);
-        double lx = dir == 0 ? x : x + R + 6 + tw / 2, ly = dir == 0 ? y + R + 14 : y;
-        dg_rect_fill(out, lx - tw / 2 - 2, ly - 7, tw + 4, 14, 0, "clb", nullptr);
-        dg_text(out, lab, 10, lx, ly, "middle", "cl");
+        if (dir == 0) { /* mermaid rotateCommitLabel (default on): label hangs down-left at -45 degrees */
+            double ax = x + 4, ay = y + R + 10;
+            buf_lit(out, "<g transform=\"rotate(-45 "); buf_num(out, ax); buf_ch(out, ' '); buf_num(out, ay); buf_lit(out, ")\">");
+            dg_rect_fill(out, ax - tw - 2, ay - 7, tw + 4, 14, 0, "clb", nullptr);
+            dg_text(out, lab, 10, ax - tw / 2, ay, "middle", "cl");
+            buf_lit(out, "</g>");
+        } else {
+            double lx = x + R + 6 + tw / 2, ly = y;
+            dg_rect_fill(out, lx - tw / 2 - 2, ly - 7, tw + 4, 14, 0, "clb", nullptr);
+            dg_text(out, lab, 10, lx, ly, "middle", "cl");
+        }
         if (c->tag.n) {
             double gw = text_width(c->tag, 10) + 12;
             double gx = dir == 0 ? x - gw / 2 : x - R - 8 - gw, gy = dir == 0 ? y - R - 28 : y - 9;
