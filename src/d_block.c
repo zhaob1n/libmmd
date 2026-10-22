@@ -471,7 +471,7 @@ DIAG_FN(block_render) {
             break;
         default: dg_rect(out, x, y, w, h, 0, "bn");
         }
-        Str css = node_css(sv.n, sv.v, b->id);
+        Str css = sv.n ? node_css(sv.n, sv.v, b->id) : (Str){};
         if (css.n && !style_shape(out, shape0, css)) return CMM_ERR_NOMEM;
         dg_text(out, b->label, fs, cx, cy, "middle", "bt");
         buf_lit(out, "</g>");

@@ -322,6 +322,26 @@ static constexpr double BH = 32;
 static constexpr double AW = 5;
 static constexpr double TB = 26;
 
+/* 14x14 stroked fragment-header glyphs (ZenUML style), top-left at (x, y) */
+static void frag_icon(Buf *o, Str label, double x, double y) {
+    static const struct { const char *k, *d; } IC[] = {
+        {"Alt", "M2 2v10M2 7h5l3-4h3M7 7l3 4h3"},
+        {"Loop", "M11.5 4.5A5 5 0 1 0 12 9M12 1.5v3.5h-3.5"},
+        {"Opt", "M12 7A5 5 0 1 1 2 7A5 5 0 1 1 12 7"},
+        {"Par", "M3 2v10M7 2v10M11 2v10"},
+        {"Try", "M7 1.5l5 2v4c0 3-2.5 4.5-5 5.5-2.5-1-5-2.5-5-5.5v-4z"},
+        {"Critical", "M7 1.5l5.5 10.5h-11zM7 5.5v3.5M7 10.2v.6"},
+        {"Section", "M2 3h10M2 7h10M2 11h6"},
+    };
+    for (size_t i = 0; i < countof(IC); i++) {
+        if (!str_eq(label, (Str){.p = IC[i].k, .n = strlen(IC[i].k)})) continue;
+        buf_lit(o, "<path class=\"zfi\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" transform=\"translate(");
+        buf_num(o, x); buf_ch(o, ','); buf_num(o, y); buf_lit(o, ")\" d=\"");
+        buf_put(o, strlen(IC[i].d), IC[i].d); buf_lit(o, "\"/>");
+        return;
+    }
+}
+
 static void icon(Buf *o, uint8_t ic, double x, double y) { /* 14x14 glyph, top-left (x,y) */
     buf_lit(o, "<path class=\"zi\" d=\"");
     switch (ic) {
@@ -544,7 +564,8 @@ DIAG_FN(zenuml_render) {
         if (e->k == E_FRAG) {
             dg_rect(o, e->x0, e->y, e->x1 - e->x0, e->y1 - e->y, 0, "zf");
             dg_rect(o, e->x0, e->y, e->x1 - e->x0, 22, 0, "zh");
-            dg_text(o, e->label, 13, e->x0 + 8, e->y + 11, "start", "zht");
+            frag_icon(o, e->label, e->x0 + 6, e->y + 4);
+            dg_text(o, e->label, 13, e->x0 + 24, e->y + 11, "start", "zht");
             dg_text(o, e->num, 9, e->x0 - 3, e->y + 6, "end", "zn");
             if (e->comment.n) dg_text(o, e->comment, 10, e->x0, e->y - 8, "start", "zc");
             if (e->cond.n) dg_text(o, e->cond, 11, e->x0 + 6, e->y + 33, "start", "zfc");
