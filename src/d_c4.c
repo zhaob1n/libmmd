@@ -2,9 +2,12 @@
  * Elements: Person, System, SystemDb, SystemQueue, Container*, Component* (+ _Ext variants);
  * boundaries: Boundary, Enterprise_Boundary, System_Boundary, Container_Boundary, Deployment_Node,
  * Node, Node_L, Node_R with `{ ... }`; relations Rel, BiRel, Rel_U/D/L/R/Up/Down/Left/Right/Back,
- * RelIndex. Named `$k=v` args and Update*Style/UpdateLayoutConfig are accepted and ignored.
- * Layout uses flow_layout with boundaries as clusters. */
+ * RelIndex. UpdateElementStyle($bgColor/$fontColor/$borderColor), UpdateRelStyle($textColor/$lineColor/
+ * $offsetX/$offsetY) and UpdateLayoutConfig($c4ShapeInRow/$c4BoundaryInRow) are honoured; tags are ignored.
+ * Layout follows mermaid: in each boundary, shapes in declaration order fill rows of c4ShapeInRow, then
+ * child boundaries fill rows of c4BoundaryInRow below them. Relations are straight clipped lines. */
 #include <math.h>
+#include <stdio.h>
 
 #include "dgraph.h"
 #include "diagrams.h"
@@ -14,13 +17,16 @@ enum { K_PERSON, K_SYSTEM, K_CONTAINER, K_COMPONENT };
 enum { F_PLAIN, F_DB, F_QUEUE };
 typedef struct CInfo { Str stereo, techn, descr; uint8_t kind, form; bool ext; } CInfo;
 typedef struct CRel { Str techn; bool bi; } CRel;
+typedef struct EStyle { Str alias, bg, font, border; } EStyle;
+typedef struct RStyle { Str from, to, text, line; double ox, oy; } RStyle;
+typedef struct Item { int32_t idx; bool box; } Item;
 
 static constexpr char CSS[] =
     "#mermaid .ct{fill:#fff;}#mermaid .ct.ext{fill:#fff;}#mermaid .cn{font-weight:bold;}#mermaid .cs{font-size:12px;font-style:italic;}"
     "#mermaid .cd{font-size:14px;}#mermaid .cb{fill:none;stroke:#444;stroke-width:1px;stroke-dasharray:7,7;}"
     "#mermaid .cbt{font-weight:bold;font-size:14px;fill:#444;}#mermaid .cbs{font-size:12px;fill:#444;}"
     "#mermaid .cr{fill:none;stroke:#444;stroke-width:1px;}#mermaid .crh{fill:#444;}#mermaid .crl{font-size:13px;fill:#444;}"
-    "#mermaid .crt{font-size:12px;font-style:italic;fill:#444;}";
+    "#mermaid .crt{font-size:12px;font-style:italic;fill:#444;}#mermaid .crx{fill:inherit;}";
 static const char *const FILL[2][4] = {{"#08427B", "#1168BD", "#438DD5", "#85BBF0"}, {"#686868", "#999999", "#B3B3B3", "#E6E6E6"}};
 static const char *const STROKE[2][4] = {{"#073B6F", "#3C7FC0", "#3C7FC0", "#78A8D8"}, {"#8A8A8A", "#8A8A8A", "#A6A6A6", "#D0D0D0"}};
 
@@ -45,6 +51,87 @@ static size_t args(Str in, size_t max, Str out[static max]) {
     return k;
 }
 
+/* value of `$key=...` among the args, unquoted; empty if absent */
+static Str named(Str in, const char *key) {
+    size_t kl = strlen(key), st = 0;
+    bool q = false;
+    for (size_t i = 0; i <= in.n; i++) {
+        if (i < in.n && in.p[i] == '"') q = !q;
+        if (i == in.n || (in.p[i] == ',' && !q)) {
+            Str a = str_trim((Str){.p = in.p + st, .n = i - st});
+            if (a.n > kl + 1 && a.p[0] == '$' && !memcmp(a.p + 1, key, kl)) {
+                Str r = str_trim((Str){.p = a.p + 1 + kl, .n = a.n - 1 - kl});
+                if (r.n && r.p[0] == '=') return unq((Str){.p = r.p + 1, .n = r.n - 1});
+            }
+            st = i + 1;
+        }
+    }
+    return (Str){};
+}
+
+static bool color_ok(Str c) { /* conservative: only chars legal in a CSS colour, so the attribute can't break out */
+    if (!c.n || c.n > 40) return false;
+    for (size_t i = 0; i < c.n; i++) {
+        char ch = c.p[i];
+        if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '#' || ch == '(' || ch == ')' || ch == ',' || ch == '.' || ch == '%' || ch == ' ')) return false;
+    }
+    return true;
+}
+
+static void put_s(Buf *b, Str s) { buf_put(b, s.n, s.p); }
+
+/* first crossing of the segment centre->(ox,oy) with the w*h box around (cx,cy) */
+static void rclip(double cx, double cy, double w, double h, double ox, double oy, double *x, double *y) {
+    double dx = ox - cx, dy = oy - cy;
+    double tx = dx != 0 ? (w / 2) / fabs(dx) : INFINITY, ty = dy != 0 ? (h / 2) / fabs(dy) : INFINITY;
+    double t = fmin(fmin(tx, ty), 1);
+    *x = cx + dx * t, *y = cy + dy * t;
+}
+
+typedef struct Lay {
+    const Graph *g;
+    const Item *items;
+    size_t nitems;
+    unsigned shape_row, box_row;
+    double *nx, *ny, *sx, *sy, *sw, *sh;
+} Lay;
+
+constexpr double C4_MARGIN = 50;
+constexpr double C4_BPAD = 20;
+constexpr double C4_GAPX = 90;
+constexpr double C4_GAPY = 70;
+
+/* lay out the contents of container `parent` (NONE = root) with top-left (x, y); returns content size */
+static void lay(Lay *L, int32_t parent, double x, double y, double *ow, double *oh, unsigned depth) {
+    double cy = y, maxw = 0, rowx = x, rowh = 0;
+    unsigned col = 0;
+    const Graph *g = L->g;
+    for (size_t i = 0; i < L->nitems; i++) {
+        Item it = L->items[i];
+        if (it.box || g->nparent[it.idx] != parent) continue;
+        if (col == L->shape_row) cy += rowh + C4_GAPY, rowx = x, rowh = 0, col = 0;
+        L->nx[it.idx] = rowx + g->nw[it.idx] / 2, L->ny[it.idx] = cy + g->nh[it.idx] / 2;
+        rowx += g->nw[it.idx] + C4_GAPX, rowh = fmax(rowh, g->nh[it.idx]), maxw = fmax(maxw, rowx - C4_GAPX - x);
+        col++;
+    }
+    if (col) cy += rowh + C4_GAPY;
+    rowx = x, rowh = 0, col = 0;
+    for (size_t i = 0; i < L->nitems; i++) {
+        Item it = L->items[i];
+        if (!it.box || g->sparent[it.idx] != parent) continue;
+        if (col == L->box_row) cy += rowh + C4_MARGIN / 2, rowx = x, rowh = 0, col = 0;
+        int32_t s = it.idx;
+        double th = memchr(g->stitle[s].p, '\n', g->stitle[s].n) ? 46 : 30, w = 0, h = 0;
+        if (depth < 64) lay(L, s, rowx + C4_BPAD, cy + th + C4_BPAD, &w, &h, depth + 1);
+        L->sx[s] = rowx, L->sy[s] = cy;
+        L->sw[s] = fmax(w + 2 * C4_BPAD, text_width(g->stitle[s], 14) + 30), L->sh[s] = h + th + 2 * C4_BPAD;
+        rowx += L->sw[s] + C4_MARGIN / 2, rowh = fmax(rowh, L->sh[s]), maxw = fmax(maxw, rowx - C4_MARGIN / 2 - x);
+        col++;
+    }
+    if (col) cy += rowh + C4_MARGIN;
+    *ow = maxw, *oh = fmax(0, cy - y - C4_MARGIN);
+}
+
 static bool is(Str s, const char *lit) { return s.n == strlen(lit) && !memcmp(s.p, lit, s.n); }
 
 static void arrowhead(Buf *b, const double *A, const double *B) { /* tip at A, coming from B */
@@ -65,6 +152,10 @@ DIAG_FN(c4_render) {
     if (!dg_next_line(&it, &line, &lo)) return diag_fail(err_off, msg, off, "empty C4 diagram");
     VEC(CInfo) ci = {};
     VEC(CRel) cr = {};
+    VEC(EStyle) es = {};
+    VEC(RStyle) rs = {};
+    VEC(Item) items = {};
+    unsigned shape_row = 4, box_row = 2;
     int32_t stack[32];
     unsigned depth = 0;
     Str ttl = title;
@@ -90,6 +181,26 @@ DIAG_FN(c4_render) {
         if (tail.n && !open) return diag_fail(err_off, msg, (size_t)(tail.p - src), "unexpected text after macro");
         Str A[8];
         size_t na = args((Str){.p = lp + 1, .n = (size_t)(rp - lp - 1)}, 8, A);
+        Str raw = {.p = lp + 1, .n = (size_t)(rp - lp - 1)};
+        if (is(mac, "UpdateLayoutConfig")) {
+            double v;
+            Str a1 = named(raw, "c4ShapeInRow"), a2 = named(raw, "c4BoundaryInRow");
+            if (a1.n && dg_parse_num(a1, &v) && v >= 1 && v <= 64) shape_row = (unsigned)v;
+            if (a2.n && dg_parse_num(a2, &v) && v >= 1 && v <= 64) box_row = (unsigned)v;
+            continue;
+        }
+        if (is(mac, "UpdateElementStyle")) {
+            if (na && !VEC_PUSH(a, &es, ((EStyle){A[0], named(raw, "bgColor"), named(raw, "fontColor"), named(raw, "borderColor")}))) return CMM_ERR_NOMEM;
+            continue;
+        }
+        if (is(mac, "UpdateRelStyle")) {
+            double ox = 0, oy = 0;
+            Str sx_ = named(raw, "offsetX"), sy_ = named(raw, "offsetY");
+            if (sx_.n && (!dg_parse_num(sx_, &ox) || fabs(ox) > 1e4)) ox = 0;
+            if (sy_.n && (!dg_parse_num(sy_, &oy) || fabs(oy) > 1e4)) oy = 0;
+            if (na >= 2 && !VEC_PUSH(a, &rs, ((RStyle){A[0], A[1], named(raw, "textColor"), named(raw, "lineColor"), ox, oy}))) return CMM_ERR_NOMEM;
+            continue;
+        }
         if (str_starts(mac, S("Update")) || is(mac, "AddElementTag") || is(mac, "AddRelTag") || is(mac, "AddBoundaryTag")) continue;
         int32_t parent = depth ? stack[depth - 1] : NONE;
         if (str_starts(mac, S("Rel")) || is(mac, "BiRel")) {
@@ -119,6 +230,7 @@ DIAG_FN(c4_render) {
             int32_t c = dg_cluster(&g, A[0], t2, parent);
             if (c == NONE) return CMM_ERR_NOMEM;
             stack[depth++] = c;
+            if (!VEC_PUSH(a, &items, ((Item){c, true}))) return CMM_ERR_NOMEM;
             continue;
         }
         CInfo info = {};
@@ -152,6 +264,7 @@ DIAG_FN(c4_render) {
         if (v == NONE) return CMM_ERR_NOMEM;
         g.nlabel[v] = na > 1 ? A[1] : A[0];
         g.nparent[v] = parent;
+        if (!VEC_PUSH(a, &items, ((Item){v, false}))) return CMM_ERR_NOMEM;
         while (ci.n < g.nn) if (!VEC_PUSH(a, &ci, (CInfo){.kind = K_SYSTEM, .stereo = S("system")})) return CMM_ERR_NOMEM;
         ci.v[v] = info;
     }
@@ -188,10 +301,54 @@ DIAG_FN(c4_render) {
             g.elabel[e] = (Str){.p = b, .n = g.elabel[e].n + cr.v[e].techn.n + 3};
         }
     }
-    cmm_status st = flow_layout(&g);
-    if (st) return st;
-    BBox bb = dg_bbox(&g);
-    if (ttl.n) bb.y0 -= 34;
+    /* nodes only referenced by Rel (never declared) go to the root in first-use order */
+    {
+        bool *seen = ANEW(a, bool, g.nn);
+        if (!seen) return CMM_ERR_NOMEM;
+        size_t k = 0;
+        for (size_t i = 0; i < items.n; i++) { /* keep the first declaration of each element */
+            Item it = items.v[i];
+            if (!it.box && seen[it.idx]) continue;
+            if (!it.box) seen[it.idx] = true;
+            items.v[k++] = it;
+        }
+        items.n = k;
+        for (size_t v = 0; v < g.nn; v++)
+            if (!seen[v] && !VEC_PUSH(a, &items, ((Item){(int32_t)v, false}))) return CMM_ERR_NOMEM;
+    }
+    /* layout output arrays (flow_layout normally allocates these) */
+    g.nx = ANEW(a, double, g.nn), g.ny = ANEW(a, double, g.nn);
+    g.sx = ANEW(a, double, g.ns + 1), g.sy = ANEW(a, double, g.ns + 1), g.sw = ANEW(a, double, g.ns + 1), g.sh = ANEW(a, double, g.ns + 1);
+    g.elx = ANEW(a, double, g.ne + 1), g.ely = ANEW(a, double, g.ne + 1);
+    if (!g.nx || !g.ny || !g.sx || !g.sy || !g.sw || !g.sh || !g.elx || !g.ely) return CMM_ERR_NOMEM;
+    Lay L = {.g = &g, .items = items.v, .nitems = items.n, .shape_row = shape_row, .box_row = box_row,
+             .nx = g.nx, .ny = g.ny, .sx = g.sx, .sy = g.sy, .sw = g.sw, .sh = g.sh};
+    double tw_ = 0, th_ = 0;
+    lay(&L, NONE, 0, 0, &tw_, &th_, 0);
+    BBox bb = {0, 0, fmax(tw_, 1), fmax(th_, 1)};
+    if (ttl.n) bb.y0 -= 34, bb.x1 = fmax(bb.x1, text_width(ttl, 18) + 20);
+    /* resolve style overrides */
+    const EStyle **nst = ANEW(a, const EStyle *, g.nn);
+    const RStyle **rst = ANEW(a, const RStyle *, g.ne + 1);
+    if (!nst || !rst) return CMM_ERR_NOMEM;
+    for (size_t i = 0; i < es.n; i++) { int32_t v = dg_find(&g, es.v[i].alias); if (v != NONE) nst[v] = &es.v[i]; }
+    for (size_t i = 0; i < rs.n; i++) {
+        int32_t f = dg_find(&g, rs.v[i].from), t = dg_find(&g, rs.v[i].to);
+        for (size_t e = 0; e < g.ne; e++)
+            if (f != NONE && ((g.efrom[e] == f && g.eto[e] == t) || (g.efrom[e] == t && g.eto[e] == f))) rst[e] = &rs.v[i];
+        }
+    for (size_t e = 0; e < g.ne; e++) {
+        int32_t f = g.efrom[e], t = g.eto[e];
+        double x0, y0, x1, y1;
+        rclip(g.nx[f], g.ny[f], g.nw[f], g.nh[f], g.nx[t], g.ny[t], &x0, &y0);
+        rclip(g.nx[t], g.ny[t], g.nw[t], g.nh[t], g.nx[f], g.ny[f], &x1, &y1);
+        bb_add(&bb, x0, y0, x0, y0), bb_add(&bb, x1, y1, x1, y1);
+        double lw;
+        unsigned ln;
+        label_measure(g.elabel[e], 13, &lw, &ln);
+        g.elx[e] = (x0 + x1) / 2 + (rst[e] ? rst[e]->ox : 0), g.ely[e] = (y0 + y1) / 2 + (rst[e] ? rst[e]->oy : 0);
+        bb_add(&bb, g.elx[e] - lw / 2, g.ely[e] - 20, g.elx[e] + lw / 2, g.ely[e] + 20);
+    }
     if (!buf_reserve(out, 2048 + g.nn * 900 + g.ne * 500 + g.ns * 300)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 12, "c4", CSS);
     if (ttl.n) dg_text(out, ttl, 18, (bb.x0 + bb.x1) / 2, bb.y0 + 14, "middle", "cn");
@@ -204,25 +361,41 @@ DIAG_FN(c4_render) {
         if (nl) dg_text(out, (Str){.p = nl + 1, .n = t.n - (size_t)(nl + 1 - t.p)}, 12, g.sx[s] + 10, g.sy[s] + 30, "start", "cbs");
     }
     for (size_t e = 0; e < g.ne; e++) {
-        uint32_t np = g.eptn[e];
-        if (np < 2) continue;
-        buf_lit(out, "<path class=\"cr\" d=\""); dg_edge_d(out, &g, e); buf_lit(out, "\"/>");
-        const double *P = g.pts.v + g.eptoff[e];
-        arrowhead(out, P + 2 * (np - 1), P + 2 * (np - 2));
+        int32_t f = g.efrom[e], t = g.eto[e];
+        double P[4];
+        rclip(g.nx[f], g.ny[f], g.nw[f], g.nh[f], g.nx[t], g.ny[t], &P[0], &P[1]);
+        rclip(g.nx[t], g.ny[t], g.nw[t], g.nh[t], g.nx[f], g.ny[f], &P[2], &P[3]);
+        bool lc = rst[e] && color_ok(rst[e]->line), tc = rst[e] && color_ok(rst[e]->text);
+        if (lc) { buf_lit(out, "<g stroke=\""); put_s(out, rst[e]->line); buf_lit(out, "\" fill=\""); put_s(out, rst[e]->line); buf_lit(out, "\">"); }
+        buf_lit(out, "<path class=\"cr\"");
+        if (lc) { buf_lit(out, " style=\"stroke:"); put_s(out, rst[e]->line); buf_lit(out, "\""); }
+        buf_lit(out, " d=\"M"); dg_pt(out, P[0], P[1]); buf_ch(out, 'L'); dg_pt(out, P[2], P[3]); buf_lit(out, "\"/>");
+        if (lc) { buf_lit(out, "<g style=\"fill:"); put_s(out, rst[e]->line); buf_lit(out, "\">"); }
+        arrowhead(out, P + 2, P);
         if (cr.v[e].bi) arrowhead(out, P, P + 2);
+        if (lc) buf_lit(out, "</g></g>");
+        if (tc) { buf_lit(out, "<g style=\"fill:"); put_s(out, rst[e]->text); buf_lit(out, "\">"); }
         Str l = g.elabel[e];
         const char *nl = memchr(l.p, '\n', l.n);
         Str l1 = nl ? (Str){.p = l.p, .n = (size_t)(nl - l.p)} : l;
         double y = g.ely[e] - (nl ? 8 : 0);
-        dg_text(out, l1, 13, g.elx[e], y, "middle", "crl");
-        if (nl) dg_text(out, (Str){.p = nl + 1, .n = l.n - (size_t)(nl + 1 - l.p)}, 12, g.elx[e], y + 16, "middle", "crt");
+        dg_text(out, l1, 13, g.elx[e], y, "middle", tc ? "crl crx" : "crl");
+        if (nl) dg_text(out, (Str){.p = nl + 1, .n = l.n - (size_t)(nl + 1 - l.p)}, 12, g.elx[e], y + 16, "middle", tc ? "crt crx" : "crt");
+        if (tc) buf_lit(out, "</g>");
     }
     for (size_t v = 0; v < g.nn; v++) {
         const CInfo *c = &ci.v[v];
         double w = g.nw[v], h = g.nh[v], x0 = g.nx[v] - w / 2, y0 = g.ny[v] - h / 2, cx = g.nx[v];
         const char *fill = FILL[c->ext][c->kind], *stroke = STROKE[c->ext][c->kind];
         bool dark = !(c->kind == K_COMPONENT);
-        buf_lit(out, "<g class=\"c4-element\" fill=\""); buf_put(out, strlen(dark ? "#fff" : "#000"), dark ? "#fff" : "#000"); buf_lit(out, "\">");
+        const EStyle *u = nst[v];
+        char fb[48], sb[48];
+        if (u && color_ok(u->bg)) snprintf(fb, sizeof fb, "%.*s", (int)u->bg.n, u->bg.p), fill = fb;
+        if (u && color_ok(u->border)) snprintf(sb, sizeof sb, "%.*s", (int)u->border.n, u->border.p), stroke = sb;
+        buf_lit(out, "<g class=\"c4-element\" fill=\"");
+        if (u && color_ok(u->font)) put_s(out, u->font);
+        else buf_put(out, strlen(dark ? "#fff" : "#000"), dark ? "#fff" : "#000");
+        buf_lit(out, "\">");
         if (c->form == F_DB) {
             double ry = 10;
             buf_lit(out, "<path fill=\""); buf_put(out, strlen(fill), fill); buf_lit(out, "\" stroke=\""); buf_put(out, strlen(stroke), stroke);
