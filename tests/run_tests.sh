@@ -18,6 +18,7 @@ for f in "$DIR"/cases/*.mmd; do
     continue
   fi
   if "$BIN" "$f" -o "$OUT/$name.svg" && check_xml "$OUT/$name.svg"; then
+    if [[ -n ${UPDATE_GOLDEN:-} ]]; then mkdir -p "$DIR/golden"; cp "$OUT/$name.svg" "$DIR/golden/$name.svg"; fi
     if [[ -f $DIR/golden/$name.svg ]] && ! cmp -s "$OUT/$name.svg" "$DIR/golden/$name.svg"; then
       echo "FAIL $name (differs from golden)"; fail=$((fail+1))
     else echo "ok   $name"; pass=$((pass+1)); fi
