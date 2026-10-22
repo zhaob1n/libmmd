@@ -171,7 +171,7 @@ static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n],
     PMARK("");
     dcfg_begin(&arena, n, src, off); /* %%{init}%% / frontmatter keys + accTitle/accDescr, all diagram kinds */
     dcfg_set_theme(opt && opt->theme ? opt->theme : cfg.theme);
-    if (str_eq(kw, S("graph")) || str_eq(kw, S("flowchart")) || str_eq(kw, S("flowchart-elk"))) {
+    if (str_eq(kw, S("graph")) || str_eq(kw, S("flowchart")) || str_eq(kw, S("flowchart-elk")) || str_eq(kw, S("swimlane-beta"))) {
         dcfg_set_theme(0); /* flowchart applies named themes itself (Graph.theme) */
         Graph g = {.arena = &arena, .title = cfg.title,
                    .theme = (uint8_t)(opt && opt->theme ? opt->theme : cfg.theme ? cfg.theme : CMM_THEME_DEFAULT),
@@ -196,8 +196,11 @@ static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n],
         PMARK("parse");
         if ((st = flow_layout(&g))) goto fail;
         PMARK("layout-misc");
+        Str *lanes = nullptr;
+        if (str_eq(kw, S("swimlane-beta")) && (st = swim_layout(&g, &lanes))) goto fail;
         if (!buf_reserve(&b, 256 + g.nn * 320 + g.ne * 200)) { st = CMM_ERR_NOMEM; goto fail; }
         if ((st = flow_svg(&g, &b))) goto fail;
+        if (lanes && (st = swim_titles(&g, lanes, &b))) goto fail;
         PMARK("svg");
     } else if (str_eq(kw, S("sequenceDiagram"))) {
         if ((st = seq_render(&arena, n, src, off, cfg.title, fs, &b, &eoff, msg))) goto fail;

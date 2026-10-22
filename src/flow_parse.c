@@ -673,6 +673,7 @@ cmm_status flow_parse(Graph *g, size_t n, const char src[static n], size_t off, 
     cmm_status st = CMM_OK;
     /* header */
     Str kw = read_word(&p);
+    if (str_eq(kw, S("swimlane")) && p.n - p.i >= 5 && !memcmp(src + p.i, "-beta", 5)) p.i += 5, kw = S("flowchart");
     if (!str_eq(kw, S("graph")) && !str_eq(kw, S("flowchart")) && !str_eq(kw, S("flowchart-elk"))) {
         st = fail(&p, "expected 'graph' or 'flowchart'");
         goto out;

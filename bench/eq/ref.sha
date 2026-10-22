@@ -459,6 +459,11 @@ b2a9983ee0faecb0 tests/cases/config_pie.mmd
 9aeade426974b49a tests/cases/er_full.mmd
 16f03414993360d2 tests/cases/er_subgraph.mmd
 e3b0c44298fc1c14 tests/cases/err1.mmd
+9d4e350b9eb52396 tests/cases/eventmodeling_04.mmd
+af7e6f9cbf935c8d tests/cases/eventmodeling_06.mmd
+9a9ab2cb2a653126 tests/cases/eventmodeling_09.mmd
+47ec8b95f6e3496c tests/cases/eventmodeling_12.mmd
+50cb601b7fa8dc51 tests/cases/eventmodeling_edge.mmd
 6e0b39046083fb87 tests/cases/flow_config_acc.mmd
 b86cfe9ab2e03b76 tests/cases/flow_config_curve.mmd
 da12ad4c1e8e2285 tests/cases/flow_config_linear.mmd
@@ -475,6 +480,11 @@ cefb6583e0330c52 tests/cases/mindmap_full.mmd
 a0e90a7be466dade tests/cases/pie_full.mmd
 febdaf1f6f66cb4c tests/cases/quadrant_full.mmd
 5d529551c71e664c tests/cases/radar_full.mmd
+46a85b2e6172aede tests/cases/railroad_abnf.mmd
+61d448727e53c5c6 tests/cases/railroad_ebnf.mmd
+f147e4c67453da7e tests/cases/railroad_edge.mmd
+ab2b73b5e2416d17 tests/cases/railroad_fn.mmd
+d17df4c25acb8c5f tests/cases/railroad_peg.mmd
 52b8efd48048039b tests/cases/requirement_full.mmd
 aeb4a72799994932 tests/cases/rich_text.mmd
 47e1786102c2edb9 tests/cases/sankey_full.mmd
@@ -486,6 +496,11 @@ c20d356da033c788 tests/cases/seq_basic.mmd
 21517e770a1a43ea tests/cases/state_full.mmd
 715f5012f0d8902c tests/cases/styles.mmd
 a85724564d61b6c0 tests/cases/subgraphs.mmd
+ff9caa50f503522b tests/cases/swimlane_01.mmd
+007cca983c05b91b tests/cases/swimlane_03.mmd
+d8226506481828c9 tests/cases/swimlane_06.mmd
+324b35aa73d4239e tests/cases/swimlane_11.mmd
+1f5749dda5148579 tests/cases/swimlane_edge.mmd
 9fda368a7c65fb8d tests/cases/theme_dark.mmd
 8ffedd4d3cfb58dd tests/cases/theme_dark_class.mmd
 08e5b7eb313db370 tests/cases/theme_dark_er.mmd
