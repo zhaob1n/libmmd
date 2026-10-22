@@ -9,6 +9,8 @@
 [[nodiscard]] Str label_normalize(Arena *a, Str raw, bool *ok);
 /* Measure a normalised label: max line width and line count. */
 void label_measure(Str s, double fs, double *w, unsigned *lines);
+[[nodiscard]] double text_width_os(Str s, double fs);
+void label_measure_f(Str s, double fs, double (*meas)(Str, double), double *w, unsigned *lines);
 /* iterate lines: returns next line, advances *pos; false at end */
 bool label_next_line(Str s, size_t *pos, Str *line);
 #endif

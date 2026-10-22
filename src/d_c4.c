@@ -195,8 +195,10 @@ constexpr double C4_TF = 10.5;   /* [type] 0.75em */
 constexpr double C4_DF = 11.48;  /* description 0.82em */
 constexpr double C4_PAD = 20;    /* conf.c4ShapePadding */
 constexpr double C4_GAP = 3;     /* c4LabelHelper SECTION_GAP */
-/* svg text bbox height of an n-line block: rows 1.1em apart plus the glyph box of one row */
-static double sec_h(unsigned n, double f) { return (n ? n - 1 : 0) * 1.1 * f + 1.33 * f; }
+/* svg text bbox height of an n-line block: rows 1.1em apart plus the glyph box of one row. Chromium's
+ * glyph box is the rounded ascent plus the rounded descent of the font ("Open Sans": 1.069em / 0.293em),
+ * measured: 14px bold 19, 10.5px 14, 11.48px 15 */
+static double sec_h(unsigned n, double f) { return (n ? n - 1 : 0) * 1.1 * f + round(1.069 * f) + round(0.293 * f); }
 /* mermaid cylinder end radius (ry = rx / (2.5 + w/50)) and person head radius */
 static double cyl_r(double w) { return w / 2 / (2.5 + w / 50); }
 static double head_r(double w) { return fmin(fmax(w * 0.23, 16), 56); }
@@ -336,26 +338,32 @@ DIAG_FN(c4_render) {
     if (!dw || !dn || !lab) return CMM_ERR_NOMEM;
     for (size_t v = 0; v < g.nn; v++) {
         CInfo *c = &ci.v[v];
-        double w = fmax(216, (double)(strlen(C4_TY[c->kind]) + c->techn.n + 4) * C4_TF * 0.55 + 2 * C4_PAD);
-        dn[v] = dg_wrap(a, g.nlabel[v], C4_NF, w - 2 * C4_PAD);
-        dw[v] = c->descr.n ? dg_wrap(a, c->descr, C4_DF, w - 2 * C4_PAD) : (Str){};
+        double w = 216; /* mermaid: node.width = conf.width; the [type] line is not used for sizing */
+        /* cylinder: node.width loses one padding before c4LabelHelper subtracts two */
+        double ww = w - 2 * C4_PAD - (c->form == F_DB ? C4_PAD : c->form == F_QUEUE ? C4_PAD / 2 : 0);
+        dn[v] = dg_wrapf(a, g.nlabel[v], C4_NF, ww, text_width_os);
+        dw[v] = c->descr.n ? dg_wrapf(a, c->descr, C4_DF, ww, text_width_os) : (Str){};
         if (!dn[v].n && g.nlabel[v].n) return CMM_ERR_NOMEM;
         double tw;
         unsigned nl = 0;
-        label_measure(dn[v], C4_NF, &tw, &nl);
-        w = fmax(w, tw * 1.05 + 2 * C4_PAD);
+        label_measure_f(dn[v], C4_NF, text_width_os, &tw, &nl);
+        w = fmax(w, tw + w - ww);
         double h = sec_h(nl, C4_NF) + C4_GAP + sec_h(1, C4_TF);
         if (dw[v].n) {
             double dwid;
             unsigned dl;
-            label_measure(dw[v], C4_DF, &dwid, &dl);
+            label_measure_f(dw[v], C4_DF, text_width_os, &dwid, &dl);
             h += C4_GAP + sec_h(dl, C4_DF);
-            w = fmax(w, dwid + 2 * C4_PAD);
+            w = fmax(w, dwid + w - ww);
         }
         lab[v] = h;
         h += 2 * C4_PAD;
-        if (c->form == F_QUEUE) h = lab[v] + 12.63;
-        else if (c->form == F_DB) h += 1.5 * cyl_r(w);
+        if (c->form == F_QUEUE) { /* mermaid tiltedCylinder: label + padding/2; body width + rx, and the
+                                      * caps (rx each) count towards the layout width */
+            h = lab[v] + C4_PAD / 2;
+            w += 3 * (h / 2 / (2.5 + h / 50));
+        }
+        else if (c->form == F_DB) h = lab[v] + C4_PAD + 3 * cyl_r(w); /* mermaid cylinder: label + padding + ry, plus both caps */
         else if (c->kind == K_PERSON) h += 2 * head_r(w) - 0.27 * head_r(w);
         dg_size(&g, (int32_t)v, w, h);
     }
@@ -395,8 +403,8 @@ DIAG_FN(c4_render) {
     bnd_set(&screen, C4_DMX, C4_DMY);
     L.maxx = C4_DMX, L.maxy = C4_DMY;
     lay(&L, &screen, C4_GLOBAL, 0);
-    BBox bb = {0, 0, L.maxx + C4_DMX, L.maxy + C4_DMY};
-    if (ttl.n) bb.y0 -= 34, bb.x1 = fmax(bb.x1, text_width(ttl, 18) + 20);
+    /* mermaid: viewBox = (startx - marginX, -(marginY + 60 if titled), box + 2 margins); screen start (50, 10) */
+    BBox bb = {0, -C4_DMY - (ttl.n ? 60 : 0), L.maxx + C4_DMX, L.maxy};
     /* resolve style overrides */
     const EStyle **nst = ANEW(a, const EStyle *, g.nn);
     const RStyle **rst = ANEW(a, const RStyle *, g.ne + 1);
@@ -449,11 +457,12 @@ DIAG_FN(c4_render) {
             lbw[e] = lw, lbh[e] = lh;
             g.elx[e] = bx + (rst[e] ? rst[e]->ox : 0), g.ely[e] = by + (rst[e] ? rst[e]->oy : 0);
         }
-        bb_add(&bb, g.elx[e] - lw / 2, g.ely[e] - 20, g.elx[e] + lw / 2, g.ely[e] + 20);
+        (void)lw; /* mermaid does not grow the viewBox for relation labels */
     }
     if (!buf_reserve(out, 2048 + g.nn * 900 + g.ne * 500 + g.ns * 300)) return CMM_ERR_NOMEM;
-    DG_HEAD(out, bb, 12, "c4", CSS);
-    if (ttl.n) dg_text(out, ttl, 18, (bb.x0 + bb.x1) / 2, bb.y0 + 14, "middle", "cn");
+    DG_HEAD(out, bb, 0, "c4", CSS);
+    /* mermaid: plain 16px text, start-anchored at (boxWidth/2 - 4*marginX, starty + marginY), baseline */
+    if (ttl.n) dg_text(out, ttl, 16, (L.maxx - C4_DMX) / 2 - 4 * C4_DMX, 20 - 0.35 * 16, "start", "cn");
     for (size_t s = 0; s < g.ns; s++) {
         dg_rect(out, g.sx[s], g.sy[s], g.sw[s], g.sh[s], 2.5, "cb");
         Str t = g.stitle[s];
@@ -531,7 +540,7 @@ DIAG_FN(c4_render) {
         }
         unsigned nl;
         double tw;
-        label_measure(dn[v], C4_NF, &tw, &nl);
+        label_measure_f(dn[v], C4_NF, text_width_os, &tw, &nl);
         double y = lt;
         dg_text_lh(out, dn[v], 1.1 * C4_NF, cx, y + sec_h(nl, C4_NF) / 2, "middle", "cn");
         y += sec_h(nl, C4_NF) + C4_GAP;
@@ -545,7 +554,7 @@ DIAG_FN(c4_render) {
         if (dw[v].n) {
             double dwid;
             unsigned dl;
-            label_measure(dw[v], C4_DF, &dwid, &dl);
+            label_measure_f(dw[v], C4_DF, text_width_os, &dwid, &dl);
             dg_text_lh(out, dw[v], 1.1 * C4_DF, cx, y + sec_h(dl, C4_DF) / 2, "middle", "cd");
         }
         buf_lit(out, "</g>");

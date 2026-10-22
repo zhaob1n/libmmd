@@ -147,3 +147,30 @@ void label_measure(Str s, double fs, double *w, unsigned *lines) {
     *w = mw;
     *lines = cnt;
 }
+
+/* "Open Sans" (C4 labels) ASCII advances in 1/1000 em, measured in Chromium; kerning ignored.
+ * Non-ASCII falls back to the default face's advance. */
+static constexpr unsigned short OS_ADV[95] = {260,264,398,646,572,827,729,219,295,295,551,572,259,322,263,367,572,572,572,572,572,572,572,572,572,572,263,263,572,572,572,432,896,632,646,630,726,556,516,727,737,279,269,612,522,899,753,778,602,778,617,548,551,729,596,923,578,559,572,327,367,327,572,438,277,556,612,479,612,562,336,543,613,252,252,525,252,926,613,602,612,612,409,477,356,613,500,775,523,501,469,375,549,375,572};
+double text_width_os(Str s, double fs) {
+    double acc = 0;
+    size_t i = 0;
+    while (i < s.n) {
+        unsigned char c = (unsigned char)s.p[i];
+        if (c >= 32 && c < 127) { acc += OS_ADV[c - 32] * fs / 1000.0; i++; continue; }
+        size_t j = i + 1;
+        while (j < s.n && ((unsigned char)s.p[j] & 0xC0) == 0x80) j++;
+        acc += text_width((Str){.p = s.p + i, .n = j - i}, fs);
+        i = j;
+    }
+    return acc;
+}
+
+void label_measure_f(Str s, double fs, double (*meas)(Str, double), double *w, unsigned *lines) {
+    size_t pos = 0;
+    Str ln;
+    double mw = 0;
+    unsigned k = 0;
+    if (s.n == 0) { *w = 0, *lines = 0; return; }
+    while (label_next_line(s, &pos, &ln)) mw = fmax(mw, meas(ln, fs)), k++;
+    *w = mw, *lines = k;
+}

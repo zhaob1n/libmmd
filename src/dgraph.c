@@ -344,13 +344,15 @@ const char *dg_palette(size_t i) {
                                     "#ffb8ff", "#b8ffff", "#ffe0e0", "#ff85ff", "#85ffff", "#ffb8b8"};
     return P[i % countof(P)];
 }
-Str dg_wrap(Arena *a, Str raw, double fs, double maxw) {
+Str dg_wrap(Arena *a, Str raw, double fs, double maxw) { return dg_wrapf(a, raw, fs, maxw, text_width); }
+
+Str dg_wrapf(Arena *a, Str raw, double fs, double maxw, double (*meas)(Str, double)) {
     bool ok = true;
     Str s = label_normalize(a, raw, &ok);
     if (!ok) return (Str){};
     double w;
     unsigned nl;
-    label_measure(s, fs, &w, &nl);
+    label_measure_f(s, fs, meas, &w, &nl);
     if (w <= maxw) return s;
     char *o = arena_alloc(a, s.n + 1, 1);
     if (!o) return (Str){};
@@ -359,13 +361,13 @@ Str dg_wrap(Arena *a, Str raw, double fs, double maxw) {
     for (size_t i = 0; i < s.n; i++) {
         if (o[i] == '\n') { ls = i + 1, lastsp = SIZE_MAX; continue; }
         if (o[i] == ' ') {
-            if (lastsp != SIZE_MAX && text_width((Str){.p = o + ls, .n = i - ls}, fs) > maxw) {
+            if (lastsp != SIZE_MAX && meas((Str){.p = o + ls, .n = i - ls}, fs) > maxw) {
                 o[lastsp] = '\n', ls = lastsp + 1;
             }
             lastsp = i;
         }
     }
-    if (lastsp != SIZE_MAX && lastsp >= ls && text_width((Str){.p = o + ls, .n = s.n - ls}, fs) > maxw) o[lastsp] = '\n';
+    if (lastsp != SIZE_MAX && lastsp >= ls && meas((Str){.p = o + ls, .n = s.n - ls}, fs) > maxw) o[lastsp] = '\n';
     return (Str){.p = o, .n = s.n};
 }
 

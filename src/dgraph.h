@@ -75,3 +75,4 @@ void dg_rect_fill(Buf *b, double x, double y, double w, double h, double rx, con
 [[nodiscard]] const char *dg_palette(size_t i);
 /* normalise (<br>, quotes) then greedily word-wrap to maxw; nullptr-safe: returns {} on OOM */
 [[nodiscard]] Str dg_wrap(Arena *a, Str raw, double fs, double maxw);
+[[nodiscard]] Str dg_wrapf(Arena *a, Str raw, double fs, double maxw, double (*meas)(Str, double));
