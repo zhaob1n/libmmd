@@ -71,3 +71,16 @@ API (`include/cmermaid.h`): `cmm_render_svg(n, src, opts, &buf, &err)`, `cmm_buf
 - Obstacle routing is on by default: edges that cross a non-endpoint node get a local visibility-graph (A*) detour. Use `--no-avoid` / `CMM_F_NO_AVOID` for the fastest layout. Edge labels sit on the rendered curve.
 - SVG: stroke widths and text anchoring are now CSS classes, and collinear points are dropped (about 20% smaller on medium, about 50% on large vs v1).
 - Numbers: `bench/results_v3.txt`.
+
+## v4/v5: layout quality
+
+- Subgraph boxes never overlap: ordering uses one global key per cluster (mean member slot over all
+  layers), so clusters stay contiguous in every layer; Brandes-Köpf keeps cluster border chains
+  rigid (borders always align with their chain partner, segments crossing a chain are conflicts).
+  Overlapping cluster pairs over the mmdr fixtures, bench inputs and tests: 12 → 0.
+- Router: corners buried in obstacles are pruned with a single grid-cell lookup, and side detours
+  are tested shortest-first (the first clear one wins).
+- Timings (µs, one core; v1 = original): medium 404 (v1) / 534 (avoid on) / 406 (`--no-avoid`),
+  xlarge 54862 / 54061 / 48932. Full numbers and the mmdr comparison: `bench/results_v4.txt`, `bench/results_v5.txt`.
+- Known gap: long edges between rectangular clusters can take wide detours around them
+  (e.g. `mega_event_mesh`); this comes from layout, not the router (`--no-avoid` shows the same).
