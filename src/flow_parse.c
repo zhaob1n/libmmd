@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include "graph.h"
+#include "rich.h"
 #include "text.h"
 
 typedef struct P {
@@ -89,7 +90,7 @@ static inline uint64_t hash_str(Str s) {
     Arena *A = g->arena;
     GROW(A, g->efrom, oc, nc); GROW(A, g->eto, oc, nc); GROW(A, g->elabel, oc, nc);
     GROW(A, g->estroke, oc, nc); GROW(A, g->estart, oc, nc); GROW(A, g->eend, oc, nc);
-    GROW(A, g->elen, oc, nc);
+    GROW(A, g->elen, oc, nc); GROW(A, g->eid, oc, nc); GROW(A, g->eflags, oc, nc);
     g->ecap = nc;
     return true;
 }
@@ -98,6 +99,7 @@ static inline uint64_t hash_str(Str s) {
     Arena *A = g->arena;
     GROW(A, g->sid, oc, nc); GROW(A, g->stitle, oc, nc); GROW(A, g->sclass, oc, nc);
     GROW(A, g->sstyle, oc, nc); GROW(A, g->sparent, oc, nc); GROW(A, g->sdir, oc, nc);
+    GROW(A, g->sflags, oc, nc);
     g->scap = nc;
     return true;
 }
@@ -224,7 +226,7 @@ static cmm_status parse_shape_text(P *p, Graph *g, int32_t v) {
     Str raw = {.p = p->s + st, .n = p->i - st};
     p->i += cl;
     bool ok;
-    Str lab = label_normalize(g->arena, raw, &ok);
+    Str lab = rich_normalize(g->arena, raw, &ok);
     if (!ok) return CMM_ERR_NOMEM;
     g->nlabel[v] = lab;
     g->nshape[v] = sh;
@@ -277,7 +279,7 @@ static cmm_status parse_at_shape(P *p, Graph *g, int32_t v) {
         if (str_eq(key, S("shape"))) g->nshape[v] = shape_by_name(val);
         else if (str_eq(key, S("label"))) {
             bool ok;
-            g->nlabel[v] = label_normalize(g->arena, val, &ok);
+            g->nlabel[v] = rich_normalize(g->arena, val, &ok);
             if (!ok) return CMM_ERR_NOMEM;
         }
     }
@@ -322,7 +324,7 @@ static cmm_status parse_group(P *p, I32Vec *grp) {
     }
 }
 
-typedef struct Link { Stroke st; Arrow a0, a1; uint16_t len; Str label; } Link;
+typedef struct Link { Stroke st; Arrow a0, a1; uint16_t len; Str label, id; } Link;
 
 static bool link_start(const P *p) {
     char c = pk(p, 0), d = pk(p, 1);
@@ -397,7 +399,7 @@ static cmm_status parse_link(P *p, Link *l) {
         if (!link_body(p, &l2, &nd, &ne, &ndot, &nt)) return fail(p, "expected link end");
         l->a1 = l2.a1;
         bool ok;
-        l->label = label_normalize(p->g->arena, raw, &ok);
+        l->label = rich_normalize(p->g->arena, raw, &ok);
         if (!ok) return CMM_ERR_NOMEM;
         if (l->st == ST_DOTTED && ndot == 0) ndot = 1;
         if (l->st == ST_DOTTED) ndot = ndot ? ndot : 1;
@@ -411,7 +413,7 @@ static cmm_status parse_link(P *p, Link *l) {
         while (p->i < p->n && p->s[p->i] != '|' && p->s[p->i] != '\n') p->i++;
         if (pk(p, 0) != '|') return fail(p, "unterminated |edge label|");
         bool ok;
-        l->label = label_normalize(p->g->arena, (Str){.p = p->s + ls, .n = p->i - ls}, &ok);
+        l->label = rich_normalize(p->g->arena, (Str){.p = p->s + ls, .n = p->i - ls}, &ok);
         if (!ok) return CMM_ERR_NOMEM;
         p->i++;
     }
@@ -428,19 +430,70 @@ static cmm_status parse_link(P *p, Link *l) {
     g->estart[e] = l->a0;
     g->eend[e] = l->a1;
     g->elen[e] = l->len;
+    g->eid[e] = l->id;
+    g->eflags[e] = 0;
     return true;
+}
+
+static int32_t find_edge_id(const Graph *g, Str id) {
+    for (size_t e = 0; e < g->ne; e++)
+        if (g->eid[e].n && str_eq(g->eid[e], id)) return (int32_t)e;
+    return NONE;
+}
+
+/* e1@{ animate: true, animation: slow } */
+static cmm_status parse_edge_props(P *p, int32_t e) {
+    p->i += 2;
+    const char *end = memchr(p->s + p->i, '}', p->n - p->i);
+    if (!end) return fail(p, "unterminated @{ }");
+    Str body = {.p = p->s + p->i, .n = (size_t)(end - (p->s + p->i))};
+    p->i = (size_t)(end - p->s) + 1;
+    Graph *g = p->g;
+    for (size_t i = 0; i + 4 <= body.n; i++) {
+        if (i + 7 <= body.n && !memcmp(body.p + i, "animate", 7)) {
+            size_t j = i + 7;
+            while (j < body.n && (body.p[j] == ':' || is_sp(body.p[j]))) j++;
+            if (j + 4 <= body.n && !memcmp(body.p + j, "true", 4)) g->eflags[e] |= EF_ANIM;
+        }
+        if (!memcmp(body.p + i, "slow", 4)) g->eflags[e] |= EF_ANIM | EF_ANIM_SLOW;
+        if (!memcmp(body.p + i, "fast", 4)) g->eflags[e] |= EF_ANIM;
+    }
+    return CMM_OK;
+}
+
+/* "id@" immediately followed by a link: edge id. Returns id (empty if none), consumes it. */
+static Str edge_id_prefix(P *p) {
+    size_t save = p->i;
+    Str w = read_word(p);
+    if (w.n && pk(p, 0) == '@') {
+        p->i++;
+        if (link_start(p)) return w;
+    }
+    p->i = save;
+    return (Str){};
 }
 
 static cmm_status parse_chain(P *p) {
     I32Vec a = {}, b = {};
+    {   /* edge property statement: e1@{ ... } */
+        size_t save = p->i;
+        Str w = read_word(p);
+        if (w.n && pk(p, 0) == '@' && pk(p, 1) == '{') {
+            int32_t e = find_edge_id(p->g, w);
+            if (e != NONE) return parse_edge_props(p, e);
+        }
+        p->i = save;
+    }
     cmm_status st = parse_group(p, &a);
     if (st) return st;
     for (;;) {
         skip_sp(p);
         if (at_eos(p)) return CMM_OK;
+        Str eid = edge_id_prefix(p);
         if (!link_start(p)) return fail(p, "unexpected character, expected link or end of statement");
         Link l;
         if ((st = parse_link(p, &l))) return st;
+        l.id = eid;
         if ((st = parse_group(p, &b))) return st;
         for (size_t i = 0; i < a.n; i++)
             for (size_t j = 0; j < b.n; j++)
@@ -477,7 +530,7 @@ static cmm_status parse_subgraph(P *p) {
         const char *q = memchr(p->s + st + 1, '"', p->n - st - 1);
         if (!q) return fail(p, "unterminated subgraph title");
         p->i = (size_t)(q - p->s) + 1;
-        title = label_normalize(g->arena, (Str){.p = p->s + st, .n = p->i - st}, &ok);
+        title = rich_normalize(g->arena, (Str){.p = p->s + st, .n = p->i - st}, &ok);
         if (!ok) return CMM_ERR_NOMEM;
         id = title;
     } else {
@@ -491,7 +544,7 @@ static cmm_status parse_subgraph(P *p) {
             size_t st = p->i;
             while (p->i < p->n && p->s[p->i] != ']' && p->s[p->i] != '\n') p->i++;
             if (pk(p, 0) != ']') return fail(p, "unterminated subgraph title");
-            title = label_normalize(g->arena, (Str){.p = p->s + st, .n = p->i - st}, &ok);
+            title = rich_normalize(g->arena, (Str){.p = p->s + st, .n = p->i - st}, &ok);
             if (!ok) return CMM_ERR_NOMEM;
             p->i++;
         } else {
@@ -515,6 +568,7 @@ static cmm_status parse_subgraph(P *p) {
     g->sstyle[s] = (Str){};
     g->sparent[s] = p->sgd ? p->sg[p->sgd - 1] : NONE;
     g->sdir[s] = g->dir;
+    g->sflags[s] = 0;
     p->sg[p->sgd++] = (int32_t)s;
     return CMM_OK;
 }
@@ -531,7 +585,8 @@ static cmm_status parse_stmt(P *p, Str w) {
         skip_sp(p);
         Dir d;
         if (!parse_dir(read_list(p), &d)) return fail(p, "invalid direction");
-        if (p->sgd) g->sdir[p->sg[p->sgd - 1]] = d; else g->dir = d;
+        if (p->sgd) { int32_t s = p->sg[p->sgd - 1]; g->sdir[s] = d; g->sflags[s] |= SF_DIRSET; }
+        else g->dir = d;
         return CMM_OK;
     }
     if (str_eq(w, S("classDef"))) {

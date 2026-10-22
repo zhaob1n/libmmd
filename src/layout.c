@@ -14,8 +14,11 @@ static double prof_now(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC
 #define PROF(name) do { } while (0)
 #endif
 
+#include <stdlib.h>
+
 #include "graph.h"
 #include "nsimplex.h"
+#include "rich.h"
 #include "text.h"
 
 constexpr double PAD_NODE = 15.0;
@@ -25,10 +28,24 @@ constexpr double EDGE_SEP = 20.0;
 constexpr unsigned MAX_KEY_DEPTH = 8;
 static_assert(sizeof(double) * MAX_KEY_DEPTH >= 2 * 16, "Key buffer reused for BcItem pairs");
 
+/* measure a label; markdown labels are word-wrapped in place first */
+static void measure(Graph *g, Str *lab, double *w, unsigned *lines) {
+    double fs = g->font_size;
+    if (lab->n && rich_needed(*lab)) {
+        bool ok;
+        Str wr = rich_wrap(g->arena, *lab, fs, RICH_WRAP_PX * fs / 16, &ok);
+        if (ok) *lab = wr;
+        rich_measure(*lab, fs, w, lines);
+        return;
+    }
+    label_measure(*lab, fs, w, lines);
+}
+
 void node_size(Graph *g, size_t v) {
+    if (g->nflags[v] & NF_FIXED) return;
     double fs = g->font_size, tw;
     unsigned lines;
-    label_measure(g->nlabel[v], fs, &tw, &lines);
+    measure(g, &g->nlabel[v], &tw, &lines);
     if (lines == 0) lines = 1;
     double th = lines * fs * 1.5;
     double w = tw + 2 * PAD_NODE, h = th + 2 * PAD_NODE;
@@ -239,6 +256,46 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint3
         L->lay[a + i] = (int32_t)tmp[i];
         L->pos[tmp[i]] = (int32_t)i;
     }
+}
+
+/* ---------- transpose: adjacent swaps that strictly reduce crossings ---------- */
+static uint64_t pair_cost(const Lay *L, int32_t u, int32_t v) {
+    uint64_t c = 0;
+    for (unsigned side = 0; side < 2; side++) {
+        const uint32_t *off = side ? L->soff : L->poff, *adj = side ? L->sidx : L->pidx;
+        for (uint32_t i = off[u]; i < off[u + 1]; i++) {
+            int32_t pa = L->pos[adj[i]];
+            for (uint32_t j = off[v]; j < off[v + 1]; j++) c += pa > L->pos[adj[j]];
+        }
+    }
+    return c;
+}
+
+/* returns crossings removed; *budget bounds the pair-cost work (early stop on huge graphs) */
+static uint64_t transpose(Lay *L, int64_t *budget) {
+    uint64_t gain = 0;
+    for (unsigned pass = 0; pass < 6; pass++) {
+        bool improved = false;
+        for (size_t r = 0; r < L->R; r++) {
+            for (size_t i = L->loff[r]; i + 1 < L->loff[r + 1]; i++) {
+                int32_t u = L->lay[i], v = L->lay[i + 1];
+                if (L->border[u] || L->border[v] || L->cl[u] != L->cl[v]) continue;
+                uint32_t du = (L->poff[u + 1] - L->poff[u]) + (L->soff[u + 1] - L->soff[u]);
+                uint32_t dv = (L->poff[v + 1] - L->poff[v]) + (L->soff[v + 1] - L->soff[v]);
+                *budget -= (int64_t)du * dv + 1;
+                if (*budget < 0) return gain;
+                uint64_t cuv = pair_cost(L, u, v), cvu = pair_cost(L, v, u);
+                if (cvu < cuv) {
+                    L->lay[i] = v, L->lay[i + 1] = u;
+                    L->pos[v]--, L->pos[u]++;
+                    gain += cuv - cvu;
+                    improved = true;
+                }
+            }
+        }
+        if (!improved) break;
+    }
+    return gain;
 }
 
 /* ---------- Brandes-Köpf ---------- */
@@ -496,11 +553,54 @@ static void clip_to_node(const Graph *g, int32_t v, double px, double py, double
     *oy = cy + dy * t;
 }
 
-cmm_status flow_layout(Graph *g) {
+static void reverse_pts(size_t np, double P[static 2 * np]) {
+    for (size_t i = 0; i < np / 2; i++) {
+        size_t j = np - 1 - i;
+        double tx = P[2 * i], ty = P[2 * i + 1];
+        P[2 * i] = P[2 * j], P[2 * i + 1] = P[2 * j + 1];
+        P[2 * j] = tx, P[2 * j + 1] = ty;
+    }
+}
+
+/* polyline starts outside box and ends inside it: cut at the first entry. Returns new count. */
+static size_t clip_poly_box(size_t np, double P[static 2 * np], double x0, double y0, double x1, double y1) {
+    #define INSIDE(i) (P[2 * (i)] >= x0 && P[2 * (i)] <= x1 && P[2 * (i) + 1] >= y0 && P[2 * (i) + 1] <= y1)
+    if (np < 2 || INSIDE(0)) return np;
+    size_t j = 1;
+    while (j < np && !INSIDE(j)) j++;
+    if (j == np) return np;
+    double px = P[2 * j - 2], py = P[2 * j - 1], dx = P[2 * j] - px, dy = P[2 * j + 1] - py, t = 0;
+    if (px < x0 && dx > 0) t = fmax(t, (x0 - px) / dx);
+    if (px > x1 && dx < 0) t = fmax(t, (x1 - px) / dx);
+    if (py < y0 && dy > 0) t = fmax(t, (y0 - py) / dy);
+    if (py > y1 && dy < 0) t = fmax(t, (y1 - py) / dy);
+    P[2 * j] = px + dx * t, P[2 * j + 1] = py + dy * t;
+    return j + 1;
+    #undef INSIDE
+}
+
+typedef struct PortKey { double k1, k2; uint32_t e; } PortKey;
+static inline bool port_lt(const PortKey *a, const PortKey *b) {
+    if (a->k1 != b->k1) return a->k1 < b->k1;
+    if (a->k2 != b->k2) return a->k2 < b->k2;
+    return a->e < b->e;
+}
+static int port_cmp(const void *a, const void *b) { return port_lt(a, b) ? -1 : port_lt(b, a) ? 1 : 0; }
+static void port_sort(size_t n, PortKey a[static n]) {
+    if (n > 24) { qsort(a, n, sizeof *a, port_cmp); return; }
+    for (size_t i = 1; i < n; i++) {
+        PortKey t = a[i];
+        size_t j = i;
+        while (j && port_lt(&t, &a[j - 1])) { a[j] = a[j - 1]; j--; }
+        a[j] = t;
+    }
+}
+
+static cmm_status layout_core(Graph *g) {
     Arena *A = g->arena;
     size_t N = g->nn, E = g->ne, S = g->ns;
     bool horiz = g->dir == DIR_LR || g->dir == DIR_RL;
-    g->nw = ANEW(A, double, N); g->nh = ANEW(A, double, N);
+    if (!g->nw) { g->nw = ANEW(A, double, N); g->nh = ANEW(A, double, N); }
     g->nx = ANEW(A, double, N); g->ny = ANEW(A, double, N);
     g->eptoff = ANEW(A, uint32_t, E); g->eptn = ANEW(A, uint32_t, E);
     g->elx = ANEW(A, double, E); g->ely = ANEW(A, double, E);
@@ -528,20 +628,24 @@ cmm_status flow_layout(Graph *g) {
             if (srep[c] == NONE) srep[c] = (int32_t)v;
     }
     bool has_labels = false;
+    int32_t *esub = ANEW(A, int32_t, 2 * E + 1);
+    if (!esub) return CMM_ERR_NOMEM;
     for (size_t e = 0; e < E; e++) {
         int32_t a = g->efrom[e], b = g->eto[e];
         for (unsigned k = 0; k < 2; k++) {
             int32_t *p = k ? &b : &a;
+            esub[2 * e + k] = NONE;
             if (g->nflags[*p] & NF_SUBREF) {
                 int32_t s = NONE;
                 for (size_t i = 0; i < S; i++) if (str_eq(g->sid[i], g->nid[*p])) { s = (int32_t)i; break; }
                 *p = s == NONE ? NONE : srep[s];
+                esub[2 * e + k] = s;
             }
         }
         ef[e] = a, et[e] = b;
         double lw = 0;
         unsigned ln = 0;
-        label_measure(g->elabel[e], g->font_size, &lw, &ln);
+        measure(g, &g->elabel[e], &lw, &ln);
         g->elw[e] = ln ? lw + 8 : 0;
         g->elh[e] = ln ? ln * g->font_size * 1.5 + 4 : 0;
         if (ln && a != NONE && b != NONE && a != b) has_labels = true;
@@ -796,17 +900,28 @@ cmm_status flow_layout(Graph *g) {
     uint64_t bestc = cross_all(&L, cbuf, fen);
     memcpy(best, L.lay, placed * sizeof *best);
     unsigned since = 0;
+    /* transpose budget: generous for small graphs, bounded (~linear) for big ones */
+    int64_t tbudget = 2000000 + 40 * (int64_t)nseg;
+    bool per_iter_tr = V <= 4000;
     for (unsigned iter = 0; iter < 24 && since < 4 && bestc > 0; iter++) {
         bool down = (iter & 1u) == 0;
         if (down) for (size_t r = 1; r < R; r++) sweep_layer(&L, r, true, false, keys, idx, tmp, csum, ccnt, clusters);
         else for (size_t r = R - 1; r-- > 0;) sweep_layer(&L, r, false, false, keys, idx, tmp, csum, ccnt, clusters);
         uint64_t c = cross_all(&L, cbuf, fen);
+        if (per_iter_tr && c > 0 && tbudget > 0) {
+            uint64_t gn = transpose(&L, &tbudget);
+            c = gn <= c ? c - gn : 0;
+        }
         if (c < bestc) { bestc = c; memcpy(best, L.lay, placed * sizeof *best); since = 0; }
         else since++;
     }
     memcpy(L.lay, best, placed * sizeof *best);
     for (size_t r = 0; r < R; r++)
         for (size_t i = L.loff[r]; i < L.loff[r + 1]; i++) L.pos[L.lay[i]] = (int32_t)(i - L.loff[r]);
+    if (bestc > 0 && tbudget > 0) { /* final polish on the kept-best order */
+        uint64_t gn = transpose(&L, &tbudget);
+        bestc = gn <= bestc ? bestc - gn : 0;
+    }
 
     PROF("order");
     /* ---- x via Brandes-Köpf ---- */
@@ -849,47 +964,7 @@ cmm_status flow_layout(Graph *g) {
         g->nx[v] = FX(lx, ly) * sgx;
         g->ny[v] = FY(lx, ly) * sgy;
     }
-    /* edges */
-    g->pts.n = 0;
-    for (size_t e = 0; e < E; e++) {
-        g->eptoff[e] = (uint32_t)g->pts.n;
-        g->eptn[e] = 0;
-        g->elx[e] = g->ely[e] = 0;
-        int32_t a = ef[e], b = et[e];
-        if (a == NONE || b == NONE) continue;
-        if (a == b) { /* self loop: handled by the SVG writer around the node */
-            g->elx[e] = g->nx[a] + g->nw[a] / 2 + 30 + g->elw[e] / 2;
-            g->ely[e] = g->ny[a];
-            continue;
-        }
-        int32_t span = rank[EV(e)] - rank[EU(e)];
-        size_t base = g->pts.n;
-        double lx = 0, ly = 0;
-        bool labset = false;
-        for (int32_t k = 0; k <= span; k++) {
-            int32_t vv = CHAIN(e, k, span);
-            double px = FX(X[vv], ry[L.rank[vv]]) * sgx, py = FY(X[vv], ry[L.rank[vv]]) * sgy;
-            if (k > 0 && k < span && has_labels && g->elw[e] > 0 && k == span / 2) { lx = px; ly = py; labset = true; }
-            if (!VEC_PUSH(A, &g->pts, px) || !VEC_PUSH(A, &g->pts, py)) return CMM_ERR_NOMEM;
-        }
-        size_t np = (size_t)span + 1;
-        double *P = g->pts.v + base;
-        if (rev[e]) {
-            for (size_t i = 0; i < np / 2; i++) {
-                double tx = P[2 * i], ty = P[2 * i + 1];
-                P[2 * i] = P[2 * (np - 1 - i)], P[2 * i + 1] = P[2 * (np - 1 - i) + 1];
-                P[2 * (np - 1 - i)] = tx, P[2 * (np - 1 - i) + 1] = ty;
-            }
-        }
-        /* clip endpoints at node boundaries */
-        clip_to_node(g, a, P[2], P[3], &P[0], &P[1]);
-        clip_to_node(g, b, P[2 * np - 4], P[2 * np - 3], &P[2 * np - 2], &P[2 * np - 1]);
-        if (!labset) { lx = (P[0] + P[2 * np - 2]) / 2; ly = (P[1] + P[2 * np - 1]) / 2; }
-        g->elx[e] = lx, g->ely[e] = ly;
-        g->eptn[e] = (uint32_t)np;
-    }
-    PROF("edges");
-    /* clusters: deepest first */
+    /* clusters: deepest first (before edges: edges to subgraph ids clip against the boxes) */
     for (size_t s = 0; s < S; s++) { g->sx[s] = INFINITY; g->sy[s] = INFINITY; g->sw[s] = -INFINITY; g->sh[s] = -INFINITY; }
     for (size_t v = 0; v < N; v++) {
         if (L.rank[v] < 0) continue;
@@ -907,7 +982,10 @@ cmm_status flow_layout(Graph *g) {
     for (int32_t d = maxd; d >= 1; d--)
         for (size_t s = 0; s < S; s++) {
             if (sdepth[s] != d || g->sx[s] == INFINITY) continue;
-            double tw = text_width(g->stitle[s], g->font_size) + 2 * CLUSTER_PAD;
+            double tw;
+            unsigned tl;
+            measure(g, &g->stitle[s], &tw, &tl);
+            tw += 2 * CLUSTER_PAD;
             g->sx[s] -= CLUSTER_PAD; g->sw[s] += CLUSTER_PAD;
             g->sy[s] -= CLUSTER_PAD + CLUSTER_TITLE; g->sh[s] += CLUSTER_PAD;
             if (g->sw[s] - g->sx[s] < tw) { double c = (g->sw[s] + g->sx[s]) / 2; g->sx[s] = c - tw / 2; g->sw[s] = c + tw / 2; }
@@ -924,8 +1002,103 @@ cmm_status flow_layout(Graph *g) {
         g->sw[s] -= g->sx[s];
         g->sh[s] -= g->sy[s];
     }
+    PROF("clusters");
+
+    /* ---- ports: spread attachment points of fan-outs/fan-ins (and parallel edges) ---- */
+    double *eport = ANEW(A, double, 2 * E + 1);
+    uint32_t *ioff = ANEW(A, uint32_t, N + 1), *iidx = ANEW(A, uint32_t, E + 1);
+    if (!eport || !ioff || !iidx) return CMM_ERR_NOMEM;
+    for (size_t i = 0; i < 2 * E; i++) eport[i] = NAN;
+    memset(ioff, 0, (N + 1) * sizeof *ioff);
+    for (size_t e = 0; e < E; e++) if (EVALID(e)) ioff[EV(e) + 1]++;
+    for (size_t v = 0; v < N; v++) ioff[v + 1] += ioff[v];
+    for (size_t v = 0; v < N; v++) it[v] = ioff[v];
+    for (size_t e = 0; e < E; e++) if (EVALID(e)) iidx[it[EV(e)]++] = (uint32_t)e;
+    {
+        size_t maxk = 0;
+        for (size_t v = 0; v < N; v++) {
+            if (ooff[v + 1] - ooff[v] > maxk) maxk = ooff[v + 1] - ooff[v];
+            if (ioff[v + 1] - ioff[v] > maxk) maxk = ioff[v + 1] - ioff[v];
+        }
+        PortKey *pk = ANEW(A, PortKey, maxk + 1);
+        if (!pk) return CMM_ERR_NOMEM;
+        for (unsigned side = 0; side < 2; side++)
+            for (size_t u = 0; u < N; u++) {
+                const uint32_t *off = side ? ioff : ooff, *lst = side ? iidx : oidx;
+                size_t k = off[u + 1] - off[u];
+                if (k < 2) continue;
+                for (size_t i = 0; i < k; i++) {
+                    uint32_t e = lst[off[u] + i];
+                    int32_t span = rank[EV(e)] - rank[EU(e)];
+                    int32_t nb = side ? CHAIN(e, span - 1, span) : CHAIN(e, 1, span);
+                    int32_t other = side ? EU(e) : EV(e);
+                    pk[i] = (PortKey){.k1 = X[nb], .k2 = X[other], .e = e};
+                }
+                port_sort(k, pk);
+                Shape sh = g->nshape[u];
+                double frac = sh == SH_RHOMBUS || sh == SH_CIRCLE || sh == SH_DCIRCLE ? 0.45 : 0.7;
+                double step = fmin(EDGE_SEP * 0.6, L.w[u] * frac / (double)(k - 1));
+                for (size_t i = 0; i < k; i++) eport[2 * pk[i].e + side] = ((double)i - (double)(k - 1) / 2) * step;
+            }
+    }
+    PROF("ports");
+
+    /* edges */
+    g->pts.n = 0;
+    for (size_t e = 0; e < E; e++) {
+        g->eptoff[e] = (uint32_t)g->pts.n;
+        g->eptn[e] = 0;
+        g->elx[e] = g->ely[e] = 0;
+        int32_t a = ef[e], b = et[e];
+        if (a == NONE || b == NONE) continue;
+        if (a == b) { /* self loop: handled by the SVG writer around the node */
+            g->elx[e] = g->nx[a] + g->nw[a] / 2 + 30 + g->elw[e] / 2;
+            g->ely[e] = g->ny[a];
+            continue;
+        }
+        int32_t span = rank[EV(e)] - rank[EU(e)];
+        size_t base = g->pts.n;
+        double lx = 0, ly = 0;
+        bool labset = false, fixed0 = false, fixed1 = false;
+        for (int32_t k = 0; k <= span; k++) {
+            int32_t vv = CHAIN(e, k, span);
+            double lxx = X[vv], lyy = ry[L.rank[vv]];
+            double px = FX(lxx, lyy) * sgx, py = FY(lxx, lyy) * sgy;
+            if ((k == 0 || k == span) && !isnan(eport[2 * e + (k ? 1 : 0)])) {
+                double tx = lxx + eport[2 * e + (k ? 1 : 0)], ty = lyy + (k ? -1 : 1) * L.h[vv] / 2;
+                clip_to_node(g, vv, FX(tx, ty) * sgx, FY(tx, ty) * sgy, &px, &py);
+                if (k) fixed1 = true; else fixed0 = true;
+            }
+            if (k > 0 && k < span && has_labels && g->elw[e] > 0 && k == span / 2) { lx = px; ly = py; labset = true; }
+            if (!VEC_PUSH(A, &g->pts, px) || !VEC_PUSH(A, &g->pts, py)) return CMM_ERR_NOMEM;
+        }
+        size_t np = (size_t)span + 1;
+        double *P = g->pts.v + base;
+        if (rev[e]) {
+            reverse_pts(np, P);
+            bool t = fixed0; fixed0 = fixed1; fixed1 = t;
+        }
+        /* clip endpoints at node boundaries */
+        if (!fixed0) clip_to_node(g, a, P[2], P[3], &P[0], &P[1]);
+        if (!fixed1) clip_to_node(g, b, P[2 * np - 4], P[2 * np - 3], &P[2 * np - 2], &P[2 * np - 1]);
+        /* edges to subgraph ids attach to the cluster box */
+        for (unsigned end = 0; end < 2; end++) {
+            int32_t sg = esub[2 * e + end];
+            if (sg == NONE || g->sw[sg] <= 0) continue;
+            if (end == 0) reverse_pts(np, P);
+            np = clip_poly_box(np, P, g->sx[sg], g->sy[sg], g->sx[sg] + g->sw[sg], g->sy[sg] + g->sh[sg]);
+            if (end == 0) reverse_pts(np, P);
+        }
+        g->pts.n = base + 2 * np;
+        if (!labset) { lx = (P[0] + P[2 * np - 2]) / 2; ly = (P[1] + P[2 * np - 1]) / 2; }
+        g->elx[e] = lx, g->ely[e] = ly;
+        g->eptn[e] = (uint32_t)np;
+    }
+    PROF("edges");
 #ifdef CMM_PROFILE
     fprintf(stderr, "  V=%zu N=%zu D=%zu R=%zu segs=%zu\n", V, N, D, R, nseg);
 #endif
     return CMM_OK;
 }
+
+cmm_status flow_layout(Graph *g) { return layout_core(g); }

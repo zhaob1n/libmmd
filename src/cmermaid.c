@@ -27,6 +27,7 @@ void cmm_buffer_free(cmm_buffer *buf) {
 typedef struct Config {
     Str title;
     double node_sep, rank_sep;
+    cmm_theme theme;
 } Config;
 
 static double parse_num_after(Str s, Str key) {
@@ -46,8 +47,27 @@ static double parse_num_after(Str s, Str key) {
     return 0;
 }
 
+static cmm_theme parse_theme_after(Str s) {
+    static const Str KEY = S("theme");
+    for (size_t i = 0; i + KEY.n <= s.n; i++) {
+        if (memcmp(s.p + i, KEY.p, KEY.n) != 0) continue;
+        size_t j = i + KEY.n;
+        if (j < s.n && s.p[j] != '"' && s.p[j] != '\'' && s.p[j] != ':' && !is_sp(s.p[j])) continue;
+        while (j < s.n && (s.p[j] == '"' || s.p[j] == '\'' || s.p[j] == ':' || is_sp(s.p[j]))) j++;
+        Str w = {.p = s.p + j, .n = 0};
+        while (j < s.n && (unsigned)((s.p[j] | 32) - 'a') < 26u) j++, w.n++;
+        if (str_eq(w, S("dark"))) return CMM_THEME_DARK;
+        if (str_eq(w, S("forest"))) return CMM_THEME_FOREST;
+        if (str_eq(w, S("neutral"))) return CMM_THEME_NEUTRAL;
+        if (str_eq(w, S("default")) || str_eq(w, S("base"))) return CMM_THEME_DEFAULT;
+    }
+    return CMM_THEME_AUTO;
+}
+
 static void apply_cfg_text(Config *c, Str s) {
     double v;
+    cmm_theme t = parse_theme_after(s);
+    if (t != CMM_THEME_AUTO) c->theme = t;
     if ((v = parse_num_after(s, S("nodeSpacing"))) > 0) c->node_sep = v;
     if ((v = parse_num_after(s, S("rankSpacing"))) > 0) c->rank_sep = v;
 }
@@ -142,7 +162,9 @@ cmm_status cmm_render_svg(size_t n, const char src[static n], const cmm_options 
     size_t eoff = 0;
     cmm_status st = CMM_OK;
     if (str_eq(kw, S("graph")) || str_eq(kw, S("flowchart")) || str_eq(kw, S("flowchart-elk"))) {
-        Graph g = {.arena = &arena, .title = cfg.title, .node_sep = cfg.node_sep,
+        Graph g = {.arena = &arena, .title = cfg.title,
+                   .theme = (uint8_t)(opt && opt->theme ? opt->theme : cfg.theme ? cfg.theme : CMM_THEME_DEFAULT),
+                   .flags = opt ? opt->flags : 0, .node_sep = cfg.node_sep,
                    .rank_sep = cfg.rank_sep, .font_size = fs};
         if ((st = flow_parse(&g, n, src, off, &eoff, msg))) goto fail;
         if ((st = flow_layout(&g))) goto fail;
