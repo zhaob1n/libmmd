@@ -30,10 +30,21 @@ typedef struct cmm_buffer {
     size_t len;
 } cmm_buffer;
 
+typedef enum cmm_theme {
+    CMM_THEME_AUTO = 0, /* from %%{init}%% / frontmatter, else default */
+    CMM_THEME_DEFAULT, CMM_THEME_DARK, CMM_THEME_FOREST, CMM_THEME_NEUTRAL,
+} cmm_theme;
+
+enum {
+    CMM_F_ROUTE_AVOID = 1u, /* flowchart: detour edges around non-incident nodes */
+};
+
 typedef struct cmm_options {
     double node_spacing; /* 0 => default (50) */
     double rank_spacing; /* 0 => default (50) */
     double font_size;    /* 0 => default (16) */
+    cmm_theme theme;     /* 0 => from source / default */
+    uint32_t flags;      /* CMM_F_* */
 } cmm_options;
 
 /* Render Mermaid source (n bytes, need not be NUL-terminated) to SVG.

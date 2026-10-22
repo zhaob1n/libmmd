@@ -1,5 +1,5 @@
 /* Shared helpers for diagram types that reuse the layered layout (state, class, er, mindmap...).
- * Builds a Graph directly (no flowchart parser), lets callers pre-size nodes (NF_SIZED),
+ * Builds a Graph directly (no flowchart parser), lets callers pre-size nodes (NF_FIXED),
  * and provides small SVG primitives. Owned by the diagram-types work; flow_* files untouched. */
 #ifndef CMM_DGRAPH_H
 #define CMM_DGRAPH_H
@@ -13,7 +13,7 @@ void dg_init(Graph *g, Arena *A, Dir dir, double fs);
 static inline void dg_size(Graph *g, int32_t v, double w, double h) {
     g->nw[v] = w;
     g->nh[v] = h;
-    g->nflags[v] |= NF_SIZED;
+    g->nflags[v] |= NF_FIXED;
 }
 [[nodiscard]] int32_t dg_edge(Graph *g, int32_t a, int32_t b, Str label);
 [[nodiscard]] int32_t dg_cluster(Graph *g, Str id, Str title, int32_t parent);

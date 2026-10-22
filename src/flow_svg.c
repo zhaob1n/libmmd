@@ -2,18 +2,44 @@
 #include <stdlib.h>
 
 #include "graph.h"
+#include "rich.h"
 #include "text.h"
 
-static constexpr char CSS[] =
-    "#mermaid{font-family:\"trebuchet ms\",verdana,arial,sans-serif;font-size:16px;fill:#333;}"
-    "#mermaid .node rect,#mermaid .node circle,#mermaid .node ellipse,#mermaid .node polygon,#mermaid .node path"
-    "{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
-    "#mermaid .flowchart-link{stroke:#333333;fill:none;}"
-    "#mermaid .edgeLabel rect{fill:rgba(232,232,232,0.8);stroke:none;}"
-    "#mermaid .cluster rect{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}"
-    "#mermaid .marker{fill:#333333;stroke:#333333;}"
-    "#mermaid text{fill:#333;}"
-    "#mermaid .title{font-size:18px;}";
+typedef struct Theme {
+    const char *bg, *font, *text, *node_fill, *node_stroke, *line, *cluster_fill, *cluster_stroke, *label_bg, *marker;
+} Theme;
+/* colours follow mermaid's built-in themes (flowchart subset) */
+static const Theme THEMES[] = {
+    [CMM_THEME_DEFAULT] = {"white", "\"trebuchet ms\",verdana,arial,sans-serif", "#333", "#ECECFF", "#9370DB",
+                           "#333333", "#ffffde", "#aaaa33", "rgba(232,232,232,0.8)", "#333333"},
+    [CMM_THEME_DARK] = {"#333", "\"trebuchet ms\",verdana,arial,sans-serif", "#ccc", "#1f2020", "#cccccc",
+                        "lightgrey", "#474949", "rgba(255,255,255,0.25)", "rgba(88,88,88,0.85)", "lightgrey"},
+    [CMM_THEME_FOREST] = {"white", "\"trebuchet ms\",verdana,arial,sans-serif", "#333", "#cde498", "#13540c",
+                          "#000000", "#cdffb2", "#6eaa49", "rgba(232,232,232,0.8)", "#000000"},
+    [CMM_THEME_NEUTRAL] = {"white", "\"trebuchet ms\",verdana,arial,sans-serif", "#333", "#eee", "#999",
+                           "#666", "#ffffde", "#999", "rgba(255,255,255,0.8)", "#666"},
+};
+static_assert(countof(THEMES) == CMM_THEME_NEUTRAL + 1, "theme table covers cmm_theme");
+
+static void put_cstr(Buf *b, const char *s) { buf_put(b, strlen(s), s); }
+
+static void emit_css(Buf *b, const Theme *t) {
+    buf_lit(b, "#mermaid{font-family:"); put_cstr(b, t->font); buf_lit(b, ";font-size:16px;fill:"); put_cstr(b, t->text); buf_lit(b, ";}");
+    buf_lit(b, "#mermaid .node rect,#mermaid .node circle,#mermaid .node ellipse,#mermaid .node polygon,#mermaid .node path{fill:");
+    put_cstr(b, t->node_fill); buf_lit(b, ";stroke:"); put_cstr(b, t->node_stroke); buf_lit(b, ";stroke-width:1px;}");
+    buf_lit(b, "#mermaid .flowchart-link{stroke:"); put_cstr(b, t->line); buf_lit(b, ";fill:none;}");
+    buf_lit(b, "#mermaid .edgeLabel rect{fill:"); put_cstr(b, t->label_bg); buf_lit(b, ";stroke:none;}");
+    buf_lit(b, "#mermaid .cluster rect{fill:"); put_cstr(b, t->cluster_fill); buf_lit(b, ";stroke:");
+    put_cstr(b, t->cluster_stroke); buf_lit(b, ";stroke-width:1px;}");
+    buf_lit(b, "#mermaid .marker{fill:"); put_cstr(b, t->marker); buf_lit(b, ";stroke:"); put_cstr(b, t->marker); buf_lit(b, ";}");
+    buf_lit(b, "#mermaid text{fill:"); put_cstr(b, t->text); buf_lit(b, ";}");
+    buf_lit(b, "#mermaid .title{font-size:18px;}");
+}
+
+static constexpr char ANIM_CSS[] =
+    "#mermaid .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}"
+    "#mermaid .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}"
+    "@keyframes dash{to{stroke-dashoffset:0;}}";
 
 static constexpr char DEFS[] =
     "<defs>"
@@ -95,15 +121,18 @@ static void text_lines(Buf *b, Str lab, double fs, double cx, double cy, const c
     unsigned k = 0;
     size_t pos = 0;
     Str ln;
+    if (lab.n && lab.p[0] == RICH_MD) lab.p++, lab.n--;
+    if (!lab.n) return;
     while (label_next_line(lab, &pos, &ln)) k++;
-    if (!k || !lab.n) return;
+    if (!k) return;
+    bool rich = rich_needed(lab), bold = false, ital = false;
     double lh = fs * 1.5, y = cy - (k - 1) * lh / 2;
     buf_lit(b, "<text");
     if (cls) { buf_lit(b, " class=\""); buf_put(b, strlen(cls), cls); buf_ch(b, '"'); }
     buf_lit(b, " text-anchor=\"middle\" dominant-baseline=\"central\"");
     if (k == 1) {
         buf_lit(b, " x=\""); buf_num(b, cx); buf_lit(b, "\" y=\""); buf_num(b, y); buf_lit(b, "\">");
-        buf_xml(b, lab);
+        if (rich) rich_emit_line(b, lab, &bold, &ital); else buf_xml(b, lab);
         buf_lit(b, "</text>");
         return;
     }
@@ -111,7 +140,7 @@ static void text_lines(Buf *b, Str lab, double fs, double cx, double cy, const c
     pos = 0;
     while (label_next_line(lab, &pos, &ln)) {
         buf_lit(b, "<tspan x=\""); buf_num(b, cx); buf_lit(b, "\" y=\""); buf_num(b, y); buf_lit(b, "\">");
-        buf_xml(b, ln);
+        if (rich) rich_emit_line(b, ln, &bold, &ital); else buf_xml(b, ln);
         buf_lit(b, "</tspan>");
         y += lh;
     }
@@ -249,12 +278,14 @@ cmm_status flow_svg(const Graph *g, Buf *b) {
     buf_lit(b, "\" viewBox=\""); buf_num(b, vx); buf_ch(b, ' '); buf_num(b, vy); buf_ch(b, ' ');
     buf_num(b, vw); buf_ch(b, ' '); buf_num(b, vh);
     buf_lit(b, "\" role=\"graphics-document document\" aria-roledescription=\"flowchart-v2\"><style>");
-    buf_lit(b, CSS);
+    const Theme *th = &THEMES[g->theme <= CMM_THEME_NEUTRAL && g->theme ? g->theme : CMM_THEME_DEFAULT];
+    emit_css(b, th);
+    for (size_t e = 0; e < g->ne; e++) if (g->eflags[e] & EF_ANIM) { buf_lit(b, ANIM_CSS); break; }
     buf_lit(b, "</style>");
     buf_lit(b, DEFS);
     buf_lit(b, "<rect x=\""); buf_num(b, vx); buf_lit(b, "\" y=\""); buf_num(b, vy);
     buf_lit(b, "\" width=\""); buf_num(b, vw); buf_lit(b, "\" height=\""); buf_num(b, vh);
-    buf_lit(b, "\" fill=\"white\"/>");
+    buf_lit(b, "\" fill=\""); put_cstr(b, th->bg); buf_lit(b, "\"/>");
     if (g->title.n) text_lines(b, g->title, 18, (bb.x0 + bb.x1) / 2, bb.y0 - title_h / 2, "title");
     buf_lit(b, "<g class=\"root\"><g class=\"clusters\">");
     /* parents before children */
@@ -266,7 +297,7 @@ cmm_status flow_svg(const Graph *g, Buf *b) {
         buf_lit(b, "\" width=\""); buf_num(b, g->sw[s]); buf_lit(b, "\" height=\""); buf_num(b, g->sh[s]); buf_ch(b, '"');
         style_attr(b, g, g->sclass[s], g->sstyle[s], false, false);
         buf_lit(b, "/>");
-        text_lines(b, g->stitle[s], fs, g->sx[s] + g->sw[s] / 2, g->sy[s] + 15 + 12 - 6, "cluster-label");
+        text_lines(b, g->stitle[s], fs, g->stx ? g->stx[s] : g->sx[s] + g->sw[s] / 2, g->sy[s] + 15 + 12 - 6, "cluster-label");
         buf_lit(b, "</g>");
     }
     buf_lit(b, "</g><g class=\"edgePaths\">");
@@ -276,12 +307,23 @@ cmm_status flow_svg(const Graph *g, Buf *b) {
         if (g->estroke[e] == ST_INVISIBLE) continue;
         bool self = g->efrom[e] == g->eto[e];
         if (!g->eptn[e] && !self) continue;
-        buf_lit(b, "<path class=\"flowchart-link\" d=\"");
+        buf_lit(b, "<path id=\"");
+        if (g->eid && g->eid[e].n) buf_xml(b, g->eid[e]);
+        else {
+            buf_lit(b, "L_"); buf_xml(b, g->nid[g->efrom[e]]); buf_ch(b, '_');
+            buf_xml(b, g->nid[g->eto[e]]); buf_ch(b, '_'); buf_int(b, (int64_t)e);
+        }
+        buf_lit(b, "\" class=\"flowchart-link");
+        if (g->eflags && (g->eflags[e] & EF_ANIM))
+            put_cstr(b, (g->eflags[e] & EF_ANIM_SLOW) ? " edge-animation-slow" : " edge-animation-fast");
+        buf_lit(b, "\" d=\"");
         if (self) {
             int32_t v = g->efrom[e];
-            double x = g->nx[v] + g->nw[v] / 2, y = g->ny[v], q = g->nh[v] / 4;
+            unsigned k = 0; /* nest repeated self-loops so they stay distinct */
+            for (size_t f = 0; f < e; f++) k += g->efrom[f] == v && g->eto[f] == v;
+            double x = g->nx[v] + g->nw[v] / 2, y = g->ny[v], q = g->nh[v] / 4, r = 40 + 18 * k, u = 20 + 8 * k;
             buf_ch(b, 'M'); pt(b, x, y - q);
-            buf_ch(b, 'C'); pt(b, x + 40, y - q - 20); buf_ch(b, ' '); pt(b, x + 40, y + q + 20);
+            buf_ch(b, 'C'); pt(b, x + r, y - q - u); buf_ch(b, ' '); pt(b, x + r, y + q + u);
             buf_ch(b, ' '); pt(b, x, y + q);
         } else basis_path(b, g->eptn[e], g->pts.v + g->eptoff[e]);
         buf_lit(b, "\" style=\"");

@@ -36,7 +36,7 @@ static inline uint64_t hstr(Str s) {
     Arena *A = g->arena;
     GROW(A, g->efrom, oc, nc); GROW(A, g->eto, oc, nc); GROW(A, g->elabel, oc, nc);
     GROW(A, g->estroke, oc, nc); GROW(A, g->estart, oc, nc); GROW(A, g->eend, oc, nc);
-    GROW(A, g->elen, oc, nc);
+    GROW(A, g->elen, oc, nc); GROW(A, g->eid, oc, nc); GROW(A, g->eflags, oc, nc);
     g->ecap = nc;
     return true;
 }
@@ -45,6 +45,7 @@ static inline uint64_t hstr(Str s) {
     Arena *A = g->arena;
     GROW(A, g->sid, oc, nc); GROW(A, g->stitle, oc, nc); GROW(A, g->sclass, oc, nc);
     GROW(A, g->sstyle, oc, nc); GROW(A, g->sparent, oc, nc); GROW(A, g->sdir, oc, nc);
+    GROW(A, g->sflags, oc, nc);
     g->scap = nc;
     return true;
 }
@@ -104,6 +105,8 @@ int32_t dg_edge(Graph *g, int32_t a, int32_t b, Str label) {
     g->estart[e] = AH_NONE;
     g->eend[e] = AH_ARROW;
     g->elen[e] = 1;
+    g->eid[e] = (Str){};
+    g->eflags[e] = 0;
     return (int32_t)e;
 }
 
@@ -115,6 +118,7 @@ int32_t dg_cluster(Graph *g, Str id, Str title, int32_t parent) {
     g->sclass[s] = g->sstyle[s] = (Str){};
     g->sparent[s] = parent;
     g->sdir[s] = g->dir;
+    g->sflags[s] = 0;
     return (int32_t)s;
 }
 

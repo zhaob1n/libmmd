@@ -21,6 +21,8 @@ typedef struct Graph {
     Arena *arena;
     Dir dir;
     Str title;
+    uint8_t theme;  /* cmm_theme */
+    uint32_t flags; /* CMM_F_* */
     double node_sep, rank_sep, font_size;
 
     /* nodes (SoA) */
@@ -38,6 +40,8 @@ typedef struct Graph {
     Stroke *estroke;
     Arrow *estart, *eend;
     uint16_t *elen;
+    Str *eid;        /* user edge id (e1@-->) or empty */
+    uint8_t *eflags; /* EF_* */
     /* layout output: polyline per edge */
     uint32_t *eptoff; /* offset into pts, count in eptn */
     uint32_t *eptn;
@@ -48,7 +52,9 @@ typedef struct Graph {
     Str *sid, *stitle, *sclass, *sstyle;
     int32_t *sparent;
     Dir *sdir;
+    uint8_t *sflags; /* SF_* */
     double *sx, *sy, *sw, *sh;
+    double *stx; /* cluster title centre x (avoids edges crossing the title) */
 
     VEC(ClassDef) classdefs;
     VEC(LinkStyle) linkstyles;
@@ -59,7 +65,9 @@ typedef struct Graph {
     size_t hcap;
 } Graph;
 
-enum { NF_DEFINED = 1u, NF_HIDDEN = 2u, NF_SUBREF = 4u, NF_SIZED = 8u /* nw/nh preset by caller */ };
+enum { NF_DEFINED = 1u, NF_HIDDEN = 2u, NF_SUBREF = 4u, NF_FIXED = 8u /* size preset (cluster proxy) */ };
+enum { SF_DIRSET = 1u };
+enum { EF_ANIM = 1u, EF_ANIM_SLOW = 2u };
 
 /* parse flowchart body starting at offset `off` within src */
 [[nodiscard]] cmm_status flow_parse(Graph *g, size_t n, const char src[static n], size_t off,
