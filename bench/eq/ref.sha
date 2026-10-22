@@ -511,6 +511,14 @@ fa782bafe7d87dcc tests/cases/theme_neutral_req.mmd
 624afa047ee8f70e tests/cases/theme_neutral_xychart.mmd
 bee2be0f47c3eb1d tests/cases/timeline_full.mmd
 59eb77452a86f3b4 tests/cases/treemap_full.mmd
+a52073d38ed7205f tests/cases/treeview_annot.mmd
+ffc1e30144073275 tests/cases/treeview_box.mmd
+dd81f9158ac2a5ba tests/cases/treeview_cfg.mmd
+43af58d0153da63e tests/cases/treeview_icons.mmd
+60dc8101ec5f901c tests/cases/venn_edge.mmd
+dd8c4ea5d4424336 tests/cases/venn_styled.mmd
+43e4a9df82680053 tests/cases/venn_text.mmd
+cf8b964da8e3abf8 tests/cases/venn_three.mmd
 c669fbe34dccf7ac tests/cases/xychart_full.mmd
 566fbe582282399a tests/cases/xychart_horiz.mmd
 289c2c68a3b302a5 tests/cases/zenuml_basic.mmd
