@@ -1,0 +1,11 @@
+v11 (master, clang -O2)
+small.mmd: min 14.9-15.1us, median 15.3-15.7us (v10 16.9us; target 11.7us NOT met)
+Text widths: Liberation Sans (Arial metrics, chromium resolution of mermaid stack) hmtx+kern table,
+  ceil to 1/64px: 693/693 single-line refsvg foreignObject widths exact; wrapped = 200.
+Rect node sizes exact vs refsvg: 584/584 (was 0/584).
+posagree RAW node-centre error px (mean/median/p90/max):
+  before 124.95/89.55/277.96/550.82
+  text   70.14/45.03/182.07/374.60
+  +loops 67.72/45.02/168.44/364.37
+posagree cross 0.9914 rankaxis 1.0000; selfloop_bidi cross 9/21 -> 21/21
+Equivalence: /tmp/eq corpus (fixtures+tests+fuzzed) bad=0 vs ref at 02f9bda.

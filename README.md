@@ -149,3 +149,6 @@ mermaid itself fails to render `block_full` and `radar_full` (partial named curv
   crossCount), reproducing graphlib key order. Default for graphs with V ≤ 512; the fast ordering is kept above.
   Override: `flowchart.order: dagre|fast` or env `CMM_ORDER`.
 - Same-rank order agreement with mermaid 0.936 → 0.961 (macro 0.658 → 0.813). Numbers: bench/results_v9.txt.
+
+## v11
+Mermaid-exact text metrics (Liberation/Arial advances+kerning), mermaid node padding, self-loop helper nodes. See bench/results_v11.txt.
