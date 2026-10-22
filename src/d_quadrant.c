@@ -127,36 +127,38 @@ DIAG_FN(quadrant_render) {
     constexpr double X0 = 40;
     constexpr double Y0 = 50;
     const double SZ = fmin(fmax(dcfg_num("quadrantChart.chartWidth", 500), 100), 4000) - 80;
+    const double SH = fmin(fmax(dcfg_num("quadrantChart.chartHeight", 500), 100), 4000) - 80;
+    const double SW = SZ;
     bool yax = yl.n || yh.n, xax = xl.n || xh.n;
     double ox = X0 + (yax ? 30 : 0), oy = Y0 + (title.n ? 20 : 0);
-    BBox bb = {0, 0, ox + SZ + 30, oy + SZ + (xax ? 40 : 10)};
+    BBox bb = {0, 0, ox + SW + 30, oy + SH + (xax ? 40 : 10)};
     if (!buf_reserve(out, 4096 + pts.n * 400)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 4, "quadrantChart", CSS);
-    if (title.n) dg_text(out, title, 20, ox + SZ / 2, 30, "middle", "ttl");
-    double h = SZ / 2;
+    if (title.n) dg_text(out, title, 20, ox + SW / 2, 30, "middle", "ttl");
+    double h = SW / 2, v = SH / 2;
     /* quadrant-1 top-right, 2 top-left, 3 bottom-left, 4 bottom-right */
-    const double qx[4] = {ox + h, ox, ox, ox + h}, qy[4] = {oy, oy, oy + h, oy + h};
+    const double qx[4] = {ox + h, ox, ox, ox + h}, qy[4] = {oy, oy, oy + v, oy + v};
     bool anypts = pts.n > 0;
     for (int i = 0; i < 4; i++) {
         char c[3] = {'q', (char)('1' + i), 0};
-        dg_rect(out, qx[i], qy[i], h, h, 0, c);
+        dg_rect(out, qx[i], qy[i], h, v, 0, c);
         /* labels sit at the top of each quadrant when points exist, centred otherwise */
-        if (q[i].n) dg_text(out, dg_wrap(a, q[i], 16, h - 10), 16, qx[i] + h / 2, anypts ? qy[i] + 20 : qy[i] + h / 2, "middle", "ql");
+        if (q[i].n) dg_text(out, dg_wrap(a, q[i], 16, h - 10), 16, qx[i] + h / 2, anypts ? qy[i] + 20 : qy[i] + v / 2, "middle", "ql");
     }
-    dg_line(out, ox + h, oy, ox + h, oy + SZ, "in");
-    dg_line(out, ox, oy + h, ox + SZ, oy + h, "in");
-    dg_rect(out, ox, oy, SZ, SZ, 0, "bd");
+    dg_line(out, ox + h, oy, ox + h, oy + SH, "in");
+    dg_line(out, ox, oy + v, ox + SW, oy + v, "in");
+    dg_rect(out, ox, oy, SW, SH, 0, "bd");
     if (xax) {
         if (xh.n) {
-            dg_text(out, xl, 16, ox + h / 2, oy + SZ + 20, "middle", "al");
-            dg_text(out, xh, 16, ox + h + h / 2, oy + SZ + 20, "middle", "al");
-        } else dg_text(out, xl, 16, ox + h, oy + SZ + 20, "middle", "al");
+            dg_text(out, xl, 16, ox + h / 2, oy + SH + 20, "middle", "al");
+            dg_text(out, xh, 16, ox + h + h / 2, oy + SH + 20, "middle", "al");
+        } else dg_text(out, xl, 16, ox + h, oy + SH + 20, "middle", "al");
     }
     if (yax) {
-        double yc[2] = {oy + h + h / 2, oy + h / 2};
+        double yc[2] = {oy + v + v / 2, oy + v / 2};
         Str ys[2] = {yl, yh};
         for (int i = 0; i < (yh.n ? 2 : 1); i++) {
-            double cy = yh.n ? yc[i] : oy + h, cx = ox - 18;
+            double cy = yh.n ? yc[i] : oy + v, cx = ox - 18;
             buf_lit(out, "<text class=\"al\" text-anchor=\"middle\" dominant-baseline=\"central\" transform=\"translate(");
             buf_num(out, cx); buf_ch(out, ','); buf_num(out, cy); buf_lit(out, ") rotate(-90)\">");
             buf_xml(out, ys[i]);
@@ -165,7 +167,7 @@ DIAG_FN(quadrant_render) {
     }
     for (size_t i = 0; i < pts.n; i++) {
         const QPt *p = &pts.v[i];
-        double cx = ox + p->x * SZ, cy = oy + (1 - p->y) * SZ;
+        double cx = ox + p->x * SW, cy = oy + (1 - p->y) * SH;
         buf_lit(out, "<circle cx=\""); buf_num(out, cx); buf_lit(out, "\" cy=\""); buf_num(out, cy);
         buf_lit(out, "\" r=\""); buf_num(out, p->st.r); buf_lit(out, "\" fill=\"");
         if (safe_color(p->st.fill)) buf_str(out, p->st.fill); else buf_lit(out, "#0000eb");

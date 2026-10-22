@@ -1,6 +1,7 @@
 /* timeline: title, sections, "period : event : event", continuation lines ": event".
  * Periods in a row (coloured per section, or per period without sections), events stacked below. */
 #include "dgraph.h"
+#include "dcfg.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -59,6 +60,7 @@ DIAG_FN(timeline_render) {
         if (!VEC_PUSH(a, &per, p)) return CMM_ERR_NOMEM;
     }
     if (!per.n) return diag_fail(err_off, msg, off, "timeline has no periods");
+    const bool MULTI = !dcfg_bool("timeline.disableMulticolor", false);
     constexpr double PW = 150;
     constexpr double GAP = 20;
     constexpr double PH = 60;
@@ -93,8 +95,8 @@ DIAG_FN(timeline_render) {
             size_t j = i;
             while (j < per.n && per.v[j].sec == per.v[i].sec) j++;
             double x = GAP + i * (PW + GAP), w = (j - i) * (PW + GAP) - GAP;
-            dg_rect_fill(out, x, TOPY, w, SH, 6, "box", COL[per.v[i].sec % countof(COL)]);
-            TXG(out, per.v[i].sec);
+            dg_rect_fill(out, x, TOPY, w, SH, 6, "box", COL[MULTI ? per.v[i].sec % countof(COL) : 0]);
+            TXG(out, MULTI ? per.v[i].sec : 0);
             dg_text(out, dg_wrap(a, secs.v[per.v[i].sec], 14, w - 10), 14, x + w / 2, TOPY + SH / 2, "middle", "tx");
             buf_lit(out, "</g>");
             i = j;
@@ -103,11 +105,11 @@ DIAG_FN(timeline_render) {
                  "<path d=\"M0,0L6,3L0,6Z\"/></marker></defs>");
     for (size_t i = 0; i < per.n; i++) {
         double x = GAP + i * (PW + GAP), cx = x + PW / 2;
-        const char *col = COL[(secs.n ? per.v[i].sec : i) % countof(COL)];
+        size_t ci = !MULTI ? 0 : secs.n ? per.v[i].sec : i;
+        const char *col = COL[ci % countof(COL)];
         double y = py + PH + 40, last = y;
         for (uint32_t k = 0; k < per.v[i].ne; k++) last = y, y += eh[per.v[i].e0 + k] + EG;
         if (per.v[i].ne) dg_line(out, cx, py + PH, cx, last, "ln");
-        size_t ci = secs.n ? per.v[i].sec : i;
         TXG(out, ci);
         dg_rect_fill(out, x, py, PW, PH, 6, "box", col);
         dg_text(out, dg_wrap(a, per.v[i].name, 14, PW - 12), 14, cx, py + PH / 2, "middle", "tx");
