@@ -1518,7 +1518,7 @@ static double seg_box(double px, double py, double qx, double qy, const Box *b) 
     double t0 = 0, t1 = 1, d[2] = {qx - px, qy - py}, p0[2] = {px, py}, lo[2] = {b->x0, b->y0}, hi[2] = {b->x1, b->y1};
     for (unsigned k = 0; k < 2; k++) {
         if (fabs(d[k]) < 1e-12) { if (p0[k] < lo[k] || p0[k] > hi[k]) return -1; continue; }
-        double ta = (lo[k] - p0[k]) / d[k], tb = (hi[k] - p0[k]) / d[k];
+        double id = 1 / d[k], ta = (lo[k] - p0[k]) * id, tb = (hi[k] - p0[k]) * id;
         if (ta > tb) { double t = ta; ta = tb; tb = t; }
         if (ta > t0) t0 = ta;
         if (tb < t1) t1 = tb;
@@ -1594,13 +1594,13 @@ static int32_t seg_hit_m(Router *R, double px, double py, double qx, double qy, 
     if (++R->cur == 0) { memset(R->stamp, 0, R->g->nn * sizeof *R->stamp); R->cur = 1; }
     int32_t hit = NONE;
     double bt = 2;
-    double dy = qy - py;
+    double dy = qy - py, idy = fabs(dy) > 1e-12 ? 1 / dy : 0;
     for (size_t cy = cy0; cy <= cy1; cy++) {
         /* x-extent of the segment inside this row band: only those cells can be touched */
         size_t ax = cx0, bx = cx1;
         if (cy0 != cy1 && fabs(dy) > 1e-12) {
             double y0 = G->y0 + (double)cy * G->cs, y1 = y0 + G->cs;
-            double t0 = (y0 - py) / dy, t1 = (y1 - py) / dy;
+            double t0 = (y0 - py) * idy, t1 = (y1 - py) * idy;
             if (t0 > t1) { double tt = t0; t0 = t1; t1 = tt; }
             t0 = dmax(t0, 0), t1 = dmin(t1, 1);
             double xa = px + (qx - px) * t0, xb = px + (qx - px) * t1;
