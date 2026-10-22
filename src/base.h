@@ -85,11 +85,13 @@ static inline bool buf_reserve(Buf *b, size_t extra) {
     if (CMM_LIKELY(b->cap - b->n > extra)) return true;
     return buf_reserve_slow(b, extra);
 }
-static inline void buf_put(Buf *b, size_t n, const char s[static n]) {
+static inline void buf_put_(Buf *b, size_t n, const char s[static n]) {
     if (!buf_reserve(b, n)) return;
     memcpy(b->p + b->n, s, n);
     b->n += n;
 }
+/* zero-length appends are common (escape runs); [static 0] would be UB, so filter here */
+#define buf_put(b, n, s) do { size_t n_ = (n); if (n_) buf_put_((b), n_, (s)); } while (0)
 static inline void buf_str(Buf *b, Str s) { if (s.n) buf_put(b, s.n, s.p); }
 #define buf_lit(b, lit) buf_put((b), sizeof(lit) - 1, (lit))
 static inline void buf_ch(Buf *b, char c) {

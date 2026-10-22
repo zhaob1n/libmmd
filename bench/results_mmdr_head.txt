@@ -1,0 +1,18 @@
+input                                        cmm lib ms cmm cli ms mmdr lib ms mmdr cli ms   cli x
+flowchart.mmd                                      0.01       0.78       46.95       51.71   66.0x
+flowchart_asymmetric_components.mmd                0.02       0.78      106.58      108.18  137.8x
+flowchart_backedges_subgraphs.mmd                  0.05       0.82      169.00      171.04  208.8x
+flowchart_component_packing.mmd                    0.02       0.78      203.17      202.49  260.3x
+flowchart_direction_conflict.mmd                   0.03       0.73      306.11      218.88  301.9x
+flowchart_fanout_returns.mmd                       0.02       0.94      311.44      304.39  324.6x
+flowchart_flow_direction_backtrack.mmd             0.02       0.72      183.32      191.88  264.7x
+flowchart_grid_feedback.mmd                        0.08       0.72      351.94      336.34  465.9x
+flowchart_label_collision.mmd                      0.01       0.76      226.50      216.83  286.1x
+flowchart_lanes_crossfeed.mmd                      0.03       0.82      258.93      261.49  318.7x
+flowchart_large.mmd                                0.26       1.36      444.34      458.71  337.1x
+flowchart_long_edge_labels.mmd                     0.03       0.80      500.69      501.58  625.7x
+flowchart_medium.mmd                               0.04       0.72      139.69      141.84  195.8x
+flowchart_mega_braid_feedback.mmd                  0.06       1.03      512.49      517.38  502.8x
+flowchart_mega_crosslane_subgraphs.mmd             0.15       1.13      446.65      420.06  370.2x
+flowchart_mega_event_mesh.mmd                      0.15       1.07     1955.88     1956.70 1830.9x
+flowchart_mega_multihub_control.mmd                0.05       0.81      785.33      804.52  997.7x

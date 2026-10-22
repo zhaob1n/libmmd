@@ -122,7 +122,7 @@ static uint64_t cross_layer(const Lay *L, size_t r, uint32_t *buf, uint32_t *fen
         int32_t u = L->lay[i];
         size_t s = m;
         for (uint32_t k = L->soff[u]; k < L->soff[u + 1]; k++) buf[m++] = (uint32_t)L->pos[L->sidx[k]];
-        sort_u32_small(m - s, buf + s);
+        if (m > s) sort_u32_small(m - s, buf + s);
     }
     memset(fen, 0, (nb + 1) * sizeof *fen);
     uint64_t cr = 0;

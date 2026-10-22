@@ -99,7 +99,7 @@ Str label_normalize(Arena *a, Str raw, bool *ok) {
 bool label_next_line(Str s, size_t *pos, Str *line) {
     if (*pos > s.n) return false;
     const char *st = s.p + *pos;
-    const char *nl = memchr(st, '\n', s.n - *pos);
+    const char *nl = s.n > *pos ? memchr(st, '\n', s.n - *pos) : nullptr;
     size_t len = nl ? (size_t)(nl - st) : s.n - *pos;
     *line = (Str){.p = st, .n = len};
     *pos += len + 1;
