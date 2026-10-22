@@ -1,0 +1,12 @@
+cmermaid round 7 — min of 3 runs, taskset -c 2, µs per render (v1 = /workspace/cmm-v1/build/bench)
+size     v1 avoid   v7 avoid   v1 no-avoid  v7 no-avoid
+small      11.7       12.5        11.6         11.6
+medium    402.6      431.7       404.0        320.0
+large    8859.5     8295.9      8937.2       7699.0
+xlarge  53836.3    50537.0     53732.2      45759.9
+
+Cycle removal (hybrid): DFS FAS (mermaid/dagre fidelity) unless N >= 1500 and dfs_reversed*20 >= N,
+then Eades greedy FAS. Measured: small N<100 rev0, medium N=100 rev1, large N=1000 rev46 -> DFS;
+xlarge N=3000 rev260 -> greedy (reversed 1277 -> 335, 257 ms -> 50.5 ms). All mmdr fixtures stay DFS.
+Override: config flowchart.cycleRemoval: dfs|greedy|auto, API flags CMM_F_FAS_DFS / CMM_F_FAS_GREEDY.
+Medium phases (avoid on): order 102, route 97, bk-pass 89, rank 50 µs.

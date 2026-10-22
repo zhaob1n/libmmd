@@ -120,3 +120,11 @@ mermaid itself fails to render `block_full` and `radar_full` (partial named curv
   `themeVariables` (primaryColor, primaryBorderColor, primaryTextColor, lineColor, edgeLabelBackground,
   clusterBkg, clusterBorder, titleColor, background, fontFamily, ...) through the same d_cfg system as the other diagrams.
 - Numbers and the mmdr comparison over all diagram types: `bench/results_v6.txt`.
+
+## v7
+- Hybrid cycle removal: DFS FAS by default, greedy (Eades) when N ≥ 1500 and DFS reverses ≥ N/20 edges.
+  `flowchart.cycleRemoval: dfs|greedy|auto`, flags `CMM_F_FAS_DFS`/`CMM_F_FAS_GREEDY`. xlarge 50.5 ms (v1 53.8).
+- `flowchart.nodeSpacing`, `flowchart.rankSpacing`, `flowchart.curve` (basis, linear, step, stepBefore, stepAfter, cardinal/catmullRom).
+- Self-loops reserve side room in BK placement; multiple loop labels stack outside the outermost loop.
+- Subgraph `direction` is ignored when member nodes link outside the subgraph (mermaid rule).
+- Numbers: bench/results_v7.txt.
