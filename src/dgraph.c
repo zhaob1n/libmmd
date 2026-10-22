@@ -2,6 +2,7 @@
 #include "dcfg.h"
 
 #include <math.h>
+#include <stdlib.h>
 
 #include "text.h"
 
@@ -362,4 +363,83 @@ Str dg_wrap(Arena *a, Str raw, double fs, double maxw) {
     }
     if (lastsp != SIZE_MAX && lastsp >= ls && text_width((Str){.p = o + ls, .n = s.n - ls}, fs) > maxw) o[lastsp] = '\n';
     return (Str){.p = o, .n = s.n};
+}
+
+/* ---- free-form renderer helpers ---- */
+static unsigned nlines(Str s) {
+    unsigned k = 0;
+    size_t pos = 0;
+    Str ln;
+    while (label_next_line(s, &pos, &ln)) k++;
+    return k;
+}
+
+BBox dg_tbox(Str s, double fs, double lh, double x, double y, bool centre, const char *anchor, TBase base) {
+    unsigned k = nlines(s);
+    double w = 0;
+    size_t pos = 0;
+    Str ln;
+    while (label_next_line(s, &pos, &ln)) w = fmax(w, text_width(ln, fs));
+    if (centre) y -= (k - 1) * lh / 2;
+    double top = base == TB_MIDDLE ? y - 0.55 * fs : base == TB_HANG ? y - 0.1 * fs : y - 0.92 * fs;
+    double x0 = anchor[0] == 'm' ? x - w / 2 : anchor[0] == 'e' ? x - w : x;
+    return (BBox){x0, top, x0 + w, top + (k - 1) * lh + 1.15 * fs};
+}
+
+unsigned dg_tspans(Buf *b, BBox *bb, Str s, double fs, double lh, double x, double y, bool centre,
+                   const char *anchor, TBase base, const char *cls) {
+    unsigned k = nlines(s);
+    if (bb) {
+        BBox t = dg_tbox(s, fs, lh, x, y, centre, anchor, base);
+        bb_add(bb, t.x0, t.y0, t.x1, t.y1);
+    }
+    if (centre) y -= (k - 1) * lh / 2;
+    buf_lit(b, "<text");
+    if (cls) { buf_lit(b, " class=\""); buf_put(b, strlen(cls), cls); buf_ch(b, '"'); }
+    buf_lit(b, " x=\""); buf_num(b, x); buf_lit(b, "\" y=\""); buf_num(b, y);
+    buf_lit(b, "\" text-anchor=\""); buf_put(b, strlen(anchor), anchor); buf_ch(b, '"');
+    if (base == TB_MIDDLE) buf_lit(b, " dominant-baseline=\"central\"");
+    else if (base == TB_HANG) buf_lit(b, " dominant-baseline=\"hanging\"");
+    buf_ch(b, '>');
+    size_t pos = 0;
+    Str ln;
+    for (unsigned i = 0; label_next_line(s, &pos, &ln); i++) {
+        buf_lit(b, "<tspan x=\""); buf_num(b, x); buf_lit(b, "\" dy=\""); buf_num(b, i ? lh : 0); buf_lit(b, "\">");
+        buf_xml(b, ln);
+        buf_lit(b, "</tspan>");
+    }
+    buf_lit(b, "</text>");
+    return k;
+}
+
+Str dg_wrapc(Arena *a, Str s, size_t maxc) {
+    if (s.n <= maxc) return s;
+    char *o = arena_alloc(a, s.n + 1, 1);
+    if (!o) return (Str){};
+    size_t n = 0, cur = 0;
+    for (size_t i = 0; i < s.n;) {
+        while (i < s.n && (s.p[i] == ' ' || s.p[i] == '\t' || s.p[i] == '\n')) i++;
+        size_t j = i;
+        while (j < s.n && s.p[j] != ' ' && s.p[j] != '\t' && s.p[j] != '\n') j++;
+        if (j == i) break;
+        if (n && cur + 1 + (j - i) <= maxc) o[n++] = ' ', cur++;
+        else if (n) o[n++] = '\n', cur = 0;
+        memcpy(o + n, s.p + i, j - i);
+        n += j - i, cur += j - i;
+        i = j;
+    }
+    return (Str){.p = o, .n = n};
+}
+
+cmm_status dg_finish(Buf *out, Buf *body, BBox bb, double m, const char *kind, size_t ncss, const char css[static ncss]) {
+    if (bb.x0 > bb.x1) bb = (BBox){0, 0, 100, 100};
+    if (!body->oom && buf_reserve(out, body->n + ncss + 1024)) {
+        dg_head(out, bb, m, kind, ncss, css);
+        buf_put(out, body->n, body->p ? body->p : "");
+        buf_lit(out, "</svg>\n");
+    }
+    bool oom = body->oom || out->oom;
+    free(body->p);
+    *body = (Buf){};
+    return oom ? CMM_ERR_NOMEM : CMM_OK;
 }
