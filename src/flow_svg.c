@@ -146,7 +146,7 @@ static void text_lines(Buf *b, Str lab, double fs, double cx, double cy, const c
     buf_lit(b, "</text>");
 }
 
-static void pt(Buf *b, double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
+static void pt(Buf *b, double x, double y) { buf_pt(b, x, y); }
 static void poly(Buf *b, size_t n, const double xy[static 2 * n]) {
     buf_lit(b, "<polygon points=\"");
     for (size_t i = 0; i < n; i++) { if (i) buf_ch(b, ' '); pt(b, xy[2 * i], xy[2 * i + 1]); }

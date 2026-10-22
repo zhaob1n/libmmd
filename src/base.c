@@ -156,11 +156,10 @@ void buf_int(Buf *b, int64_t v) {
     b->n += u64_to_str(u, o);
 }
 
-void buf_num(Buf *b, double v) {
+/* fixed 2-decimal, trimmed; writes at most 26 bytes, returns the count */
+static inline size_t fmt_num(char *o, double v) {
     if (!(v == v) || v > 1e15 || v < -1e15) v = 0; /* NaN / absurd guard */
     int64_t c = (int64_t)(v * 100.0 + (v < 0 ? -0.5 : 0.5));
-    if (!buf_reserve(b, 26)) return;
-    char *o = b->p + b->n;
     size_t k = 0;
     uint64_t u = (uint64_t)c;
     if (c < 0) {
@@ -185,6 +184,20 @@ void buf_num(Buf *b, double v) {
         k = 0;
         o[k++] = '0';
     }
+    return k;
+}
+
+void buf_num(Buf *b, double v) {
+    if (!buf_reserve(b, 26)) return;
+    b->n += fmt_num(b->p + b->n, v);
+}
+
+void buf_pt(Buf *b, double x, double y) {
+    if (!buf_reserve(b, 54)) return;
+    char *o = b->p + b->n;
+    size_t k = fmt_num(o, x);
+    o[k++] = ',';
+    k += fmt_num(o + k, y);
     b->n += k;
 }
 

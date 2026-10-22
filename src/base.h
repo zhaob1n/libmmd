@@ -159,6 +159,7 @@ static inline void buf_ch(Buf *b, char c) {
     b->p[b->n++] = c;
 }
 void buf_num(Buf *b, double v);  /* fast fixed 2-decimal, trimmed */
+void buf_pt(Buf *b, double x, double y); /* "x,y" with buf_num formatting, one reserve */
 void buf_int(Buf *b, int64_t v);
 void buf_xml(Buf *b, Str s);     /* XML-escape text, handles mermaid #entity; */
 
