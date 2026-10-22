@@ -1087,6 +1087,21 @@ static cmm_status layout_core(Graph *g) {
         for (int32_t c = g->nparent[v]; c != NONE; c = g->sparent[c])
             if (srep[c] == NONE) srep[c] = (int32_t)v;
     }
+    /* mermaid adjustClustersAndEdges: a cluster that is an edge source and whose first leaf sits in an
+     * extracted (isolated) sub-cluster is anchored on the first member outside it (findSafeAnchorNode) */
+    for (size_t s = 0; s < S; s++) {
+        if (srep[s] == NONE || !(g->nflags[srep[s]] & NF_PROXY)) continue;
+        bool src = false;
+        for (size_t e = 0; e < E && !src; e++)
+            src = (g->nflags[g->efrom[e]] & NF_SUBREF) && str_eq(g->nid[g->efrom[e]], g->sid[s]);
+        if (!src) continue;
+        for (size_t v = 0; v < N; v++) {
+            if (g->nflags[v] & (NF_HIDDEN | NF_PROXY | NF_SUBREF)) continue;
+            bool in = false;
+            for (int32_t c = g->nparent[v]; c != NONE && !in; c = g->sparent[c]) in = c == (int32_t)s;
+            if (in) { srep[s] = (int32_t)v; break; }
+        }
+    }
     bool has_labels = false;
     int32_t *esub = ANEW(A, int32_t, 2 * E + 1);
     if (!esub) return CMM_ERR_NOMEM;
@@ -1955,7 +1970,7 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
         Graph *d = &G[0];
         proxy[k] = i;
         d->nid[i] = g->sid[s]; d->nlabel[i] = (Str){}; d->nclass[i] = d->nstyle[i] = (Str){};
-        d->nshape[i] = SH_RECT; d->nflags[i] = NF_DEFINED | NF_FIXED;
+        d->nshape[i] = SH_RECT; d->nflags[i] = NF_DEFINED | NF_FIXED | NF_PROXY;
         d->nparent[i] = p == NONE ? NONE : smap[p];
     }
     for (size_t s = 0; s < S; s++) {
