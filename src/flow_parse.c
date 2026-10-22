@@ -186,12 +186,13 @@ static bool parse_dir(Str w, Dir *d) {
 }
 
 /* ---- node shapes ---- */
-typedef struct ShapeTok { char open[4]; char close[4]; Shape sh; } ShapeTok;
+typedef struct ShapeTok { char open[4]; char close[4]; Shape sh; uint8_t ol, cl; } ShapeTok;
+#define ST(o, c, s) {o, c, s, sizeof o - 1, sizeof c - 1}
 static constexpr ShapeTok SHAPES[] = {
-    {"(((", ")))", SH_DCIRCLE}, {"((", "))", SH_CIRCLE}, {"([", "])", SH_STADIUM},
-    {"(", ")", SH_ROUND},       {"[[", "]]", SH_SUBROUTINE}, {"[(", ")]", SH_CYLINDER},
-    {"[/", "/]", SH_LEAN_R},    {"[\\", "\\]", SH_LEAN_L},   {"[", "]", SH_RECT},
-    {"{{", "}}", SH_HEXAGON},   {"{", "}", SH_RHOMBUS},      {">", "]", SH_ASYM},
+    ST("(((", ")))", SH_DCIRCLE), ST("((", "))", SH_CIRCLE), ST("([", "])", SH_STADIUM),
+    ST("(", ")", SH_ROUND),       ST("[[", "]]", SH_SUBROUTINE), ST("[(", ")]", SH_CYLINDER),
+    ST("[/", "/]", SH_LEAN_R),    ST("[\\", "\\]", SH_LEAN_L),   ST("[", "]", SH_RECT),
+    ST("{{", "}}", SH_HEXAGON), ST("{", "}", SH_RHOMBUS),     ST(">", "]", SH_ASYM),
 };
 
 static cmm_status parse_shape_text(P *p, Graph *g, int32_t v) {
@@ -199,15 +200,15 @@ static cmm_status parse_shape_text(P *p, Graph *g, int32_t v) {
     if (c0 != '(' && c0 != '[' && c0 != '{' && c0 != '>') return CMM_OK;
     const ShapeTok *t = nullptr;
     for (size_t k = 0; k < countof(SHAPES); k++) {
-        size_t ol = strlen(SHAPES[k].open);
-        if (p->i + ol <= p->n && memcmp(p->s + p->i, SHAPES[k].open, ol) == 0) { t = &SHAPES[k]; break; }
+        size_t ol = SHAPES[k].ol;
+        if (p->s[p->i] == SHAPES[k].open[0] && p->i + ol <= p->n && memcmp(p->s + p->i, SHAPES[k].open, ol) == 0) { t = &SHAPES[k]; break; }
     }
     if (!t) return CMM_OK;
-    size_t ol = strlen(t->open);
+    size_t ol = t->ol;
     p->i += ol;
     size_t st = p->i;
     Shape sh = t->sh;
-    size_t cl = strlen(t->close);
+    size_t cl = t->cl;
     if (pk(p, 0) == '"') { /* quoted: skip to closing quote */
         const char *q = memchr(p->s + p->i + 1, '"', p->n - p->i - 1);
         if (!q) return fail(p, "unterminated string in node text");
@@ -215,7 +216,7 @@ static cmm_status parse_shape_text(P *p, Graph *g, int32_t v) {
     }
     for (;;) {
         if (p->i >= p->n || p->s[p->i] == '\n') return fail(p, "unterminated node shape");
-        if (p->i + cl <= p->n && memcmp(p->s + p->i, t->close, cl) == 0) break;
+        if (p->s[p->i] == t->close[0] && p->i + cl <= p->n && memcmp(p->s + p->i, t->close, cl) == 0) break;
         if (sh == SH_LEAN_R && p->s[p->i] == '\\' && pk(p, 1) == ']') { sh = SH_TRAP_ALT; cl = 2; break; }
         if (sh == SH_LEAN_L && p->s[p->i] == '/' && pk(p, 1) == ']') { sh = SH_TRAP; cl = 2; break; }
         p->i++;
