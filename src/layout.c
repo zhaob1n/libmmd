@@ -7,6 +7,7 @@
 #ifdef CMM_PROFILE
 #include <stdio.h>
 #include <time.h>
+
 static double prof_t0;
 static double prof_now(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_sec * 1e3 + ts.tv_nsec / 1e6; }
 #define PROF(name) do { double t_ = prof_now(); if (*name) fprintf(stderr, "  %-10s %8.3f ms\n", name, t_ - prof_t0); prof_t0 = t_; } while (0)
@@ -20,6 +21,10 @@ static double prof_now(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC
 #include "nsimplex.h"
 #include "rich.h"
 #include "text.h"
+
+/* inline min/max: fmin/fmax are libm calls at -O2 (NaN semantics) */
+static inline double dmin(double a, double b) { return a < b ? a : b; }
+static inline double dmax(double a, double b) { return a > b ? a : b; }
 
 constexpr double PAD_NODE = 15.0;
 constexpr double CLUSTER_PAD = 15.0;
@@ -58,8 +63,8 @@ void node_size(Graph *g, size_t v) {
         h = th + 2 * PAD_NODE + 2 * ry;
         break;
     }
-    case SH_CIRCLE: w = h = fmax(tw, th) + 2 * PAD_NODE; break;
-    case SH_DCIRCLE: w = h = fmax(tw, th) + 2 * PAD_NODE + 10; break;
+    case SH_CIRCLE: w = h = dmax(tw, th) + 2 * PAD_NODE; break;
+    case SH_DCIRCLE: w = h = dmax(tw, th) + 2 * PAD_NODE + 10; break;
     case SH_ASYM: w = tw + 2 * PAD_NODE + h / 4; break;
     case SH_RHOMBUS: { double s = (tw + 16) + (th + 16); w = h = s; break; }
     case SH_HEXAGON: w = tw + 2 * PAD_NODE + h / 2; break;
@@ -580,10 +585,10 @@ static size_t clip_poly_box(size_t np, double P[static 2 * np], double x0, doubl
     while (j < np && !INSIDE(j)) j++;
     if (j == np) return np;
     double px = P[2 * j - 2], py = P[2 * j - 1], dx = P[2 * j] - px, dy = P[2 * j + 1] - py, t = 0;
-    if (px < x0 && dx > 0) t = fmax(t, (x0 - px) / dx);
-    if (px > x1 && dx < 0) t = fmax(t, (x1 - px) / dx);
-    if (py < y0 && dy > 0) t = fmax(t, (y0 - py) / dy);
-    if (py > y1 && dy < 0) t = fmax(t, (y1 - py) / dy);
+    if (px < x0 && dx > 0) t = dmax(t, (x0 - px) / dx);
+    if (px > x1 && dx < 0) t = dmax(t, (x1 - px) / dx);
+    if (py < y0 && dy > 0) t = dmax(t, (y0 - py) / dy);
+    if (py > y1 && dy < 0) t = dmax(t, (y1 - py) / dy);
     P[2 * j] = px + dx * t, P[2 * j + 1] = py + dy * t;
     return j + 1;
     #undef INSIDE
@@ -915,7 +920,7 @@ static cmm_status layout_core(Graph *g) {
     int64_t tbudget = 2000000 + 40 * (int64_t)nseg;
     uint8_t *tdirty = ANEW(A, uint8_t, R + 2);
     if (!tdirty) return CMM_ERR_NOMEM;
-    for (unsigned iter = 0; iter < 24 && since < 4 && bestc > 0; iter++) {
+    for (unsigned iter = 0; iter < 24 && since < 2 && bestc > 0; iter++) {
         bool down = (iter & 1u) == 0;
         if (down) for (size_t r = 1; r < R; r++) sweep_layer(&L, r, true, false, keys, idx, tmp, csum, ccnt, clusters);
         else for (size_t r = R - 1; r-- > 0;) sweep_layer(&L, r, false, false, keys, idx, tmp, csum, ccnt, clusters);
@@ -1051,7 +1056,7 @@ static cmm_status layout_core(Graph *g) {
                 port_sort(k, pk);
                 Shape sh = g->nshape[u];
                 double frac = sh == SH_RHOMBUS || sh == SH_CIRCLE || sh == SH_DCIRCLE ? 0.45 : 0.7;
-                double step = fmin(EDGE_SEP * 0.6, L.w[u] * frac / (double)(k - 1));
+                double step = dmin(EDGE_SEP * 0.6, L.w[u] * frac / (double)(k - 1));
                 for (size_t i = 0; i < k; i++) eport[2 * pk[i].e + side] = ((double)i - (double)(k - 1) / 2) * step;
             }
     }
@@ -1282,9 +1287,9 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
         double tw;
         unsigned tl;
         measure(g, &g->stitle[s], &tw, &tl);
-        if (b.x0 == INFINITY) b = (Box){0, 0, fmax(tw, 40), 20};
+        if (b.x0 == INFINITY) b = (Box){0, 0, dmax(tw, 40), 20};
         cb[k] = b;
-        double w = fmax(b.x1 - b.x0, tw) + 2 * CLUSTER_PAD, h = b.y1 - b.y0 + 2 * CLUSTER_PAD + CLUSTER_TITLE;
+        double w = dmax(b.x1 - b.x0, tw) + 2 * CLUSTER_PAD, h = b.y1 - b.y0 + 2 * CLUSTER_PAD + CLUSTER_TITLE;
         G[0].nw[proxy[k]] = w;
         G[0].nh[proxy[k]] = h;
     }
@@ -1382,11 +1387,11 @@ typedef struct Grid { double x0, y0, cs; size_t gw, gh; uint32_t *off, *idx; } G
     size_t k = 0;
     for (size_t v = 0; v < N; v++) {
         if (!use[v]) continue;
-        x0 = fmin(x0, nb[v].x0), y0 = fmin(y0, nb[v].y0), x1 = fmax(x1, nb[v].x1), y1 = fmax(y1, nb[v].y1);
+        x0 = dmin(x0, nb[v].x0), y0 = dmin(y0, nb[v].y0), x1 = dmax(x1, nb[v].x1), y1 = dmax(y1, nb[v].y1);
         area += (nb[v].x1 - nb[v].x0) * (nb[v].y1 - nb[v].y0), k++;
     }
     if (!k) { G->gw = G->gh = 0; return true; }
-    double cs = fmax(sqrt(area / (double)k) * 2, 32);
+    double cs = dmax(sqrt(area / (double)k) * 2, 32);
     size_t gw = (size_t)((x1 - x0) / cs) + 1, gh = (size_t)((y1 - y0) / cs) + 1;
     while (gw * gh > 4 * k + 64) cs *= 1.5, gw = (size_t)((x1 - x0) / cs) + 1, gh = (size_t)((y1 - y0) / cs) + 1;
     *G = (Grid){x0, y0, cs, gw, gh, ANEW(A, uint32_t, gw * gh + 1), nullptr};
@@ -1426,10 +1431,10 @@ typedef struct Router {
 } Router;
 
 /* first obstacle (other than skip1/skip2) whose interior the segment p->q enters; NONE if clear */
-static int32_t seg_hit(Router *R, double px, double py, double qx, double qy, int32_t s1, int32_t s2) {
+static int32_t seg_hit_m(Router *R, double px, double py, double qx, double qy, int32_t s1, int32_t s2, double sh) {
     const Grid *G = &R->G;
     if (!G->gw) return NONE;
-    double lx = fmin(px, qx), hx = fmax(px, qx), ly = fmin(py, qy), hy = fmax(py, qy);
+    double lx = dmin(px, qx), hx = dmax(px, qx), ly = dmin(py, qy), hy = dmax(py, qy);
     if (hx < G->x0 || hy < G->y0) return NONE;
     size_t cx0 = lx < G->x0 ? 0 : (size_t)((lx - G->x0) / G->cs), cy0 = ly < G->y0 ? 0 : (size_t)((ly - G->y0) / G->cs);
     size_t cx1 = (size_t)((hx - G->x0) / G->cs), cy1 = (size_t)((hy - G->y0) / G->cs);
@@ -1438,34 +1443,56 @@ static int32_t seg_hit(Router *R, double px, double py, double qx, double qy, in
     if (++R->cur == 0) { memset(R->stamp, 0, R->g->nn * sizeof *R->stamp); R->cur = 1; }
     int32_t hit = NONE;
     double bt = 2;
-    for (size_t cy = cy0; cy <= cy1; cy++)
-        for (size_t cx = cx0; cx <= cx1; cx++)
+    double dy = qy - py;
+    for (size_t cy = cy0; cy <= cy1; cy++) {
+        /* x-extent of the segment inside this row band: only those cells can be touched */
+        size_t ax = cx0, bx = cx1;
+        if (cy0 != cy1 && fabs(dy) > 1e-12) {
+            double y0 = G->y0 + (double)cy * G->cs, y1 = y0 + G->cs;
+            double t0 = (y0 - py) / dy, t1 = (y1 - py) / dy;
+            if (t0 > t1) { double tt = t0; t0 = t1; t1 = tt; }
+            t0 = dmax(t0, 0), t1 = dmin(t1, 1);
+            double xa = px + (qx - px) * t0, xb = px + (qx - px) * t1;
+            double la = dmin(xa, xb) - 1, lb = dmax(xa, xb) + 1;
+            size_t na = la < G->x0 ? 0 : (size_t)((la - G->x0) / G->cs);
+            size_t nb2 = lb < G->x0 ? 0 : (size_t)((lb - G->x0) / G->cs);
+            if (na > ax) ax = na;
+            if (nb2 < bx) bx = nb2;
+        }
+        for (size_t cx = ax; cx <= bx; cx++)
             for (uint32_t k = G->off[cy * G->gw + cx]; k < G->off[cy * G->gw + cx + 1]; k++) {
                 uint32_t v = G->idx[k];
                 if (R->stamp[v] == R->cur || (int32_t)v == s1 || (int32_t)v == s2) continue;
                 R->stamp[v] = R->cur;
                 R->budget--;
                 Box b = R->nb[v];
-                b.x0 += 0.5, b.y0 += 0.5, b.x1 -= 0.5, b.y1 -= 0.5; /* grazing along a side is fine */
+                b.x0 += sh, b.y0 += sh, b.x1 -= sh, b.y1 -= sh; /* grazing along a side is fine */
                 if (hx < b.x0 || lx > b.x1 || hy < b.y0 || ly > b.y1) continue;
                 double t = seg_box(px, py, qx, qy, &b);
-                if (t >= 0 && t < bt) bt = t, hit = (int32_t)v;
+                if (t >= 0 && t < bt) return (int32_t)v; /* any hit suffices */
             }
+    }
     return hit;
+}
+
+static int32_t seg_hit(Router *R, double px, double py, double qx, double qy, int32_t s1, int32_t s2) {
+    return seg_hit_m(R, px, py, qx, qy, s1, s2, 0.5);
 }
 
 static bool pt_in(const Box *b, double x, double y) { return x > b->x0 && x < b->x1 && y > b->y0 && y < b->y1; }
 
 /* shortest visibility path S->T; writes interior corners to out (max cap pts). Returns count or -1. */
+static inline double edist(double dx, double dy) { return sqrt(dx * dx + dy * dy); }
+
 static int vis_path(Router *R, Arena *A, double sx, double sy, double tx, double ty, int32_t s1, int32_t s2,
                     size_t cap, double out[static 2 * cap]) {
     const Graph *g = R->g;
     double pad = 0;
     for (unsigned attempt = 0; attempt < 3; attempt++) {
-        pad = attempt == 0 ? 60 : pad * 3;
-        double lx = fmin(sx, tx) - pad, hx = fmax(sx, tx) + pad, ly = fmin(sy, ty) - pad, hy = fmax(sy, ty) + pad;
+        pad = attempt == 0 ? 24 : pad * 3;
+        double lx = dmin(sx, tx) - pad, hx = dmax(sx, tx) + pad, ly = dmin(sy, ty) - pad, hy = dmax(sy, ty) + pad;
         /* candidate corners */
-        constexpr size_t MAXC = 160;
+        constexpr size_t MAXC = 96;
         double cx[MAXC + 2], cy[MAXC + 2];
         size_t nc = 0;
         cx[nc] = sx, cy[nc] = sy, nc++;
@@ -1505,22 +1532,47 @@ static int vis_path(Router *R, Arena *A, double sx, double sy, double tx, double
         if (!dist || !prev || !done) return -1;
         for (size_t i = 0; i < nc; i++) dist[i] = INFINITY, prev[i] = -1, done[i] = 0;
         dist[0] = 0;
+        /* A*: Euclidean distance to T is consistent on a visibility graph */
+        double *hh = ANEW(A, double, nc);
+        if (!hh) return -1;
+        for (size_t i = 0; i < nc; i++) hh[i] = edist(cx[i] - tx, cy[i] - ty);
+        bool reached = false;
+        /* lazy A*: relax without visibility tests, validate a node's parent link only when it is popped */
         for (;;) {
             size_t u = SIZE_MAX;
             double bd = INFINITY;
-            for (size_t i = 0; i < nc; i++) if (!done[i] && dist[i] < bd) bd = dist[i], u = i;
-            if (u == SIZE_MAX || u == 1) break;
-            done[u] = 1;
-            for (size_t w = 1; w < nc; w++) {
-                if (done[w]) continue;
-                double d = bd + hypot(cx[w] - cx[u], cy[w] - cy[u]);
-                if (d >= dist[w]) continue;
+            for (size_t i = 0; i < nc; i++) if (!done[i] && dist[i] + hh[i] < bd) bd = dist[i] + hh[i], u = i;
+            if (u == SIZE_MAX) break;
+            if (u != 0 && !done[u]) {
+                int32_t p = prev[u];
                 if (R->budget < 0) return -1;
-                if (seg_hit(R, cx[u], cy[u], cx[w], cy[w], s1, s2) != NONE) continue;
-                dist[w] = d, prev[w] = (int32_t)u;
+                if (seg_hit(R, cx[p], cy[p], cx[u], cy[u], s1, s2) != NONE) {
+                    /* parent invisible: best visible already-settled parent, else drop for now */
+                    double nd = INFINITY;
+                    int32_t np2 = -1;
+                    for (size_t q = 0; q < nc; q++) {
+                        if (done[q] != 1 || (int32_t)q == p) continue;
+                        double d = dist[q] + edist(cx[u] - cx[q], cy[u] - cy[q]);
+                        if (d >= nd) continue;
+                        if (seg_hit(R, cx[q], cy[q], cx[u], cy[u], s1, s2) != NONE) continue;
+                        nd = d, np2 = (int32_t)q;
+                    }
+                    dist[u] = nd, prev[u] = np2;
+                    if (np2 < 0) { done[u] = 2; continue; } /* unreachable via settled nodes */
+                    continue; /* re-select with the corrected key */
+                }
+            }
+            if (u == 1) { reached = true; break; }
+            done[u] = 1;
+            double du = dist[u];
+            for (size_t w = 1; w < nc; w++) {
+                if (done[w] == 1) continue;
+                double d = du + edist(cx[w] - cx[u], cy[w] - cy[u]);
+                if (done[w] == 0 && d >= dist[w]) continue;
+                dist[w] = d, prev[w] = (int32_t)u, done[w] = 0;
             }
         }
-        if (dist[1] == INFINITY) { if (full) break; continue; }
+        if (!reached) { if (full) break; continue; }
         size_t k = 0;
         for (int32_t v = prev[1]; v > 0; v = prev[v]) k++;
         if (k > cap) return -1;
@@ -1529,6 +1581,37 @@ static int vis_path(Router *R, Arena *A, double sx, double sy, double tx, double
         return (int)k;
     }
     return -1;
+}
+
+/* cheap detour: hug one side of the single blocking box (2 corners). Returns corner count or -1. */
+static int side_path(Router *R, double sx, double sy, double tx, double ty, int32_t s1, int32_t s2,
+                     double out[static 4]) {
+    int32_t h = seg_hit(R, sx, sy, tx, ty, s1, s2);
+    if (h == NONE) return 0;
+    const Box *b = &R->nb[h];
+    if (pt_in(b, sx, sy) || pt_in(b, tx, ty)) return -1;
+    double c[4][4] = {
+        {b->x0, b->y0, b->x0, b->y1}, {b->x1, b->y0, b->x1, b->y1}, /* left, right side */
+        {b->x0, b->y0, b->x1, b->y0}, {b->x0, b->y1, b->x1, b->y1}, /* top, bottom side */
+    };
+    double best = INFINITY;
+    int bk = -1;
+    for (unsigned k = 0; k < 4; k++) {
+        double *q = c[k];
+        /* visit the corner nearer S first */
+        if (edist(q[0] - sx, q[1] - sy) > edist(q[2] - sx, q[3] - sy)) {
+            double t0 = q[0], t1 = q[1];
+            q[0] = q[2], q[1] = q[3], q[2] = t0, q[3] = t1;
+        }
+        double L = edist(q[0] - sx, q[1] - sy) + edist(q[2] - q[0], q[3] - q[1]) + edist(tx - q[2], ty - q[3]);
+        if (L >= best) continue;
+        if (seg_hit(R, sx, sy, q[0], q[1], s1, s2) != NONE || seg_hit(R, q[0], q[1], q[2], q[3], s1, s2) != NONE ||
+            seg_hit(R, q[2], q[3], tx, ty, s1, s2) != NONE) continue;
+        best = L, bk = (int)k;
+    }
+    if (bk < 0) return -1;
+    memcpy(out, c[bk], sizeof c[bk]);
+    return 2;
 }
 
 [[nodiscard]] static bool route_avoid(Graph *g) {
@@ -1556,7 +1639,7 @@ static int vis_path(Router *R, Arena *A, double sx, double sy, double tx, double
         /* find first / last offending segment */
         size_t fi = SIZE_MAX, li = 0;
         for (uint32_t i = 0; i + 1 < np && R.budget > 0; i++)
-            if (seg_hit(&R, P[2 * i], P[2 * i + 1], P[2 * i + 2], P[2 * i + 3], a, b) != NONE) {
+            if (seg_hit_m(&R, P[2 * i], P[2 * i + 1], P[2 * i + 2], P[2 * i + 3], a, b, M - 3) != NONE) {
                 if (fi == SIZE_MAX) fi = i;
                 li = i;
             }
@@ -1564,7 +1647,8 @@ static int vis_path(Router *R, Arena *A, double sx, double sy, double tx, double
         int k = -1;
         if (fi != SIZE_MAX) {
             /* endpoints of the detour: step back to points that are themselves outside obstacles */
-            k = vis_path(&R, A, P[2 * fi], P[2 * fi + 1], P[2 * li + 2], P[2 * li + 3], a, b, 64, tmp);
+            k = side_path(&R, P[2 * fi], P[2 * fi + 1], P[2 * li + 2], P[2 * li + 3], a, b, tmp);
+            if (k < 0) k = vis_path(&R, A, P[2 * fi], P[2 * fi + 1], P[2 * li + 2], P[2 * li + 3], a, b, 64, tmp);
         }
         if (k < 0) {
             for (uint32_t i = 0; i < 2 * np; i++) if (!VEC_PUSH(A, &out, P[i])) return false;
@@ -1598,7 +1682,7 @@ static void simplify_pts(Graph *g) {
                 double ax = V[w - 4], ay = V[w - 3], bx = V[w - 2], by = V[w - 1];
                 double cr = (bx - ax) * (y - by) - (by - ay) * (x - bx);
                 double dt = (bx - ax) * (x - bx) + (by - ay) * (y - by);
-                double l2 = hypot(bx - ax, by - ay) * hypot(x - bx, y - by);
+                double l2 = edist(bx - ax, by - ay) * edist(x - bx, y - by);
                 if (dt > 0 && fabs(cr) <= 1e-3 * l2) { V[w - 2] = x, V[w - 1] = y; continue; } /* extend run */
             }
             V[w++] = x, V[w++] = y;
@@ -1610,7 +1694,15 @@ static void simplify_pts(Graph *g) {
 }
 
 /* move edge labels onto the drawn curve (B-spline of the polyline), nearest point to the reserved slot */
+static bool lab_overlap(const Graph *g, size_t a, size_t b) {
+    return fabs(g->elx[a] - g->elx[b]) * 2 < g->elw[a] + g->elw[b] + 4 &&
+           fabs(g->ely[a] - g->ely[b]) * 2 < g->elh[a] + g->elh[b] + 2;
+}
+
 static void labels_on_curve(Graph *g) {
+    size_t E = g->ne;
+    double *ox = ANEW(g->arena, double, 2 * E + 2);
+    if (ox) for (size_t e = 0; e < E; e++) ox[2 * e] = g->elx[e], ox[2 * e + 1] = g->ely[e];
     for (size_t e = 0; e < g->ne; e++) {
         uint32_t np = g->eptn[e];
         if (!g->elabel[e].n || np < 3) continue;
@@ -1631,6 +1723,23 @@ static void labels_on_curve(Graph *g) {
         }
         g->elx[e] = bx, g->ely[e] = by;
     }
+    if (!ox) return;
+    /* labelled edges are few; resolve overlaps the snap introduced (e.g. A->B / B->A pairs) */
+    size_t *L = ANEW(g->arena, size_t, E + 1), nl = 0;
+    if (!L) return;
+    for (size_t e = 0; e < E; e++) if (g->elabel[e].n) L[nl++] = e;
+    if (nl > 4000) return;
+    for (size_t i = 0; i < nl; i++)
+        for (size_t j = i + 1; j < nl; j++) {
+            size_t a = L[i], b = L[j];
+            if (!lab_overlap(g, a, b)) continue;
+            g->elx[a] = ox[2 * a], g->ely[a] = ox[2 * a + 1];
+            g->elx[b] = ox[2 * b], g->ely[b] = ox[2 * b + 1];
+            if (!lab_overlap(g, a, b)) continue;
+            double need = (g->elw[a] + g->elw[b]) / 2 + 4 - fabs(g->elx[a] - g->elx[b]);
+            double sgn = g->elx[a] < g->elx[b] || (g->elx[a] == g->elx[b] && a < b) ? -1 : 1;
+            g->elx[a] += sgn * need / 2, g->elx[b] -= sgn * need / 2;
+        }
 }
 
 /* place each cluster title where no edge crosses the title band (prefer centred) */
@@ -1658,15 +1767,15 @@ static void labels_on_curve(Graph *g) {
             for (uint32_t i = 0; i + 1 < g->eptn[e] && ni < 64; i++) {
                 const double *P = g->pts.v + g->eptoff[e] + 2 * i;
                 double ya = P[1], yb = P[3];
-                if (fmax(ya, yb) < y0 || fmin(ya, yb) > y1) continue;
+                if (dmax(ya, yb) < y0 || dmin(ya, yb) > y1) continue;
                 double xa = P[0], xb = P[2];
                 if (fabs(yb - ya) > 1e-9) { /* restrict to the band */
                     double ta = (y0 - ya) / (yb - ya), tb = (y1 - ya) / (yb - ya);
-                    ta = fmin(fmax(ta, 0), 1), tb = fmin(fmax(tb, 0), 1);
+                    ta = dmin(dmax(ta, 0), 1), tb = dmin(dmax(tb, 0), 1);
                     double x1 = xa + (xb - xa) * ta, x2 = xa + (xb - xa) * tb;
                     xa = x1, xb = x2;
                 }
-                double l = fmin(xa, xb) - 3, r = fmax(xa, xb) + 3;
+                double l = dmin(xa, xb) - 3, r = dmax(xa, xb) + 3;
                 if (r < g->sx[s] || l > g->sx[s] + g->sw[s]) continue;
                 iv[2 * ni] = l, iv[2 * ni + 1] = r, ni++;
                 if (nc + 2 <= countof(cand)) { cand[nc++] = l - half; cand[nc++] = r + half; }
@@ -1674,7 +1783,7 @@ static void labels_on_curve(Graph *g) {
         }
         if (!ni) continue;
         for (size_t c = 0; c < nc; c++) {
-            double x = fmin(fmax(cand[c], lo), hi);
+            double x = dmin(dmax(cand[c], lo), hi);
             bool free_ = true;
             for (size_t i = 0; i < ni && free_; i++) if (x + half > iv[2 * i] && x - half < iv[2 * i + 1]) free_ = false;
             if (free_ && fabs(x - mid) < bestd) { bestd = fabs(x - mid); best = x; }
@@ -1687,8 +1796,11 @@ static void labels_on_curve(Graph *g) {
 cmm_status flow_layout(Graph *g) {
     cmm_status st = layout_rec(g, 0);
     if (st) return st;
-    if (!(g->flags & CMM_F_NO_AVOID) && !route_avoid(g)) return CMM_ERR_NOMEM;
-    simplify_pts(g);
+    simplify_pts(g); /* fewer segments for the obstacle test */
+    if (!(g->flags & CMM_F_NO_AVOID)) {
+        if (!route_avoid(g)) return CMM_ERR_NOMEM;
+        simplify_pts(g);
+    }
     labels_on_curve(g);
     if (!place_titles(g)) return CMM_ERR_NOMEM;
     return CMM_OK;

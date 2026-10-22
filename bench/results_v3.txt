@@ -1,0 +1,37 @@
+# v3 in-process bench (min of 3 runs of min-per-iter, us; Asia/Shanghai 2026-10-23)
+# v1 = /tmp/before/bench (41835c5, -O2 -march=native). default = -O2 (no -march).
+small v1 min_us=11.6 svg_bytes=9236
+small default-O2 min_us=14.2 svg_bytes=8224
+small native min_us=13.5 svg_bytes=8224
+small lto min_us=13.3 svg_bytes=8224
+small pgo+lto min_us=12.0 svg_bytes=8224
+small pgo+ctx min_us=12.0 svg_bytes=8224
+small pgo+ctx,no-avoid min_us=11.2 svg_bytes=8224
+small O2,no-avoid min_us=13.3 svg_bytes=8224
+medium v1 min_us=404.9 svg_bytes=80341
+medium default-O2 min_us=811.3 svg_bytes=64282
+medium native min_us=798.2 svg_bytes=64282
+medium lto min_us=814.1 svg_bytes=64282
+medium pgo+lto min_us=806.2 svg_bytes=64282
+medium pgo+ctx min_us=764.7 svg_bytes=64282
+medium pgo+ctx,no-avoid min_us=393.2 svg_bytes=63458
+medium O2,no-avoid min_us=452.8 svg_bytes=63458
+large v1 min_us=8923.5 svg_bytes=1167886
+large default-O2 min_us=10688.3 svg_bytes=612905
+large native min_us=11126.6 svg_bytes=612905
+large lto min_us=11167.2 svg_bytes=612905
+large pgo+lto min_us=11253.5 svg_bytes=612905
+large pgo+ctx min_us=10258.3 svg_bytes=612905
+large pgo+ctx,no-avoid min_us=8006.1 svg_bytes=597681
+large O2,no-avoid min_us=8911.6 svg_bytes=597681
+xlarge v1 min_us=54458.4 svg_bytes=4670606
+xlarge default-O2 min_us=63834.6 svg_bytes=1940396
+xlarge native min_us=67429.1 svg_bytes=1940396
+xlarge lto min_us=64861.1 svg_bytes=1940396
+xlarge pgo+lto min_us=68298.8 svg_bytes=1940396
+xlarge pgo+ctx min_us=63831.0 svg_bytes=1940396
+xlarge pgo+ctx,no-avoid min_us=52343.4 svg_bytes=1869349
+xlarge O2,no-avoid min_us=53311.2 svg_bytes=1869349
+
+# CLI vs mmdr (bench/compare.py)
+small: cmm cli 0.82ms vs mmdr 137.08ms (166x); medium: 1.92ms vs 20157ms (10504x); large: cmm 14.92ms, mmdr timeout >120s

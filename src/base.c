@@ -169,7 +169,14 @@ void buf_num(Buf *b, double v) {
     }
     uint64_t ip = u / 100;
     unsigned fp = (unsigned)(u % 100);
-    k += u64_to_str(ip, o + k);
+    if (ip < 10) o[k++] = (char)('0' + ip);
+    else if (ip < 100) { memcpy(o + k, DIGITS2 + ip * 2, 2); k += 2; }
+    else if (ip < 10000) { /* typical SVG coordinate: two digit pairs, no division loop */
+        unsigned hi = (unsigned)ip / 100, lo = (unsigned)ip % 100;
+        if (hi >= 10) { memcpy(o + k, DIGITS2 + hi * 2, 2); k += 2; }
+        else o[k++] = (char)('0' + hi);
+        memcpy(o + k, DIGITS2 + lo * 2, 2); k += 2;
+    } else k += u64_to_str(ip, o + k);
     if (fp) {
         o[k++] = '.';
         o[k++] = (char)('0' + fp / 10);

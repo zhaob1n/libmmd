@@ -23,9 +23,16 @@ CFLAGS ?= $(OPT) -g
 ifneq ($(MARCH),)
 CFLAGS += -march=$(MARCH)
 endif
+AR := ar
 ifeq ($(LTO),1)
 CFLAGS += -flto
 LDFLAGS += -flto
+ifeq ($(IS_CLANG),1)
+LDFLAGS += -fuse-ld=lld
+AR := $(dir $(CC))llvm-ar
+else
+AR := gcc-ar
+endif
 endif
 ifneq ($(PGO_GEN),)
 CFLAGS += -fprofile-generate=$(PGO_GEN)
@@ -33,7 +40,7 @@ LDFLAGS += -fprofile-generate=$(PGO_GEN)
 endif
 ifneq ($(PGO_USE),)
 ifeq ($(IS_CLANG),1)
-CFLAGS += -fprofile-use=$(PGO_USE)/default.profdata
+CFLAGS += -fprofile-use=$(PGO_USE)/default.profdata -Wno-backend-plugin
 else
 CFLAGS += -fprofile-use=$(PGO_USE) -fprofile-correction -Wno-missing-profile
 endif
@@ -55,7 +62,7 @@ $(BUILD)/%.o: src/%.c $(wildcard src/*.h) include/cmermaid.h | $(BUILD)
 $(BUILD):
 	mkdir -p $@
 $(BUILD)/libcmermaid.a: $(OBJS)
-	ar rcs $@ $^
+	$(AR) rcs $@ $^
 $(BUILD)/libcmermaid.so.$(VERSION): $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -shared -Wl,-soname,$(SONAME) $^ $(LDLIBS) -o $@
 $(BUILD)/libcmermaid.so: $(BUILD)/libcmermaid.so.$(VERSION)
