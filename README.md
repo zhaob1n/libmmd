@@ -48,6 +48,7 @@ API (`include/cmermaid.h`): `cmm_render_svg(n, src, opts, &buf, &err)`, `cmm_buf
 | radar(-beta) | `src/d_radar.c` | axes, positional/named curves, max/min/ticks, polygon graticule, legend |
 | treemap(-beta) | `src/d_treemap.c` | squarified layout, sections, classDef/`:::` |
 | kanban | `src/d_kanban.c` | columns, cards, `@{assigned, ticket, priority}` |
+| config / a11y | `src/d_cfg.c`, `src/dcfg.h` | `%%{init}%%` (relaxed JSON) + YAML frontmatter `config:` flattened to dotted keys; ~85 themeVariables mapped to CSS per type (values whitelisted, `url(` rejected); per-diagram keys (pie.textPosition, gantt.barHeight/barGap/topPadding/leftPadding, quadrantChart.chartWidth, xyChart.width/height, sankey.width/height, packet.bitsPerRow); accTitle/accDescr (incl. `{}` block) → `<title>`/`<desc>` + aria-labelledby/describedby |
 | text metrics | `src/text.c` | embedded Helvetica-compatible advance table, CJK/emoji wide, 8-byte ASCII fast path |
 
 ## Fidelity vs mermaid-cli 11.17
