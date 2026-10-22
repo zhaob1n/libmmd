@@ -1034,12 +1034,15 @@ static cmm_status layout_core(Graph *g) {
     uint64_t bestc = cross_all(&L, cbuf, fen);
     memcpy(best, L.lay, placed * sizeof *best);
     unsigned since = 0;
+    /* patience: small graphs afford one extra non-improving sweep; on big ones the sweeps settle into a
+     * period-2 oscillation (down/up alternate) and the extra sweep only repeats a seen order */
+    const unsigned patience = nseg <= 256 ? 2 : 1;
     /* transpose (final polish only; per-sweep transpose measured no gain on bench inputs)
      * budget: generous for small graphs, bounded (~linear) for big ones */
     int64_t tbudget = 2000000 + 40 * (int64_t)nseg;
     uint8_t *tdirty = ANEW(A, uint8_t, R + 2);
     if (!tdirty) return CMM_ERR_NOMEM;
-    for (unsigned iter = 0; iter < 24 && since < 2 && bestc > 0; iter++) {
+    for (unsigned iter = 0; iter < 24 && since < patience && bestc > 0; iter++) {
         bool down = (iter & 1u) == 0;
         if (clusters) cluster_keys(&L, S, csum, ccnt);
         if (down) for (size_t r = 1; r < R; r++) sweep_layer(&L, r, true, false, keys, idx, tmp, csum, ccnt, clusters);
