@@ -365,7 +365,7 @@ static void actor_box(Buf *b, const Part *pa, double y, double fs) {
 }
 
 typedef struct Act { int32_t p; double y0; unsigned depth; } Act;
-typedef struct Blk { size_t ev; double y0; int32_t lo, hi; } Blk;
+typedef struct Blk { size_t ev; double y0; int32_t lo, hi; double xl, xr; /* content x extent (notes, self msgs) */ } Blk;
 
 static constexpr char SEQ_CSS[] =
     "#mermaid{font-family:\"trebuchet ms\",verdana,arial,sans-serif;font-size:16px;}"
@@ -380,6 +380,7 @@ static constexpr char SEQ_CSS[] =
     "#mermaid .block{fill:none;stroke:#526e9c;stroke-width:1.5px;}"
     "#mermaid .block-sep{stroke:#526e9c;stroke-width:1.5px;stroke-dasharray:3,3;}"
     "#mermaid .block-tab{fill:#ECECFF;stroke:#526e9c;stroke-width:1.5px;}"
+    "#mermaid .block-kw{font-size:14px;font-weight:bold;}"
     "#mermaid .seqnum{fill:#333;}#mermaid .seqnum-t{fill:#fff;font-size:12px;}"
     "#mermaid .title{font-size:18px;}"
     "#mermaid .box{stroke:rgba(0,0,0,0.5);stroke-width:1px;}#mermaid .destroy{stroke:#333;stroke-width:2px;fill:none;}";
@@ -487,6 +488,8 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
                 buf_ch(&front, ' '); pt(&front, x1 + 60, ly + 40); buf_ch(&front, ' '); pt(&front, x1, ly + 30); buf_ch(&front, '"');
                 ly += 30;
                 if (x1 + 70 + text_width(ev->text, fs) > maxx) maxx = x1 + 70 + text_width(ev->text, fs);
+                for (size_t q = 0; q < nblk; q++)
+                    if (x1 + 70 > blks[q].xr) blks[q].xr = x1 + 70;
             } else {
                 text_(&front, ev->text, fs, (x1 + x2) / 2, y + lh / 2, "middle", "msg-text");
                 double dir = x2 > x1 ? 1 : -1;
@@ -545,6 +548,10 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
             if (x < minx) minx = x;
             if (x + w > maxx) maxx = x + w;
             rect(&front, x, y, w, h, "note");
+            for (size_t q = 0; q < nblk; q++) {
+                if (x < blks[q].xl) blks[q].xl = x;
+                if (x + w > blks[q].xr) blks[q].xr = x + w;
+            }
             text_(&front, ev->text, fs, x + w / 2, y + 7 + lh / 2, "middle", "note-text");
             for (size_t q = 0; q < nblk; q++) {
                 int32_t lo = ev->a < ev->b ? ev->a : ev->b, hi = ev->a ^ ev->b ^ lo;
@@ -555,7 +562,7 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
             break;
         }
         case EV_BEGIN:
-            if (nblk < countof(blks)) blks[nblk++] = (Blk){.ev = k, .y0 = y, .lo = INT32_MAX, .hi = -1};
+            if (nblk < countof(blks)) blks[nblk++] = (Blk){.ev = k, .y0 = y, .lo = INT32_MAX, .hi = -1, .xl = 1e300, .xr = -1e300};
             y += lh + 18;
             break;
         case EV_ELSE:
@@ -579,6 +586,12 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
             pad = 60 - 8.0 * depth;
             double x0 = pa[bl.lo].x - pad, x1 = pa[bl.hi].x + pad;
             if (bl.lo == bl.hi) { x0 = pa[bl.lo].x - pa[bl.lo].w / 2 + 8.0 * depth; x1 = pa[bl.lo].x + pa[bl.lo].w / 2 + 60 - 8.0 * depth; }
+            if (bl.xl - 10 < x0) x0 = bl.xl - 10;
+            if (bl.xr + 10 > x1) x1 = bl.xr + 10;
+            for (size_t q = 0; q < nblk; q++) { /* parents must enclose this block */
+                if (x0 - 8 < blks[q].xl) blks[q].xl = x0 - 8;
+                if (x1 + 8 > blks[q].xr) blks[q].xr = x1 + 8;
+            }
             double y1 = y;
             if (str_eq(be->kw, S("rect")) || str_eq(be->kw, S("box"))) {
                 buf_lit(&back, "<rect x=\""); buf_num(&back, x0); buf_lit(&back, "\" y=\""); buf_num(&back, bl.y0);
@@ -589,10 +602,10 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
                 buf_lit(&back, "\"/>");
             } else {
                 rect(&mid, x0, bl.y0, x1 - x0, y1 - bl.y0, "block");
-                double tw = text_width(be->kw, 14) + 20;
+                double tw = text_width(be->kw, 14) * 1.3 + 26; /* bold keyword (fallback fonts are wide) + slanted corner */
                 buf_lit(&mid, "<path class=\"block-tab\" d=\"M"); pt(&mid, x0, bl.y0); buf_lit(&mid, " h"); buf_num(&mid, tw);
                 buf_lit(&mid, " v14 l-8,8 H"); buf_num(&mid, x0); buf_lit(&mid, " Z\"/>");
-                text_(&mid, be->kw, 14, x0 + tw / 2 - 4, bl.y0 + 11, "middle", "block-kw");
+                text_(&front, be->kw, 14, x0 + 8, bl.y0 + 11, "start", "block-kw");
                 if (be->text.n) {
                     buf_lit(&mid, "<text x=\""); buf_num(&mid, (x0 + x1) / 2); buf_lit(&mid, "\" y=\""); buf_num(&mid, bl.y0 + lh / 2 + 4);
                     buf_lit(&mid, "\" text-anchor=\"middle\" dominant-baseline=\"central\">[");
