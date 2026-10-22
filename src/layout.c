@@ -513,19 +513,32 @@ static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, 
         }
     }
     /* segments crossing a cluster side chain may not be aligned (the chain must stay straight) */
-    for (size_t r = 1; r < R; r++) {
-        size_t a = L->loff[r], n = L->loff[r + 1] - a;
-        for (size_t i = 0; i < n; i++) {
-            int32_t b = L->lay[a + i];
-            if (!L->border[b] || L->poff[b + 1] == L->poff[b]) continue;
-            int32_t pb = L->pos[L->pidx[L->poff[b]]], ib = (int32_t)i;
+    {
+        /* chains never cross each other, so an edge crosses one iff the number of chain
+           borders right of its head differs from the number right of its tail (O(V+E)) */
+        int32_t *sr = ANEW(A, int32_t, V + 1), *sp = ANEW(A, int32_t, V + 1);
+        if (!sr || !sp) return false;
+        for (size_t r = 1; r < R; r++) {
+            size_t a = L->loff[r], n = L->loff[r + 1] - a, pn = a - L->loff[r - 1];
+            bool any = false;
+            for (size_t i = 0; i <= n; i++) sr[i] = 0;
+            for (size_t i = 0; i <= pn; i++) sp[i] = 0;
+            for (size_t i = 0; i < n; i++) {
+                int32_t b = L->lay[a + i];
+                if (!L->border[b] || L->poff[b + 1] == L->poff[b]) continue;
+                sr[i] = 1;
+                sp[L->pos[L->pidx[L->poff[b]]]] = 1;
+                any = true;
+            }
+            if (!any) continue;
+            for (size_t i = n; i-- > 0;) sr[i] += sr[i + 1];
+            for (size_t i = pn; i-- > 0;) sp[i] += sp[i + 1];
             for (size_t j = 0; j < n; j++) {
                 int32_t v = L->lay[a + j];
                 if (L->border[v]) continue;
                 for (uint32_t k = L->poff[v]; k < L->poff[v + 1]; k++) {
                     int32_t u = (int32_t)L->pidx[k];
-                    if (((int32_t)j < ib) != (L->pos[u] < pb))
-                        if (!pset_add(A, &conf, u, v)) return false;
+                    if (sr[j + 1] != sp[L->pos[u] + 1] && !pset_add(A, &conf, u, v)) return false;
                 }
             }
         }
