@@ -7,12 +7,12 @@
 #include "diagrams.h"
 #include "text.h"
 
-typedef struct Series { bool line; uint32_t v0, nv; } Series;
+typedef struct Series { bool line; uint32_t v0, nv; Str name; const char *col; } Series;
 
 static constexpr char CSS[] =
     "#mermaid .ax{stroke:#131300;stroke-width:2px;}#mermaid .tk{stroke:#131300;stroke-width:2px;}"
     "#mermaid .tl{font-size:14px;fill:#131300;}#mermaid .at{font-size:16px;fill:#131300;}"
-    "#mermaid .ttl{font-size:20px;fill:#131300;}#mermaid .ln{fill:none;stroke-width:2px;}";
+    "#mermaid .ttl{font-size:20px;fill:#131300;}#mermaid .ln{fill:none;stroke-width:2px;}#mermaid .lg{stroke:#131300;stroke-width:.5px;}";
 static const char *const PAL[] = {"#ECECFF", "#8493A6", "#FFC3A0", "#DCDDE1", "#B8E994",
                                   "#D1A36F", "#C3CDE6", "#FFB6C1", "#496078", "#F8F3E3"};
 static const char *const LINEPAL[] = {"#8493A6", "#FF7F50", "#3c9a3c", "#7b52ab", "#c0392b"};
@@ -124,7 +124,7 @@ DIAG_FN(xychart_render) {
         }
         if (str_eq(w, S("bar")) || str_eq(w, S("line"))) {
             Series s = {.line = w.p[0] == 'l', .v0 = (uint32_t)vals.n};
-            (void)take_title(&rest);
+            s.name = take_title(&rest);
             VEC(Str) items = {};
             if (!list(a, rest, &items, &oom)) return oom ? CMM_ERR_NOMEM : diag_fail(err_off, msg, lo, "expected [numbers]");
             for (size_t i = 0; i < items.n; i++) {
@@ -167,7 +167,10 @@ DIAG_FN(xychart_render) {
     double leftw = horiz ? (cats.n ? catw : tl) : tl;
     double ox = 20 + (horiz ? (xt.n ? 26 : 0) : (yt.n ? 26 : 0)) + leftw + 10, oy = title.n ? 50 : 15;
     double pw = horiz ? 700 : PW, ph = horiz ? 450 : PH;
-    BBox bb = {0, 0, ox + pw + 20, oy + ph + 60};
+    /* legend for named series, right of the plot */
+    double legw = 0;
+    for (size_t s = 0; s < ser.n; s++) if (ser.v[s].name.n) legw = fmax(legw, text_width(ser.v[s].name, 14) + 40);
+    BBox bb = {0, 0, ox + pw + 20 + legw, oy + ph + 60};
     if (!buf_reserve(out, 4096 + vals.n * 200 + nc * 200)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 4, "xychart", CSS);
     if (title.n) dg_text(out, title, 20, ox + pw / 2, 25, "middle", "ttl");
@@ -182,7 +185,7 @@ DIAG_FN(xychart_render) {
     for (size_t s = 0; s < ser.n; s++) {
         if (ser.v[s].line) continue;
         double bwid = band * 0.9 / (double)nbar;
-        const char *col = PAL[bi % countof(PAL)];
+        const char *col = ser.v[s].col = PAL[bi % countof(PAL)];
         for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
             double v = vals.v[ser.v[s].v0 + k], p = VPOS(v), c0 = CPOS(k) - band * 0.45 + bwid * (double)bi;
             if (horiz) dg_rect_fill(out, fmin(base, p), c0, fabs(p - base), bwid, 0, nullptr, col);
@@ -192,7 +195,7 @@ DIAG_FN(xychart_render) {
     }
     for (size_t s = 0; s < ser.n; s++) {
         if (!ser.v[s].line) continue;
-        const char *col = LINEPAL[li++ % countof(LINEPAL)];
+        const char *col = ser.v[s].col = LINEPAL[li++ % countof(LINEPAL)];
         buf_lit(out, "<path class=\"ln\" stroke=\""); buf_put(out, strlen(col), col); buf_lit(out, "\" d=\"");
         for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
             double v = vals.v[ser.v[s].v0 + k];
@@ -220,6 +223,17 @@ DIAG_FN(xychart_render) {
         double p = CPOS(i);
         if (horiz) { dg_line(out, ox - 5, p, ox, p, "tk"); dg_text(out, t, 14, ox - 8, p, "end", "tl"); }
         else { dg_line(out, p, oy + ph, p, oy + ph + 5, "tk"); dg_text(out, t, 14, p, oy + ph + 16, "middle", "tl"); }
+    }
+    if (legw > 0) {
+        double ly = oy + 10;
+        for (size_t s = 0; s < ser.n; s++) {
+            if (!ser.v[s].name.n) continue;
+            if (ser.v[s].line) { buf_lit(out, "<path class=\"ln\" stroke=\""); buf_put(out, strlen(ser.v[s].col), ser.v[s].col);
+                buf_lit(out, "\" d=\"M"); dg_pt(out, ox + pw + 20, ly); buf_ch(out, 'L'); dg_pt(out, ox + pw + 36, ly); buf_lit(out, "\"/>"); }
+            else dg_rect_fill(out, ox + pw + 22, ly - 6, 12, 12, 0, "lg", ser.v[s].col);
+            dg_text(out, ser.v[s].name, 14, ox + pw + 42, ly, "start", "tl");
+            ly += 22;
+        }
     }
 #undef VPOS
 #undef CPOS

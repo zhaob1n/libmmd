@@ -1,6 +1,10 @@
 /* mindmap: indentation tree. Shapes: [square] (rounded) ((circle)) ))bang(( )cloud( {{hexagon}},
- * bare text = default (underlined). ::icon(..) and :::class lines/suffixes are accepted and ignored.
- * Layout: root centred; its children alternate right/left; each side is a tidy horizontal tree. */
+ * bare text = default (underlined). `::icon(fa fa-x)` adds an icon badge to the previous node and
+ * `:::a b` adds CSS classes (both as their own line or as a suffix).
+ * Layout: radial (the shape mermaid's default cose-bilkent converges to): each root child gets a wedge
+ * proportional to its leaf count, rings are pushed out until siblings fit. `layout: tidy-tree` in the
+ * front matter/init selects the two-sided tidy tree. */
+#include <stdio.h>
 #include <math.h>
 
 #include "dgraph.h"
@@ -9,14 +13,15 @@
 
 enum : uint8_t { M_DEF, M_SQ, M_RND, M_CIR, M_BANG, M_CLOUD, M_HEX };
 typedef struct MNode {
-    Str label;
+    Str label, icon, cls;
     uint32_t parent, first, next, depth, sec;
     uint8_t shape;
     int8_t side;
     double w, h, x, y, sub; /* sub: subtree height */
 } MNode;
 
-static constexpr char CSS[] = "#mermaid .mt{font-size:16px;}#mermaid .me{fill:none;}";
+static constexpr char CSS[] = "#mermaid .mt{font-size:16px;}#mermaid .me{fill:none;}"
+                              "#mermaid .ic{fill:#fff;stroke:#333;stroke-width:1px;}#mermaid .ict{font-size:11px;font-weight:bold;fill:#333;}";
 static const char *const SEC[] = {"#ffb8ff", "#b8ffff", "#ffe0e0", "#e4ffb8", "#ffffab", "#b8b8ff",
                                   "#ff85ff", "#85ffff", "#ffb8b8", "#f5ffe0", "#ffffde"};
 static const char *const SECS[] = {"#c060c0", "#40b0b0", "#d08080", "#80b040", "#c0c040", "#6060d0",
@@ -70,11 +75,29 @@ DIAG_FN(mindmap_render) {
     VEC(MNode) v = {};
     VEC(uint32_t) ind = {}; /* indentation per node */
     while (dg_next_line(&it, &line, &lo)) {
-        if (str_starts(line, S("::icon(")) || str_starts(line, S(":::"))) continue;
+        if (str_starts(line, S("::icon("))) {
+            if (v.n && line.p[line.n - 1] == ')') v.v[v.n - 1].icon = str_trim((Str){.p = line.p + 7, .n = line.n - 8});
+            continue;
+        }
+        if (str_starts(line, S(":::"))) {
+            if (v.n) v.v[v.n - 1].cls = str_trim((Str){.p = line.p + 3, .n = line.n - 3});
+            continue;
+        }
         unsigned in = dg_indent(&it, lo);
-        for (size_t i = 0; i + 3 <= line.n; i++)
-            if (!memcmp(line.p + i, ":::", 3)) { line = str_trim((Str){.p = line.p, .n = i}); break; }
         MNode m = {.parent = UINT32_MAX, .first = UINT32_MAX, .next = UINT32_MAX};
+        for (size_t i = 0; i + 3 <= line.n; i++)
+            if (!memcmp(line.p + i, ":::", 3)) {
+                m.cls = str_trim((Str){.p = line.p + i + 3, .n = line.n - i - 3});
+                line = str_trim((Str){.p = line.p, .n = i});
+                break;
+            }
+        for (size_t i = 0; i + 7 <= line.n; i++) /* inline "text ::icon(x)" */
+            if (!memcmp(line.p + i, "::icon(", 7)) {
+                const char *e = memchr(line.p + i, ')', line.n - i);
+                if (e) m.icon = str_trim((Str){.p = line.p + i + 7, .n = (size_t)(e - line.p) - i - 7});
+                line = str_trim((Str){.p = line.p, .n = i});
+                break;
+            }
         if (!parse_node(line, &m.label, &m.shape)) return diag_fail(err_off, msg, lo, "bad node");
         if (v.n) {
             if (in <= ind.v[0]) return diag_fail(err_off, msg, lo, "mindmap can only have one root");
@@ -104,6 +127,7 @@ DIAG_FN(mindmap_render) {
         V[i].w = w + 2 * pad, V[i].h = nl * 24 + (V[i].shape == M_DEF ? 8 : 20);
         if (V[i].shape == M_CIR) V[i].w = V[i].h = fmax(V[i].w, V[i].h);
         if (V[i].shape == M_HEX) V[i].w += 20;
+        if (V[i].icon.n) V[i].w += 28, V[i].h = fmax(V[i].h, 32);
         if (i) V[i].sec = V[i].depth == 1 ? 0 : V[V[i].parent].sec;
     }
     /* sections = index among root's children; alternate sides */
@@ -119,7 +143,44 @@ DIAG_FN(mindmap_render) {
     for (size_t i = 1; i < v.n; i++) if (V[i].depth == 1) V[i].sec = k++;
     for (size_t i = 1; i < v.n; i++) if (V[i].depth > 1) V[i].sec = V[V[i].parent].sec;
     V[0].x = 0, V[0].y = 0;
-    for (int side = -1; side <= 1; side += 2) {
+    bool tidy = false;
+    for (size_t i = 0; i + 9 <= off && !tidy; i++) tidy = !memcmp(src + i, "tidy-tree", 9);
+    if (!tidy) {
+        double *leaves = ANEW(a, double, v.n), *ang = ANEW(a, double, v.n), *wedge = ANEW(a, double, v.n);
+        if (!leaves || !ang || !wedge) return CMM_ERR_NOMEM;
+        for (size_t i = v.n; i-- > 0;) { /* children come after parents */
+            if (V[i].first == UINT32_MAX) leaves[i] = 1;
+            if (i) leaves[V[i].parent] += leaves[i];
+        }
+        ang[0] = 0, wedge[0] = 2 * M_PI;
+        for (size_t i = 0; i < v.n; i++) { /* split each wedge among children, start angle at -90deg + offset */
+            double start = ang[i] - wedge[i] / 2;
+            if (!i) start = -M_PI / 2 - (V[0].first != UINT32_MAX ? M_PI / (double)leaves[0] : 0);
+            for (uint32_t c = V[i].first; c != UINT32_MAX; c = V[c].next) {
+                wedge[c] = wedge[i] * leaves[c] / fmax(1, leaves[i]);
+                ang[c] = start + wedge[c] / 2;
+                start += wedge[c];
+            }
+        }
+        /* per-node radius: just past the parent, but far enough out that its chord fits its wedge */
+        double *rad = ANEW(a, double, v.n);
+        if (!rad) return CMM_ERR_NOMEM;
+        rad[0] = 0;
+        for (size_t i = 1; i < v.n; i++) { /* parents precede children */
+            uint32_t p = V[i].parent;
+            double si = hypot(V[i].w, V[i].h) / 2, sp = hypot(V[p].w, V[p].h) / 2;
+            double r = rad[p] + sp + si + 30;
+            double need = (2 * si + 12) / (2 * sin(fmin(wedge[i], M_PI) / 2));
+            if (p && need > r) { /* only push out when the sibling-wedge is actually crowded */
+                uint32_t nsib = 0;
+                for (uint32_t c = V[p].first; c != UINT32_MAX; c = V[c].next) nsib++;
+                if (nsib > 1 || leaves[i] > 1) r = need;
+            } else if (!p && need > r) r = need;
+            rad[i] = r;
+        }
+        for (size_t i = 1; i < v.n; i++) V[i].x = rad[i] * cos(ang[i]), V[i].y = rad[i] * sin(ang[i]);
+    }
+    for (int side = -1; side <= 1 && tidy; side += 2) {
         double tot = side > 0 ? hr : hl, y = -tot / 2;
         for (uint32_t c = V[0].first; c != UINT32_MAX; c = V[c].next) {
             if (V[c].side != side) continue;
@@ -133,6 +194,13 @@ DIAG_FN(mindmap_render) {
     DG_HEAD(out, bb, 10, "mindmap", CSS);
     for (size_t i = 1; i < v.n; i++) { /* edges: cubic from parent side to child side, thinner with depth */
         const MNode *p = &V[V[i].parent], *c = &V[i];
+        if (!tidy) {
+            const char *col = SECS[c->sec % countof(SECS)];
+            buf_lit(out, "<path class=\"me\" stroke=\""); buf_put(out, strlen(col), col);
+            buf_lit(out, "\" stroke-width=\""); buf_num(out, fmax(2, 17 - 3.0 * c->depth)); buf_lit(out, "\" d=\"M");
+            dg_pt(out, p->x, p->y); buf_ch(out, 'L'); dg_pt(out, c->x, c->y); buf_lit(out, "\"/>");
+            continue;
+        }
         double dir = c->x > p->x ? 1 : -1;
         double x0 = V[i].parent == 0 ? p->x : p->x + dir * p->w / 2, y0 = p->y;
         double x1 = c->x - dir * c->w / 2, y1 = c->y + (c->shape == M_DEF ? c->h / 2 : 0);
@@ -146,7 +214,11 @@ DIAG_FN(mindmap_render) {
         const MNode *m = &V[i];
         const char *fill = i ? SEC[m->sec % countof(SEC)] : "#9370DB", *st = i ? SECS[m->sec % countof(SECS)] : "#6a4fb0";
         double x = m->x - m->w / 2, y = m->y - m->h / 2, w = m->w, h = m->h;
-        buf_lit(out, "<g fill=\""); buf_put(out, strlen(fill), fill); buf_lit(out, "\" stroke=\""); buf_put(out, strlen(st), st);
+        buf_lit(out, "<g class=\"mindmap-node section-");
+        char sn[16];
+        buf_put(out, (size_t)snprintf(sn, sizeof sn, "%d", i ? (int)m->sec : -1), sn);
+        if (m->cls.n) { buf_ch(out, ' '); buf_xml(out, m->cls); }
+        buf_lit(out, "\" fill=\""); buf_put(out, strlen(fill), fill); buf_lit(out, "\" stroke=\""); buf_put(out, strlen(st), st);
         buf_lit(out, "\">");
         switch (m->shape) {
         case M_DEF:
@@ -188,7 +260,19 @@ DIAG_FN(mindmap_render) {
         }
         }
         buf_lit(out, "</g>");
-        dg_text(out, m->label, 16, m->x, m->y, "middle", i ? "mt" : "mt\" fill=\"#fff");
+        double tx = m->x;
+        if (m->icon.n) { /* badge with the icon's initial (fa-book -> B), label shifted right */
+            Str nm = m->icon;
+            for (size_t k = nm.n; k-- > 0;) if (nm.p[k] == ' ' || nm.p[k] == '-' || nm.p[k] == ':') { nm = (Str){.p = nm.p + k + 1, .n = nm.n - k - 1}; break; }
+            double cx = x + 18;
+            buf_lit(out, "<g class=\"icon\"><title>"); buf_xml(out, m->icon); buf_lit(out, "</title><circle class=\"ic\" cx=\"");
+            buf_num(out, cx); buf_lit(out, "\" cy=\""); buf_num(out, m->y); buf_lit(out, "\" r=\"10\"/>");
+            char g[2] = {nm.n ? (char)(nm.p[0] >= 'a' && nm.p[0] <= 'z' ? nm.p[0] - 32 : nm.p[0]) : '?', 0};
+            dg_text(out, (Str){.p = g, .n = 1}, 11, cx, m->y, "middle", "ict");
+            buf_lit(out, "</g>");
+            tx += 14;
+        }
+        dg_text(out, m->label, 16, tx, m->y, "middle", i ? "mt" : "mt\" fill=\"#fff");
     }
     buf_lit(out, "</svg>\n");
     return out->oom ? CMM_ERR_NOMEM : CMM_OK;

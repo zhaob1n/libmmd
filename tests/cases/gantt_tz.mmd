@@ -1,0 +1,12 @@
+gantt
+    title Time zones and weekends
+    dateFormat YYYY-MM-DDTHH:mmZ
+    axisFormat %m-%d %H:%M
+    excludes weekends
+    weekend friday
+    weekday monday
+    todayMarker stroke-width:4px,stroke:#0f0
+    section Ops
+    Deploy EU   :a, 2026-10-01T09:00+02:00, 3d
+    Deploy Asia :b, 2026-10-01T09:00+08:00, 2d
+    Verify      :after a b, 1w

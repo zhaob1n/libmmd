@@ -3,6 +3,8 @@
  * Time is UTC milliseconds; dates are civil (no time zones). */
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
 #include "dgraph.h"
 #include "diagrams.h"
@@ -20,7 +22,7 @@ typedef struct GCtx {
     Task *t;
     size_t nt;
     Str fmt;
-    bool ex_weekends, inclusive;
+    bool ex_weekends, inclusive, fri_weekend;
     VEC(double) exdays; /* excluded day numbers */
 } GCtx;
 
@@ -48,12 +50,13 @@ static bool parse_date(Str fmt, Str s, double *out) {
     s = str_trim(s);
     int64_t y = 1970;
     unsigned mo = 1, d = 1, h = 0, mi = 0, se = 0, ms = 0;
+    double tz = 0; /* offset in ms, subtracted to normalise to UTC */
     size_t i = 0, j = 0;
     while (i < fmt.n) {
         static const struct { const char *t; uint8_t len, maxd, which; } TK[] = {
             {"YYYY", 4, 4, 0}, {"SSS", 3, 3, 6}, {"YY", 2, 2, 7}, {"MM", 2, 2, 1}, {"DD", 2, 2, 2}, {"HH", 2, 2, 3},
             {"mm", 2, 2, 4}, {"ss", 2, 2, 5}, {"M", 1, 2, 1}, {"D", 1, 2, 2}, {"H", 1, 2, 3}, {"m", 1, 2, 4},
-            {"s", 1, 2, 5}, {"X", 1, 12, 8}, {"x", 1, 15, 9}};
+            {"s", 1, 2, 5}, {"X", 1, 12, 8}, {"x", 1, 15, 9}, {"ZZ", 2, 4, 10}, {"Z", 1, 4, 10}};
         size_t k = 0;
         for (; k < countof(TK); k++)
             if (fmt.n - i >= TK[k].len && !memcmp(fmt.p + i, TK[k].t, TK[k].len)) break;
@@ -63,6 +66,20 @@ static bool parse_date(Str fmt, Str s, double *out) {
             continue;
         }
         i += TK[k].len;
+        if (TK[k].which == 10) { /* Z | +HH:mm | -HHmm */
+            if (j < s.n && s.p[j] == 'Z') { j++; continue; }
+            if (j >= s.n || (s.p[j] != '+' && s.p[j] != '-')) return false;
+            double sg = s.p[j++] == '-' ? -1 : 1;
+            unsigned hv = 0, mv = 0, nd = 0;
+            while (j < s.n && nd < 2 && (unsigned)(s.p[j] - '0') < 10u) hv = hv * 10 + (unsigned)(s.p[j++] - '0'), nd++;
+            if (nd != 2) return false;
+            if (j < s.n && s.p[j] == ':') j++;
+            nd = 0;
+            while (j < s.n && nd < 2 && (unsigned)(s.p[j] - '0') < 10u) mv = mv * 10 + (unsigned)(s.p[j++] - '0'), nd++;
+            if (nd == 1 || hv > 23 || mv > 59) return false;
+            tz = sg * (hv * 60.0 + mv) * 60000;
+            continue;
+        }
         bool neg = TK[k].which >= 8 && j < s.n && s.p[j] == '-';
         if (neg) j++;
         uint64_t v = 0;
@@ -83,7 +100,7 @@ static bool parse_date(Str fmt, Str s, double *out) {
         }
     }
     if (j != s.n || mo < 1 || mo > 12 || d < 1 || d > 31 || h > 24 || mi > 59 || se > 60) return false;
-    *out = (double)days_from_civil(y, mo, d) * DAY + ((h * 60.0 + mi) * 60 + se) * 1000 + ms;
+    *out = (double)days_from_civil(y, mo, d) * DAY + ((h * 60.0 + mi) * 60 + se) * 1000 + ms - tz;
     return true;
 }
 
@@ -125,7 +142,7 @@ static bool add_duration(Str s, double t, double *out) {
 static bool excluded(const GCtx *c, double day) {
     if (c->ex_weekends) {
         int64_t wd = ((int64_t)day % 7 + 7 + 4) % 7; /* 1970-01-01 was a Thursday (4) */
-        if (wd == 0 || wd == 6) return true;
+        if (c->fri_weekend ? (wd == 5 || wd == 6) : (wd == 0 || wd == 6)) return true;
     }
     for (size_t i = 0; i < c->exdays.n; i++) if (c->exdays.v[i] == day) return true;
     return false;
@@ -231,7 +248,7 @@ static constexpr char CSS[] =
     "#mermaid .active{fill:#bfc7ff;stroke:#534fbc;}#mermaid .crit{fill:#ff8888;stroke:#ff0000;}"
     "#mermaid .crit.done{fill:#d3d3d3;stroke:#ff0000;}#mermaid .crit.active{fill:#ff8888;stroke:#ff0000;}"
     "#mermaid .tin{fill:#fff;font-size:11px;}#mermaid .tout{fill:#000;font-size:11px;}"
-    "#mermaid .done+.tin,#mermaid .tin.dk{fill:#000;}#mermaid .vert{stroke:#ff8888;stroke-width:2px;stroke-dasharray:4 2;}"
+    "#mermaid .done+.tin,#mermaid .tin.dk{fill:#000;}#mermaid .today{stroke:red;stroke-width:2px;fill:none;}#mermaid .vert{stroke:#ff8888;stroke-width:2px;stroke-dasharray:4 2;}"
     "#mermaid .today{stroke:red;stroke-width:2px;}#mermaid .ttl{font-size:18px;}";
 
 DIAG_FN(gantt_render) {
@@ -240,7 +257,8 @@ DIAG_FN(gantt_render) {
     size_t lo;
     if (!dg_next_line(&it, &line, &lo)) return diag_fail(err_off, msg, off, "empty gantt");
     GCtx c = {.a = a, .fmt = S("YYYY-MM-DD")};
-    Str axis = S("%Y-%m-%d"), tick = {};
+    Str axis = S("%Y-%m-%d"), tick = {}, today_style = {};
+    int week_start = 0;
     VEC(Str) secs = {};
     VEC(Task) tv = {};
     VEC(Str) exraw = {};
@@ -268,7 +286,21 @@ DIAG_FN(gantt_render) {
             }
             continue;
         }
-        if (str_eq(w, S("todayMarker")) || str_eq(w, S("weekday")) || str_eq(w, S("weekend")) ||
+        if (str_eq(w, S("todayMarker"))) { /* mermaid accepts comma-separated declarations */
+            char *st = ANEW(a, char, rest.n + 1);
+            if (!st) return CMM_ERR_NOMEM;
+            for (size_t k = 0; k < rest.n; k++) st[k] = rest.p[k] == ',' ? ';' : rest.p[k];
+            today_style = (Str){.p = st, .n = rest.n};
+            continue;
+        }
+        if (str_eq(w, S("weekend"))) { c.fri_weekend = str_eq(dg_word(&rest), S("friday")); continue; }
+        if (str_eq(w, S("weekday"))) {
+            static const char *const WD[] = {"sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"};
+            Str d = dg_word(&rest);
+            for (int k = 0; k < 7; k++) if (str_eq(d, (Str){.p = WD[k], .n = strlen(WD[k])})) week_start = k;
+            continue;
+        }
+        if (
             str_eq(w, S("click")) || str_eq(w, S("displayMode")) || str_starts(w, S("acc")))
             continue;
         if (str_eq(w, S("section"))) { if (!VEC_PUSH(a, &secs, rest)) return CMM_ERR_NOMEM; continue; }
@@ -320,13 +352,11 @@ DIAG_FN(gantt_render) {
     constexpr double GAP = 4;
     constexpr double TOP = 50;
     constexpr double LEFT = 75;
-    constexpr double W = 1000;
     double left = LEFT;
     for (size_t i = 0; i < secs.n; i++) {
         double tw = text_width(secs.v[i], 11) + 20;
         if (tw > left) left = tw;
     }
-    double plot = W - left - 75, sc = plot / (hi_t - lo_t);
     double H = TOP + tv.n * (BH + GAP) + 40;
     /* ticks */
     static const double STEPS[] = {1000, 5000, 15000, 60000, 300000, 900000, 3600000, 6 * 3600000.0, 12 * 3600000.0,
@@ -353,6 +383,25 @@ DIAG_FN(gantt_render) {
         for (size_t i = 0; i < countof(STEPS); i++)
             if ((hi_t - lo_t) / STEPS[i] <= 12) { step = STEPS[i]; break; }
     }
+    /* week ticks start on the configured weekday (mermaid `weekday`, default sunday) */
+    double t_first = lo_t;
+    if (!months && step >= 7 * DAY && fmod(step, 7 * DAY) == 0) {
+        double day = floor(lo_t / DAY);
+        int64_t wd = ((int64_t)day % 7 + 7 + 4) % 7;
+        t_first = (day - (double)((wd - week_start + 7) % 7)) * DAY;
+    }
+    /* width: mermaid's default 1000px unless the axis labels need more room */
+    char lab[96];
+    double W = 1000, maxlab = 0;
+    size_t nticks = 0;
+    for (int k = 0; k < 600; k++, nticks++) {
+        double t = months ? add_months(lo_t, step * k) : t_first + step * k;
+        if (t > hi_t + 1e-6) break;
+        double lw = text_width((Str){.p = lab, .n = fmt_time(axis, t, sizeof lab, lab)}, 10);
+        if (lw > maxlab) maxlab = lw;
+    }
+    if (left + 75 + (double)nticks * (maxlab + 12) > W) W = ceil(left + 75 + (double)nticks * (maxlab + 12));
+    double plot = W - left - 75, sc = plot / (hi_t - lo_t);
     BBox bb = {0, title.n ? 0 : 20, W, H};
     if (!buf_reserve(out, 4096 + tv.n * 700)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 4, "gantt", CSS);
@@ -368,10 +417,10 @@ DIAG_FN(gantt_render) {
     }
     /* grid + axis labels */
     double gy0 = TOP - 2, gy1 = TOP + tv.n * (BH + GAP) - 2;
-    char lab[96];
     for (int k = 0; k < 600; k++) {
-        double t = months ? add_months(lo_t, step * k) : lo_t + step * k;
+        double t = months ? add_months(lo_t, step * k) : t_first + step * k;
         if (t > hi_t + 1e-6) break;
+        if (t < lo_t - 1e-6) continue;
         double x = left + (t - lo_t) * sc;
         dg_line(out, x, gy0, x, gy1, "grid");
         size_t len = fmt_time(axis, t, sizeof lab, lab);
@@ -402,6 +451,19 @@ DIAG_FN(gantt_render) {
         if (tw + 8 <= x1 - x0) dg_text(out, t->name, 11, (x0 + x1) / 2, y + BH / 2, "middle", t->tags & (T_DONE | T_ACTIVE) ? "tin dk" : "tin");
         else if (x1 + 5 + tw <= W) dg_text(out, t->name, 11, x1 + 5, y + BH / 2, "start", "tout");
         else dg_text(out, t->name, 11, x0 - 5, y + BH / 2, "end", "tout");
+    }
+    /* today marker: CMM_TODAY=YYYY-MM-DD overrides the clock (reproducible output) */
+    if (!str_eq(today_style, S("off"))) {
+        double now = (double)time(nullptr) * 1000;
+        const char *env = getenv("CMM_TODAY");
+        if (env) parse_date(S("YYYY-MM-DD"), (Str){.p = env, .n = strlen(env)}, &now);
+        if (now >= lo_t && now <= hi_t) {
+            double x = left + (now - lo_t) * sc;
+            buf_lit(out, "<line class=\"today\" x1=\""); buf_num(out, x); buf_lit(out, "\" x2=\""); buf_num(out, x);
+            buf_lit(out, "\" y1=\""); buf_num(out, gy0 - 8); buf_lit(out, "\" y2=\""); buf_num(out, gy1 + 4);
+            if (today_style.n) { buf_lit(out, "\" style=\""); buf_xml(out, today_style); }
+            buf_lit(out, "\"/>");
+        }
     }
     if (title.n) dg_text(out, title, 18, W / 2, 25, "middle", "ttl");
     buf_lit(out, "</svg>\n");

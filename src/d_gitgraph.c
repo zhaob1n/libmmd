@@ -1,6 +1,7 @@
 /* gitGraph [LR:|TB:|BT:]: commit [id:"x"] [type: NORMAL|REVERSE|HIGHLIGHT] [tag:"t"] [msg:"m"],
  * branch name [order: n], checkout|switch name, merge name [id/tag/type], cherry-pick id:"x" [parent:"y"].
  * Commits advance along the main axis one slot each; branches are lanes. */
+#include <math.h>
 #include <stdio.h>
 
 #include "dgraph.h"
@@ -100,8 +101,12 @@ DIAG_FN(gitgraph_render) {
             if (!at.id.n) {
                 char *idbuf = arena_alloc(a, 16, 1);
                 if (!idbuf) return CMM_ERR_NOMEM;
-                uint32_t h = (uint32_t)cm.n * 2654435761u ^ 0x5bd1e995u;
-                int len = snprintf(idbuf, 16, "%zu-%07x", cm.n, h & 0xfffffffu);
+                /* mermaid: "<seq>-<7 hex>"; deterministic FNV-1a over seq, branch and parent */
+                uint64_t h = 1469598103934665603u;
+                const uint64_t mix[3] = {cm.n, cur, c.p1};
+                for (size_t q = 0; q < 3; q++) for (int bt = 0; bt < 8; bt++) h = (h ^ ((mix[q] >> (bt * 8)) & 0xff)) * 1099511628211u;
+                for (size_t q = 0; q < br.v[cur].name.n; q++) h = (h ^ (uint8_t)br.v[cur].name.p[q]) * 1099511628211u;
+                int len = snprintf(idbuf, 16, "%zu-%07llx", cm.n, (unsigned long long)(h & 0xfffffffu));
                 at.id = (Str){.p = idbuf, .n = (size_t)len};
             }
             for (size_t k = 0; k < cm.n; k++)
@@ -187,22 +192,37 @@ DIAG_FN(gitgraph_render) {
             const char *col = COL[cl % countof(COL)];
             buf_lit(out, "<path class=\"ar\" stroke=\""); buf_put(out, strlen(col), col); buf_lit(out, "\" d=\"M");
             dg_pt(out, PX(pp, pq), PY(pp, pq));
-            if (pq == q) { buf_ch(out, 'L'); dg_pt(out, PX(p, q), PY(p, q)); }
-            else {
-                /* branching out: turn at the parent; merging in: turn at the child; rounded corner r=10 */
+            /* orthogonal route with rounded corners. Branch-out (and cherry-pick) turns at the parent and runs
+             * on the child lane; merges run on the parent lane and turn at the child. If that run would pass
+             * over other commits of the lane, detour through a lane-gap track (mermaid's "findLane"). */
+            double P[4][2];
+            size_t np = 0;
+            P[np][0] = pp, P[np++][1] = pq;
+            if (pq != q) {
                 bool out_ = (lane[c->lane] > lane[cm.v[par].lane] && k == 0) || c->type == C_CHERRY;
-                double cp = out_ ? pp : p, s = q > pq ? 1 : -1, rr = 10;
-                if (out_) {
-                    buf_ch(out, 'L'); dg_pt(out, PX(cp, q - s * rr), PY(cp, q - s * rr));
-                    buf_ch(out, 'Q'); dg_pt(out, PX(cp, q), PY(cp, q)); buf_ch(out, ' ');
-                    dg_pt(out, PX(cp + rr, q), PY(cp + rr, q));
-                    buf_ch(out, 'L'); dg_pt(out, PX(p, q), PY(p, q));
-                } else {
-                    buf_ch(out, 'L'); dg_pt(out, PX(cp - rr, pq), PY(cp - rr, pq));
-                    buf_ch(out, 'Q'); dg_pt(out, PX(cp, pq), PY(cp, pq)); buf_ch(out, ' ');
-                    dg_pt(out, PX(cp, pq + s * rr), PY(cp, pq + s * rr));
-                    buf_ch(out, 'L'); dg_pt(out, PX(p, q), PY(p, q));
-                }
+                uint32_t run = out_ ? c->lane : cm.v[par].lane;
+                bool clash = false;
+                for (size_t j = par + 1; j < i && !clash; j++) clash = cm.v[j].lane == run;
+                if (clash) {
+                    double mid = (pq + q) / 2 + ((double)(i % 3) - 1) * 6;
+                    P[np][0] = pp, P[np++][1] = mid;
+                    P[np][0] = p, P[np++][1] = mid;
+                } else if (out_) P[np][0] = pp, P[np++][1] = q;
+                else P[np][0] = p, P[np++][1] = pq;
+            }
+            P[np][0] = p, P[np++][1] = q;
+            for (size_t j = 1; j < np; j++) {
+                if (j + 1 < np) { /* corner at P[j]: stop rr short, curve through it */
+                    double rr = 10, ax = P[j][0] - P[j - 1][0], ay = P[j][1] - P[j - 1][1];
+                    double bx = P[j + 1][0] - P[j][0], by = P[j + 1][1] - P[j][1];
+                    double la = fmax(1e-9, fabs(ax) + fabs(ay)), lb = fmax(1e-9, fabs(bx) + fabs(by));
+                    double r1 = fmin(rr, la / 2), r2 = fmin(rr, lb / 2);
+                    double sx = P[j][0] - ax / la * r1, sy = P[j][1] - ay / la * r1;
+                    double ex = P[j][0] + bx / lb * r2, ey = P[j][1] + by / lb * r2;
+                    buf_ch(out, 'L'); dg_pt(out, PX(sx, sy), PY(sx, sy));
+                    buf_ch(out, 'Q'); dg_pt(out, PX(P[j][0], P[j][1]), PY(P[j][0], P[j][1])); buf_ch(out, ' ');
+                    dg_pt(out, PX(ex, ey), PY(ex, ey));
+                } else { buf_ch(out, 'L'); dg_pt(out, PX(P[j][0], P[j][1]), PY(P[j][0], P[j][1])); }
             }
             if (c->type == C_CHERRY && k == 1) buf_lit(out, "\" stroke-dasharray=\"6 4");
             buf_lit(out, "\"/>");
