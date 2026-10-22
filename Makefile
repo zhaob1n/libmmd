@@ -13,7 +13,8 @@ STD := $(shell echo 'int x;' | $(CC) -std=gnu2y -fsyntax-only -xc - >/dev/null 2
 CFLAGS += -std=$(STD) -fms-extensions $(WARN) -Iinclude -Isrc
 LDLIBS = -lm
 BUILD ?= build
-SRCS := src/base.c src/text.c src/flow_parse.c src/layout.c src/nsimplex.c src/flow_svg.c src/seq.c src/cmermaid.c
+DIAG_SRCS := $(wildcard src/d_*.c)
+SRCS := src/base.c src/text.c src/flow_parse.c src/layout.c src/nsimplex.c src/flow_svg.c src/seq.c src/dgraph.c $(DIAG_SRCS) src/cmermaid.c
 OBJS := $(SRCS:src/%.c=$(BUILD)/%.o)
 
 all: $(BUILD)/libcmermaid.a $(BUILD)/mmdc-c $(BUILD)/bench

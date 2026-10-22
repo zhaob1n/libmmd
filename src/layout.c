@@ -500,7 +500,8 @@ cmm_status flow_layout(Graph *g) {
     Arena *A = g->arena;
     size_t N = g->nn, E = g->ne, S = g->ns;
     bool horiz = g->dir == DIR_LR || g->dir == DIR_RL;
-    g->nw = ANEW(A, double, N); g->nh = ANEW(A, double, N);
+    if (!g->nw) g->nw = ANEW(A, double, N); /* pre-sized graphs (NF_SIZED) bring their own */
+    if (!g->nh) g->nh = ANEW(A, double, N);
     g->nx = ANEW(A, double, N); g->ny = ANEW(A, double, N);
     g->eptoff = ANEW(A, uint32_t, E); g->eptn = ANEW(A, uint32_t, E);
     g->elx = ANEW(A, double, E); g->ely = ANEW(A, double, E);
@@ -515,7 +516,7 @@ cmm_status flow_layout(Graph *g) {
         return CMM_ERR_NOMEM;
 
     PROF("");
-    for (size_t v = 0; v < N; v++) node_size(g, v);
+    for (size_t v = 0; v < N; v++) if (!(g->nflags[v] & NF_SIZED)) node_size(g, v);
     for (size_t s = 0; s < S; s++) {
         int32_t d = 1;
         for (int32_t c = g->sparent[s]; c != NONE; c = g->sparent[c]) d++;

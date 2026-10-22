@@ -59,7 +59,7 @@ typedef struct Graph {
     size_t hcap;
 } Graph;
 
-enum { NF_DEFINED = 1u, NF_HIDDEN = 2u, NF_SUBREF = 4u };
+enum { NF_DEFINED = 1u, NF_HIDDEN = 2u, NF_SUBREF = 4u, NF_SIZED = 8u /* nw/nh preset by caller */ };
 
 /* parse flowchart body starting at offset `off` within src */
 [[nodiscard]] cmm_status flow_parse(Graph *g, size_t n, const char src[static n], size_t off,

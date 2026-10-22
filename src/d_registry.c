@@ -1,0 +1,21 @@
+#include <stdio.h>
+
+#include "diagrams.h"
+
+cmm_status diag_fail(size_t *err_off, char msg[static 160], size_t off, const char *m) {
+    *err_off = off;
+    snprintf(msg, 160, "%s", m);
+    return CMM_ERR_SYNTAX;
+}
+
+typedef struct DiagEnt { Str kw; DiagFn fn; } DiagEnt;
+static const DiagEnt DIAGS[] = {
+    {S("stateDiagram"), state_render},
+    {S("stateDiagram-v2"), state_render},
+};
+
+DiagFn diag_lookup(Str kw) {
+    for (size_t i = 0; i < countof(DIAGS); i++)
+        if (str_eq(kw, DIAGS[i].kw)) return DIAGS[i].fn;
+    return nullptr;
+}

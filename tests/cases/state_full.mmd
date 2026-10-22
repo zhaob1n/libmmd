@@ -1,0 +1,45 @@
+stateDiagram-v2
+    [*] --> Still
+    Still --> [*]
+    Still --> Moving : push
+    Moving --> Still : stop
+    Moving --> Crash
+    Crash --> [*]
+    state "Waiting for input" as Wait
+    Moving --> Wait
+    Wait : idle loop
+    Wait : polls every 5s
+    state fork_state <<fork>>
+    Wait --> fork_state
+    fork_state --> Left
+    fork_state --> Right
+    state join_state <<join>>
+    Left --> join_state
+    Right --> join_state
+    state check <<choice>>
+    join_state --> check
+    check --> Active : if n > 0
+    check --> Crash : if n < 0
+    state Active {
+        [*] --> NumLockOff
+        NumLockOff --> NumLockOn : EvNumLockPressed
+        NumLockOn --> NumLockOff : EvNumLockPressed
+        --
+        [*] --> CapsLockOff
+        CapsLockOff --> CapsLockOn : EvCapsLockPressed
+        CapsLockOn --> CapsLockOff : EvCapsLockPressed
+        state Nested {
+            direction LR
+            [*] --> deep
+            deep --> [*]
+        }
+    }
+    Active --> [*]
+    note right of Crash : Important information!
+    note left of Still
+        A multi-line note
+        about stillness
+    end note
+    classDef bad fill:#f88,stroke:#a00
+    class Crash bad
+    Left:::bad
