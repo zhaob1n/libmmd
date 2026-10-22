@@ -176,13 +176,28 @@ DIAG_FN(gitgraph_render) {
     }
     for (size_t i = 0; i < br.n; i++) lane[ord[i]] = (uint32_t)i;
     constexpr double STEP = 50;
-    constexpr double LANE = 90; /* mermaid setBranchPosition: 50 + 40 (rotateCommitLabel, default on) */
+    const bool rot = dcfg_bool("gitGraph.rotateCommitLabel", true);
+    const double LANE = rot ? 90 : 50; /* mermaid setBranchPosition: 50 + 40 when rotateCommitLabel */
     constexpr double R = 10;
     double bnw = 0;
     for (size_t i = 0; i < br.n; i++) { double w = text_width(br.v[i].name, 14); if (w > bnw) bnw = w; }
     double p0 = dir == 0 ? bnw + 40 : 70; /* main-axis origin */
     double q0 = dir == 0 ? 50 : bnw / 2 + 30;
-    double plen = p0 + (double)cm.n * STEP + 30;
+    /* parallelCommits: a commit sits one step after its furthest parent instead of at its sequence index */
+    double *col = ANEW(a, double, cm.n ? cm.n : 1);
+    if (!col) return CMM_ERR_NOMEM;
+    const bool par_c = dcfg_bool("gitGraph.parallelCommits", false);
+    double ncol = 0;
+    for (size_t i = 0; i < cm.n; i++) {
+        col[i] = (double)i;
+        if (par_c) {
+            col[i] = 0;
+            if (cm.v[i].p1 != UINT32_MAX) col[i] = fmax(col[i], col[cm.v[i].p1] + 1);
+            if (cm.v[i].p2 != UINT32_MAX) col[i] = fmax(col[i], col[cm.v[i].p2] + 1);
+        }
+        ncol = fmax(ncol, col[i] + 1);
+    }
+    double plen = p0 + ncol * STEP; /* branch lines end 40 past the last commit */
     double lanesep = dir == 0 ? LANE : (bnw + 30 > LANE ? bnw + 30 : LANE);
     double qlen = q0 + (double)br.n * lanesep;
 #define PX(p, q) (dir == 0 ? (p) : (q))
@@ -194,10 +209,22 @@ DIAG_FN(gitgraph_render) {
     if (dir == 0)
         for (size_t i = 0; i < cm.n; i++) {
             double q = q0 + lane[cm.v[i].lane] * lanesep, tw = text_width(cm.v[i].id, 10);
-            if (cm.v[i].type != C_CHERRY) bot = fmax(bot, q + (tw / 2 - 8 + 28.5) / sqrt(2) + 10 + tw / 25 * 8.5); /* rotated about (x - 10, y) */
+            if (cm.v[i].type != C_CHERRY) bot = fmax(bot, rot ? q + (tw / 2 - 8 + 28.5) / sqrt(2) + 10 + tw / 25 * 8.5 /* rotated about (x - 10, y) */
+                                                               : q + 28.5);
             if (cm.v[i].tag.n) top = fmin(top, q - R - 28);
         }
-    BBox bb = dir == 0 ? (BBox){0, top - 4, plen, bot + 4} : (BBox){0, title.n ? -40 : 0, qlen, plen};
+    double left = p0 - 10 - 23 - bnw - (rot ? 30 : 0);
+    if (dir == 0 && rot) /* rotated commit labels hang down-left of their commit */
+        for (size_t i = 0; i < cm.n; i++) {
+            if (cm.v[i].type == C_CHERRY) continue;
+            double tw = text_width(cm.v[i].id, 10), x = p0 + col[i] * STEP, y = q0 + lane[cm.v[i].lane] * lanesep;
+            double rx = -7.5 - (tw + 10) / 25 * 9.5, cx = x - 10, c = sqrt(.5);
+            for (int k = 0; k < 4; k++) {
+                double px = (k & 1 ? x + tw / 2 + 2 : x - tw / 2 - 2) - cx, py = (k & 2 ? y + 28.5 : y + 13.5) - y;
+                left = fmin(left, rx + cx + px * c + py * c);
+            }
+        }
+    BBox bb = dir == 0 ? (BBox){left - 4, top - 4, plen - 6, bot + 4} : (BBox){0, title.n ? -40 : 0, qlen, plen};
     if (!buf_reserve(out, 4096 + cm.n * 900)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 4, "gitGraph", CSS);
     if (title.n) dg_text(out, title, 18, dir == 0 ? plen / 2 : qlen / 2, dir == 0 ? q0 - 31.3 : -20, "middle", "ttl");
@@ -210,20 +237,22 @@ DIAG_FN(gitgraph_render) {
         buf_lit(out, "\" x2=\""); buf_num(out, PX(plen - 10, q)); buf_lit(out, "\" y2=\""); buf_num(out, PY(plen - 10, q));
         buf_lit(out, "\"/>");
         double tw = text_width(br.v[b].name, 14);
-        double lx = dir == 0 ? p0 - 20 - tw : q - tw / 2, ly = dir == 0 ? q : (dir == 1 ? p0 - 35 : plen - p0 + 35);
-        dg_rect_fill(out, lx - 6, ly - 11, tw + 12, 22, 4, nullptr, col);
+        /* LR drawBranches: label box x = -bw - 4 - (rotate ? 30 : 0), width bw + 18, shifted -19 */
+        double lx = dir == 0 ? p0 - 10 - 17 - tw - (rot ? 30 : 0) : q - tw / 2, ly = dir == 0 ? q : (dir == 1 ? p0 - 35 : plen - p0 + 35);
+        if (dir == 0) dg_rect_fill(out, lx - 6, ly - 11, tw + 18, 22, 4, nullptr, col);
+        else dg_rect_fill(out, lx - 6, ly - 11, tw + 12, 22, 4, nullptr, col);
         buf_lit(out, "<g fill=\""); buf_put(out, strlen(LTXT[lane[b] % countof(LTXT)]), LTXT[lane[b] % countof(LTXT)]); buf_lit(out, "\">");
-        dg_text(out, br.v[b].name, 14, lx + tw / 2, ly, "middle", "bn bnx");
+        dg_text(out, br.v[b].name, 14, lx + tw / 2 + (dir == 0 ? 3 : 0), ly, "middle", "bn bnx");
         buf_lit(out, "</g>");
     }
     /* connections */
     for (size_t i = 0; i < cm.n; i++) {
         const Commit *c = &cm.v[i];
-        double p = p0 + (double)i * STEP, q = q0 + lane[c->lane] * lanesep;
+        double p = p0 + col[i] * STEP, q = q0 + lane[c->lane] * lanesep;
         for (int k = 0; k < 2; k++) {
             uint32_t par = k ? c->p2 : c->p1;
             if (par == UINT32_MAX) continue;
-            double pp = p0 + (double)par * STEP, pq = q0 + lane[cm.v[par].lane] * lanesep;
+            double pp = p0 + col[par] * STEP, pq = q0 + lane[cm.v[par].lane] * lanesep;
             /* colour: the lane that is not the lower-index main lane (mermaid colours by the branch going away) */
             uint32_t cl = lane[cm.v[par].lane] > lane[c->lane] ? lane[cm.v[par].lane] : lane[c->lane];
             const char *col = dcfg_pal("git", cl % countof(COL), COL[cl % countof(COL)]);
@@ -268,7 +297,7 @@ DIAG_FN(gitgraph_render) {
     /* commits, labels, tags */
     for (size_t i = 0; i < cm.n; i++) {
         const Commit *c = &cm.v[i];
-        double p = p0 + (double)i * STEP, q = q0 + lane[c->lane] * lanesep, x = PX(p, q), y = PY(p, q);
+        double p = p0 + col[i] * STEP, q = q0 + lane[c->lane] * lanesep, x = PX(p, q), y = PY(p, q);
         const char *col = dcfg_pal("git", lane[c->lane] % countof(COL), COL[lane[c->lane] % countof(COL)]);
         if (c->type == C_HIGHLIGHT) {
             dg_rect_fill(out, x - R, y - R, 2 * R, 2 * R, 0, nullptr, col);
@@ -293,6 +322,9 @@ DIAG_FN(gitgraph_render) {
         Str lab = c->id;
         double tw = text_width(lab, 10);
         if (c->type == C_CHERRY) { /* mermaid drawCommits: no commit label on cherry-picks */
+        } else if (dir == 0 && !rot) {
+            dg_rect_fill(out, x - tw / 2 - 2, y + 13.5, tw + 4, 15, 0, "clb", nullptr);
+            dg_text(out, lab, 10, x, y + 21, "middle", "cl");
         } else if (dir == 0) { /* mermaid rotateCommitLabel (default on): label hangs down-left at -45 degrees */
             double rx = -7.5 - (tw + 10) / 25 * 9.5, ry = 10 + tw / 25 * 8.5;
             buf_lit(out, "<g transform=\"translate("); dg_pt(out, rx, ry); buf_lit(out, ") rotate(-45 ");
