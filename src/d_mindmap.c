@@ -274,7 +274,7 @@ DIAG_FN(mindmap_render) {
         for (size_t i = 0; i < v.n; i++) { /* split each wedge among children, start angle at -90deg + offset */
             double start = ang[i] - wedge[i] / 2;
             if (!i) start = -M_PI / 2 - (V[0].first != UINT32_MAX ? M_PI / (double)leaves[0] : 0);
-            if (!i && nroot == 2) start = -M_PI * leaves[V[0].first] / fmax(1, leaves[0]); /* cose: two branches go right, left */
+            if (!i && nroot == 2 && leaves[0] == 2) start = -M_PI * leaves[V[0].first] / fmax(1, leaves[0]); /* cose: two branches go right, left */
             for (uint32_t c = V[i].first; c != UINT32_MAX; c = V[c].next) {
                 wedge[c] = wedge[i] * leaves[c] / fmax(1, leaves[i]);
                 ang[c] = start + wedge[c] / 2;

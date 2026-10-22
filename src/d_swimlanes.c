@@ -65,6 +65,19 @@ cmm_status swim_layout(Graph *g, Str **keep) {
         }
         if (!ch) break;
     }
+    /* mermaid stacks edge-less nodes of a lane along the rank axis instead of side by side */
+    memset(mark, 0, nn + 1);
+    for (size_t e = 0; e < g->ne; e++) {
+        int32_t f = g->efrom[e], t = g->eto[e];
+        if (f >= 0 && (size_t)f < nn) mark[f] = 1;
+        if (t >= 0 && (size_t)t < nn) mark[t] = 1;
+    }
+    for (size_t v = 0; v < nn; v++) {
+        if (mark[v] || (g->nflags[v] & NF_HIDDEN)) continue;
+        int32_t r = 0;
+        for (size_t u = 0; u < v; u++) if (!mark[u] && !(g->nflags[u] & NF_HIDDEN) && lane[u] == lane[v] && rank[u] + 1 > r) r = rank[u] + 1;
+        rank[v] = r;
+    }
     int32_t nr = 1;
     for (size_t v = 0; v < nn; v++) if (rank[v] + 1 > nr) nr = rank[v] + 1;
     /* main = rank axis, cross = lane axis */
