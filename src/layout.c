@@ -638,10 +638,10 @@ static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, 
         for (size_t v = 0; v < V; v++) xss[k][v] += d;
     }
     for (size_t v = 0; v < V; v++) {
-        double a[4] = {xss[0][v], xss[1][v], xss[2][v], xss[3][v]};
-        for (unsigned i = 1; i < 4; i++)
-            for (unsigned j = i; j && a[j - 1] > a[j]; j--) { double t = a[j]; a[j] = a[j - 1]; a[j - 1] = t; }
-        L->x[v] = (a[1] + a[2]) / 2;
+        /* median of 4 = mean of the two middle values: max of the pair minima, min of the pair maxima */
+        double a = xss[0][v], b = xss[1][v], c = xss[2][v], d = xss[3][v];
+        double m1 = dmax(dmin(a, b), dmin(c, d)), m2 = dmin(dmax(a, b), dmax(c, d));
+        L->x[v] = (m1 + m2) / 2;
     }
     return true;
 }
