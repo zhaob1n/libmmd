@@ -30,6 +30,7 @@ for f in files:
     if m == 'ok' and u != 'ok' and '-v' in sys.argv: print('FAIL', f, u)
 tm = tu = 0
 for d, (m, u, x) in sorted(by.items()):
-    if '-q' not in sys.argv: print(f'{d:28} {u:3}/{m:<3} ours/mermaid-ok  ({x} mermaid-fail)'); tm += m; tu += u
+    tm += m; tu += u
+    if '-q' not in sys.argv: print(f'{d:28} {u:3}/{m:<3} ours/mermaid-ok  ({x} mermaid-fail)')
 print(f'{"TOTAL":28} {tu:3}/{tm:<3} = {100 * tu / max(tm, 1):.1f}%')
 sys.exit(0 if tu == tm else 1)
