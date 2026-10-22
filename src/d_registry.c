@@ -43,6 +43,7 @@ static const DiagEnt DIAGS[] = {
     {S("radar"), radar_render},
     {S("packet-beta"), packet_render},
     {S("packet"), packet_render},
+    {S("zenuml"), zenuml_render},
 };
 
 DiagFn diag_lookup(Str kw) {

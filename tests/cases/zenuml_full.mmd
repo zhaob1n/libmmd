@@ -1,0 +1,29 @@
+zenuml
+    title Order Service
+    @Actor Client
+    @Boundary OrderController
+    @Database DB
+    // a comment
+    Client->OrderController: place order
+    OrderController.create(payload) {
+        if (payload.valid) {
+            Order order = new Order(payload)
+            result = DB.save(order) {
+                return ok
+            }
+        } else if (retry) {
+            Client->OrderController: again
+        } else {
+            return error
+        }
+        while (pending) {
+            DB.poll()
+        }
+        try {
+            DB.commit()
+        } catch (e) {
+            DB.rollback()
+        } finally {
+            DB.close()
+        }
+    }
