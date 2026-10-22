@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 #include "seq.h"
+#include "dcfg.h"
 #include "text.h"
 
 typedef enum : uint8_t { EV_MSG, EV_NOTE, EV_BEGIN, EV_ELSE, EV_END, EV_ACT, EV_DEACT, EV_CREATE, EV_DESTROY } EvKind;
@@ -734,12 +735,17 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
     buf_lit(out, "<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"mermaid\" class=\"sequence\" width=\"");
     buf_num(out, vw); buf_lit(out, "\" height=\""); buf_num(out, vh); buf_lit(out, "\" viewBox=\"");
     buf_num(out, vx); buf_ch(out, ' '); buf_num(out, vy); buf_ch(out, ' '); buf_num(out, vw); buf_ch(out, ' '); buf_num(out, vh);
-    buf_lit(out, "\" role=\"graphics-document document\" aria-roledescription=\"sequence\"><style>");
+    buf_lit(out, "\" role=\"graphics-document document\" aria-roledescription=\"sequence");
+    dcfg_svg_aria(out);
+    buf_lit(out, "<style>");
     buf_lit(out, SEQ_CSS);
+    dcfg_theme_css(out, "sequence");
     buf_lit(out, "</style>");
     buf_lit(out, SEQ_DEFS);
     buf_lit(out, "<rect x=\""); buf_num(out, vx); buf_lit(out, "\" y=\""); buf_num(out, vy);
-    buf_lit(out, "\" width=\""); buf_num(out, vw); buf_lit(out, "\" height=\""); buf_num(out, vh); buf_lit(out, "\" fill=\"white\"/>");
+    buf_lit(out, "\" width=\""); buf_num(out, vw); buf_lit(out, "\" height=\""); buf_num(out, vh); buf_lit(out, "\" fill=\"");
+    { Str bg = dcfg_background(); if (bg.n) buf_str(out, bg); else buf_lit(out, "white"); }
+    buf_lit(out, "\"/>");
     if (p.title.n) text_(out, p.title, 18, (minx + maxx) / 2, 15, "middle", "title");
     buf_put(out, boxes.n, boxes.p ? boxes.p : "");
     free(boxes.p);

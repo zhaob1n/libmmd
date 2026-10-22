@@ -6,6 +6,7 @@
 #include "graph.h"
 #include "diagrams.h"
 #include "seq.h"
+#include "dcfg.h"
 
 const char *cmm_status_str(cmm_status s) {
     switch (s) {
@@ -171,7 +172,7 @@ static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n],
         if ((st = flow_layout(&g))) goto fail;
         if (!buf_reserve(&b, 256 + g.nn * 320 + g.ne * 200)) { st = CMM_ERR_NOMEM; goto fail; }
         if ((st = flow_svg(&g, &b))) goto fail;
-    } else if (str_eq(kw, S("sequenceDiagram"))) {
+    } else if (dcfg_begin(&arena, n, src, off), str_eq(kw, S("sequenceDiagram"))) {
         if ((st = seq_render(&arena, n, src, off, cfg.title, fs, &b, &eoff, msg))) goto fail;
     } else if (diag_lookup(kw)) {
         if ((st = diag_lookup(kw)(&arena, n, src, off, cfg.title, fs, &b, &eoff, msg))) goto fail;
@@ -185,6 +186,7 @@ static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n],
     b.p[b.n] = 0;
     if (err) *err = (cmm_error){};
 fail:
+    dcfg_end();
     *ap = arena;
     *bp = b;
     if (st) set_err(err, st, n, src, eoff, msg);
