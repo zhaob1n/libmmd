@@ -13,7 +13,7 @@ static constexpr char CSS[] =
     "#mermaid .outer{fill:none;stroke:#000;stroke-width:2px;}"
     "#mermaid .pct{font-size:17px;}#mermaid .ttl{font-size:25px;}";
 /* mermaid default theme pie1..pie12 (hsl adjustments of primary/secondary/tertiary) */
-static const char *const COLORS[] = {"#ececff", "#ffffde", "#f9ffec", "#b9b9ff", "#ffffab", "#e8ffb9", "#ffb9ff", "#b9ffff", "#ffecec", "#ff86ff", "#86ffff", "#ffb9b9"};
+static const char *const COLORS[] = {"#ececff", "#ffffde", "#b5ff20", "#b9b9ff", "#ffff45", "#d7ff86", "#ff86ff", "#20ffff", "#ff2020", "#ff20ff", "#20ff8f", "#ff5353"};
 
 DIAG_FN(pie_render) {
     LineIt it = {.s = src, .n = n, .i = off};
@@ -68,14 +68,10 @@ DIAG_FN(pie_render) {
     if (!buf_reserve(out, 2048 + sl.n * 600)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 8, "pie", CSS);
     if (title.n) dg_text(out, title, 25, CX, -14, "middle", "ttl");
-    /* slices are drawn largest first (stable), colours stay bound to declaration order */
+    /* mermaid 11 keeps declaration order, clockwise from 12 o'clock */
     uint32_t *ord = ANEW(a, uint32_t, sl.n);
     if (!ord) return CMM_ERR_NOMEM;
-    for (size_t i = 0; i < sl.n; i++) {
-        size_t k = i;
-        while (k > 0 && sl.v[ord[k - 1]].v < sl.v[i].v) { ord[k] = ord[k - 1]; k--; }
-        ord[k] = (uint32_t)i;
-    }
+    for (size_t i = 0; i < sl.n; i++) ord[i] = (uint32_t)i;
     double ang = 0;
     char fill[64];
     for (size_t j = 0; j < sl.n; j++) {
