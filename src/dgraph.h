@@ -36,6 +36,8 @@ void dg_basis(Buf *b, size_t n, const double P[static 2 * n]);
 void dg_edge_d(Buf *b, const Graph *g, size_t e);
 /* centred multi-line text; anchor "middle"/"start"/"end"; cls may be nullptr */
 void dg_text(Buf *b, Str s, double fs, double x, double cy, const char *anchor, const char *cls);
+/* dg_text with an explicit row pitch (font size comes from the class) */
+void dg_text_lh(Buf *b, Str s, double lh, double x, double cy, const char *anchor, const char *cls);
 /* svg root with viewBox, <style>, white background */
 void dg_head(Buf *b, BBox bb, double margin, const char *kind, size_t ncss, const char css[static ncss]);
 #define DG_HEAD(b, bb, m, kind, css) dg_head((b), (bb), (m), (kind), sizeof(css) - 1, (css))

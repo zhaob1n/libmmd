@@ -23,8 +23,8 @@ typedef struct RStyle { Str from, to, text, line; double ox, oy; } RStyle;
 typedef struct Item { int32_t idx; bool box; } Item;
 
 static constexpr char CSS[] =
-    "#mermaid .ct{fill:#fff;}#mermaid .ct.ext{fill:#fff;}#mermaid .cn{font-weight:bold;}#mermaid .cs{font-size:12px;}"
-    "#mermaid .cd{font-size:14px;}#mermaid .cb{fill:none;stroke:#444;stroke-width:1px;stroke-dasharray:7,7;}"
+    "#mermaid .ct{fill:#fff;}#mermaid .ct.ext{fill:#fff;}#mermaid .cn{font-weight:bold;font-size:14px;}#mermaid .cs{font-size:10.5px;}"
+    "#mermaid .cd{font-size:11.48px;}#mermaid .cb{fill:none;stroke:#444;stroke-width:1px;stroke-dasharray:7,7;}"
     "#mermaid .cbt{font-weight:bold;font-size:14px;fill:#444;}#mermaid .cbs{font-size:12px;fill:#444;}"
     "#mermaid .cr{fill:none;stroke:#444;stroke-width:1px;}#mermaid .crh{fill:#444;}#mermaid .crl{font-size:13px;fill:#444;}"
     "#mermaid .crt{font-size:12px;font-style:italic;fill:#444;}#mermaid .crx{fill:inherit;}#mermaid .crc .cr{stroke:inherit;}#mermaid .crc .crh{fill:inherit;}";
@@ -190,6 +190,17 @@ static void arrowhead(Buf *b, const double *A, const double *B) { /* tip at A, c
     dg_pt(b, A[0] - dx * 10 + dy * 4, A[1] - dy * 10 - dx * 4); buf_lit(b, "z\"/>");
 }
 
+constexpr double C4_NF = 14;     /* c4 element name */
+constexpr double C4_TF = 10.5;   /* [type] 0.75em */
+constexpr double C4_DF = 11.48;  /* description 0.82em */
+constexpr double C4_PAD = 20;    /* conf.c4ShapePadding */
+constexpr double C4_GAP = 3;     /* c4LabelHelper SECTION_GAP */
+/* svg text bbox height of an n-line block: rows 1.1em apart plus the glyph box of one row */
+static double sec_h(unsigned n, double f) { return (n ? n - 1 : 0) * 1.1 * f + 1.33 * f; }
+/* mermaid cylinder end radius (ry = rx / (2.5 + w/50)) and person head radius */
+static double cyl_r(double w) { return w / 2 / (2.5 + w / 50); }
+static double head_r(double w) { return fmin(fmax(w * 0.23, 16), 56); }
+
 DIAG_FN(c4_render) {
     Graph g;
     dg_init(&g, a, DIR_TB, fs);
@@ -318,27 +329,35 @@ DIAG_FN(c4_render) {
     if (depth) return diag_fail(err_off, msg, n, "missing '}'");
     if (!g.nn) return diag_fail(err_off, msg, off, "C4 diagram has no elements");
     while (ci.n < g.nn) if (!VEC_PUSH(a, &ci, (CInfo){.kind = K_SYSTEM, .stereo = S("system")})) return CMM_ERR_NOMEM;
-    Str *dw = ANEW(a, Str, g.nn);
-    if (!dw) return CMM_ERR_NOMEM;
+    /* mermaid 11.17 c4LabelHelper: sections name (14px bold) / [type] (0.75em) / descr (0.82em) wrapped to
+     * width - 2*padding (padding 20), stacked 3px apart; shapes pad the stack by 20 on each side. */
+    Str *dw = ANEW(a, Str, g.nn), *dn = ANEW(a, Str, g.nn);
+    double *lab = ANEW(a, double, g.nn);
+    if (!dw || !dn || !lab) return CMM_ERR_NOMEM;
     for (size_t v = 0; v < g.nn; v++) {
         CInfo *c = &ci.v[v];
-        dw[v] = c->descr.n ? dg_wrap(a, c->descr, 14, 190) : (Str){};
-        double w, tw;
+        double w = fmax(216, (double)(strlen(C4_TY[c->kind]) + c->techn.n + 4) * C4_TF * 0.55 + 2 * C4_PAD);
+        dn[v] = dg_wrap(a, g.nlabel[v], C4_NF, w - 2 * C4_PAD);
+        dw[v] = c->descr.n ? dg_wrap(a, c->descr, C4_DF, w - 2 * C4_PAD) : (Str){};
+        if (!dn[v].n && g.nlabel[v].n) return CMM_ERR_NOMEM;
+        double tw;
         unsigned nl = 0;
-        label_measure(g.nlabel[v], fs, &tw, &nl);
-        w = fmax(216, tw + 30);
-        w = fmax(w, (double)(strlen(C4_TY[c->kind]) + c->techn.n + 4) * 6.6 + 30);
-        double h = 12 + nl * fs * 1.3 + 2 + 18 + 10;
+        label_measure(dn[v], C4_NF, &tw, &nl);
+        w = fmax(w, tw * 1.05 + 2 * C4_PAD);
+        double h = sec_h(nl, C4_NF) + C4_GAP + sec_h(1, C4_TF);
         if (dw[v].n) {
             double dwid;
             unsigned dl;
-            label_measure(dw[v], 14, &dwid, &dl);
-            h += dl * 18 + 6;
-            w = fmax(w, dwid + 30);
+            label_measure(dw[v], C4_DF, &dwid, &dl);
+            h += C4_GAP + sec_h(dl, C4_DF);
+            w = fmax(w, dwid + 2 * C4_PAD);
         }
-        if (c->kind == K_PERSON) h += 50;
-        if (c->form == F_DB) h += 14;
-        dg_size(&g, (int32_t)v, w, fmax(h, 60 + (c->kind == K_PERSON ? 50 : 0)));
+        lab[v] = h;
+        h += 2 * C4_PAD;
+        if (c->form == F_QUEUE) h = lab[v] + 12.63;
+        else if (c->form == F_DB) h += 1.5 * cyl_r(w);
+        else if (c->kind == K_PERSON) h += 2 * head_r(w) - 0.27 * head_r(w);
+        dg_size(&g, (int32_t)v, w, h);
     }
     for (size_t e = 0; e < g.ne; e++) {
         if (cr.v[e].techn.n) {
@@ -476,8 +495,9 @@ DIAG_FN(c4_render) {
         if (u && color_ok(u->font)) put_attr(out, u->font);
         else buf_put(out, strlen(dark ? "#fff" : "#000"), dark ? "#fff" : "#000");
         buf_lit(out, "\">");
+        double lt = g.ny[v] - lab[v] / 2; /* label stack top */
         if (c->form == F_DB) {
-            double ry = 10;
+            double ry = cyl_r(w);
             buf_lit(out, "<path fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
             buf_lit(out, "\" d=\"M"); dg_pt(out, x0, y0 + ry);
             buf_lit(out, "a"); buf_num(out, w / 2); buf_ch(out, ','); buf_num(out, ry); buf_lit(out, " 0 0 1 "); buf_num(out, w); buf_lit(out, ",0");
@@ -485,9 +505,9 @@ DIAG_FN(c4_render) {
             buf_lit(out, "a"); buf_num(out, w / 2); buf_ch(out, ','); buf_num(out, ry); buf_lit(out, " 0 0 1 "); buf_num(out, -w); buf_lit(out, ",0");
             buf_lit(out, "z M"); dg_pt(out, x0, y0 + ry);
             buf_lit(out, "a"); buf_num(out, w / 2); buf_ch(out, ','); buf_num(out, ry); buf_lit(out, " 0 0 0 "); buf_num(out, w); buf_lit(out, ",0\"/>");
-            y0 += 2 * ry - 4;
+            lt = y0 + 1.5 * ry + (h - 1.5 * ry - lab[v]) / 2;
         } else if (c->form == F_QUEUE) {
-            double rx = 10;
+            double rx = h / 2 / (2.5 + h / 50);
             buf_lit(out, "<path fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
             buf_lit(out, "\" d=\"M"); dg_pt(out, x0 + rx, y0);
             buf_lit(out, "h"); buf_num(out, w - 2 * rx);
@@ -497,37 +517,36 @@ DIAG_FN(c4_render) {
             buf_lit(out, "z M"); dg_pt(out, x0 + w - rx, y0);
             buf_lit(out, "a"); buf_num(out, rx); buf_ch(out, ','); buf_num(out, h / 2); buf_lit(out, " 0 0 0 0,"); buf_num(out, h); buf_lit(out, "\"/>");
         } else if (c->kind == K_PERSON) { /* mermaid 11: rounded body with a large head circle above it */
-            double r = fmin(36, w / 4), by = y0 + r * 1.4, bh = h - r * 1.4;
+            double r = head_r(w), by = y0 + 2 * r - 0.27 * r, bh = h - (by - y0);
             buf_lit(out, "<rect fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
-            buf_lit(out, "\" rx=\""); buf_num(out, fmin(30, bh / 3)); buf_lit(out, "\" x=\""); buf_num(out, x0); buf_lit(out, "\" y=\""); buf_num(out, by);
+            buf_lit(out, "\" rx=\""); buf_num(out, fmin(w * 0.177, bh * 0.45)); buf_lit(out, "\" x=\""); buf_num(out, x0); buf_lit(out, "\" y=\""); buf_num(out, by);
             buf_lit(out, "\" width=\""); buf_num(out, w); buf_lit(out, "\" height=\""); buf_num(out, bh); buf_lit(out, "\"/>");
             buf_lit(out, "<circle fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
             buf_lit(out, "\" cx=\""); buf_num(out, cx); buf_lit(out, "\" cy=\""); buf_num(out, y0 + r); buf_lit(out, "\" r=\""); buf_num(out, r); buf_lit(out, "\"/>");
-            y0 = by;
+            lt = by + (bh - lab[v]) / 2;
         } else {
             buf_lit(out, "<rect rx=\"2.5\" fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
             buf_lit(out, "\" x=\""); buf_num(out, x0); buf_lit(out, "\" y=\""); buf_num(out, y0);
             buf_lit(out, "\" width=\""); buf_num(out, w); buf_lit(out, "\" height=\""); buf_num(out, h); buf_lit(out, "\"/>");
         }
-        double y = y0 + 12;
-        double tw;
         unsigned nl;
-        label_measure(g.nlabel[v], fs, &tw, &nl);
-        y += nl * fs * 1.3 / 2;
-        dg_text(out, g.nlabel[v], fs, cx, y, "middle", "cn");
-        y += nl * fs * 1.3 / 2 + 2;
+        double tw;
+        label_measure(dn[v], C4_NF, &tw, &nl);
+        double y = lt;
+        dg_text_lh(out, dn[v], 1.1 * C4_NF, cx, y + sec_h(nl, C4_NF) / 2, "middle", "cn");
+        y += sec_h(nl, C4_NF) + C4_GAP;
         { /* mermaid 11 type line: [Person], [Software System], [Container: techn], [Component: techn] */
-            dg_text_open(out, cx, y + 8, "middle", "cs");
+            dg_text_open(out, cx, y + sec_h(1, C4_TF) / 2 + 0.35 * C4_TF, "middle", "cs");
             buf_ch(out, '['); buf_put(out, strlen(C4_TY[c->kind]), C4_TY[c->kind]);
             if (c->techn.n) { buf_lit(out, ": "); buf_xml(out, c->techn); }
             buf_lit(out, "]</text>");
-            y += 18;
+            y += sec_h(1, C4_TF) + C4_GAP;
         }
         if (dw[v].n) {
             double dwid;
             unsigned dl;
-            label_measure(dw[v], 14, &dwid, &dl);
-            dg_text(out, dw[v], 14, cx, y + 6 + dl * 9, "middle", "cd");
+            label_measure(dw[v], C4_DF, &dwid, &dl);
+            dg_text_lh(out, dw[v], 1.1 * C4_DF, cx, y + sec_h(dl, C4_DF) / 2, "middle", "cd");
         }
         buf_lit(out, "</g>");
     }

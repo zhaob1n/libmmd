@@ -191,12 +191,16 @@ void dg_edge_d(Buf *b, const Graph *g, size_t e) {
 }
 
 void dg_text(Buf *b, Str s, double fs, double x, double cy, const char *anchor, const char *cls) {
+    dg_text_lh(b, s, fs * 1.5, x, cy, anchor, cls);
+}
+
+void dg_text_lh(Buf *b, Str s, double lh, double x, double cy, const char *anchor, const char *cls) {
     unsigned k = 0;
     size_t pos = 0;
     Str ln;
     if (!s.n) return;
     while (label_next_line(s, &pos, &ln)) k++;
-    double lh = fs * 1.5, y = cy - (k - 1) * lh / 2;
+    double y = cy - (k - 1) * lh / 2;
     pos = 0;
     while (label_next_line(s, &pos, &ln)) {
         buf_lit(b, "<text");
