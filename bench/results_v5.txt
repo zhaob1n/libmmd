@@ -1,0 +1,48 @@
+v5 (taskset -c 2, min of 3 runs, µs). v1 = original baseline bench.
+size    v1      O2(avoid on)  O2 no-avoid
+small   11.6    13.1          12.1
+medium  404.5   534.2         406.4
+large   8926    9034          8087
+xlarge  54862   54061         48932
+Changes: cluster contiguity (global cluster keys in ordering, rigid border chains in BK,
+border-crossing conflicts), O(V+E) border conflict pass, router corner pruning by grid cell,
+shortest-first side detours. Cluster box overlaps over mmdr fixtures + bench + tests: 12 -> 0.
+Medium crossings 501 -> 589 (cost of cluster constraints).
+
+compare.py vs mmdr (bench/inputs + bench/mmdr_fixtures):
+input                                        cmm lib ms cmm cli ms mmdr lib ms mmdr cli ms   cli x
+large.mmd                                          9.49      11.80           -           -       -  mmdr: timeout>120s
+medium.mmd                                         0.58       1.74    20727.41    20731.73 11885.7x
+small.mmd                                          0.02       1.79      146.42      142.09   79.3x
+xlarge.mmd                                        60.18      67.57           -           -       -  mmdr: timeout>120s
+flowchart.mmd                                      0.01       1.87       56.51       54.31   29.0x
+flowchart_asymmetric_components.mmd                0.01       1.83      118.72      111.76   60.9x
+flowchart_backedges_subgraphs.mmd                  0.02       1.86      176.13      190.97  102.7x
+flowchart_component_packing.mmd                    0.02       1.96      204.38      208.97  106.8x
+flowchart_direction_conflict.mmd                   0.02       1.83      227.24      222.11  121.5x
+flowchart_fanout_returns.mmd                       0.02       1.88      312.08      307.76  163.6x
+flowchart_flow_direction_backtrack.mmd             0.02       1.78      195.33      197.45  110.8x
+flowchart_grid_feedback.mmd                        0.05       1.87      347.10      353.40  188.5x
+flowchart_label_collision.mmd                      0.02       1.78      220.98      225.62  126.8x
+flowchart_lanes_crossfeed.mmd                      0.02       1.78      275.36      268.99  150.8x
+flowchart_large.mmd                                0.27       2.19      528.58      467.89  213.4x
+flowchart_long_edge_labels.mmd                     0.03       1.92      528.02      532.08  276.6x
+flowchart_medium.mmd                               0.04       1.97      141.84      147.32   74.7x
+flowchart_mega_braid_feedback.mmd                  0.06       2.00      614.51      565.65  283.3x
+flowchart_mega_crosslane_subgraphs.mmd             0.14       1.98      446.08      449.14  227.1x
+flowchart_mega_event_mesh.mmd                      0.21       2.10     1907.85     1883.85  896.5x
+flowchart_mega_multihub_control.mmd                0.05       1.93      771.92      784.41  406.1x
+flowchart_mega_nested_regions.mmd                  0.05       1.91      904.33      877.36  460.5x
+flowchart_nested_clusters.mmd                      0.03       1.86      195.42      190.86  102.8x
+flowchart_parallel_edges_bundle.mmd                0.02       1.82      251.32      255.47  140.3x
+flowchart_parallel_label_stack.mmd                 0.02       1.96      182.09      184.60   94.1x
+flowchart_parallel_merges.mmd                      0.02       1.75      143.90      144.32   82.6x
+flowchart_path_occlusion_maze.mmd                  0.20       1.97     1291.26     1298.54  660.1x
+flowchart_port_alignment_matrix.mmd                0.03       1.72      370.17      371.25  216.4x
+flowchart_ports_heavy.mmd                          0.04       1.95     1394.15     1335.57  683.8x
+flowchart_selfloop_bidi.mmd                        0.02       1.91      502.68      495.13  259.1x
+flowchart_small.mmd                                0.01       1.88       29.55       29.63   15.8x
+flowchart_sparse_components.mmd                    0.02       1.87      130.20      137.25   73.4x
+flowchart_subgraph_boundary_intrusion.mmd          0.04       1.97      772.83      764.34  388.9x
+flowchart_tiny.mmd                                 0.00       1.89        1.89        3.80    2.0x
+flowchart_weave.mmd                                0.57       2.41      904.19      902.43  373.8x
