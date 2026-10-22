@@ -37,11 +37,19 @@ DIAG_FN(pie_render) {
         if (str_eq(w, S("title"))) { title = str_trim(rest); continue; }
         if (str_eq(w, S("showData"))) { show = true; continue; }
         if (str_starts(w, S("accTitle")) || str_starts(w, S("accDescr"))) continue;
-        if (!line.n || line.p[0] != '"') return diag_fail(err_off, msg, lo, "expected \"label\" : value");
-        const char *q = memchr(line.p + 1, '"', line.n - 1);
-        if (!q) return diag_fail(err_off, msg, lo, "unterminated slice label");
-        Str label = {.p = line.p + 1, .n = (size_t)(q - line.p - 1)};
-        Str tail = str_trim((Str){.p = q + 1, .n = line.n - (size_t)(q + 1 - line.p)});
+        Str label, tail;
+        const char *q;
+        if (line.p[0] == '"') {
+            q = memchr(line.p + 1, '"', line.n - 1);
+            if (!q) return diag_fail(err_off, msg, lo, "unterminated slice label");
+            label = (Str){.p = line.p + 1, .n = (size_t)(q - line.p - 1)};
+        } else { /* unquoted label: up to the last ':' */
+            q = nullptr;
+            for (size_t k = line.n; k-- > 0;) if (line.p[k] == ':') { q = line.p + k - 1; break; }
+            if (!q) return diag_fail(err_off, msg, lo, "expected label : value");
+            label = str_trim((Str){.p = line.p, .n = (size_t)(q + 1 - line.p)});
+        }
+        tail = str_trim((Str){.p = q + 1, .n = line.n - (size_t)(q + 1 - line.p)});
         double v;
         if (!tail.n || tail.p[0] != ':' || !dg_parse_num(str_trim((Str){.p = tail.p + 1, .n = tail.n - 1}), &v) || v < 0)
             return diag_fail(err_off, msg, (size_t)(q + 1 - src), "expected ': <non-negative number>'");
