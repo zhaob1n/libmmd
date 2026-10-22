@@ -1,0 +1,15 @@
+# 2026-10-23 (after: themes, rich text, recursive cluster layout, transpose, ports, SSE2 scanners)
+# in-process bench (build/bench, min of 3 runs, clang -O2 -march=native), before = commit 41835c5
+input     before     after
+small     11.8us     14.0us
+medium    404.8us    460.7us
+large     8.93ms     9.54ms
+xlarge    53.9ms     57.7ms
+# vs mmdr (bench/compare.py)
+input                                        cmm lib ms cmm cli ms mmdr lib ms mmdr cli ms   cli x
+flowchart.mmd                                      0.01       0.68       54.47       53.43   78.1x
+flowchart_direction_conflict.mmd                   0.03       0.96      226.03      225.04  234.0x
+flowchart_nested_clusters.mmd                      0.02       0.74      206.78      190.05  258.5x
+flowchart_mega_event_mesh.mmd                      0.16       0.99     1898.11     1869.14 1881.1x
+medium.mmd                                         0.57       1.72    19840.05    19844.13 11567.2x
+large.mmd                                         10.33      14.47           -           -       -  mmdr: timeout>120s
