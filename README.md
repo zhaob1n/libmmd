@@ -62,7 +62,7 @@ API (`include/cmermaid.h`): `cmm_render_svg(n, src, opts, &buf, &err)`, `cmm_buf
 
 ## Docs syntax corpus
 
-`tests/docs/<doc>/NN.mmd`: all 432 ```` ```mermaid ```` examples from mermaid's `packages/mermaid/src/docs/syntax/*.md` (mermaid 6d8921f, extracted by `tools/extract_docs.py`). `python3 tools/docs_audit.py [-v] [--mmdc]` reports per-type pass counts against mermaid-cli (cached in `tests/docs/mermaid_status.txt`); `tools/docs_sbs.py` renders side-by-sides. Every supported type passes 100% of the examples mermaid itself renders (312/396 total). The 84 failures are all types we do not implement: cynefin, eventmodeling, ishikawa, railroad, swimlanes, treeView, venn, wardley.
+`tests/docs/<doc>/NN.mmd`: all 432 ```` ```mermaid ```` examples from mermaid's `packages/mermaid/src/docs/syntax/*.md` (mermaid 6d8921f, extracted by `tools/extract_docs.py`). `python3 tools/docs_audit.py [-v] [--mmdc]` reports per-type pass counts against mermaid-cli (cached in `tests/docs/mermaid_status.txt`); `tools/docs_sbs.py` renders side-by-sides. Every type passes 100% of the examples mermaid itself renders (396/396; 36 examples mermaid itself rejects are excluded). `make test` runs the audit and fails on any regression.
 
 ## Fidelity vs mermaid-cli 11.17
 
