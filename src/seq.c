@@ -1,7 +1,510 @@
+/* Sequence diagrams: participants/actors, messages (all arrow kinds incl. +/- activation),
+ * activate/deactivate, notes, loop/alt/opt/par/critical/break/rect/box blocks, autonumber.
+ * Parse -> layout -> SVG in one translation unit. */
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "seq.h"
+#include "text.h"
+
+typedef enum : uint8_t { EV_MSG, EV_NOTE, EV_BEGIN, EV_ELSE, EV_END, EV_ACT, EV_DEACT } EvKind;
+typedef enum : uint8_t { NP_LEFT, NP_RIGHT, NP_OVER } NotePos;
+typedef enum : uint8_t { HD_NONE, HD_ARROW, HD_CROSS, HD_ASYNC } Head;
+
+typedef struct Part { Str id, label; bool actor; double x, w; } Part;
+typedef struct Ev {
+    EvKind kind;
+    uint8_t sub; /* NotePos */
+    bool dotted, bidir, act_to, deact_from;
+    Head head;
+    int32_t a, b;
+    Str kw, text;
+} Ev;
+
+typedef struct SP {
+    Arena *A;
+    const char *s;
+    size_t n, i, err;
+    char *msg;
+    VEC(Part) parts;
+    VEC(Ev) evs;
+    bool autonumber;
+    Str title;
+} SP;
+
+constexpr double ACT_W = 150;
+constexpr double ACT_H = 65;
+constexpr double ACT_MARGIN = 50;
+constexpr double BOX_MARGIN = 10;
+
+static cmm_status sfail(SP *p, size_t off, const char *m) {
+    p->err = off;
+    snprintf(p->msg, 160, "%s", m);
+    return CMM_ERR_SYNTAX;
+}
+
+static int32_t part_get(SP *p, Str id, bool *oom) {
+    for (size_t k = 0; k < p->parts.n; k++)
+        if (str_eq(p->parts.v[k].id, id)) return (int32_t)k;
+    if (!VEC_PUSH(p->A, &p->parts, (Part){.id = id, .label = id})) { *oom = true; return -1; }
+    return (int32_t)p->parts.n - 1;
+}
+
+static Str word(Str *s) {
+    *s = str_trim(*s);
+    size_t k = 0;
+    while (k < s->n && !is_sp(s->p[k])) k++;
+    Str w = {.p = s->p, .n = k};
+    s->p += k;
+    s->n -= k;
+    return w;
+}
+
+typedef struct ArrowTok { char t[8]; Head h; bool dotted, bidir; } ArrowTok;
+static constexpr ArrowTok ARROWS[] = {
+    {"<<-->>", HD_ARROW, true, true}, {"<<->>", HD_ARROW, false, true},
+    {"-->>", HD_ARROW, true, false},  {"->>", HD_ARROW, false, false},
+    {"--x", HD_CROSS, true, false},   {"-x", HD_CROSS, false, false},
+    {"--)", HD_ASYNC, true, false},   {"-)", HD_ASYNC, false, false},
+    {"-->", HD_NONE, true, false},    {"->", HD_NONE, false, false},
+};
+
+static cmm_status parse_line(SP *p, Str line, size_t off) {
+    bool oom = false;
+    Str rest = line;
+    Str w = word(&rest);
+    Ev ev = {.a = -1, .b = -1};
+    if (str_eq(w, S("create"))) { w = word(&rest); }
+    if (str_eq(w, S("participant")) || str_eq(w, S("actor"))) {
+        rest = str_trim(rest);
+        Str id = rest, label = rest;
+        for (size_t k = 0; k + 4 <= rest.n; k++)
+            if (memcmp(rest.p + k, " as ", 4) == 0) {
+                id = str_trim((Str){.p = rest.p, .n = k});
+                label = str_trim((Str){.p = rest.p + k + 4, .n = rest.n - k - 4});
+                break;
+            }
+        if (!id.n) return sfail(p, off, "expected participant name");
+        int32_t k = part_get(p, id, &oom);
+        if (oom) return CMM_ERR_NOMEM;
+        bool ok;
+        p->parts.v[k].label = label_normalize(p->A, label, &ok);
+        if (!ok) return CMM_ERR_NOMEM;
+        p->parts.v[k].actor = str_eq(w, S("actor"));
+        return CMM_OK;
+    }
+    if (str_eq(w, S("autonumber"))) { p->autonumber = true; return CMM_OK; }
+    if (str_starts(w, S("title"))) {
+        Str t = str_trim((Str){.p = line.p + 5, .n = line.n - 5});
+        if (t.n && t.p[0] == ':') t = str_trim((Str){.p = t.p + 1, .n = t.n - 1});
+        p->title = t;
+        return CMM_OK;
+    }
+    if (str_eq(w, S("destroy")) || str_starts(w, S("accTitle")) || str_starts(w, S("accDescr")) ||
+        str_eq(w, S("links")) || str_eq(w, S("link")) || str_eq(w, S("properties")) || str_eq(w, S("details")))
+        return CMM_OK;
+    if (str_eq(w, S("activate")) || str_eq(w, S("deactivate"))) {
+        Str id = str_trim(rest);
+        ev.kind = w.n == 8 ? EV_ACT : EV_DEACT;
+        ev.a = part_get(p, id, &oom);
+        if (oom) return CMM_ERR_NOMEM;
+        return VEC_PUSH(p->A, &p->evs, ev) ? CMM_OK : CMM_ERR_NOMEM;
+    }
+    if (str_ieq(w, S("note"))) {
+        Str pw = word(&rest);
+        if (str_eq(pw, S("left")) || str_eq(pw, S("right"))) {
+            ev.sub = pw.n == 4 ? NP_LEFT : NP_RIGHT;
+            Str of = word(&rest);
+            if (!str_eq(of, S("of"))) return sfail(p, off, "expected 'of' in note");
+        } else if (str_eq(pw, S("over"))) ev.sub = NP_OVER;
+        else return sfail(p, off, "expected left of/right of/over in note");
+        const char *c = memchr(rest.p, ':', rest.n);
+        if (!c) return sfail(p, off, "expected ':' in note");
+        Str who = str_trim((Str){.p = rest.p, .n = (size_t)(c - rest.p)});
+        Str text = (Str){.p = c + 1, .n = rest.n - (size_t)(c + 1 - rest.p)};
+        const char *cm = memchr(who.p, ',', who.n);
+        Str a = who, b = {};
+        if (cm) { a = str_trim((Str){.p = who.p, .n = (size_t)(cm - who.p)}); b = str_trim((Str){.p = cm + 1, .n = who.n - (size_t)(cm + 1 - who.p)}); }
+        ev.kind = EV_NOTE;
+        ev.a = part_get(p, a, &oom);
+        ev.b = b.n ? part_get(p, b, &oom) : ev.a;
+        if (oom) return CMM_ERR_NOMEM;
+        bool ok;
+        ev.text = label_normalize(p->A, text, &ok);
+        if (!ok) return CMM_ERR_NOMEM;
+        return VEC_PUSH(p->A, &p->evs, ev) ? CMM_OK : CMM_ERR_NOMEM;
+    }
+    static const Str BEG[] = {S("loop"), S("alt"), S("opt"), S("par"), S("critical"), S("break"), S("rect"), S("box"), S("par_over")};
+    for (size_t k = 0; k < countof(BEG); k++)
+        if (str_eq(w, BEG[k])) {
+            ev.kind = EV_BEGIN;
+            ev.kw = w;
+            ev.text = str_trim(rest);
+            return VEC_PUSH(p->A, &p->evs, ev) ? CMM_OK : CMM_ERR_NOMEM;
+        }
+    if (str_eq(w, S("else")) || str_eq(w, S("and")) || str_eq(w, S("option"))) {
+        ev.kind = EV_ELSE;
+        ev.text = str_trim(rest);
+        return VEC_PUSH(p->A, &p->evs, ev) ? CMM_OK : CMM_ERR_NOMEM;
+    }
+    if (str_eq(w, S("end"))) {
+        ev.kind = EV_END;
+        return VEC_PUSH(p->A, &p->evs, ev) ? CMM_OK : CMM_ERR_NOMEM;
+    }
+    /* message: A ARROW [+|-]B : text */
+    const ArrowTok *at = nullptr;
+    size_t apos = 0;
+    for (size_t k = 0; k < line.n && !at; k++) {
+        if (line.p[k] != '-' && line.p[k] != '<') continue;
+        for (size_t t = 0; t < countof(ARROWS); t++) {
+            size_t tl = strlen(ARROWS[t].t);
+            if (k + tl <= line.n && memcmp(line.p + k, ARROWS[t].t, tl) == 0) { at = &ARROWS[t]; apos = k; break; }
+        }
+    }
+    if (!at || apos == 0) return sfail(p, off, "unrecognised statement in sequence diagram");
+    Str from = str_trim((Str){.p = line.p, .n = apos});
+    Str r2 = {.p = line.p + apos + strlen(at->t), .n = line.n - apos - strlen(at->t)};
+    r2 = str_trim(r2);
+    if (r2.n && r2.p[0] == '+') { ev.act_to = true; r2.p++; r2.n--; }
+    else if (r2.n && r2.p[0] == '-') { ev.deact_from = true; r2.p++; r2.n--; }
+    const char *c = memchr(r2.p, ':', r2.n);
+    Str to = str_trim((Str){.p = r2.p, .n = c ? (size_t)(c - r2.p) : r2.n});
+    Str text = c ? (Str){.p = c + 1, .n = r2.n - (size_t)(c + 1 - r2.p)} : (Str){};
+    if (!from.n || !to.n) return sfail(p, off, "message needs sender and receiver");
+    ev.kind = EV_MSG;
+    ev.a = part_get(p, from, &oom);
+    ev.b = part_get(p, to, &oom);
+    if (oom) return CMM_ERR_NOMEM;
+    ev.head = at->h;
+    ev.dotted = at->dotted;
+    ev.bidir = at->bidir;
+    bool ok;
+    ev.text = label_normalize(p->A, text, &ok);
+    if (!ok) return CMM_ERR_NOMEM;
+    return VEC_PUSH(p->A, &p->evs, ev) ? CMM_OK : CMM_ERR_NOMEM;
+}
+
+static void pt(Buf *b, double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
+static void rect(Buf *b, double x, double y, double w, double h, const char *cls) {
+    buf_lit(b, "<rect class=\""); buf_put(b, strlen(cls), cls); buf_lit(b, "\" x=\""); buf_num(b, x);
+    buf_lit(b, "\" y=\""); buf_num(b, y); buf_lit(b, "\" width=\""); buf_num(b, w);
+    buf_lit(b, "\" height=\""); buf_num(b, h); buf_lit(b, "\"/>");
+}
+static void line_(Buf *b, double x1, double y1, double x2, double y2, const char *cls) {
+    buf_lit(b, "<line class=\""); buf_put(b, strlen(cls), cls); buf_lit(b, "\" x1=\""); buf_num(b, x1);
+    buf_lit(b, "\" y1=\""); buf_num(b, y1); buf_lit(b, "\" x2=\""); buf_num(b, x2);
+    buf_lit(b, "\" y2=\""); buf_num(b, y2); buf_lit(b, "\"/>");
+}
+static void text_(Buf *b, Str s, double fs, double x, double y, const char *anchor, const char *cls) {
+    size_t pos = 0;
+    Str ln;
+    double lh = fs * 1.5;
+    while (label_next_line(s, &pos, &ln)) {
+        buf_lit(b, "<text class=\""); buf_put(b, strlen(cls), cls); buf_lit(b, "\" x=\""); buf_num(b, x);
+        buf_lit(b, "\" y=\""); buf_num(b, y); buf_lit(b, "\" text-anchor=\""); buf_put(b, strlen(anchor), anchor);
+        buf_lit(b, "\" dominant-baseline=\"central\">");
+        buf_xml(b, ln);
+        buf_lit(b, "</text>");
+        y += lh;
+    }
+}
+static unsigned nlines(Str s) {
+    if (!s.n) return 0;
+    unsigned k = 1;
+    for (size_t i = 0; i < s.n; i++) k += s.p[i] == '\n';
+    return k;
+}
+
+static void actor_box(Buf *b, const Part *pa, double y, double fs) {
+    if (pa->actor) {
+        double x = pa->x, t = y + 4;
+        buf_lit(b, "<g class=\"actor-man\"><circle cx=\""); buf_num(b, x); buf_lit(b, "\" cy=\""); buf_num(b, t + 8);
+        buf_lit(b, "\" r=\"8\"/>");
+        line_(b, x, t + 16, x, t + 34, "actor-line");
+        line_(b, x - 14, t + 22, x + 14, t + 22, "actor-line");
+        line_(b, x, t + 34, x - 12, t + 48, "actor-line");
+        line_(b, x, t + 34, x + 12, t + 48, "actor-line");
+        buf_lit(b, "</g>");
+        text_(b, pa->label, fs, x, y + ACT_H - 6, "middle", "actor-label");
+        return;
+    }
+    rect(b, pa->x - pa->w / 2, y, pa->w, ACT_H, "actor");
+    unsigned k = nlines(pa->label);
+    text_(b, pa->label, fs, pa->x, y + ACT_H / 2 - (k - 1) * fs * 0.75, "middle", "actor-label");
+}
+
+typedef struct Act { int32_t p; double y0; unsigned depth; } Act;
+typedef struct Blk { size_t ev; double y0; int32_t lo, hi; } Blk;
+
+static constexpr char SEQ_CSS[] =
+    "#mermaid{font-family:\"trebuchet ms\",verdana,arial,sans-serif;font-size:16px;}"
+    "#mermaid .actor{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
+    "#mermaid .actor-man circle,#mermaid .actor-line{fill:#ECECFF;stroke:#9370DB;stroke-width:2px;}"
+    "#mermaid text{fill:#333;}"
+    "#mermaid .lifeline{stroke:#999;stroke-width:0.5px;}"
+    "#mermaid .msg{stroke:#333;stroke-width:1.5px;fill:none;}"
+    "#mermaid .msg.dotted{stroke-dasharray:3,3;}"
+    "#mermaid .note{fill:#fff5ad;stroke:#aaaa33;stroke-width:1px;}"
+    "#mermaid .act{fill:#f4f4f4;stroke:#666;stroke-width:1px;}"
+    "#mermaid .block{fill:none;stroke:#526e9c;stroke-width:1.5px;}"
+    "#mermaid .block-sep{stroke:#526e9c;stroke-width:1.5px;stroke-dasharray:3,3;}"
+    "#mermaid .block-tab{fill:#ECECFF;stroke:#526e9c;stroke-width:1.5px;}"
+    "#mermaid .seqnum{fill:#333;}#mermaid .seqnum-t{fill:#fff;font-size:12px;}"
+    "#mermaid .title{font-size:18px;}";
+
+static constexpr char SEQ_DEFS[] =
+    "<defs><marker id=\"sq-arrow\" viewBox=\"0 0 12 12\" refX=\"11\" refY=\"6\" markerWidth=\"12\" markerHeight=\"12\" "
+    "markerUnits=\"userSpaceOnUse\" orient=\"auto\"><path d=\"M0,0 L12,6 L0,12 z\" fill=\"#333\"/></marker>"
+    "<marker id=\"sq-arrow-start\" viewBox=\"0 0 12 12\" refX=\"1\" refY=\"6\" markerWidth=\"12\" markerHeight=\"12\" "
+    "markerUnits=\"userSpaceOnUse\" orient=\"auto\"><path d=\"M12,0 L0,6 L12,12 z\" fill=\"#333\"/></marker>"
+    "<marker id=\"sq-cross\" viewBox=\"0 0 12 12\" refX=\"10\" refY=\"6\" markerWidth=\"12\" markerHeight=\"12\" "
+    "markerUnits=\"userSpaceOnUse\" orient=\"auto\"><path d=\"M2,2 L10,10 M10,2 L2,10\" stroke=\"#333\" stroke-width=\"2\"/></marker>"
+    "<marker id=\"sq-async\" viewBox=\"0 0 12 12\" refX=\"11\" refY=\"6\" markerWidth=\"12\" markerHeight=\"12\" "
+    "markerUnits=\"userSpaceOnUse\" orient=\"auto\"><path d=\"M0,0 L12,6 L0,12\" fill=\"none\" stroke=\"#333\" stroke-width=\"1.5\"/></marker>"
+    "</defs>";
+
 cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, Str title, double fs,
                       Buf *out, size_t *err_off, char msg[static 160]) {
-    (void)a; (void)src; (void)off; (void)title; (void)fs; (void)out; (void)msg;
-    *err_off = 0;
-    return CMM_ERR_UNSUPPORTED;
+    SP p = {.A = a, .s = src, .n = n, .msg = msg, .title = title};
+    cmm_status st = CMM_OK;
+    Buf back = {}, mid = {}, front = {};
+    /* skip header line */
+    const char *nl = memchr(src + off, '\n', n - off);
+    size_t i = nl ? (size_t)(nl - src) + 1 : n;
+    while (i < n) {
+        const char *e = memchr(src + i, '\n', n - i);
+        size_t le = e ? (size_t)(e - src) : n;
+        Str line = str_trim((Str){.p = src + i, .n = le - i});
+        size_t loff = (size_t)(line.p - src);
+        /* strip trailing comment-free semicolons */
+        while (line.n && line.p[line.n - 1] == ';') line.n--;
+        if (line.n && !str_starts(line, S("%%")) && (st = parse_line(&p, line, loff))) goto done;
+        i = le + 1;
+    }
+    size_t P = p.parts.n;
+    if (P == 0) { st = sfail(&p, off, "sequence diagram has no participants"); goto done; }
+    Part *pa = p.parts.v;
+    /* horizontal layout */
+    for (size_t k = 0; k < P; k++) {
+        double tw = 0;
+        unsigned ln;
+        label_measure(pa[k].label, fs, &tw, &ln);
+        pa[k].w = tw + 30 > ACT_W ? tw + 30 : ACT_W;
+        pa[k].x = k ? pa[k - 1].x + pa[k - 1].w / 2 + ACT_MARGIN + pa[k].w / 2 : pa[k].w / 2;
+    }
+    for (size_t k = 0; k < p.evs.n; k++) {
+        const Ev *ev = &p.evs.v[k];
+        if (ev->kind != EV_MSG && ev->kind != EV_NOTE) continue;
+        double tw = 0;
+        unsigned ln;
+        label_measure(ev->text, fs, &tw, &ln);
+        int32_t lo = ev->a < ev->b ? ev->a : ev->b, hi = ev->a < ev->b ? ev->b : ev->a;
+        double need = tw + 2 * BOX_MARGIN + 10;
+        if (lo == hi) {
+            if (ev->kind == EV_MSG || ev->sub == NP_RIGHT) { if ((size_t)hi + 1 >= P) continue; hi++; need = tw + 60; }
+            else if (ev->sub == NP_LEFT) { if (lo == 0) continue; lo--; need = tw + 60; }
+            else continue;
+        }
+        double d = pa[hi].x - pa[lo].x;
+        if (d < need)
+            for (size_t q = (size_t)hi; q < P; q++) pa[q].x += need - d;
+    }
+    double lh = fs * 1.5, title_h = p.title.n ? 40 : 0;
+    double y = title_h + ACT_H + 20, minx = pa[0].x - pa[0].w / 2, maxx = pa[P - 1].x + pa[P - 1].w / 2;
+    Act acts[256];
+    size_t nact = 0;
+    Blk blks[64];
+    size_t nblk = 0;
+    unsigned num = 0;
+    for (size_t k = 0; k < p.evs.n; k++) {
+        const Ev *ev = &p.evs.v[k];
+        switch (ev->kind) {
+        case EV_MSG: {
+            unsigned ln = nlines(ev->text);
+            double ly = y + ln * lh + 4;
+            double x1 = pa[ev->a].x, x2 = pa[ev->b].x;
+            for (size_t q = 0; q < nblk; q++) {
+                int32_t lo = ev->a < ev->b ? ev->a : ev->b, hi = ev->a ^ ev->b ^ lo;
+                if (lo < blks[q].lo) blks[q].lo = lo;
+                if (hi > blks[q].hi) blks[q].hi = hi;
+            }
+            const char *mk = ev->head == HD_ARROW ? "sq-arrow" : ev->head == HD_CROSS ? "sq-cross" : ev->head == HD_ASYNC ? "sq-async" : nullptr;
+            if (ev->a == ev->b) {
+                text_(&front, ev->text, fs, x1 + 8, y + lh / 2, "start", "msg-text");
+                buf_lit(&front, "<path class=\"msg"); if (ev->dotted) buf_lit(&front, " dotted");
+                buf_lit(&front, "\" d=\"M"); pt(&front, x1, ly); buf_lit(&front, " C"); pt(&front, x1 + 60, ly - 10);
+                buf_ch(&front, ' '); pt(&front, x1 + 60, ly + 40); buf_ch(&front, ' '); pt(&front, x1, ly + 30); buf_ch(&front, '"');
+                ly += 30;
+                if (x1 + 70 + text_width(ev->text, fs) > maxx) maxx = x1 + 70 + text_width(ev->text, fs);
+            } else {
+                text_(&front, ev->text, fs, (x1 + x2) / 2, y + lh / 2, "middle", "msg-text");
+                double dir = x2 > x1 ? 1 : -1;
+                buf_lit(&front, "<path class=\"msg"); if (ev->dotted) buf_lit(&front, " dotted");
+                buf_lit(&front, "\" d=\"M"); pt(&front, x1, ly); buf_lit(&front, " L"); pt(&front, x2 - dir * 1, ly); buf_ch(&front, '"');
+            }
+            if (mk) { buf_lit(&front, " marker-end=\"url(#"); buf_put(&front, strlen(mk), mk); buf_lit(&front, ")\""); }
+            if (ev->bidir) buf_lit(&front, " marker-start=\"url(#sq-arrow-start)\"");
+            buf_lit(&front, "/>");
+            if (p.autonumber) {
+                num++;
+                buf_lit(&front, "<circle class=\"seqnum\" cx=\""); buf_num(&front, x1); buf_lit(&front, "\" cy=\"");
+                buf_num(&front, ev->a == ev->b ? ly - 30 : ly); buf_lit(&front, "\" r=\"9\"/>");
+                char nb[16];
+                int len = snprintf(nb, sizeof nb, "%u", num);
+                if (len > 0) text_(&front, (Str){.p = nb, .n = (size_t)len}, 12, x1, ev->a == ev->b ? ly - 30 : ly, "middle", "seqnum-t");
+            }
+            if (ev->act_to && nact < countof(acts)) {
+                unsigned d = 0;
+                for (size_t q = 0; q < nact; q++) d += acts[q].p == ev->b;
+                acts[nact++] = (Act){.p = ev->b, .y0 = ly, .depth = d};
+            }
+            if (ev->deact_from)
+                for (size_t q = nact; q-- > 0;)
+                    if (acts[q].p == ev->a) {
+                        double ax = pa[acts[q].p].x - 5 + acts[q].depth * 5;
+                        rect(&mid, ax, acts[q].y0, 10, ly - acts[q].y0, "act");
+                        acts[q] = acts[--nact];
+                        break;
+                    }
+            y = ly + 22;
+            break;
+        }
+        case EV_NOTE: {
+            double tw = 0;
+            unsigned ln;
+            label_measure(ev->text, fs, &tw, &ln);
+            double w = tw + 20, h = ln * lh + 14, x;
+            if (ev->sub == NP_LEFT) x = pa[ev->a].x - 15 - w;
+            else if (ev->sub == NP_RIGHT) x = pa[ev->a].x + 15;
+            else {
+                double l = pa[ev->a].x < pa[ev->b].x ? pa[ev->a].x : pa[ev->b].x, r = pa[ev->a].x + pa[ev->b].x - l;
+                if (r - l + 50 > w) w = r - l + 50;
+                x = (l + r) / 2 - w / 2;
+            }
+            if (x < minx) minx = x;
+            if (x + w > maxx) maxx = x + w;
+            rect(&front, x, y, w, h, "note");
+            text_(&front, ev->text, fs, x + w / 2, y + 7 + lh / 2, "middle", "note-text");
+            for (size_t q = 0; q < nblk; q++) {
+                int32_t lo = ev->a < ev->b ? ev->a : ev->b, hi = ev->a ^ ev->b ^ lo;
+                if (lo < blks[q].lo) blks[q].lo = lo;
+                if (hi > blks[q].hi) blks[q].hi = hi;
+            }
+            y += h + 16;
+            break;
+        }
+        case EV_BEGIN:
+            if (nblk < countof(blks)) blks[nblk++] = (Blk){.ev = k, .y0 = y, .lo = INT32_MAX, .hi = -1};
+            y += lh + 18;
+            break;
+        case EV_ELSE:
+            if (nblk) {
+                Ev *be = &p.evs.v[blks[nblk - 1].ev];
+                (void)be;
+                p.evs.v[k].a = (int32_t)nblk - 1; /* remember owner depth */
+                p.evs.v[k].b = 0;
+                /* separator drawn at END once x extent known: stash y in text-less slot */
+                p.evs.v[k].kw = (Str){.p = nullptr, .n = (size_t)(y * 100)};
+            }
+            y += lh + 14;
+            break;
+        case EV_END: {
+            if (!nblk) { st = sfail(&p, off, "'end' without block"); goto done; }
+            Blk bl = blks[--nblk];
+            const Ev *be = &p.evs.v[bl.ev];
+            if (bl.hi < 0) { bl.lo = 0; bl.hi = (int32_t)P - 1; }
+            double pad = 20 + 10.0 * (double)0;
+            unsigned depth = (unsigned)nblk;
+            pad = 60 - 8.0 * depth;
+            double x0 = pa[bl.lo].x - pad, x1 = pa[bl.hi].x + pad;
+            if (bl.lo == bl.hi) { x0 = pa[bl.lo].x - pa[bl.lo].w / 2 + 8.0 * depth; x1 = pa[bl.lo].x + pa[bl.lo].w / 2 + 60 - 8.0 * depth; }
+            double y1 = y;
+            if (str_eq(be->kw, S("rect")) || str_eq(be->kw, S("box"))) {
+                buf_lit(&back, "<rect x=\""); buf_num(&back, x0); buf_lit(&back, "\" y=\""); buf_num(&back, bl.y0);
+                buf_lit(&back, "\" width=\""); buf_num(&back, x1 - x0); buf_lit(&back, "\" height=\""); buf_num(&back, y1 - bl.y0);
+                buf_lit(&back, "\" fill=\"");
+                Str c = be->text.n ? be->text : S("rgba(200,200,255,0.3)");
+                buf_xml(&back, c);
+                buf_lit(&back, "\"/>");
+            } else {
+                rect(&mid, x0, bl.y0, x1 - x0, y1 - bl.y0, "block");
+                double tw = text_width(be->kw, 14) + 20;
+                buf_lit(&mid, "<path class=\"block-tab\" d=\"M"); pt(&mid, x0, bl.y0); buf_lit(&mid, " h"); buf_num(&mid, tw);
+                buf_lit(&mid, " v14 l-8,8 H"); buf_num(&mid, x0); buf_lit(&mid, " Z\"/>");
+                text_(&mid, be->kw, 14, x0 + tw / 2 - 4, bl.y0 + 11, "middle", "block-kw");
+                if (be->text.n) {
+                    buf_lit(&mid, "<text x=\""); buf_num(&mid, (x0 + x1) / 2); buf_lit(&mid, "\" y=\""); buf_num(&mid, bl.y0 + lh / 2 + 4);
+                    buf_lit(&mid, "\" text-anchor=\"middle\" dominant-baseline=\"central\">[");
+                    buf_xml(&mid, be->text);
+                    buf_lit(&mid, "]</text>");
+                }
+                for (size_t q = bl.ev + 1; q < k; q++) {
+                    Ev *ee = &p.evs.v[q];
+                    if (ee->kind != EV_ELSE || ee->a != (int32_t)nblk) continue;
+                    double sy = (double)ee->kw.n / 100;
+                    buf_lit(&mid, "<line class=\"block-sep\" x1=\""); buf_num(&mid, x0); buf_lit(&mid, "\" y1=\""); buf_num(&mid, sy);
+                    buf_lit(&mid, "\" x2=\""); buf_num(&mid, x1); buf_lit(&mid, "\" y2=\""); buf_num(&mid, sy); buf_lit(&mid, "\"/>");
+                    if (ee->text.n) {
+                        buf_lit(&mid, "<text x=\""); buf_num(&mid, (x0 + x1) / 2); buf_lit(&mid, "\" y=\""); buf_num(&mid, sy + lh / 2 + 2);
+                        buf_lit(&mid, "\" text-anchor=\"middle\" dominant-baseline=\"central\">[");
+                        buf_xml(&mid, ee->text);
+                        buf_lit(&mid, "]</text>");
+                    }
+                }
+            }
+            if (x0 < minx) minx = x0;
+            if (x1 > maxx) maxx = x1;
+            for (size_t q = 0; q < nblk; q++) { /* propagate extent to parents */
+                if (bl.lo < blks[q].lo) blks[q].lo = bl.lo;
+                if (bl.hi > blks[q].hi) blks[q].hi = bl.hi;
+            }
+            y += 14;
+            break;
+        }
+        case EV_ACT:
+            if (nact < countof(acts)) {
+                unsigned d = 0;
+                for (size_t q = 0; q < nact; q++) d += acts[q].p == ev->a;
+                acts[nact++] = (Act){.p = ev->a, .y0 = y - 10, .depth = d};
+            }
+            break;
+        case EV_DEACT:
+            for (size_t q = nact; q-- > 0;)
+                if (acts[q].p == ev->a) {
+                    double ax = pa[acts[q].p].x - 5 + acts[q].depth * 5;
+                    rect(&mid, ax, acts[q].y0, 10, y - 10 - acts[q].y0, "act");
+                    acts[q] = acts[--nact];
+                    break;
+                }
+            break;
+        }
+    }
+    if (nblk) { st = sfail(&p, n, "unterminated block (missing 'end')"); goto done; }
+    for (size_t q = 0; q < nact; q++) rect(&mid, pa[acts[q].p].x - 5 + acts[q].depth * 5, acts[q].y0, 10, y - acts[q].y0, "act");
+    double bottom = y + 10;
+    for (size_t k = 0; k < P; k++) line_(&back, pa[k].x, title_h + ACT_H, pa[k].x, bottom, "lifeline");
+    for (size_t k = 0; k < P; k++) { actor_box(&back, &pa[k], title_h, fs); actor_box(&front, &pa[k], bottom, fs); }
+    if (back.oom || mid.oom || front.oom) { st = CMM_ERR_NOMEM; goto done; }
+    double m = 20, vx = minx - m, vy = -m / 2, vw = maxx - minx + 2 * m, vh = bottom + ACT_H + m;
+    buf_lit(out, "<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"mermaid\" class=\"sequence\" width=\"");
+    buf_num(out, vw); buf_lit(out, "\" height=\""); buf_num(out, vh); buf_lit(out, "\" viewBox=\"");
+    buf_num(out, vx); buf_ch(out, ' '); buf_num(out, vy); buf_ch(out, ' '); buf_num(out, vw); buf_ch(out, ' '); buf_num(out, vh);
+    buf_lit(out, "\" role=\"graphics-document document\" aria-roledescription=\"sequence\"><style>");
+    buf_lit(out, SEQ_CSS);
+    buf_lit(out, "</style>");
+    buf_lit(out, SEQ_DEFS);
+    buf_lit(out, "<rect x=\""); buf_num(out, vx); buf_lit(out, "\" y=\""); buf_num(out, vy);
+    buf_lit(out, "\" width=\""); buf_num(out, vw); buf_lit(out, "\" height=\""); buf_num(out, vh); buf_lit(out, "\" fill=\"white\"/>");
+    if (p.title.n) text_(out, p.title, 18, (minx + maxx) / 2, 15, "middle", "title");
+    buf_put(out, back.n, back.p ? back.p : "");
+    buf_put(out, mid.n, mid.p ? mid.p : "");
+    buf_put(out, front.n, front.p ? front.p : "");
+    buf_lit(out, "</svg>\n");
+    if (out->oom) st = CMM_ERR_NOMEM;
+done:
+    free(back.p);
+    free(mid.p);
+    free(front.p);
+    *err_off = p.err;
+    return st;
 }

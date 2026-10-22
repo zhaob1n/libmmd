@@ -1,0 +1,290 @@
+flowchart TD
+  n0[Node 0]
+  n1(Node 1)
+  n2(Node 2)
+  n3((Node 3))
+  n4{Node 4}
+  n5[[Node 5]]
+  n6[[Node 6]]
+  n7([Node 7])
+  n8[Node 8]
+  n9{Node 9}
+  n10{{Node 10}}
+  n11{{Node 11}}
+  n12((Node 12))
+  n13[(Node 13)]
+  n14[[Node 14]]
+  n15[Node 15]
+  n16[Node 16]
+  n17((Node 17))
+  n18[(Node 18)]
+  n19((Node 19))
+  n20{{Node 20}}
+  n21{{Node 21}}
+  n22{Node 22}
+  n23{Node 23}
+  n24([Node 24])
+  n25([Node 25])
+  n26[Node 26]
+  n27{Node 27}
+  n28((Node 28))
+  n29{Node 29}
+  n30{Node 30}
+  n31((Node 31))
+  n32{Node 32}
+  n33[(Node 33)]
+  n34{{Node 34}}
+  n35((Node 35))
+  n36((Node 36))
+  n37((Node 37))
+  n38[(Node 38)]
+  n39{Node 39}
+  n40{{Node 40}}
+  n41[(Node 41)]
+  n42([Node 42])
+  n43[(Node 43)]
+  n44[[Node 44]]
+  n45[(Node 45)]
+  n46((Node 46))
+  n47[(Node 47)]
+  n48[(Node 48)]
+  n49((Node 49))
+  n50[(Node 50)]
+  n51[(Node 51)]
+  n52([Node 52])
+  n53((Node 53))
+  n54{Node 54}
+  n55[[Node 55]]
+  n56[(Node 56)]
+  n57[[Node 57]]
+  n58[[Node 58]]
+  n59{{Node 59}}
+  n60[[Node 60]]
+  n61([Node 61])
+  n62[(Node 62)]
+  n63((Node 63))
+  n64(Node 64)
+  n65((Node 65))
+  n66[Node 66]
+  n67([Node 67])
+  n68(Node 68)
+  n69[Node 69]
+  n70[Node 70]
+  n71[[Node 71]]
+  n72([Node 72])
+  n73(Node 73)
+  n74{Node 74}
+  n75[[Node 75]]
+  n76([Node 76])
+  n77([Node 77])
+  n78[Node 78]
+  n79{{Node 79}}
+  n80[Node 80]
+  n81[Node 81]
+  n82((Node 82))
+  n83((Node 83))
+  n84{Node 84}
+  n85([Node 85])
+  n86[Node 86]
+  n87(Node 87)
+  n88(Node 88)
+  n89(Node 89)
+  n90[Node 90]
+  n91[Node 91]
+  n92[Node 92]
+  n93((Node 93))
+  n94[[Node 94]]
+  n95{Node 95}
+  n96{Node 96}
+  n97{Node 97}
+  n98[Node 98]
+  n99{{Node 99}}
+  subgraph s0 [Group 0]
+    n0
+    n1
+    n2
+    n3
+    n4
+    n5
+    n6
+    n7
+    n8
+    n9
+    n10
+  end
+  subgraph s1 [Group 1]
+    n11
+    n12
+    n13
+    n14
+    n15
+    n16
+    n17
+    n18
+    n19
+    n20
+    n21
+  end
+  subgraph s2 [Group 2]
+    n22
+    n23
+    n24
+    n25
+    n26
+    n27
+    n28
+    n29
+    n30
+    n31
+    n32
+  end
+  n0 --> n1
+  n1 --- n2
+  n1 -.-> n3
+  n3 --- n4
+  n0 -.-> n4
+  n3 -->|edge 3-5| n5
+  n0 --> n6
+  n1 --- n6
+  n3 --- n7
+  n6 -.-> n7
+  n0 --- n8
+  n0 -.->|edge 0-8| n8
+  n2 --> n9
+  n8 --> n10
+  n7 --> n11
+  n9 --- n12
+  n10 ==> n13
+  n12 -->|edge 12-13| n13
+  n6 -->|edge 6-14| n14
+  n11 --> n14
+  n0 --> n15
+  n6 --> n16
+  n14 -.-> n17
+  n12 --> n17
+  n13 ==> n18
+  n13 --- n19
+  n15 -.->|edge 15-20| n20
+  n19 -.-> n21
+  n9 --> n22
+  n13 -->|edge 13-22| n22
+  n21 --> n23
+  n13 ==> n24
+  n0 -.->|edge 0-25| n25
+  n23 --> n26
+  n15 -->|edge 15-26| n26
+  n12 ==>|edge 12-27| n27
+  n11 ==> n27
+  n3 -->|edge 3-28| n28
+  n27 -.-> n28
+  n22 -->|edge 22-29| n29
+  n24 --> n30
+  n15 -.-> n30
+  n5 -.-> n31
+  n17 ==> n31
+  n31 ==> n32
+  n11 ==> n32
+  n22 -.-> n33
+  n25 --> n33
+  n6 -.->|edge 6-34| n34
+  n30 ==> n35
+  n35 -->|edge 35-36| n36
+  n19 --> n37
+  n35 -.-> n37
+  n11 --> n38
+  n32 ==>|edge 32-38| n38
+  n31 --- n39
+  n24 --> n40
+  n36 --- n41
+  n25 ==> n41
+  n40 --> n42
+  n13 ==> n42
+  n35 ==> n43
+  n28 -.-> n43
+  n36 --> n44
+  n41 --> n44
+  n27 ==> n45
+  n26 ==> n46
+  n37 --> n47
+  n17 ==> n47
+  n46 --> n48
+  n21 ==> n48
+  n27 --- n49
+  n45 ---|edge 45-50| n50
+  n39 ==> n50
+  n35 --> n51
+  n33 --> n52
+  n47 --- n53
+  n38 -.-> n54
+  n38 --> n54
+  n30 ==> n55
+  n45 -->|edge 45-55| n55
+  n38 ==> n56
+  n30 --> n56
+  n27 -.->|edge 27-57| n57
+  n54 ==> n57
+  n55 -.-> n58
+  n44 --- n59
+  n32 -.-> n60
+  n39 -.-> n60
+  n51 ==> n61
+  n60 --> n61
+  n44 --- n62
+  n58 --- n63
+  n35 --> n64
+  n51 --> n64
+  n38 --> n65
+  n63 -.-> n66
+  n47 --> n66
+  n42 ==> n67
+  n46 ==> n67
+  n58 --> n68
+  n48 -->|edge 48-68| n68
+  n54 --> n69
+  n45 -.->|edge 45-70| n70
+  n44 --> n70
+  n53 -.-> n71
+  n64 --- n71
+  n65 ==> n72
+  n69 -.-> n72
+  n54 -.-> n73
+  n52 -.-> n74
+  n73 --> n75
+  n50 -->|edge 50-76| n76
+  n51 -.->|edge 51-76| n76
+  n47 --- n77
+  n73 --- n77
+  n63 --> n78
+  n54 ==>|edge 54-78| n78
+  n74 --> n79
+  n63 -.-> n80
+  n57 --> n81
+  n74 ---|edge 74-81| n81
+  n72 ---|edge 72-82| n82
+  n56 --> n82
+  n67 -.->|edge 67-83| n83
+  n69 --- n83
+  n74 --- n84
+  n61 --> n84
+  n70 --- n85
+  n72 --- n85
+  n68 ==>|edge 68-86| n86
+  n68 --- n86
+  n71 ---|edge 71-87| n87
+  n60 ==> n88
+  n67 --> n89
+  n65 -->|edge 65-90| n90
+  n71 ==>|edge 71-91| n91
+  n69 --> n92
+  n79 -->|edge 79-92| n92
+  n64 --> n93
+  n90 --- n94
+  n69 -.-> n95
+  n83 --> n96
+  n73 --> n97
+  n87 ==> n97
+  n96 --- n98
+  n97 --> n98
+  n89 -->|edge 89-99| n99
+  n25 --> n9
+  n43 --> n27

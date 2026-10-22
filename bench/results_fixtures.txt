@@ -1,0 +1,25 @@
+input                                        cmm lib ms cmm cli ms mmdr lib ms mmdr cli ms   cli x
+flowchart.mmd                                      0.01       0.80       52.61       54.33   67.7x
+flowchart_asymmetric_components.mmd                0.01       0.72      108.90      115.82  161.4x
+flowchart_backedges_subgraphs.mmd                  0.02       0.77      169.29      183.03  237.9x
+flowchart_component_packing.mmd                    0.02       0.74      199.84      206.43  279.4x
+flowchart_direction_conflict.mmd                   0.02       0.86      217.99      220.45  257.2x
+flowchart_fanout_returns.mmd                       0.02       0.84      300.12      308.08  364.7x
+flowchart_flow_direction_backtrack.mmd             0.02       0.83      182.41      186.59  223.5x
+flowchart_grid_feedback.mmd                        0.04       0.74      324.40      339.46  460.1x
+flowchart_label_collision.mmd                      0.01       0.80      270.27      218.89  273.3x
+flowchart_lanes_crossfeed.mmd                      0.02       0.91      258.16      262.28  288.2x
+flowchart_large.mmd                                0.16       1.03      472.30      475.49  461.5x
+flowchart_long_edge_labels.mmd                     0.03       0.80      526.37      521.39  650.0x
+flowchart_medium.mmd                               0.03       0.93      153.12      150.04  161.8x
+flowchart_mega_braid_feedback.mmd                  0.05       0.77      590.29      559.23  730.7x
+flowchart_mega_crosslane_subgraphs.mmd             0.04       0.98      422.14      436.02  446.3x
+flowchart_mega_event_mesh.mmd                      0.06       0.98     1864.38     1886.25 1924.8x
+flowchart_mega_multihub_control.mmd                0.05       0.91      816.18      803.13  884.2x
+flowchart_mega_nested_regions.mmd                  0.03       0.97      845.19      861.04  887.3x
+flowchart_nested_clusters.mmd                      0.02       0.93      181.97      184.99  198.2x
+flowchart_parallel_edges_bundle.mmd                0.02       0.74      248.03      247.05  332.9x
+flowchart_parallel_label_stack.mmd                 0.01       0.66      180.56      178.46  272.2x
+flowchart_parallel_merges.mmd                      0.02       0.67      135.25      139.13  207.8x
+flowchart_path_occlusion_maze.mmd                  0.05       0.93     1274.86     1277.10 1377.4x
+flowchart_port_alignment_matrix.mmd                0.02       0.89      421.55      394.42  444.8x

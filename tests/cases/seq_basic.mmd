@@ -1,0 +1,27 @@
+sequenceDiagram
+    autonumber
+    title: Login flow
+    actor U as User
+    participant B as Browser
+    participant S as Server
+    participant DB as Database
+    U->>B: open page
+    B->>+S: GET /login
+    S-->>-B: 200 OK
+    U->>B: submit credentials
+    B->>+S: POST /login
+    loop retry up to 3x
+        S->>DB: SELECT user
+        DB-->>S: row
+    end
+    alt valid password
+        S-->>B: set cookie
+    else invalid
+        S--xB: 401
+    end
+    Note right of S: audit log written
+    Note over B,S: TLS everywhere
+    S->>S: self check
+    S-)DB: async event
+    B<<->>S: websocket
+    deactivate S

@@ -4,8 +4,18 @@
  *   5. Brandes-Köpf coordinate assignment (4 alignments + balancing)
  *   6. rank-axis placement, direction transform, edge polyline + clipping, cluster boxes */
 #include <math.h>
+#ifdef CMM_PROFILE
+#include <stdio.h>
+#include <time.h>
+static double prof_t0;
+static double prof_now(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_sec * 1e3 + ts.tv_nsec / 1e6; }
+#define PROF(name) do { double t_ = prof_now(); if (*name) fprintf(stderr, "  %-10s %8.3f ms\n", name, t_ - prof_t0); prof_t0 = t_; } while (0)
+#else
+#define PROF(name) do { } while (0)
+#endif
 
 #include "graph.h"
+#include "nsimplex.h"
 #include "text.h"
 
 constexpr double PAD_NODE = 15.0;
@@ -13,6 +23,7 @@ constexpr double CLUSTER_PAD = 15.0;
 constexpr double CLUSTER_TITLE = 24.0;
 constexpr double EDGE_SEP = 20.0;
 constexpr unsigned MAX_KEY_DEPTH = 8;
+static_assert(sizeof(double) * MAX_KEY_DEPTH >= 2 * 16, "Key buffer reused for BcItem pairs");
 
 void node_size(Graph *g, size_t v) {
     double fs = g->font_size, tw;
@@ -131,6 +142,28 @@ static uint64_t cross_all(const Lay *L, uint32_t *buf, uint32_t *fen) {
     return c;
 }
 
+typedef struct BcItem { double bc; int32_t id; uint32_t i; } BcItem;
+static inline bool bc_lt(BcItem a, BcItem b) { return a.bc < b.bc || (a.bc == b.bc && a.id < b.id); }
+static void bc_sort(size_t n, BcItem a[static n], BcItem tmp[static n]) {
+    if (n <= 24) {
+        for (size_t i = 1; i < n; i++) {
+            BcItem t = a[i];
+            size_t j = i;
+            while (j && bc_lt(t, a[j - 1])) { a[j] = a[j - 1]; j--; }
+            a[j] = t;
+        }
+        return;
+    }
+    size_t h = n / 2;
+    bc_sort(h, a, tmp);
+    bc_sort(n - h, a + h, tmp);
+    if (!bc_lt(a[h], a[h - 1])) return; /* already ordered: common after convergence */
+    memcpy(tmp, a, h * sizeof *a);
+    size_t i = 0, j = h, k = 0;
+    while (i < h && j < n) a[k++] = bc_lt(a[j], tmp[i]) ? a[j++] : tmp[i++];
+    while (i < h) a[k++] = tmp[i++];
+}
+
 /* ---------- one barycenter sweep over layer r ---------- */
 static void sweep_layer(Lay *L, size_t r, bool down, Key *keys, uint32_t *idx, uint32_t *tmp,
                         double *csum, uint32_t *ccnt, bool clusters) {
@@ -150,7 +183,21 @@ static void sweep_layer(Lay *L, size_t r, bool down, Key *keys, uint32_t *idx, u
         }
         L->bc[v] = bcv;
     }
-    if (clusters) {
+    if (!clusters) {
+        BcItem *it = (BcItem *)keys, *tb = it + n; /* keys buffer is large enough (sizeof Key >= 2*sizeof BcItem) */
+        for (size_t i = 0; i < n; i++) {
+            int32_t v = L->lay[a + i];
+            it[i] = (BcItem){.bc = L->bc[v], .id = v, .i = (uint32_t)i};
+        }
+        bc_sort(n, it, tb);
+        for (size_t i = 0; i < n; i++) {
+            L->lay[a + i] = it[i].id;
+            L->pos[it[i].id] = (int32_t)i;
+        }
+        (void)idx; (void)tmp;
+        return;
+    }
+    {
         Graph *g = L->g;
         for (size_t i = 0; i < n; i++) {
             int32_t v = L->lay[a + i];
@@ -380,6 +427,7 @@ static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, 
             }
         }
     }
+    PROF("bk-conf");
     size_t E = L->soff[V];
     size_t maxdeg = 1;
     for (size_t v = 0; v < V; v++) {
@@ -399,7 +447,7 @@ static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, 
         !W.bw || !W.xs || !W.nbuf || !xss[0] || !xss[1] || !xss[2] || !xss[3])
         return false;
     (void)E;
-    for (unsigned k = 0; k < 4; k++) (void)bk_pass(L, &conf, k < 2, (k & 1u) == 0, &W, xss[k]);
+    for (unsigned k = 0; k < 4; k++) { (void)bk_pass(L, &conf, k < 2, (k & 1u) == 0, &W, xss[k]); PROF("bk-pass"); }
     /* align to the narrowest layout */
     double mins[4], maxs[4], best = INFINITY;
     unsigned bi = 0;
@@ -464,6 +512,7 @@ cmm_status flow_layout(Graph *g) {
         !g->elh || !g->sx || !g->sy || !g->sw || !g->sh || !sdepth || !srep || !ef || !et || !mlen || !rev)
         return CMM_ERR_NOMEM;
 
+    PROF("");
     for (size_t v = 0; v < N; v++) node_size(g, v);
     for (size_t s = 0; s < S; s++) {
         int32_t d = 1;
@@ -502,6 +551,7 @@ cmm_status flow_layout(Graph *g) {
     #define LW(v) (horiz ? g->nh[v] : g->nw[v])
     #define LH(v) (horiz ? g->nw[v] : g->nh[v])
 
+    PROF("sizes");
     /* ---- out-CSR on real nodes ---- */
     uint32_t *ooff = ANEW(A, uint32_t, N + 1), *oidx = ANEW(A, uint32_t, E + 1);
     int32_t *rank = ANEW(A, int32_t, N);
@@ -514,27 +564,13 @@ cmm_status flow_layout(Graph *g) {
     for (size_t v = 0; v < N; v++) ooff[v + 1] += ooff[v];
     for (size_t v = 0; v < N; v++) it[v] = ooff[v];
     for (size_t e = 0; e < E; e++) if (EVALID(e)) oidx[it[ef[e]]++] = (uint32_t)e;
-    /* DFS cycle removal */
-    memset(state, 0, N);
-    memset(rev, 0, E);
-    for (size_t s0 = 0; s0 < N; s0++) {
-        if (state[s0] || (g->nflags[s0] & NF_HIDDEN)) continue;
-        size_t sp = 0;
-        stk[sp++] = (uint32_t)s0;
-        it[s0] = ooff[s0];
-        state[s0] = 1;
-        while (sp) {
-            uint32_t u = stk[sp - 1];
-            if (it[u] < ooff[u + 1]) {
-                uint32_t e = oidx[it[u]++];
-                uint32_t w = (uint32_t)et[e];
-                if (state[w] == 1) rev[e] = 1;
-                else if (!state[w]) { state[w] = 1; it[w] = ooff[w]; stk[sp++] = w; }
-            } else {
-                state[u] = 2;
-                sp--;
-            }
-        }
+    /* cycle removal: greedy feedback arc set */
+    {
+        uint8_t *valid = ANEW(A, uint8_t, E + 1), *hid = ANEW(A, uint8_t, N + 1);
+        if (!valid || !hid) return CMM_ERR_NOMEM;
+        for (size_t e = 0; e < E; e++) valid[e] = EVALID(e);
+        for (size_t v = 0; v < N; v++) hid[v] = (g->nflags[v] & NF_HIDDEN) ? 1 : 0;
+        if (!greedy_fas(A, N, E, ef, et, valid, hid, rev)) return CMM_ERR_NOMEM;
     }
     /* effective DAG CSR */
     #define EU(e) (rev[e] ? et[e] : ef[e])
@@ -561,18 +597,17 @@ cmm_status flow_layout(Graph *g) {
             if (--indeg2[w] == 0) topo[qt++] = w;
         }
     }
-    /* greedy tightening: move nodes down towards successors when it shortens total edge length */
-    for (size_t q = qt; q-- > 0;) {
-        uint32_t v = topo[q];
-        uint32_t od = ooff[v + 1] - ooff[v];
-        if (!od || indeg[v] >= od) continue;
-        int32_t hi = INT32_MAX;
-        for (uint32_t k = ooff[v]; k < ooff[v + 1]; k++) {
-            uint32_t e = oidx[k];
-            int32_t c = rank[EV(e)] - mlen[e];
-            if (c < hi) hi = c;
+    {
+        int32_t *eu = ANEW(A, int32_t, E + 1), *ev = ANEW(A, int32_t, E + 1);
+        uint8_t *valid = ANEW(A, uint8_t, E + 1), *hid = ANEW(A, uint8_t, N + 1);
+        if (!eu || !ev || !valid || !hid) return CMM_ERR_NOMEM;
+        for (size_t e = 0; e < E; e++) {
+            valid[e] = EVALID(e);
+            eu[e] = valid[e] ? EU(e) : 0;
+            ev[e] = valid[e] ? EV(e) : 0;
         }
-        if (hi > rank[v]) rank[v] = hi;
+        for (size_t v = 0; v < N; v++) hid[v] = (g->nflags[v] & NF_HIDDEN) ? 1 : 0;
+        if (!network_simplex(A, N, E, eu, ev, mlen, valid, hid, rank, 20 * N + 100)) return CMM_ERR_NOMEM;
     }
     int32_t minr = INT32_MAX, maxr = 0;
     for (size_t v = 0; v < N; v++) if (!(g->nflags[v] & NF_HIDDEN) && rank[v] < minr) minr = rank[v];
@@ -582,6 +617,7 @@ cmm_status flow_layout(Graph *g) {
         if (!(g->nflags[v] & NF_HIDDEN) && rank[v] > maxr) maxr = rank[v];
     }
 
+    PROF("rank");
     /* ---- normalisation: dummies ---- */
     size_t D = 0;
     uint32_t *choff = ANEW(A, uint32_t, E + 1);
@@ -654,6 +690,7 @@ cmm_status flow_layout(Graph *g) {
         }
     }
 
+    PROF("normalize");
     /* ---- initial order: DFS by rank ---- */
     size_t R = L.R;
     uint32_t *cnt = ANEW(A, uint32_t, R + 1), *byrank = ANEW(A, uint32_t, V + 1);
@@ -720,9 +757,11 @@ cmm_status flow_layout(Graph *g) {
     for (size_t r = 0; r < R; r++)
         for (size_t i = L.loff[r]; i < L.loff[r + 1]; i++) L.pos[L.lay[i]] = (int32_t)(i - L.loff[r]);
 
+    PROF("order");
     /* ---- x via Brandes-Köpf ---- */
     if (!bk(&L)) return CMM_ERR_NOMEM;
 
+    PROF("bk");
     /* ---- rank axis ---- */
     double *ry = ANEW(A, double, R + 1), *rh = ANEW(A, double, R + 1);
     double *gtop = ANEW(A, double, R + 1), *gbot = ANEW(A, double, R + 1);
@@ -807,6 +846,7 @@ cmm_status flow_layout(Graph *g) {
         g->elx[e] = lx, g->ely[e] = ly;
         g->eptn[e] = (uint32_t)np;
     }
+    PROF("edges");
     /* clusters: deepest first */
     for (size_t s = 0; s < S; s++) { g->sx[s] = INFINITY; g->sy[s] = INFINITY; g->sw[s] = -INFINITY; g->sh[s] = -INFINITY; }
     for (size_t v = 0; v < N; v++) {
@@ -842,5 +882,8 @@ cmm_status flow_layout(Graph *g) {
         g->sw[s] -= g->sx[s];
         g->sh[s] -= g->sy[s];
     }
+#ifdef CMM_PROFILE
+    fprintf(stderr, "  V=%zu N=%zu D=%zu R=%zu segs=%zu\n", V, N, D, R, nseg);
+#endif
     return CMM_OK;
 }
