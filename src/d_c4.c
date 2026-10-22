@@ -308,6 +308,7 @@ DIAG_FN(c4_render) {
     {
         bool *seen = ANEW(a, bool, g.nn);
         if (!seen) return CMM_ERR_NOMEM;
+        for (size_t v = 0; v < g.nn; v++) seen[v] = false; /* arena memory is not zeroed */
         size_t k = 0;
         for (size_t i = 0; i < items.n; i++) { /* keep the first declaration of each element */
             Item it = items.v[i];
@@ -341,6 +342,8 @@ DIAG_FN(c4_render) {
     const EStyle **nst = ANEW(a, const EStyle *, g.nn);
     const RStyle **rst = ANEW(a, const RStyle *, g.ne + 1);
     if (!nst || !rst) return CMM_ERR_NOMEM;
+    for (size_t v = 0; v < g.nn; v++) nst[v] = nullptr;
+    for (size_t e = 0; e <= g.ne; e++) rst[e] = nullptr;
     for (size_t i = 0; i < es.n; i++) { int32_t v = dg_find(&g, es.v[i].alias); if (v != NONE) nst[v] = &es.v[i]; }
     for (size_t i = 0; i < rs.n; i++) {
         int32_t f = dg_find(&g, rs.v[i].from), t = dg_find(&g, rs.v[i].to);

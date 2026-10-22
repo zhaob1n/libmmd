@@ -105,6 +105,7 @@ DIAG_FN(sankey_render) {
     uint32_t *colcnt = ANEW(a, uint32_t, maxc + 1);
     uint32_t *lord = ANEW(a, uint32_t, nn);
     if (!colsum || !colcnt || !lord) return CMM_ERR_NOMEM;
+    for (uint32_t c = 0; c <= maxc; c++) colsum[c] = 0, colcnt[c] = 0; /* arena memory is not zeroed */
     for (size_t i = 0; i < nn; i++) colsum[N[i].col] += N[i].v, colcnt[N[i].col]++;
     for (uint32_t c = 0; c <= maxc; c++)
         if (colsum[c] > 0) ky = fmin(ky, (H - (colcnt[c] - 1.0) * PAD) / colsum[c]);
