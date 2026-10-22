@@ -58,6 +58,7 @@ API (`include/cmermaid.h`): `cmm_render_svg(n, src, opts, &buf, &err)`, `cmm_buf
 | swimlane-beta | `src/d_swimlanes.c` (+ flowchart parser/drawer) | full-width lanes from top-level subgraphs (LR/RL rows with rotated titles, TB/BT columns), lane-aware ranking (unlabelled cross-lane hops share a column), orthogonal edge routing, all flowchart node shapes/styles |
 | eventmodeling | `src/d_eventmodeling.c` | `tf`/`timeframe`, `rf`/`resetframe` frames (ui, cmd, evt, rmo, pcr + long names), `Ns.Name` stream/namespace lanes, `->> id` sources, inline `{ ... }` and `[[data]]` blocks, mermaid box sizing and relation geometry, `em*` theme variables |
 | railroad | `src/d_railroad.c` | `railroad-ebnf-beta` (`=`/`::=`, `\|`, `[ ]`, `{ }`, `?*+`, `-` exception, `? special ?`, `(* *)`), `railroad-abnf-beta` (`/`, `n*m` repeats, `%x` values), `railroad-peg-beta` (`<-`, `/`, `&`/`!` lookahead, `.`), `railroad-beta` function DSL; mermaid arc geometry |
+| wardley | `src/d_wardley.c` | `wardley-beta`: `title`, `size`, `evolution` stages (`@bounds`, `A / B` labels), `anchor`, `component` (`label [x, y]`, `(build\|buy\|outsource\|market\|inertia)`), `pipeline { }`, `evolve`, `note`, `(de)accelerator`, `annotation(s)`, links `->` `+>` `+<` `+<>` `-.->` `+'lbl'>` `; label` |
 
 ## Docs syntax corpus
 

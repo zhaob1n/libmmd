@@ -36,6 +36,7 @@ typedef DIAG_FN((*DiagFn));
 [[nodiscard]] DIAG_FN(treeview_render);
 [[nodiscard]] DIAG_FN(eventmodeling_render);
 [[nodiscard]] DIAG_FN(railroad_render);
+[[nodiscard]] DIAG_FN(wardley_render);
 /* swimlane-beta: flowchart parse/draw with a lane layout (d_swimlanes.c) */
 struct Graph;
 [[nodiscard]] cmm_status swim_layout(struct Graph *g, Str **keep);

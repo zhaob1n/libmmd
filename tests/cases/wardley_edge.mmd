@@ -1,0 +1,12 @@
+wardley-beta
+title Edge
+size [300, 200]
+component "A b" [12, 95] label [20, -10] (build) (inertia)
+component B [0.5, 0.5]
+A b -> B
+B +<> Missing
+evolve B 2
+pipeline B {
+}
+note "x <&> y" [0.1, 0.1]
+annotation 1,[0.2, 0.2] "q"
