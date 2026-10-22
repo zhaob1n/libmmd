@@ -1229,6 +1229,7 @@ static cmm_status layout_core(Graph *g) {
         for (size_t v = 0; v < N; v++) hid[v] = (g->nflags[v] & NF_HIDDEN) ? 1 : 0;
         if (!drank && !network_simplex(A, N, E, eu, ev, mlen, valid, hid, rank, 20 * N + 100)) return CMM_ERR_NOMEM;
     }
+    PMARK("acyc");
     int32_t *ctop = nullptr, *cbot = nullptr, *corder = nullptr;
     int32_t *elrank = nullptr; /* dagre labelRank per edge (drank only) */
     size_t nco = 0;

@@ -165,13 +165,15 @@ static Res sort_subgraph(Ctx *c, int32_t k) {
     c->etop = base + n; /* child entries are dead */
     Ent *E = c->ent + base;
     /* resolveConflicts */
+    bool anycg = false;
     uint32_t gen = ++c->gen;
-    for (uint32_t j = 0; j < n; j++) c->mtag[E[j].v] = gen, c->mix[E[j].v] = j;
-    for (size_t q = 0; q < c->cgn; q++) {
+    if (c->cgn && n > 1)
+        for (uint32_t j = 0; j < n; j++) c->mtag[E[j].v] = gen, c->mix[E[j].v] = j;
+    for (size_t q = 0; n > 1 && q < c->cgn; q++) {
         int32_t a = c->cga[q] + (int32_t)V, b = c->cgb[q] + (int32_t)V;
         if (c->mtag[a] != gen || c->mtag[b] != gen) continue;
         Ent *ea = &E[c->mix[a]], *eb = &E[c->mix[b]];
-        eb->indeg++;
+        eb->indeg++, anycg = true;
         int32_t l = new_lk(c, (int32_t)c->mix[b], -1);
         if (l < 0) return out;
         E = c->ent + base;
@@ -179,7 +181,14 @@ static Res sort_subgraph(Ctx *c, int32_t k) {
         if (ea->outt < 0) ea->outh = l; else c->lk[ea->outt].next = l;
         ea->outt = l;
     }
-    /* sourceSet = entries with indegree 0, in JS key order of mappedEntries */
+    /* no constraint edges: nothing merges, and sort.js orders entries by (bc, i) / i regardless of the
+     * resolved order, so skip the topological pass */
+    size_t no = 0;
+    if (!anycg) {
+        for (uint32_t j = 0; j < n; j++) c->outl[j] = j;
+        no = n;
+        goto expand;
+    }
     size_t ns = 0;
     for (uint32_t j = 0; j < n; j++) if (!E[j].indeg) c->src[ns++] = j;
     for (size_t a = 1; a < ns; a++) { /* insertion sort by key order (almost always already sorted) */
@@ -188,7 +197,6 @@ static Res sort_subgraph(Ctx *c, int32_t k) {
         while (b > 0 && key_lt(c, &E[x], &E[c->src[b - 1]])) { c->src[b] = c->src[b - 1]; b--; }
         c->src[b] = x;
     }
-    size_t no = 0;
     while (ns) {
         uint32_t vi = c->src[--ns];
         Ent *ve = &E[vi];
@@ -208,6 +216,7 @@ static Res sort_subgraph(Ctx *c, int32_t k) {
             if (--E[wi].indeg == 0) c->src[ns++] = wi;
         }
     }
+expand:;
     /* expandSubgraphs + partition for sort */
     size_t nsort = 0, nun = 0;
     Ent **srt = c->sbuf, **uns = c->sbuf + n;

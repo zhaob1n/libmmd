@@ -482,7 +482,9 @@ bool dagre_rank(Arena *A, const DRankIn *in, int32_t rank[], int32_t top[], int3
         !g.lim || !g.par || !g.pe || !g.post || !g.stk || !g.sit || !g.nboff || !g.nbk || !g.acnt || !g.adj || !g.path)
         return false;
     memset(g.tin, 0, M);
+    PMARK("r-prep");
     if (!network_simplex_dagre(&g, maxit)) return false;
+    PMARK("r-ns");
     /* injectEdgeLabelProxies + removeEmptyRanks (nodeRankFactor = nodeSep) */
     int64_t mn = INT64_MAX, mx = INT64_MIN;
     for (size_t v = 0; v < M; v++) { if (g.r[v] < mn) mn = g.r[v]; if (g.r[v] > mx) mx = g.r[v]; }
