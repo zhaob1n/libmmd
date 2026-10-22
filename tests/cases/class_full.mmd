@@ -1,0 +1,58 @@
+---
+title: Animal example
+---
+classDiagram
+    note "From Duck till Zebra"
+    Animal <|-- Duck
+    note for Duck "can fly\ncan swim"
+    Animal <|-- Fish
+    Animal <|-- Zebra
+    Animal : +int age
+    Animal : +String gender
+    Animal: +isMammal() bool
+    Animal: +mate()
+    class Duck{
+        +String beakColor
+        +swim()
+        +quack()
+    }
+    class Fish{
+        -int sizeInFeet
+        -canEat()
+    }
+    class Zebra{
+        +bool is_wild
+        +run()
+    }
+    class Shape~T~ {
+        <<interface>>
+        +List~List~int~~ points
+        +area()$ double
+        +draw()*
+    }
+    <<abstract>> Animal
+    namespace Geometry {
+        class Square~Shape~{
+            -List~int~ position
+            +setPoints(List~int~ points)
+            +getPoints() List~int~
+        }
+        class Circle
+    }
+    Shape <|.. Square : implements
+    Shape <|.. Circle
+    classA --|> classB : Inheritance
+    classC --* classD : Composition
+    classE --o classF : Aggregation
+    classG --> classH : Association
+    classI -- classJ : Link(Solid)
+    classK ..> classL : Dependency
+    classM ..|> classN : Realization
+    classO .. classP : Link(Dashed)
+    Customer "1" --> "*" Ticket
+    Student "1" --> "1..*" Course
+    Galaxy --> "many" Star : Contains
+    Animal <|--|> Robot
+    bar ()-- foo
+    class Label["A labelled class"]
+    direction TB

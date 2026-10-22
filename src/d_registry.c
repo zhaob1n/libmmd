@@ -12,6 +12,8 @@ typedef struct DiagEnt { Str kw; DiagFn fn; } DiagEnt;
 static const DiagEnt DIAGS[] = {
     {S("stateDiagram"), state_render},
     {S("stateDiagram-v2"), state_render},
+    {S("classDiagram"), class_render},
+    {S("classDiagram-v2"), class_render},
 };
 
 DiagFn diag_lookup(Str kw) {
