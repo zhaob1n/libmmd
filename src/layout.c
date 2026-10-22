@@ -85,6 +85,9 @@ typedef struct Lay {
     double *w, *h, *x, *bc;
     uint32_t *poff, *pidx, *soff, *sidx;
     int32_t *sdepth;
+    double *lsum, *lval; /* per-cluster scratch for compound ordering (S+1) */
+    uint32_t *lcnt;
+    int32_t *plist;
     double nodesep;
     double cpad;
 } Lay;
@@ -237,6 +240,57 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint3
         return;
     }
     (void)ccnt; /* csum holds layer-independent cluster keys (see cluster_keys) */
+    /* compound ordering: a cluster is placed among its siblings by the local barycenter of its members
+     * (so long edges pass on the near side), made monotone in the global cluster order by pool-adjacent-
+     * violators so siblings never swap between layers (keeps boxes disjoint). */
+    size_t np = 0;
+    for (size_t i = 0; i < n; i++) {
+        int32_t v = L->lay[a + i];
+        for (int32_t c = L->cl[v]; c != NONE; c = L->g->sparent[c]) {
+            if (!(L->lcnt[c] & 0x80000000u)) { L->plist[np++] = c; L->lcnt[c] = 0x80000000u; }
+            if (!L->border[v]) L->lsum[c] += L->bc[v], L->lcnt[c]++;
+        }
+    }
+    for (size_t i = 0; i < np; i++) { /* mark listed */
+        int32_t c = L->plist[i];
+        uint32_t cn = L->lcnt[c] & 0x7fffffffu;
+        L->lval[c] = cn ? L->lsum[c] / cn : csum[c] * (double)n;
+    }
+    /* sort listed clusters by (parent, global key) */
+    for (size_t i = 1; i < np; i++) {
+        int32_t t = L->plist[i];
+        size_t j = i;
+        while (j) {
+            int32_t u = L->plist[j - 1];
+            int32_t pu = L->g->sparent[u], pt = L->g->sparent[t];
+            if (pu < pt || (pu == pt && (csum[u] < csum[t] || (csum[u] == csum[t] && u < t)))) break;
+            L->plist[j] = u; j--;
+        }
+        L->plist[j] = t;
+    }
+    for (size_t g0 = 0; g0 < np;) { /* PAV per sibling group */
+        size_t g1 = g0 + 1;
+        while (g1 < np && L->g->sparent[L->plist[g1]] == L->g->sparent[L->plist[g0]]) g1++;
+        /* blocks stored in-place: lsum reused as block value, lcnt as block weight */
+        size_t nb = 0;
+        int32_t *pl = L->plist + g0;
+        double bv[64]; double bw[64]; size_t be[64];
+        for (size_t i = 0; i < g1 - g0; i++) {
+            if (nb == countof(bv)) break;
+            bv[nb] = L->lval[pl[i]], bw[nb] = 1, be[nb] = i + 1, nb++;
+            while (nb > 1 && bv[nb - 2] >= bv[nb - 1]) {
+                bv[nb - 2] = (bv[nb - 2] * bw[nb - 2] + bv[nb - 1] * bw[nb - 1]) / (bw[nb - 2] + bw[nb - 1]);
+                bw[nb - 2] += bw[nb - 1], be[nb - 2] = be[nb - 1], nb--;
+            }
+        }
+        size_t s0 = 0;
+        for (size_t b2 = 0; b2 < nb; b2++) {
+            for (size_t i = s0; i < be[b2]; i++) L->lval[pl[i]] = bv[b2] + 1e-6 * (double)(i - s0);
+            s0 = be[b2];
+        }
+        g0 = g1;
+    }
+    for (size_t i = 0; i < np; i++) { int32_t c = L->plist[i]; L->lsum[c] = 0, L->lcnt[c] = 0; }
     for (size_t i = 0; i < n; i++) {
         int32_t v = L->lay[a + i];
         Key *k = &keys[i];
@@ -247,7 +301,7 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint3
             for (int32_t c = L->cl[v]; c != NONE && cn < countof(chain); c = L->g->sparent[c]) chain[cn++] = c;
             while (cn && d < MAX_KEY_DEPTH - 1) {
                 int32_t c = chain[--cn];
-                k->bc[d] = csum[c] * (double)n;
+                k->bc[d] = L->lval[c];
                 k->id[d] = -(c + 1);
                 d++;
             }
@@ -949,6 +1003,11 @@ static cmm_status layout_core(Graph *g) {
     uint32_t *ccnt = ANEW(A, uint32_t, S + 1);
     int32_t *best = ANEW(A, int32_t, V + 1);
     if (!keys || !idx || !tmp || !cbuf || !fen || !csum || !ccnt || !best) return CMM_ERR_NOMEM;
+    L.lsum = ANEW(A, double, S + 1), L.lval = ANEW(A, double, S + 1);
+    L.lcnt = ANEW(A, uint32_t, S + 1), L.plist = ANEW(A, int32_t, S + 1);
+    if (!L.lsum || !L.lval || !L.lcnt || !L.plist) return CMM_ERR_NOMEM;
+    memset(L.lsum, 0, (S + 1) * sizeof *L.lsum);
+    memset(L.lcnt, 0, (S + 1) * sizeof *L.lcnt);
     memset(csum, 0, (S + 1) * sizeof *csum);
     memset(ccnt, 0, (S + 1) * sizeof *ccnt);
     bool clusters = S > 0;
