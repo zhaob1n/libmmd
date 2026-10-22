@@ -102,6 +102,7 @@ DIAG_FN(xychart_render) {
     Str xt = {}, yt = {};
     VEC(Str) cats = {};
     VEC(double) vals = {};
+    VEC(Str) labs = {};
     VEC(Series) ser = {};
     double xmin = 0, xmax = 0, ymin = 0, ymax = 0;
     bool xr = false, yr = false, oom = false;
@@ -130,6 +131,14 @@ DIAG_FN(xychart_render) {
             if (!list(a, rest, &items, &oom)) return oom ? CMM_ERR_NOMEM : diag_fail(err_off, msg, lo, "expected [numbers]");
             for (size_t i = 0; i < items.n; i++) {
                 double d;
+                Str it = items.v[i], lab = {};
+                for (size_t q = 0; q < it.n; q++) /* `540 "PaLM"`: per-point label */
+                    if (it.p[q] == '"' && q + 1 < it.n && it.p[it.n - 1] == '"') {
+                        lab = (Str){.p = it.p + q + 1, .n = it.n - q - 2};
+                        items.v[i] = str_trim((Str){.p = it.p, .n = q});
+                        break;
+                    }
+                if (!VEC_PUSH(a, &labs, lab)) return CMM_ERR_NOMEM;
                 if (!dg_parse_num(items.v[i], &d)) return diag_fail(err_off, msg, (size_t)(items.v[i].p - src), "not a number");
                 if (!VEC_PUSH(a, &vals, d)) return CMM_ERR_NOMEM;
             }
@@ -186,7 +195,7 @@ DIAG_FN(xychart_render) {
     for (size_t s = 0; s < ser.n; s++) {
         if (ser.v[s].line) continue;
         double bwid = band * 0.9 / (double)nbar;
-        const char *col = ser.v[s].col = PAL[bi % countof(PAL)];
+        const char *col = ser.v[s].col = dcfg_list("xyChart.plotColorPalette", s, PAL[bi % countof(PAL)]);
         for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
             double v = vals.v[ser.v[s].v0 + k], p = VPOS(v), c0 = CPOS(k) - band * 0.45 + bwid * (double)bi;
             if (horiz) dg_rect_fill(out, fmin(base, p), c0, fabs(p - base), bwid, 0, nullptr, col);
@@ -196,7 +205,7 @@ DIAG_FN(xychart_render) {
     }
     for (size_t s = 0; s < ser.n; s++) {
         if (!ser.v[s].line) continue;
-        const char *col = ser.v[s].col = LINEPAL[li++ % countof(LINEPAL)];
+        const char *col = ser.v[s].col = dcfg_list("xyChart.plotColorPalette", s, LINEPAL[li++ % countof(LINEPAL)]);
         buf_lit(out, "<path class=\"ln\" stroke=\""); buf_put(out, strlen(col), col); buf_lit(out, "\" d=\"");
         for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
             double v = vals.v[ser.v[s].v0 + k];
@@ -205,6 +214,16 @@ DIAG_FN(xychart_render) {
         }
         buf_lit(out, "\"/>");
     }
+    for (size_t s = 0; s < ser.n; s++) /* per-point labels, above the point / bar end */
+        for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
+            Str l = labs.v[ser.v[s].v0 + k];
+            if (!l.n) continue;
+            double p = VPOS(vals.v[ser.v[s].v0 + k]), c = CPOS(k);
+            buf_lit(out, "<g font-size=\"12\" fill=\""); buf_put(out, strlen(ser.v[s].col), ser.v[s].col); buf_lit(out, "\">");
+            if (horiz) dg_text(out, l, 12, p + 6, c, "start", nullptr);
+            else dg_text(out, l, 12, c, p - 10, "middle", nullptr);
+            buf_lit(out, "</g>");
+        }
     /* axes */
     dg_line(out, ox, oy, ox, oy + ph, "ax");
     dg_line(out, ox, oy + ph, ox + pw, oy + ph, "ax");

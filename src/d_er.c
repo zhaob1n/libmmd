@@ -12,19 +12,29 @@ typedef struct Attr { int32_t ent; Str type, name, keys, comment; } Attr;
 typedef struct ERel { Card ca, cb; bool dashed; } ERel;
 typedef struct EInfo { uint32_t a0, an; double cw[4]; } EInfo;
 
+typedef struct CDef { Str name, css; } CDef;
 typedef struct EP {
     Arena *A;
     Graph g;
     VEC(EInfo) ei;
     VEC(Attr) at;
     VEC(ERel) rel;
+    VEC(CDef) cdefs;
     size_t *err_off;
     char *msg;
+    int32_t sg[16]; /* open `subgraph` stack */
+    unsigned sgn;
 } EP;
 
 [[nodiscard]] static int32_t ent(EP *p, Str ref) {
     ref = str_trim(ref);
-    Str label = {};
+    Str label = {}, cls = {};
+    for (size_t k = 0; k + 3 < ref.n; k++) /* ENTITY:::cls (also ENTITY[label]:::cls) */
+        if (ref.p[k] == ':' && ref.p[k + 1] == ':' && ref.p[k + 2] == ':') {
+            cls = str_trim((Str){.p = ref.p + k + 3, .n = ref.n - k - 3});
+            ref = str_trim((Str){.p = ref.p, .n = k});
+            break;
+        }
     const char *b = ref.n ? memchr(ref.p, '[', ref.n) : nullptr;
     if (b && ref.p[ref.n - 1] == ']') {
         label = str_trim((Str){.p = b + 1, .n = ref.n - (size_t)(b + 1 - ref.p) - 1});
@@ -37,16 +47,20 @@ typedef struct EP {
     int32_t v = dg_node(&p->g, ref, &fresh);
     if (v == NONE) return NONE;
     if (fresh && !VEC_PUSH(p->A, &p->ei, (EInfo){})) return NONE;
+    if (fresh) p->g.nparent[v] = p->sgn ? p->sg[p->sgn - 1] : NONE;
     if (label.n) p->g.nlabel[v] = label;
+    if (cls.n) p->g.nclass[v] = cls;
     return v;
 }
 
 typedef struct CardTok { const char *t; Card c; } CardTok;
 static const CardTok LCARD[] = {
     {"|o", CD_ZERO_ONE}, {"||", CD_ONE}, {"}o", CD_ZERO_MANY}, {"}|", CD_ONE_MANY},
+    {"o|", CD_ZERO_ONE}, {"o{", CD_ZERO_MANY}, {"|{", CD_ONE_MANY}, /* mermaid's lexer accepts either facing */
 };
 static const CardTok RCARD[] = {
     {"o|", CD_ZERO_ONE}, {"||", CD_ONE}, {"o{", CD_ZERO_MANY}, {"|{", CD_ONE_MANY},
+    {"|o", CD_ZERO_ONE}, {"}o", CD_ZERO_MANY}, {"}|", CD_ONE_MANY},
 };
 static const CardTok WCARD[] = { /* word forms, longest first */
     {"one or zero", CD_ZERO_ONE}, {"zero or one", CD_ZERO_ONE}, {"one or more", CD_ONE_MANY},
@@ -61,6 +75,7 @@ static bool parse_rel(Str l, Str *a, Str *b, ERel *r, Str *label) {
     bool inq = false;
     for (size_t k = 0; k < l.n; k++) {
         if (l.p[k] == '"') inq = !inq;
+        if (!inq && l.p[k] == ':' && k + 2 < l.n && l.p[k + 1] == ':' && l.p[k + 2] == ':') { k += 2; continue; } /* A:::cls */
         if (!inq && l.p[k] == ':') { c = l.p + k; break; }
     }
     if (!c) return false;
@@ -132,14 +147,53 @@ static cmm_status parse(EP *p, LineIt *it) {
             continue;
         }
         Str rest = line, w = dg_word(&rest);
+        if (str_eq(w, S("subgraph"))) { /* subgraph id ["title"] | subgraph "title" */
+            Str r = str_trim(rest), id = r, t = r;
+            const char *b = r.n ? memchr(r.p, '[', r.n) : nullptr;
+            if (b && r.p[r.n - 1] == ']') {
+                id = str_trim((Str){.p = r.p, .n = (size_t)(b - r.p)});
+                t = str_trim((Str){.p = b + 1, .n = r.n - (size_t)(b + 1 - r.p) - 1});
+            }
+            if (t.n >= 2 && t.p[0] == '"' && t.p[t.n - 1] == '"') t.p++, t.n -= 2;
+            if (id.n >= 2 && id.p[0] == '"' && id.p[id.n - 1] == '"') id.p++, id.n -= 2;
+            if (!id.n) return diag_fail(p->err_off, p->msg, off, "subgraph needs a name");
+            if (p->sgn >= countof(p->sg)) return diag_fail(p->err_off, p->msg, off, "subgraphs nested too deeply");
+            int32_t c = dg_cluster(g, id, t, p->sgn ? p->sg[p->sgn - 1] : NONE);
+            if (c == NONE) return CMM_ERR_NOMEM;
+            p->sg[p->sgn++] = c;
+            continue;
+        }
+        if (p->sgn && str_eq(line, S("end"))) { p->sgn--; continue; }
         if (str_eq(w, S("direction"))) {
             Str d = dg_word(&rest);
             g->dir = str_eq(d, S("LR")) ? DIR_LR : str_eq(d, S("RL")) ? DIR_RL : str_eq(d, S("BT")) ? DIR_BT : DIR_TB;
             continue;
         }
-        if (str_starts(w, S("accTitle")) || str_starts(w, S("accDescr")) || str_eq(w, S("classDef")) ||
-            str_eq(w, S("class")) || str_eq(w, S("style")))
+        if (str_starts(w, S("accTitle")) || str_starts(w, S("accDescr"))) continue;
+        if (str_eq(w, S("classDef"))) {
+            Str name = dg_word(&rest);
+            if (!name.n) return diag_fail(p->err_off, p->msg, off, "classDef needs a name");
+            while (name.n) { /* classDef a,b css */
+                const char *c = memchr(name.p, ',', name.n);
+                Str one = {.p = name.p, .n = c ? (size_t)(c - name.p) : name.n};
+                if (!VEC_PUSH(p->A, &p->cdefs, ((CDef){.name = one, .css = str_trim(rest)}))) return CMM_ERR_NOMEM;
+                name = c ? (Str){.p = c + 1, .n = name.n - one.n - 1} : (Str){};
+            }
             continue;
+        }
+        if (str_eq(w, S("class")) || str_eq(w, S("style"))) {
+            bool sty = w.p[1] == 't';
+            Str ids = dg_word(&rest), val = str_trim(rest);
+            while (ids.n) {
+                const char *c = memchr(ids.p, ',', ids.n);
+                Str id = {.p = ids.p, .n = c ? (size_t)(c - ids.p) : ids.n};
+                int32_t v = ent(p, id);
+                if (v == NONE) return CMM_ERR_NOMEM;
+                if (v >= 0) { if (sty) g->nstyle[v] = val; else g->nclass[v] = val; }
+                ids = c ? (Str){.p = c + 1, .n = ids.n - id.n - 1} : (Str){};
+            }
+            continue;
+        }
         Str a, b, label;
         ERel r;
         if (parse_rel(line, &a, &b, &r, &label)) {
@@ -159,7 +213,8 @@ static cmm_status parse(EP *p, LineIt *it) {
             if (ob) { ref.n = (size_t)(ob - ref.p); close_inline = true; }
         }
         for (size_t k = 0; k < ref.n; k++)
-            if (ref.p[k] == ':' || ref.p[k] == '{' || ref.p[k] == '}' || ref.p[k] == '|')
+            if (ref.p[k] == ':' && k + 2 < ref.n && ref.p[k + 1] == ':' && ref.p[k + 2] == ':') k += 2;
+            else if (ref.p[k] == ':' || ref.p[k] == '{' || ref.p[k] == '}' || ref.p[k] == '|')
                 return diag_fail(p->err_off, p->msg, off + k, "unrecognised statement in ER diagram");
         int32_t v = ent(p, ref);
         if (v == NONE) return CMM_ERR_NOMEM;
@@ -170,7 +225,27 @@ static cmm_status parse(EP *p, LineIt *it) {
     return CMM_OK;
 }
 
+/* re-open the just-written <rect .../> and add classDef / style css (later wins, as in mermaid) */
+static void ent_style(Buf *b, const EP *p, Str cls, Str sty) {
+    Str css[2] = {{}, sty};
+    for (size_t i = 0; cls.n && i < p->cdefs.n; i++)
+        if (str_eq(p->cdefs.v[i].name, cls)) css[0] = p->cdefs.v[i].css;
+    if (!css[0].n && !css[1].n) return;
+    b->n -= 2; /* "/>" */
+    buf_lit(b, " style=\"");
+    for (int j = 0; j < 2; j++) {
+        for (size_t k = 0; k < css[j].n; k++) {
+            char ch = css[j].p[k] == ',' ? ';' : css[j].p[k];
+            if (ch == '"' || ch == '<' || ch == '&') continue;
+            buf_ch(b, ch);
+        }
+        if (css[j].n) buf_ch(b, ';');
+    }
+    buf_lit(b, "\"/>");
+}
+
 static constexpr char CSS[] =
+    "#mermaid .sg{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}"
     "#mermaid .ent{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .row0{fill:#ffffff;stroke:#9370DB;stroke-width:0.5px;}"
     "#mermaid .row1{fill:#f6f6ff;stroke:#9370DB;stroke-width:0.5px;}"
@@ -209,6 +284,10 @@ DIAG_FN(er_render) {
     cmm_status st = parse(&p, &it);
     if (st) return st;
     Graph *g = &p.g;
+    if (p.sgn) return diag_fail(err_off, msg, it.i, "unterminated subgraph (missing 'end')");
+    for (size_t v = 0; v < g->nn; v++) /* relations to a subgraph id attach to its cluster */
+        for (size_t s = 0; s < g->ns; s++)
+            if (str_eq(g->nid[v], g->sid[s])) { g->nflags[v] |= NF_SUBREF | NF_HIDDEN; break; }
     if (!g->nn) return diag_fail(err_off, msg, off, "ER diagram has no entities");
     size_t N = g->nn, M = p.at.n;
     Attr *as = ANEW(a, Attr, M + 1);
@@ -239,6 +318,11 @@ DIAG_FN(er_render) {
     if (!buf_reserve(out, 2048 + N * 400 + g->ne * 400 + M * 300)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 12, "erDiagram", CSS);
     if (title.n) dg_text(out, title, 18, (bb.x0 + bb.x1) / 2, bb.y0 + 12, "middle", "name");
+    for (size_t s = 0; s < g->ns; s++) {
+        if (g->sw[s] <= 0) continue;
+        dg_rect(out, g->sx[s], g->sy[s], g->sw[s], g->sh[s], 0, "sg");
+        dg_text(out, g->stitle[s], fs, g->sx[s] + g->sw[s] / 2, g->sy[s] + 14, "middle", "name");
+    }
     for (size_t e = 0; e < g->ne; e++) {
         const ERel *r = &p.rel.v[e];
         if (!g->eptn[e] && g->efrom[e] != g->eto[e]) continue;
@@ -262,9 +346,11 @@ DIAG_FN(er_render) {
         }
     }
     for (size_t v = 0; v < N; v++) {
+        if (g->nflags[v] & NF_HIDDEN) continue;
         const EInfo *e = &p.ei.v[v];
         double w = g->nw[v], h = g->nh[v], x0 = g->nx[v] - w / 2, y0 = g->ny[v] - h / 2;
         dg_rect(out, x0, y0, w, h, 0, "ent");
+        ent_style(out, &p, g->nclass[v], g->nstyle[v]);
         if (!e->an) { dg_text(out, g->nlabel[v], fs, g->nx[v], g->ny[v], "middle", "name"); continue; }
         dg_text(out, g->nlabel[v], fs, g->nx[v], y0 + hh / 2, "middle", "name");
         double y = y0 + hh;

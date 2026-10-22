@@ -25,6 +25,13 @@ static const char *const LTXT[] = {"#fff", "#000", "#000", "#fff", "#000", "#000
 typedef struct Attr { Str id, tag, msg, parent; uint8_t type; double order; bool has_type, has_order; } Attr;
 static bool attrs(Str s, Attr *at) {
     while ((s = str_trim(s)).n) {
+        if (s.p[0] == '"') { /* legacy `commit "msg"` */
+            const char *q = memchr(s.p + 1, '"', s.n - 1);
+            if (!q) return false;
+            at->msg = (Str){.p = s.p + 1, .n = (size_t)(q - s.p - 1)};
+            s = (Str){.p = q + 1, .n = s.n - (size_t)(q + 1 - s.p)};
+            continue;
+        }
         const char *c = memchr(s.p, ':', s.n);
         if (!c) return false;
         Str k = str_trim((Str){.p = s.p, .n = (size_t)(c - s.p)});
@@ -76,7 +83,9 @@ DIAG_FN(gitgraph_render) {
     }
     VEC(Commit) cm = {};
     VEC(Branch) br = {};
-    if (!VEC_PUSH(a, &br, ((Branch){.name = S("main")}))) return CMM_ERR_NOMEM;
+    Str mainb = dcfg_get("gitGraph.mainBranchName");
+    if (!mainb.n) mainb = S("main");
+    if (!VEC_PUSH(a, &br, ((Branch){.name = mainb}))) return CMM_ERR_NOMEM;
     uint32_t cur = 0;
     while (dg_next_line(&it, &line, &lo)) {
         Str rest = line, w = dg_word(&rest);
@@ -118,8 +127,7 @@ DIAG_FN(gitgraph_render) {
                 int len = snprintf(idbuf, 16, "%zu-%07llx", cm.n, (unsigned long long)(h & 0xfffffffu));
                 at.id = (Str){.p = idbuf, .n = (size_t)len};
             }
-            for (size_t k = 0; k < cm.n; k++)
-                if (str_eq(cm.v[k].id, at.id)) return diag_fail(err_off, msg, lo, "duplicate commit id");
+            /* mermaid only warns on duplicate ids */
             c.id = at.id, c.tag = at.tag, c.msg = at.msg;
             if (!VEC_PUSH(a, &cm, c)) return CMM_ERR_NOMEM;
             br.v[cur].head = (uint32_t)cm.n - 1, br.v[cur].has_head = true;

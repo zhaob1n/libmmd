@@ -303,6 +303,26 @@ const char *dcfg_pal(const char *prefix, size_t i, const char def[static 1]) {
     return o;
 }
 
+const char *dcfg_list(const char *var, size_t i, const char def[static 1]) {
+    if (!cur.n && cur_theme <= CMM_THEME_DEFAULT) return def;
+    static thread_local char ring[8][208];
+    static thread_local unsigned slot;
+    Str v = dcfg_tv(var);
+    size_t cnt = v.n ? 1 : 0;
+    for (size_t k = 0; k < v.n; k++) cnt += v.p[k] == ',';
+    if (!cnt) return def;
+    i %= cnt;
+    size_t b = 0;
+    for (size_t k = 0; k < i; k++) b = (size_t)((const char *)memchr(v.p + b, ',', v.n - b) - v.p) + 1;
+    const char *c = memchr(v.p + b, ',', v.n - b);
+    Str it = str_trim((Str){.p = v.p + b, .n = (c ? (size_t)(c - v.p) : v.n) - b});
+    if (!it.n || it.n >= sizeof ring[0]) return def;
+    char *o = ring[slot++ % countof(ring)];
+    memcpy(o, it.p, it.n);
+    o[it.n] = 0;
+    return o;
+}
+
 Str dcfg_background(void) {
     Str v = dcfg_tv("background");
     return (cur_theme > CMM_THEME_DEFAULT && v.n == 5 && !memcmp(v.p, "white", 5)) ? (Str){} : v;

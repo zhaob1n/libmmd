@@ -50,6 +50,19 @@ bool dg_next_line(LineIt *it, Str *line, size_t *off);
 unsigned dg_indent(const LineIt *it, size_t off);
 Str dg_word(Str *s);
 bool dg_parse_num(Str s, double *out);
+/* ---- free-form (non-graph) renderers: draw into a body Buf while growing a BBox ---- */
+typedef enum TBase { TB_ALPHA, TB_MIDDLE, TB_HANG } TBase;
+/* mermaid drawMultilineText: lines ('\n' or <br>) as tspans, first at y (block centred when
+ * centre is true); grows *bb (nullable) with an estimated text box. Returns the line count. */
+unsigned dg_tspans(Buf *b, BBox *bb, Str s, double fs, double lh, double x, double y, bool centre,
+                   const char *anchor, TBase base, const char *cls);
+/* estimated bbox of such a text block (same arguments) */
+[[nodiscard]] BBox dg_tbox(Str s, double fs, double lh, double x, double y, bool centre, const char *anchor, TBase base);
+/* greedy word wrap at maxc characters per line (mermaid wrapText), '\n'-joined; {} on OOM */
+[[nodiscard]] Str dg_wrapc(Arena *a, Str s, size_t maxc);
+/* svg head for bb + margin, then body, then </svg>; frees body */
+[[nodiscard]] cmm_status dg_finish(Buf *out, Buf *body, BBox bb, double m, const char *kind, size_t ncss, const char css[static ncss]);
+#define DG_FINISH(o, body, bb, m, kind, css) dg_finish((o), (body), (bb), (m), (kind), sizeof(css) - 1, (css))
 #endif
 
 /* opening <text> tag (caller writes the content and "</text>") */

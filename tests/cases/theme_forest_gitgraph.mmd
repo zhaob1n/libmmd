@@ -1,0 +1,29 @@
+---
+config:
+  theme: forest
+---
+gitGraph
+    commit id: "init"
+    commit tag: "v0.1"
+    branch develop
+    checkout develop
+    commit id: "dev-1"
+    branch feature order: 3
+    checkout feature
+    commit id: "feat-a" type: HIGHLIGHT
+    commit id: "feat-b"
+    checkout develop
+    commit id: "dev-2" type: REVERSE
+    merge feature tag: "rc1"
+    checkout main
+    commit id: "hotfix"
+    merge develop id: "release" tag: "v1.0"
+    branch "fix/bug"
+    commit
+    checkout develop
+    cherry-pick id: "hotfix"
+    checkout feature
+    commit id: "feat-c"
+    checkout main
+    commit id: "m-late"
+    merge feature

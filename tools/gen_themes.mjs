@@ -1,7 +1,8 @@
 // Generates src/d_themes.h from mermaid's own theme objects (values that differ from the default theme).
-// usage: node tools/gen_themes.mjs <var...> > src/d_themes.h
+// usage: node tools/gen_themes.mjs $(cat tools/theme_vars.txt) > src/d_themes.h
 const m = await import(process.env.HOME + '/node_modules/mermaid/dist/chunks/mermaid.core/chunk-DU6HZSFF.mjs');
 const themes = Object.values(m).find(v => v && v.dark && v.forest && v.neutral);
+const kh = await import(process.env.HOME + '/node_modules/khroma/dist/index.js');
 const get = (o, k) => k.split('.').reduce((a, p) => a == null ? a : a[p], o);
 const vars = process.argv.slice(2);
 const def = themes.default.getThemeVariables();
@@ -14,6 +15,10 @@ for (const t of ['dark', 'forest', 'neutral']) {
     if (typeof v !== 'string' || !v || (k !== 'background' && v === get(def, k))) continue;
     if (!/^[#%.,()\- 'a-zA-Z0-9]{1,200}$/.test(v)) continue;
     out += `    {"${k}", "${v}"},\n`;
+  }
+  for (let i = 0; i < 12; i++) { // kanban column fill: mermaid's styles adjust cScale by 10 (darken in dark mode)
+    const c = tv['cScale' + i];
+    if (typeof c === 'string') out += `    {"kanbanFill${i}", "${tv.darkMode ? kh.darken(c, 10) : kh.lighten(c, 10)}"},\n`;
   }
   out += '};\n';
 }

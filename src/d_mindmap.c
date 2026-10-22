@@ -42,7 +42,6 @@ static bool parse_node(Str s, Str *label, uint8_t *shape) {
             if (s.n - i >= ol + cl && !memcmp(s.p + i, SH[k].o, ol) && s.n >= cl &&
                 !memcmp(s.p + s.n - cl, SH[k].c, cl)) {
                 Str in = {.p = s.p + i + ol, .n = s.n - i - ol - cl};
-                if (in.n >= 2 && in.p[0] == '"' && in.p[in.n - 1] == '"') in = (Str){.p = in.p + 1, .n = in.n - 2};
                 *label = in, *shape = SH[k].sh;
                 return true;
             }
@@ -187,6 +186,17 @@ DIAG_FN(mindmap_render) {
             continue;
         }
         unsigned in = dg_indent(&it, lo);
+        size_t bt = 0;
+        for (size_t i = 0; i < line.n; i++) bt += line.p[i] == '`';
+        if (bt & 1) { /* "`markdown` string spanning lines: extend to the line holding the closing backtick */
+            const char *e = memchr(src + it.i, '`', n - it.i);
+            if (e) {
+                const char *nl = memchr(e, '\n', n - (size_t)(e - src));
+                size_t end = nl ? (size_t)(nl - src) : n;
+                it.i = nl ? end + 1 : n;
+                line = str_trim((Str){.p = line.p, .n = end - lo});
+            }
+        }
         MNode m = {.parent = UINT32_MAX, .first = UINT32_MAX, .next = UINT32_MAX};
         for (size_t i = 0; i + 3 <= line.n; i++)
             if (!memcmp(line.p + i, ":::", 3)) {
@@ -202,6 +212,9 @@ DIAG_FN(mindmap_render) {
                 break;
             }
         if (!parse_node(line, &m.label, &m.shape)) return diag_fail(err_off, msg, lo, "bad node");
+        bool ok;
+        m.label = label_normalize(a, m.label, &ok); /* "quoted", "`markdown`", <br> */
+        if (!ok) return CMM_ERR_NOMEM;
         if (v.n) {
             if (in <= ind.v[0]) return diag_fail(err_off, msg, lo, "mindmap can only have one root");
             uint32_t p = (uint32_t)v.n - 1;
@@ -308,7 +321,7 @@ DIAG_FN(mindmap_render) {
         double dir = c->x > p->x ? 1 : -1;
         double x0 = V[i].parent == 0 ? p->x : p->x + dir * p->w / 2, y0 = p->y;
         double x1 = c->x - dir * c->w / 2, y1 = c->y + (c->shape == M_DEF ? c->h / 2 : 0);
-        const char *col = SECS[c->sec % countof(SECS)];
+        const char *col = dcfg_pal("cScalePeer", c->sec % countof(SECS) + 1, SECS[c->sec % countof(SECS)]);
         buf_lit(out, "<path class=\"me\" stroke=\""); buf_put(out, strlen(col), col);
         buf_lit(out, "\" stroke-width=\""); buf_num(out, fmax(2, 17 - 3.0 * c->depth)); buf_lit(out, "\" d=\"M");
         dg_pt(out, x0, y0); buf_ch(out, 'C'); dg_pt(out, (x0 + x1) / 2, y0); buf_ch(out, ' ');
@@ -316,7 +329,7 @@ DIAG_FN(mindmap_render) {
     }
     for (size_t i = 0; i < v.n; i++) {
         const MNode *m = &V[i];
-        const char *fill = i ? dcfg_pal("cScale", m->sec % countof(SEC) + 1, SEC[m->sec % countof(SEC)]) : dcfg_pal("cScale", 0, "#0000ec"), *st = i ? SECS[m->sec % countof(SECS)] : "#0000a0";
+        const char *fill = i ? dcfg_pal("cScale", m->sec % countof(SEC) + 1, SEC[m->sec % countof(SEC)]) : dcfg_pal("git", 0, "#0000ec"), *st = i ? dcfg_pal("cScalePeer", m->sec % countof(SECS) + 1, SECS[m->sec % countof(SECS)]) : dcfg_pal("cScalePeer", 0, "#0000a0");
         const char *tcls = !i || SECW[m->sec % countof(SECW)] ? "mt\" fill=\"#fff" : "mt";
         double x = m->x - m->w / 2, y = m->y - m->h / 2, w = m->w, h = m->h;
         buf_lit(out, "<g class=\"mindmap-node section-");

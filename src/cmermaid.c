@@ -53,6 +53,10 @@ static cmm_theme parse_theme_after(Str s) {
     static const Str KEY = S("theme");
     for (size_t i = 0; i + KEY.n <= s.n; i++) {
         if (memcmp(s.p + i, KEY.p, KEY.n) != 0) continue;
+        size_t ls = i; /* skip YAML `# comment` lines */
+        while (ls && s.p[ls - 1] != '\n') ls--;
+        while (ls < i && is_sp(s.p[ls])) ls++;
+        if (s.p[ls] == '#') continue;
         size_t j = i + KEY.n;
         if (j < s.n && s.p[j] != '"' && s.p[j] != '\'' && s.p[j] != ':' && !is_sp(s.p[j])) continue;
         while (j < s.n && (s.p[j] == '"' || s.p[j] == '\'' || s.p[j] == ':' || is_sp(s.p[j]))) j++;
@@ -155,6 +159,7 @@ static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n],
     size_t k = off;
     while (k < n && !is_sp(src[k]) && src[k] != '\n' && src[k] != ';') k++;
     Str kw = {.p = src + off, .n = k - off};
+    if (kw.n > 1 && kw.p[kw.n - 1] == ':') kw.n--; /* "gitGraph:" */
 
     Arena arena = *ap;
     Buf b = *bp;

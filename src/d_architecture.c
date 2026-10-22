@@ -24,6 +24,7 @@ static constexpr char CSS[] =
     "#mermaid .agl{font-size:16px;}#mermaid .aw{fill:none;stroke:#fff;stroke-width:3px;stroke-linecap:round;stroke-linejoin:round;}"
     "#mermaid .awf{fill:#fff;}#mermaid .ael{font-size:14px;}";
 
+typedef struct AAlign { bool col; Str ids; size_t off; } AAlign;
 static bool idc(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || (unsigned char)c >= 0x80; }
 static Str take_id(Str *s) {
     size_t i = 0;
@@ -98,6 +99,7 @@ DIAG_FN(architecture_render) {
     VEC(ANode) nv = {};
     VEC(AGroup) gv = {};
     VEC(AEdge) ev = {};
+    VEC(AAlign) alv = {};
     while (dg_next_line(&it, &line, &lo)) {
         Str l = line, w = dg_word(&l);
         l = str_trim(l);
@@ -122,6 +124,12 @@ DIAG_FN(architecture_render) {
                 for (size_t k = 0; k < nv.n; k++) if (str_eq(nv.v[k].id, id)) return diag_fail(err_off, msg, lo, "duplicate service id");
                 if (!VEC_PUSH(a, &nv, ((ANode){.id = id, .icon = icon, .label = label, .group = par, .junction = isj}))) return CMM_ERR_NOMEM;
             }
+            continue;
+        }
+        if (str_eq(w, S("align"))) { /* align row|column a b c (v11.16) */
+            Str ax = dg_word(&l);
+            if (!str_eq(ax, S("row")) && !str_eq(ax, S("column"))) return diag_fail(err_off, msg, lo, "expected 'align row' or 'align column'");
+            if (!VEC_PUSH(a, &alv, ((AAlign){.col = ax.p[0] == 'c', .ids = str_trim(l), .off = lo}))) return CMM_ERR_NOMEM;
             continue;
         }
         /* edge: id[{group}]:P <?--[label]--? >? P:id[{group}] */
@@ -191,6 +199,24 @@ DIAG_FN(architecture_render) {
         for (size_t k = c0; k < t; k++) mx = N[q[k]].gx < mx ? N[q[k]].gx : mx, Mx = N[q[k]].gx > Mx ? N[q[k]].gx : Mx;
         for (size_t k = c0; k < t; k++) N[q[k]].gx += xoff - mx;
         xoff += Mx - mx + 1;
+    }
+    /* align: pin the shared coordinate to the first member, keep the declared order strictly increasing */
+    for (size_t k = 0; k < alv.n; k++) {
+        Str l = alv.v[k].ids;
+        int32_t prev = NONE, cnt = 0;
+        for (Str id; (id = take_id(&l)).n; l = str_trim(l)) {
+            int32_t m = NONE;
+            for (size_t i = 0; i < nn; i++) if (str_eq(N[i].id, id)) m = (int32_t)i;
+            if (m == NONE) return diag_fail(err_off, msg, (size_t)(id.p - src), "align member is not a service or junction");
+            if (prev != NONE) {
+                int32_t *pin = alv.v[k].col ? &N[m].gx : &N[m].gy, *ord = alv.v[k].col ? &N[m].gy : &N[m].gx;
+                int32_t pv = alv.v[k].col ? N[prev].gy : N[prev].gx;
+                *pin = alv.v[k].col ? N[prev].gx : N[prev].gy;
+                if (*ord <= pv) *ord = pv + 1;
+            }
+            prev = m, cnt++;
+        }
+        if (l.n || cnt < 2) return diag_fail(err_off, msg, alv.v[k].off, "align needs at least two members");
     }
     /* group non-overlap: while two unrelated groups' grid boxes intersect, insert columns (or rows) so the
      * later group and everything beyond the earlier one shifts clear; relative placement is preserved */

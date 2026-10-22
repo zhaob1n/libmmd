@@ -16,6 +16,8 @@ void dcfg_end(void);
 void dcfg_set_theme(int theme); /* CMM_THEME_* */
 Str dcfg_tv(const char *var);
 /* palette entry <prefix><i> (pie1.., cScale0.., git0..) from themeVariables / named theme, else def */
+/* i-th (mod count) item of a comma-separated colour list, e.g. xyChart.plotColorPalette, else def */
+const char *dcfg_list(const char *var, size_t i, const char def[static 1]);
 const char *dcfg_pal(const char *prefix, size_t i, const char def[static 1]); /* themeVariables.<var> or named-theme preset */
 const DCfg *dcfg_cur(void);
 Str dcfg_get(const char *key);                  /* last match, or empty; "themeVariables.x" etc. */

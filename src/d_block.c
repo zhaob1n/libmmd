@@ -9,7 +9,8 @@
 #include "diagrams.h"
 #include "text.h"
 
-enum { BS_RECT, BS_ROUND, BS_STADIUM, BS_CIRCLE, BS_CYL, BS_DIAMOND, BS_HEX, BS_SUB, BS_ASYM, BS_PARA };
+enum { BS_RECT, BS_ROUND, BS_STADIUM, BS_CIRCLE, BS_CYL, BS_DIAMOND, BS_HEX, BS_SUB, BS_ASYM, BS_PARA,
+       BS_AR_R, BS_AR_L, BS_AR_U, BS_AR_D, BS_AR_X, BS_AR_Y }; /* id<[".."]>(dir) block arrows */
 typedef struct Blk {
     Str id, label;
     uint32_t parent, first, last, next;
@@ -57,6 +58,32 @@ static bool node_tok(P *p, Str *id, Str *label, uint8_t *shape, uint32_t *span, 
     if (p->i == st) return false;
     *id = (Str){.p = p->s + st, .n = p->i - st};
     *has_label = false, *shape = BS_RECT, *span = 1;
+    if (p->i + 1 < p->n && p->s[p->i] == '<' && p->s[p->i + 1] == '[') { /* block arrow */
+        p->i += 2;
+        size_t ls = p->i;
+        if (p->i < p->n && p->s[p->i] == '"') {
+            ls = ++p->i;
+            while (p->i < p->n && p->s[p->i] != '"') p->i++;
+            if (p->i >= p->n) return false;
+            *label = (Str){.p = p->s + ls, .n = p->i - ls};
+            p->i++;
+        } else {
+            while (p->i < p->n && p->s[p->i] != ']') p->i++;
+            *label = str_trim((Str){.p = p->s + ls, .n = p->i - ls});
+        }
+        if (p->i + 1 >= p->n || p->s[p->i] != ']' || p->s[p->i + 1] != '>') return false;
+        p->i += 2;
+        *has_label = true, *shape = BS_AR_R;
+        if (p->i < p->n && p->s[p->i] == '(') {
+            const char *e = memchr(p->s + p->i, ')', p->n - p->i);
+            if (!e) return false;
+            Str d = str_trim((Str){.p = p->s + p->i + 1, .n = (size_t)(e - p->s) - p->i - 1});
+            *shape = str_eq(d, S("left")) ? BS_AR_L : str_eq(d, S("up")) ? BS_AR_U : str_eq(d, S("down")) ? BS_AR_D
+                   : str_eq(d, S("x")) ? BS_AR_X : str_eq(d, S("y")) ? BS_AR_Y : BS_AR_R;
+            p->i = (size_t)(e - p->s) + 1;
+        }
+        if (label->n == 18 && !memcmp(label->p, "&nbsp;&nbsp;&nbsp;", 18)) *label = S(" ");
+    } else
     if (p->i < p->n && strchr("([{>", p->s[p->i])) {
         char op[4] = {};
         size_t k = 0;
@@ -117,6 +144,50 @@ static uint32_t flow(Blk *B, const Blk *g, uint32_t cols, uint32_t *rc, uint32_t
     return g->first == UINT32_MAX ? 0 : r + 1;
 }
 
+static bool in_list(Str ids, Str id) {
+    while (ids.n) {
+        const char *c = memchr(ids.p, ',', ids.n);
+        Str one = str_trim((Str){.p = ids.p, .n = c ? (size_t)(c - ids.p) : ids.n});
+        if (str_eq(one, id)) return true;
+        ids = c ? (Str){.p = c + 1, .n = ids.n - (size_t)(c + 1 - ids.p)} : (Str){};
+    }
+    return false;
+}
+/* css for node id from `class ids cls` + `classDef cls css` and `style id css` (style wins: it comes last) */
+static Str node_css(size_t n, const Str L[static n], Str id) {
+    Str cls = {}, sty = {}, out = {};
+    for (size_t i = 0; i < n; i++) {
+        Str r = L[i], w = dg_word(&r), ids = dg_word(&r);
+        if (str_eq(w, S("class")) && in_list(ids, id)) cls = str_trim(r);
+        if (str_eq(w, S("style")) && in_list(ids, id)) sty = str_trim(r);
+    }
+    for (size_t i = 0; cls.n && i < n; i++) {
+        Str r = L[i], w = dg_word(&r), nm = dg_word(&r);
+        if (str_eq(w, S("classDef")) && in_list(nm, cls)) out = str_trim(r);
+    }
+    return sty.n ? sty : out;
+}
+/* insert style="css" after every class="bn" written since offset `from` */
+static bool style_shape(Buf *b, size_t from, Str css) {
+    static constexpr char K[] = "class=\"bn\"";
+    for (size_t i = from; i + sizeof K - 1 <= b->n; i++) {
+        if (memcmp(b->p + i, K, sizeof K - 1)) continue;
+        size_t at = i + sizeof K - 1, add = css.n + 9;
+        if (!buf_reserve(b, add)) return false;
+        memmove(b->p + at + add, b->p + at, b->n - at);
+        memcpy(b->p + at, " style=\"", 8);
+        size_t k = at + 8;
+        for (size_t j = 0; j < css.n; j++) {
+            char ch = css.p[j] == ',' ? ';' : css.p[j];
+            b->p[k++] = ch == '"' || ch == '<' || ch == '&' ? ' ' : ch;
+        }
+        b->p[k] = '"';
+        b->n += add;
+        i = at + add;
+    }
+    return true;
+}
+
 /* outline polygon of b (arcs approximated); returns vertex count */
 static size_t outline(const Blk *b, double P[static 80]) {
     double x = b->x, y = b->y, w = b->w, h = b->h, cx = x + w / 2, cy = y + h / 2;
@@ -169,11 +240,15 @@ DIAG_FN(block_render) {
     if (!dg_next_line(&it, &line, &lo)) return diag_fail(err_off, msg, off, "empty block diagram");
     BlkVec bv = {};
     VEC(BEdge) ev = {};
+    VEC(Str) sv = {}; /* classDef / class / style lines, resolved when drawing */
     if (add_blk(a, &bv, UINT32_MAX, (Blk){.cols = -1, .span = 1, .group = true}) == UINT32_MAX) return CMM_ERR_NOMEM;
     uint32_t cur = 0;
     unsigned depth = 0;
     while (dg_next_line(&it, &line, &lo)) {
-        if (str_starts(line, S("classDef ")) || str_starts(line, S("class ")) || str_starts(line, S("style "))) continue;
+        if (str_starts(line, S("classDef ")) || str_starts(line, S("class ")) || str_starts(line, S("style "))) {
+            if (!VEC_PUSH(a, &sv, line)) return CMM_ERR_NOMEM;
+            continue;
+        }
         P p = {.s = line.p, .i = 0, .n = line.n};
         uint32_t prev = UINT32_MAX;
         while (sp(&p), p.i < p.n) {
@@ -332,6 +407,7 @@ DIAG_FN(block_render) {
             continue;
         }
         buf_lit(out, "<g class=\"node\" id=\"blk-"); buf_xml(out, b->id); buf_lit(out, "\">");
+        size_t shape0 = out->n;
         switch (b->shape) {
         case BS_ROUND: dg_rect(out, x, y, w, h, 8, "bn"); break;
         case BS_STADIUM: dg_rect(out, x, y, w, h, h / 2, "bn"); break;
@@ -339,6 +415,31 @@ DIAG_FN(block_render) {
             double r = fmin(w, h) / 2;
             buf_lit(out, "<circle class=\"bn\" cx=\""); buf_num(out, cx); buf_lit(out, "\" cy=\""); buf_num(out, cy);
             buf_lit(out, "\" r=\""); buf_num(out, r); buf_lit(out, "\"/>");
+            break;
+        }
+        case BS_AR_R: case BS_AR_L: case BS_AR_U: case BS_AR_D: case BS_AR_X: case BS_AR_Y: {
+            bool vert = b->shape == BS_AR_U || b->shape == BS_AR_D || b->shape == BS_AR_Y;
+            bool two = b->shape == BS_AR_X || b->shape == BS_AR_Y, neg = b->shape == BS_AR_L || b->shape == BS_AR_U;
+            /* unit arrow along +u in (u,v) space: u in [0,L], v in [-T/2,T/2]; head length = T/2 */
+            /* natural size (mermaid does not stretch block arrows to the cell): label + head, centred */
+            double nl = text_width(b->label, fs) + 40, nt = 40;
+            double L = fmin(vert ? h : w, nl), T = fmin(vert ? w : h, nt);
+            if (vert) x = cx - T / 2, y = cy - L / 2; else x = cx - L / 2, y = cy - T / 2;
+            double hd = fmin(T / 2, L / 2), q = T / 4;
+            double U[14], Vv[14];
+            size_t k = 0;
+            #define AP(u_, v_) (U[k] = (u_), Vv[k] = (v_), k++)
+            if (two) { AP(0, 0); AP(hd, -T / 2); AP(hd, -q); } else { AP(0, -q); }
+            AP(L - hd, -q); AP(L - hd, -T / 2); AP(L, 0); AP(L - hd, T / 2); AP(L - hd, q);
+            if (two) { AP(hd, q); AP(hd, T / 2); } else AP(0, q);
+            #undef AP
+            buf_lit(out, "<polygon class=\"bn\" points=\"");
+            for (size_t j = 0; j < k; j++) {
+                double u = neg ? L - U[j] : U[j];
+                if (j) buf_ch(out, ' ');
+                if (vert) dg_pt(out, cx + Vv[j], y + u); else dg_pt(out, x + u, cy + Vv[j]);
+            }
+            buf_lit(out, "\"/>");
             break;
         }
         case BS_DIAMOND: case BS_HEX: case BS_ASYM: case BS_PARA: {
@@ -370,6 +471,8 @@ DIAG_FN(block_render) {
             break;
         default: dg_rect(out, x, y, w, h, 0, "bn");
         }
+        Str css = sv.n ? node_css(sv.n, sv.v, b->id) : (Str){};
+        if (css.n && !style_shape(out, shape0, css)) return CMM_ERR_NOMEM;
         dg_text(out, b->label, fs, cx, cy, "middle", "bt");
         buf_lit(out, "</g>");
     }

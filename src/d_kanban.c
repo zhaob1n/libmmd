@@ -1,9 +1,11 @@
+#include <stdio.h>
 /* kanban: top-level lines are columns, indented lines are cards. Both accept `id[Label]`, `[Label]`
  * or bare text; cards take `@{ assigned: 'x', ticket: T-1, priority: 'High' }` metadata.
  * Geometry follows mermaid: 200px columns, 10px gaps, wrapped card text, priority stripe. */
 #include <math.h>
 
 #include "dgraph.h"
+#include "dcfg.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -106,9 +108,17 @@ DIAG_FN(kanban_render) {
     if (!cy) return CMM_ERR_NOMEM;
     for (size_t c = 0; c < cols.n; c++) {
         double x = (double)c * (CW + GAP);
-        dg_rect_fill(out, x, top, CW, ch[c] + 5, 5, "kc", COLF[c % countof(COLF)]); /* mermaid sizes each column to its cards */
+        /* mermaid: .section-N fill = cScale[N+1] lightened (darkened in dark mode) by 10; columns are N = c+1 */
+        size_t ci = c % 10 + 2;
+        char key[40];
+        snprintf(key, sizeof key, "themeVariables.cScale%zu", ci);
+        const char *fill = dcfg_get(key).n ? dcfg_pal("cScale", ci, COLF[c % countof(COLF)]) : dcfg_pal("kanbanFill", ci, COLF[c % countof(COLF)]);
+        dg_rect_fill(out, x, top, CW, ch[c] + 5, 5, "kc", fill); /* mermaid sizes each column to its cards */
         Str t = dg_wrap(a, cols.v[c], 16, CW - 20);
-        dg_text(out, t.p ? t : cols.v[c], 16, x + CW / 2, top + 13, "middle", "kt");
+        const char *lc = dcfg_pal("cScaleLabel", ci, "");
+        if (*lc) { buf_lit(out, "<g font-size=\"16px\" fill=\""); buf_put(out, strlen(lc), lc); buf_lit(out, "\">"); }
+        dg_text(out, t.p ? t : cols.v[c], 16, x + CW / 2, top + 13, "middle", *lc ? nullptr : "kt");
+        if (*lc) buf_lit(out, "</g>");
         cy[c] = top + 28;
     }
     for (size_t i = 0; i < items.n; i++) {

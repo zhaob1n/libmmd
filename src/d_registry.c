@@ -44,6 +44,10 @@ static const DiagEnt DIAGS[] = {
     {S("packet-beta"), packet_render},
     {S("packet"), packet_render},
     {S("zenuml"), zenuml_render},
+    {S("ishikawa-beta"), ishikawa_render},
+    {S("ishikawa"), ishikawa_render},
+    {S("cynefin-beta"), cynefin_render},
+    {S("cynefin"), cynefin_render},
 };
 
 DiagFn diag_lookup(Str kw) {
