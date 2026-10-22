@@ -55,6 +55,7 @@ API (`include/cmermaid.h`): `cmm_render_svg(n, src, opts, &buf, &err)`, `cmm_buf
 | text metrics | `src/text.c` | embedded Helvetica-compatible advance table, CJK/emoji wide, 8-byte ASCII fast path |
 | venn | `src/d_venn.c` | sets, unions with sizes, indented `text` nodes, `style`; venn.js-style area-proportional layout (lens-area bisection + stress descent), labels at each region's deepest point |
 | treeView | `src/d_treeview.c` | indentation or box-drawing (`├──`/`└──`/`│`) trees, `:::highlight`, `icon(pack:name)` / showIcons file+folder icons, filename/extension icon maps, `## descriptions` |
+| swimlane-beta | `src/d_swimlanes.c` (+ flowchart parser/drawer) | full-width lanes from top-level subgraphs (LR/RL rows with rotated titles, TB/BT columns), lane-aware ranking (unlabelled cross-lane hops share a column), orthogonal edge routing, all flowchart node shapes/styles |
 
 ## Docs syntax corpus
 
