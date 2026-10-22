@@ -381,7 +381,7 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
     uint32_t *ver = SA((R + 1) * sizeof *ver, true), *pva = SA((R + 1) * sizeof *pva, false);
     uint32_t *pvb = SA((R + 1) * sizeof *pvb, false);
     uint64_t *pcc = SA((R + 1) * sizeof *pcc, false), *mcgh = SA((2 * R + 1) * sizeof *mcgh, false);
-    uint8_t *mst = SA(2 * R + 1, true); /* bit0 valid, bit1 bias-dependent, bit2 bias */
+    uint8_t *mst = SA(2 * R + 1, true); /* bit0 valid, bit1 bias-dependent, bit2 bias, bit3 cg-independent */
     uint32_t *mcgn = SA((2 * R + 1) * sizeof *mcgn, false);
     int32_t *msnap = SA(2 * LT * sizeof *msnap, false), *mout = SA(2 * LT * sizeof *mout, false);
     tree = SA(4 * (maxw + 1) * sizeof *tree, false);
@@ -461,15 +461,15 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
             int32_t *snap = msnap + (c.down ? LT : 0) + nlo, *mo = mout + (c.down ? LT : 0) + lo;
             /* sortSubgraph reads only the neighbour layer's order, the constraint graph and (on ties) biasRight;
              * the layer's own current order and everything else are fixed, so an identical input replays. */
-            bool hit = (mst[m] & 1) && mcgn[m] == c.cgn && mcgh[m] == c.cgh &&
+            bool hit = (mst[m] & 1) && ((mst[m] & 8) || (mcgn[m] == c.cgn && mcgh[m] == c.cgh)) &&
                        (!(mst[m] & 2) || !!(mst[m] & 4) == c.bias) && !memcmp(snap, d->lay + nlo, nw * sizeof *snap);
             int32_t *no = mo;
-            if (!hit && c.cgn == 0 && rioff[r + 1] - rioff[r] == w) { /* no cluster spans this layer */
+            if (!hit && rioff[r + 1] - rioff[r] == w) {
+                /* no cluster spans this layer: constraint-graph edges (cluster pairs) cannot touch it */
                 c.tie = false;
                 sort_flat(&c, ri + rioff[r], w, fbc, fsi, fui, mo);
                 memcpy(snap, d->lay + nlo, nw * sizeof *snap);
-                mst[m] = (uint8_t)(1 | (c.tie ? 2 : 0) | (c.bias ? 4 : 0));
-                mcgn[m] = 0, mcgh[m] = c.cgh;
+                mst[m] = (uint8_t)(1 | (c.tie ? 2 : 0) | (c.bias ? 4 : 0) | 8);
                 hit = true;
             }
             if (!hit) {
@@ -517,10 +517,14 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
             }
         }
         DT(t1);
+        /* only cc < bestcc matters (and the best's exact count): sum cached pairs first, then count stale
+         * pairs and stop once the sum reaches bestcc; skipped pairs stay stale for the next sweep */
         uint64_t cc = 0;
-        for (size_t r = 0; r + 1 < R; r++) {
-            if (!it || pva[r] != ver[r] || pvb[r] != ver[r + 1])
-                pcc[r] = cross_pair(d, d->lay, r, tree), pva[r] = ver[r], pvb[r] = ver[r + 1];
+        for (size_t r = 0; r + 1 < R; r++)
+            if (it && pva[r] == ver[r] && pvb[r] == ver[r + 1]) cc += pcc[r];
+        for (size_t r = 0; r + 1 < R && cc < bestcc; r++) {
+            if (it && pva[r] == ver[r] && pvb[r] == ver[r + 1]) continue;
+            pcc[r] = cross_pair(d, d->lay, r, tree), pva[r] = ver[r], pvb[r] = ver[r + 1];
             cc += pcc[r];
         }
 #ifdef CMM_PROFILE
