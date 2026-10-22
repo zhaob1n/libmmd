@@ -27,7 +27,7 @@ typedef struct Box { Str color, label; } Box;
 typedef struct Ev {
     EvKind kind;
     uint8_t sub; /* NotePos */
-    bool dotted, bidir, act_to, deact_from;
+    bool dotted, bidir, act_to, deact_from, dot_a, dot_b; /* A()->>()B central-connection dots */
     Head head;
     int32_t a, b;
     Str kw, text;
@@ -307,6 +307,8 @@ static cmm_status parse_line(SP *p, Str line, size_t off) {
     const char *c = memchr(r2.p, ':', r2.n);
     Str to = str_trim((Str){.p = r2.p, .n = c ? (size_t)(c - r2.p) : r2.n});
     Str text = c ? (Str){.p = c + 1, .n = r2.n - (size_t)(c + 1 - r2.p)} : (Str){};
+    if (from.n > 2 && from.p[from.n - 2] == '(' && from.p[from.n - 1] == ')') ev.dot_a = true, from = str_trim((Str){.p = from.p, .n = from.n - 2});
+    if (to.n > 2 && to.p[0] == '(' && to.p[1] == ')') ev.dot_b = true, to = str_trim((Str){.p = to.p + 2, .n = to.n - 2});
     if (!from.n || !to.n) return sfail(p, off, "message needs sender and receiver");
     ev.kind = EV_MSG;
     ev.a = part_get(p, from, &oom);
@@ -546,6 +548,11 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
             if (mk) { buf_lit(&front, " marker-end=\"url(#"); buf_put(&front, strlen(mk), mk); buf_lit(&front, ")\""); }
             if (ev->bidir) buf_lit(&front, " marker-start=\"url(#sq-arrow-start)\"");
             buf_lit(&front, "/>");
+            for (int e = 0; e < 2; e++)
+                if (e ? ev->dot_b : ev->dot_a) {
+                    buf_lit(&front, "<circle class=\"seqdot\" cx=\""); buf_num(&front, e ? x2 : x1); buf_lit(&front, "\" cy=\"");
+                    buf_num(&front, ly); buf_lit(&front, "\" r=\"5\" fill=\"#333\"/>");
+                }
             if (p.autonumber) {
                 num++;
                 buf_lit(&front, "<circle class=\"seqnum\" cx=\""); buf_num(&front, x1); buf_lit(&front, "\" cy=\"");

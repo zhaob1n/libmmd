@@ -22,6 +22,8 @@ typedef struct EP {
     VEC(CDef) cdefs;
     size_t *err_off;
     char *msg;
+    int32_t sg[16]; /* open `subgraph` stack */
+    unsigned sgn;
 } EP;
 
 [[nodiscard]] static int32_t ent(EP *p, Str ref) {
@@ -45,6 +47,7 @@ typedef struct EP {
     int32_t v = dg_node(&p->g, ref, &fresh);
     if (v == NONE) return NONE;
     if (fresh && !VEC_PUSH(p->A, &p->ei, (EInfo){})) return NONE;
+    if (fresh) p->g.nparent[v] = p->sgn ? p->sg[p->sgn - 1] : NONE;
     if (label.n) p->g.nlabel[v] = label;
     if (cls.n) p->g.nclass[v] = cls;
     return v;
@@ -144,6 +147,23 @@ static cmm_status parse(EP *p, LineIt *it) {
             continue;
         }
         Str rest = line, w = dg_word(&rest);
+        if (str_eq(w, S("subgraph"))) { /* subgraph id ["title"] | subgraph "title" */
+            Str r = str_trim(rest), id = r, t = r;
+            const char *b = r.n ? memchr(r.p, '[', r.n) : nullptr;
+            if (b && r.p[r.n - 1] == ']') {
+                id = str_trim((Str){.p = r.p, .n = (size_t)(b - r.p)});
+                t = str_trim((Str){.p = b + 1, .n = r.n - (size_t)(b + 1 - r.p) - 1});
+            }
+            if (t.n >= 2 && t.p[0] == '"' && t.p[t.n - 1] == '"') t.p++, t.n -= 2;
+            if (id.n >= 2 && id.p[0] == '"' && id.p[id.n - 1] == '"') id.p++, id.n -= 2;
+            if (!id.n) return diag_fail(p->err_off, p->msg, off, "subgraph needs a name");
+            if (p->sgn >= countof(p->sg)) return diag_fail(p->err_off, p->msg, off, "subgraphs nested too deeply");
+            int32_t c = dg_cluster(g, id, t, p->sgn ? p->sg[p->sgn - 1] : NONE);
+            if (c == NONE) return CMM_ERR_NOMEM;
+            p->sg[p->sgn++] = c;
+            continue;
+        }
+        if (p->sgn && str_eq(line, S("end"))) { p->sgn--; continue; }
         if (str_eq(w, S("direction"))) {
             Str d = dg_word(&rest);
             g->dir = str_eq(d, S("LR")) ? DIR_LR : str_eq(d, S("RL")) ? DIR_RL : str_eq(d, S("BT")) ? DIR_BT : DIR_TB;
@@ -225,6 +245,7 @@ static void ent_style(Buf *b, const EP *p, Str cls, Str sty) {
 }
 
 static constexpr char CSS[] =
+    "#mermaid .sg{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}"
     "#mermaid .ent{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .row0{fill:#ffffff;stroke:#9370DB;stroke-width:0.5px;}"
     "#mermaid .row1{fill:#f6f6ff;stroke:#9370DB;stroke-width:0.5px;}"
@@ -263,6 +284,10 @@ DIAG_FN(er_render) {
     cmm_status st = parse(&p, &it);
     if (st) return st;
     Graph *g = &p.g;
+    if (p.sgn) return diag_fail(err_off, msg, it.i, "unterminated subgraph (missing 'end')");
+    for (size_t v = 0; v < g->nn; v++) /* relations to a subgraph id attach to its cluster */
+        for (size_t s = 0; s < g->ns; s++)
+            if (str_eq(g->nid[v], g->sid[s])) { g->nflags[v] |= NF_SUBREF | NF_HIDDEN; break; }
     if (!g->nn) return diag_fail(err_off, msg, off, "ER diagram has no entities");
     size_t N = g->nn, M = p.at.n;
     Attr *as = ANEW(a, Attr, M + 1);
@@ -293,6 +318,11 @@ DIAG_FN(er_render) {
     if (!buf_reserve(out, 2048 + N * 400 + g->ne * 400 + M * 300)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 12, "erDiagram", CSS);
     if (title.n) dg_text(out, title, 18, (bb.x0 + bb.x1) / 2, bb.y0 + 12, "middle", "name");
+    for (size_t s = 0; s < g->ns; s++) {
+        if (g->sw[s] <= 0) continue;
+        dg_rect(out, g->sx[s], g->sy[s], g->sw[s], g->sh[s], 0, "sg");
+        dg_text(out, g->stitle[s], fs, g->sx[s] + g->sw[s] / 2, g->sy[s] + 14, "middle", "name");
+    }
     for (size_t e = 0; e < g->ne; e++) {
         const ERel *r = &p.rel.v[e];
         if (!g->eptn[e] && g->efrom[e] != g->eto[e]) continue;
@@ -316,6 +346,7 @@ DIAG_FN(er_render) {
         }
     }
     for (size_t v = 0; v < N; v++) {
+        if (g->nflags[v] & NF_HIDDEN) continue;
         const EInfo *e = &p.ei.v[v];
         double w = g->nw[v], h = g->nh[v], x0 = g->nx[v] - w / 2, y0 = g->ny[v] - h / 2;
         dg_rect(out, x0, y0, w, h, 0, "ent");

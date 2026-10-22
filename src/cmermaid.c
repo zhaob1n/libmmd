@@ -53,6 +53,10 @@ static cmm_theme parse_theme_after(Str s) {
     static const Str KEY = S("theme");
     for (size_t i = 0; i + KEY.n <= s.n; i++) {
         if (memcmp(s.p + i, KEY.p, KEY.n) != 0) continue;
+        size_t ls = i; /* skip YAML `# comment` lines */
+        while (ls && s.p[ls - 1] != '\n') ls--;
+        while (ls < i && is_sp(s.p[ls])) ls++;
+        if (s.p[ls] == '#') continue;
         size_t j = i + KEY.n;
         if (j < s.n && s.p[j] != '"' && s.p[j] != '\'' && s.p[j] != ':' && !is_sp(s.p[j])) continue;
         while (j < s.n && (s.p[j] == '"' || s.p[j] == '\'' || s.p[j] == ':' || is_sp(s.p[j]))) j++;

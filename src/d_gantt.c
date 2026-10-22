@@ -376,6 +376,16 @@ DIAG_FN(gantt_render) {
                                    3 * 3600000.0, 6 * 3600000.0, 12 * 3600000.0, DAY, 2 * DAY, 7 * DAY};
     double step = 7 * DAY;
     bool months = false;
+    if (tick.n) { /* mermaid ignores anything but /^[1-9][0-9]*(millisecond|second|minute|hour|day|week|month)$/ */
+        size_t k = 0;
+        while (k < tick.n && (unsigned)(tick.p[k] - '0') < 10u) k++;
+        Str u = {.p = tick.p + k, .n = tick.n - k};
+        static const char *const U[] = {"millisecond", "second", "minute", "hour", "day", "week", "month"};
+        bool ok = k && tick.p[0] != '0';
+        size_t j = 0;
+        while (j < countof(U) && !str_eq(u, (Str){.p = U[j], .n = strlen(U[j])})) j++;
+        if (!ok || j == countof(U)) tick = (Str){};
+    }
     if (tick.n) {
         Str tk = tick;
         size_t k = 0;
@@ -433,6 +443,7 @@ DIAG_FN(gantt_render) {
     /* width: mermaid's default 1000px unless the axis labels need more room */
     char lab[96];
     double W = 1000, maxlab = 0;
+    { Str uw = dcfg_get("gantt.useWidth"); double v; if (uw.n && dg_parse_num(uw, &v) && v >= 100 && v <= 20000) W = v; }
     /* tick times; d3 day intervals restart at each month (... Jan 29, Jan 31, Feb 01) */
     double TK[600];
     size_t ntk = 0;

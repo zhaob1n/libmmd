@@ -252,8 +252,14 @@ bool dg_next_line(LineIt *it, Str *line, size_t *off) {
         it->lstart = it->i;
         it->i = nl ? e + 1 : e;
         Str t = str_trim(raw);
+        if (str_starts(t, S("%%"))) continue;
+        for (size_t k = 1; k + 2 <= t.n; k++) /* trailing `  %% comment` (mermaid lexers drop it anywhere) */
+            if (t.p[k] == '%' && t.p[k + 1] == '%' && is_sp(t.p[k - 1]) && (k + 2 >= t.n || t.p[k + 2] != '{')) {
+                t = str_trim((Str){.p = t.p, .n = k});
+                break;
+            }
         while (t.n && t.p[t.n - 1] == ';') t.n--;
-        if (!t.n || str_starts(t, S("%%"))) continue;
+        if (!t.n) continue;
         bool blk;
         if (dcfg_is_acc(t, &blk)) { /* handled by dcfg (emitted as <title>/<desc>) */
             if (blk && !memchr(t.p, '}', t.n)) {
