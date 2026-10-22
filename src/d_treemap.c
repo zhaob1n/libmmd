@@ -17,13 +17,13 @@ typedef struct TNode {
 typedef struct TCls { Str name, fill, stroke, color; } TCls;
 
 static constexpr char CSS[] =
-    "#mermaid .sh{font-size:12px;font-weight:bold;fill:#333;}#mermaid .lf{stroke:#fff;stroke-width:1px;}"
-    "#mermaid .ln{font-size:12px;fill:#222;}#mermaid .lv{font-size:10px;fill:#333;}"
-    "#mermaid .sec{fill-opacity:.25;stroke-width:1px;}#mermaid .ttl{font-size:18px;fill:#333;}";
-static const char *const SEC[] = {"#8dd3c7", "#ffffb3", "#bebada", "#fb8072", "#80b1d3", "#fdb462",
-                                  "#b3de69", "#fccde5", "#d9d9d9", "#bc80bd", "#ccebc5", "#ffed6f"};
-static const char *const SECD[] = {"#4f9e92", "#b3b35c", "#7a74a8", "#c0453a", "#3f7aa3", "#c27d26",
-                                   "#76a12d", "#c48aa8", "#8f8f8f", "#7d3f7e", "#7fae78", "#b3a227"};
+    "#mermaid .sh{font-size:12px;font-weight:bold;fill:#333;}#mermaid .lf{fill-opacity:.3;stroke-width:3px;}"
+    "#mermaid .sv{font-size:10px;font-style:italic;fill:#333;}"
+    "#mermaid .sec{fill-opacity:.6;stroke-width:2px;stroke-opacity:.4;}#mermaid .ttl{font-size:18px;fill:#333;}";
+/* mermaid 11 default cScale (hsl(h,100%,~76%)): sections fill .6 opacity, leaves .3 with a 3px same-colour border */
+static const char *const SEC[] = {"#8686ff", "#ffff78", "#d7ff86", "#86c2ff", "#86ffff", "#86ffc2", "#ff86ff", "#ff8686"};
+static const char *const SECD[] = {"#3939ff", "#ffff2c", "#b5ff20", "#399cff", "#39ffff", "#39ff9c", "#ff39ff", "#ff3939"};
+static const char *const SECT[] = {"#fff", "#000", "#000", "#000", "#000", "#000", "#000", "#000"};
 
 static double worst(double s, double mn, double mx, double side) {
     double s2 = s * s, w2 = side * side;
@@ -200,25 +200,32 @@ DIAG_FN(treemap_render) {
         buf_lit(out, "\" fill=\"");
         if (uc && uc->fill.n) buf_xml(out, uc->fill); else buf_put(out, strlen(fill), fill);
         buf_lit(out, "\" stroke=\"");
-        if (uc && uc->stroke.n) buf_xml(out, uc->stroke); else buf_put(out, strlen(st), st);
+        if (uc && uc->stroke.n) buf_xml(out, uc->stroke); else if (leaf) buf_put(out, strlen(fill), fill); else buf_put(out, strlen(st), st);
         buf_lit(out, "\"/>");
         fmt_val(t->v, sizeof nb, nb, &nl);
         if (!leaf) {
             if (t->w > 30) {
                 dg_text(out, t->label, 12, t->x + 6, t->y + HDR / 2, "start", "sh");
                 if (t->w > text_width(t->label, 12) + text_width((Str){.p = nb, .n = nl}, 10) + 24)
-                    dg_text(out, (Str){.p = nb, .n = nl}, 10, t->x + t->w - 6, t->y + HDR / 2, "end", "lv");
+                    dg_text(out, (Str){.p = nb, .n = nl}, 10, t->x + t->w - 6, t->y + HDR / 2, "end", "sv");
             }
             continue;
         }
-        double fsz = fmin(16, fmax(8, fmin(t->w / (double)(t->label.n + 2) * 1.6, t->h / 3)));
+        /* mermaid fits leaf labels up to 38px; value at ~0.6x */
+        double fsz = fmin(38, fmax(8, fmin((t->w - 12) / fmax(1, text_width(t->label, 1)), t->h / 2.2)));
+        double vsz = fmax(8, fmin(23, fsz * 0.6));
+        const char *tc = SECT[t->sec % countof(SECT)];
         if (t->w > 20 && t->h > 20) {
+            buf_lit(out, "<g fill=\""); buf_put(out, strlen(tc), tc); buf_lit(out, "\">");
             char cl[64];
             snprintf(cl, sizeof cl, "ln\" font-size=\"%.1f", fsz);
             if (uc && uc->color.n) { dg_text_open(out, t->x + t->w / 2, t->y + t->h / 2 - fsz * 0.45, "middle", cl);
                 buf_lit(out, "<tspan fill=\""); buf_xml(out, uc->color); buf_lit(out, "\">"); buf_xml(out, t->label); buf_lit(out, "</tspan></text>"); }
             else dg_text(out, t->label, fsz, t->x + t->w / 2, t->y + t->h / 2 - fsz * 0.45, "middle", cl);
-            dg_text(out, (Str){.p = nb, .n = nl}, 10, t->x + t->w / 2, t->y + t->h / 2 + fsz * 0.7, "middle", "lv");
+            char vc[64];
+            snprintf(vc, sizeof vc, "lv\" font-size=\"%.1f", vsz);
+            dg_text(out, (Str){.p = nb, .n = nl}, vsz, t->x + t->w / 2, t->y + t->h / 2 + fsz * 0.25 + vsz * 0.6, "middle", vc);
+            buf_lit(out, "</g>");
         }
     }
     if (title.n) dg_text(out, title, 18, W / 2, 20, "middle", "ttl");
