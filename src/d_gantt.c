@@ -242,8 +242,8 @@ static size_t fmt_time(Str f, double t, size_t cap, char out[static cap]) {
 
 static constexpr char CSS[] =
     "#mermaid .sec0,#mermaid .sec2{fill:#6666ff;opacity:0.2;}#mermaid .sec1,#mermaid .sec3{fill:#fff400;opacity:0.2;}"
-    "#mermaid .stitle{font-size:11px;fill:#333;}#mermaid .grid{stroke:#ddd;stroke-width:1px;}"
-    "#mermaid .tick{font-size:10px;fill:#000;}"
+    "#mermaid .stitle{font-size:11px;fill:#333;}#mermaid .grid{stroke:lightgrey;opacity:.8;stroke-width:1px;}"
+    "#mermaid .tick{font-size:10px;fill:#000;}#mermaid .exr{fill:#eee;stroke:none;}"
     "#mermaid .task{fill:#8a90dd;stroke:#534fbc;}#mermaid .done{fill:#d3d3d3;stroke:grey;}"
     "#mermaid .active{fill:#bfc7ff;stroke:#534fbc;}#mermaid .crit{fill:#ff8888;stroke:#ff0000;}"
     "#mermaid .crit.done{fill:#d3d3d3;stroke:#ff0000;}#mermaid .crit.active{fill:#ff8888;stroke:#ff0000;}"
@@ -414,6 +414,18 @@ DIAG_FN(gantt_render) {
         dg_rect(out, 0, TOP + i * (BH + GAP) - 2, W, (j - i) * (BH + GAP), 0, cls);
         if (secs.n) dg_text(out, secs.v[tv.v[i].sec], 11, 10, TOP + (i + j) * (BH + GAP) / 2.0 - 2, "start", "stitle");
         i = j;
+    }
+    /* excluded days (mermaid shades runs of excluded days in #eee) */
+    if (c.ex_weekends || c.exdays.n) {
+        double d0 = floor(lo_t / DAY), d1 = ceil(hi_t / DAY), gb = TOP + tv.n * (BH + GAP) - 2;
+        for (double d = d0; d < d1 && d - d0 < 4000;) {
+            if (!excluded(&c, d)) { d++; continue; }
+            double e = d;
+            while (e < d1 && excluded(&c, e)) e++;
+            double xa = left + (fmax(d * DAY, lo_t) - lo_t) * sc, xb = left + (fmin(e * DAY, hi_t) - lo_t) * sc;
+            if (xb > xa) dg_rect(out, xa, TOP - 2, xb - xa, gb - TOP + 2, 0, "exr");
+            d = e;
+        }
     }
     /* grid + axis labels */
     double gy0 = TOP - 2, gy1 = TOP + tv.n * (BH + GAP) - 2;
