@@ -1655,6 +1655,38 @@ static bool pt_buried(const Router *R, double x, double y, int32_t s1, int32_t s
 /* shortest visibility path S->T; writes interior corners to out (max cap pts). Returns count or -1. */
 static inline double edist(double dx, double dy) { return sqrt(dx * dx + dy * dy); }
 
+/* indexed binary min-heap over A* keys f = dist + h (ties by index, matching a linear argmin scan) */
+typedef struct VHeap { size_t n; int32_t *h, *at; const double *dist, *hh; } VHeap;
+static inline bool vh_lt(const VHeap *H, int32_t a, int32_t b) {
+    double fa = H->dist[a] + H->hh[a], fb = H->dist[b] + H->hh[b];
+    return fa < fb || (fa == fb && a < b);
+}
+static void vh_swap(VHeap *H, size_t i, size_t j) {
+    int32_t t = H->h[i]; H->h[i] = H->h[j], H->h[j] = t;
+    H->at[H->h[i]] = (int32_t)i, H->at[H->h[j]] = (int32_t)j;
+}
+static void vh_fix(VHeap *H, size_t i) {
+    while (i && vh_lt(H, H->h[i], H->h[(i - 1) / 2])) vh_swap(H, i, (i - 1) / 2), i = (i - 1) / 2;
+    for (;;) {
+        size_t l = 2 * i + 1, r = l + 1, m = i;
+        if (l < H->n && vh_lt(H, H->h[l], H->h[m])) m = l;
+        if (r < H->n && vh_lt(H, H->h[r], H->h[m])) m = r;
+        if (m == i) return;
+        vh_swap(H, i, m), i = m;
+    }
+}
+static void vh_set(VHeap *H, int32_t v) { /* insert or re-key */
+    if (H->at[v] < 0) { H->h[H->n] = v, H->at[v] = (int32_t)H->n, H->n++; }
+    vh_fix(H, (size_t)H->at[v]);
+}
+static void vh_del(VHeap *H, int32_t v) {
+    size_t i = (size_t)H->at[v];
+    H->n--;
+    if (i != H->n) { H->h[i] = H->h[H->n], H->at[H->h[i]] = (int32_t)i; }
+    H->at[v] = -1;
+    if (i < H->n) vh_fix(H, i);
+}
+
 static int vis_path(Router *R, Arena *A, double sx, double sy, double tx, double ty, int32_t s1, int32_t s2,
                     size_t cap, double out[static 2 * cap]) {
     const Graph *g = R->g;
@@ -1693,7 +1725,7 @@ static int vis_path(Router *R, Arena *A, double sx, double sy, double tx, double
             if (!pt_buried(R, cx[i], cy[i], s1, s2)) cx[m] = cx[i], cy[m] = cy[i], m++;
         }
         nc = m;
-        /* Dijkstra (dense, O(V^2) with lazy visibility) */
+        /* A* over the complete visibility graph, binary heap, lazy visibility */
         double *dist = ANEW(A, double, nc);
         int32_t *prev = ANEW(A, int32_t, nc);
         uint8_t *done = ANEW(A, uint8_t, nc);
@@ -1704,40 +1736,51 @@ static int vis_path(Router *R, Arena *A, double sx, double sy, double tx, double
         double *hh = ANEW(A, double, nc);
         if (!hh) return -1;
         for (size_t i = 0; i < nc; i++) hh[i] = edist(cx[i] - tx, cy[i] - ty);
+        VHeap H = {0, ANEW(A, int32_t, nc), ANEW(A, int32_t, nc), dist, hh};
+        if (!H.h || !H.at) return -1;
+        for (size_t i = 0; i < nc; i++) H.at[i] = -1;
+        vh_set(&H, 0);
         bool reached = false;
         /* lazy A*: relax without visibility tests, validate a node's parent link only when it is popped */
         for (;;) {
-            size_t u = SIZE_MAX;
-            double bd = INFINITY;
-            for (size_t i = 0; i < nc; i++) if (!done[i] && dist[i] + hh[i] < bd) bd = dist[i] + hh[i], u = i;
-            if (u == SIZE_MAX) break;
+            if (!H.n) break;
+            size_t u = (size_t)H.h[0];
             if (u != 0 && !done[u]) {
                 int32_t p = prev[u];
                 if (R->budget < 0) return -1;
                 if (seg_hit(R, cx[p], cy[p], cx[u], cy[u], s1, s2) != NONE) {
                     /* parent invisible: best visible already-settled parent, else drop for now */
-                    double nd = INFINITY;
-                    int32_t np2 = -1;
+                    /* candidates by tentative distance: the first visible one is the best (fewest tests) */
+                    double cd[MAXC + 2];
+                    int32_t cq[MAXC + 2];
+                    size_t ncand = 0;
                     for (size_t q = 0; q < nc; q++) {
                         if (done[q] != 1 || (int32_t)q == p) continue;
                         double d = dist[q] + edist(cx[u] - cx[q], cy[u] - cy[q]);
-                        if (d >= nd) continue;
-                        if (seg_hit(R, cx[q], cy[q], cx[u], cy[u], s1, s2) != NONE) continue;
-                        nd = d, np2 = (int32_t)q;
+                        size_t j = ncand++;
+                        while (j && (cd[j - 1] > d || (cd[j - 1] == d && cq[j - 1] > (int32_t)q))) cd[j] = cd[j - 1], cq[j] = cq[j - 1], j--;
+                        cd[j] = d, cq[j] = (int32_t)q;
                     }
+                    double nd = INFINITY;
+                    int32_t np2 = -1;
+                    for (size_t i = 0; i < ncand; i++)
+                        if (seg_hit(R, cx[cq[i]], cy[cq[i]], cx[u], cy[u], s1, s2) == NONE) { nd = cd[i], np2 = cq[i]; break; }
                     dist[u] = nd, prev[u] = np2;
-                    if (np2 < 0) { done[u] = 2; continue; } /* unreachable via settled nodes */
+                    if (np2 < 0) { done[u] = 2; vh_del(&H, (int32_t)u); continue; } /* unreachable via settled nodes */
+                    vh_fix(&H, (size_t)H.at[u]);
                     continue; /* re-select with the corrected key */
                 }
             }
             if (u == 1) { reached = true; break; }
             done[u] = 1;
+            vh_del(&H, (int32_t)u);
             double du = dist[u];
             for (size_t w = 1; w < nc; w++) {
                 if (done[w] == 1) continue;
                 double d = du + edist(cx[w] - cx[u], cy[w] - cy[u]);
                 if (done[w] == 0 && d >= dist[w]) continue;
                 dist[w] = d, prev[w] = (int32_t)u, done[w] = 0;
+                vh_set(&H, (int32_t)w);
             }
         }
         if (!reached) { if (full) break; continue; }
