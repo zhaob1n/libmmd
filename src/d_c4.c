@@ -14,6 +14,7 @@
 #include "text.h"
 
 enum { K_PERSON, K_SYSTEM, K_CONTAINER, K_COMPONENT };
+static const char *const C4_TY[4] = {"Person", "Software System", "Container", "Component"};
 enum { F_PLAIN, F_DB, F_QUEUE };
 typedef struct CInfo { Str stereo, techn, descr; uint8_t kind, form; bool ext; } CInfo;
 typedef struct CRel { Str techn; bool bi; } CRel;
@@ -22,7 +23,7 @@ typedef struct RStyle { Str from, to, text, line; double ox, oy; } RStyle;
 typedef struct Item { int32_t idx; bool box; } Item;
 
 static constexpr char CSS[] =
-    "#mermaid .ct{fill:#fff;}#mermaid .ct.ext{fill:#fff;}#mermaid .cn{font-weight:bold;}#mermaid .cs{font-size:12px;font-style:italic;}"
+    "#mermaid .ct{fill:#fff;}#mermaid .ct.ext{fill:#fff;}#mermaid .cn{font-weight:bold;}#mermaid .cs{font-size:12px;}"
     "#mermaid .cd{font-size:14px;}#mermaid .cb{fill:none;stroke:#444;stroke-width:1px;stroke-dasharray:7,7;}"
     "#mermaid .cbt{font-weight:bold;font-size:14px;fill:#444;}#mermaid .cbs{font-size:12px;fill:#444;}"
     "#mermaid .cr{fill:none;stroke:#444;stroke-width:1px;}#mermaid .crh{fill:#444;}#mermaid .crl{font-size:13px;fill:#444;}"
@@ -280,7 +281,8 @@ DIAG_FN(c4_render) {
         unsigned nl = 0;
         label_measure(g.nlabel[v], fs, &tw, &nl);
         w = fmax(216, tw + 30);
-        double h = 20 + 18 + nl * fs * 1.3 + (c->techn.n ? 18 : 0) + 8;
+        w = fmax(w, (double)(strlen(C4_TY[c->kind]) + c->techn.n + 4) * 6.6 + 30);
+        double h = 12 + nl * fs * 1.3 + 2 + 18 + 10;
         if (dw[v].n) {
             double dwid;
             unsigned dl;
@@ -288,9 +290,9 @@ DIAG_FN(c4_render) {
             h += dl * 18 + 6;
             w = fmax(w, dwid + 30);
         }
-        if (c->kind == K_PERSON) h += 48;
+        if (c->kind == K_PERSON) h += 50;
         if (c->form == F_DB) h += 14;
-        dg_size(&g, (int32_t)v, w, fmax(h, 60 + (c->kind == K_PERSON ? 48 : 0)));
+        dg_size(&g, (int32_t)v, w, fmax(h, 60 + (c->kind == K_PERSON ? 50 : 0)));
     }
     for (size_t e = 0; e < g.ne; e++) {
         if (cr.v[e].techn.n) {
@@ -416,29 +418,31 @@ DIAG_FN(c4_render) {
             buf_lit(out, "a"); buf_num(out, rx); buf_ch(out, ','); buf_num(out, h / 2); buf_lit(out, " 0 0 1 0,"); buf_num(out, -h);
             buf_lit(out, "z M"); dg_pt(out, x0 + w - rx, y0);
             buf_lit(out, "a"); buf_num(out, rx); buf_ch(out, ','); buf_num(out, h / 2); buf_lit(out, " 0 0 0 0,"); buf_num(out, h); buf_lit(out, "\"/>");
+        } else if (c->kind == K_PERSON) { /* mermaid 11: rounded body with a large head circle above it */
+            double r = fmin(36, w / 4), by = y0 + r * 1.4, bh = h - r * 1.4;
+            buf_lit(out, "<rect fill=\""); buf_put(out, strlen(fill), fill); buf_lit(out, "\" stroke=\""); buf_put(out, strlen(stroke), stroke);
+            buf_lit(out, "\" rx=\""); buf_num(out, fmin(30, bh / 3)); buf_lit(out, "\" x=\""); buf_num(out, x0); buf_lit(out, "\" y=\""); buf_num(out, by);
+            buf_lit(out, "\" width=\""); buf_num(out, w); buf_lit(out, "\" height=\""); buf_num(out, bh); buf_lit(out, "\"/>");
+            buf_lit(out, "<circle fill=\""); buf_put(out, strlen(fill), fill); buf_lit(out, "\" stroke=\""); buf_put(out, strlen(stroke), stroke);
+            buf_lit(out, "\" cx=\""); buf_num(out, cx); buf_lit(out, "\" cy=\""); buf_num(out, y0 + r); buf_lit(out, "\" r=\""); buf_num(out, r); buf_lit(out, "\"/>");
+            y0 = by;
         } else {
             buf_lit(out, "<rect rx=\"2.5\" fill=\""); buf_put(out, strlen(fill), fill); buf_lit(out, "\" stroke=\""); buf_put(out, strlen(stroke), stroke);
             buf_lit(out, "\" x=\""); buf_num(out, x0); buf_lit(out, "\" y=\""); buf_num(out, y0);
             buf_lit(out, "\" width=\""); buf_num(out, w); buf_lit(out, "\" height=\""); buf_num(out, h); buf_lit(out, "\"/>");
         }
-        double y = y0 + 16;
-        if (c->kind == K_PERSON) { /* head + shoulders glyph */
-            buf_lit(out, "<circle fill=\"#fff\" fill-opacity=\".9\" cx=\""); buf_num(out, cx); buf_lit(out, "\" cy=\""); buf_num(out, y + 10);
-            buf_lit(out, "\" r=\"10\"/><path fill=\"#fff\" fill-opacity=\".9\" d=\"M"); dg_pt(out, cx - 18, y + 42);
-            buf_lit(out, "q0,-20 18,-20 q18,0 18,20 z\"/>");
-            y += 50;
-        }
-        buf_lit(out, "<text class=\"cs\" text-anchor=\"middle\" dominant-baseline=\"central\" x=\""); buf_num(out, cx);
-        buf_lit(out, "\" y=\""); buf_num(out, y); buf_lit(out, "\">&lt;&lt;"); buf_xml(out, c->stereo); buf_lit(out, "&gt;&gt;</text>");
+        double y = y0 + 12;
         double tw;
         unsigned nl;
         label_measure(g.nlabel[v], fs, &tw, &nl);
-        y += 10 + nl * fs * 1.3 / 2;
+        y += nl * fs * 1.3 / 2;
         dg_text(out, g.nlabel[v], fs, cx, y, "middle", "cn");
-        y += nl * fs * 1.3 / 2 + 4;
-        if (c->techn.n) {
+        y += nl * fs * 1.3 / 2 + 2;
+        { /* mermaid 11 type line: [Person], [Software System], [Container: techn], [Component: techn] */
             dg_text_open(out, cx, y + 8, "middle", "cs");
-            buf_ch(out, '['); buf_xml(out, c->techn); buf_lit(out, "]</text>");
+            buf_ch(out, '['); buf_put(out, strlen(C4_TY[c->kind]), C4_TY[c->kind]);
+            if (c->techn.n) { buf_lit(out, ": "); buf_xml(out, c->techn); }
+            buf_lit(out, "]</text>");
             y += 18;
         }
         if (dw[v].n) {
