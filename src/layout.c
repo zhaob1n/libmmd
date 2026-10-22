@@ -1052,6 +1052,57 @@ static cmm_status layout_core(Graph *g) {
         }
     }
 
+    /* mermaid/dagre tie order for compound graphs: a cluster's children are its sub-clusters in reverse
+     * declaration order (flowDb pushes subgraphs reversed), then its direct members. Seed every layer with
+     * that hierarchy order (stable on the DFS order within a cluster); sweeps then move by barycenters. */
+    if (S) {
+        uint32_t *post = ANEW(A, uint32_t, S + 1), *cst = ANEW(A, uint32_t, S + 1), *kc = ANEW(A, uint32_t, 2 * S + 3);
+        int32_t *kid = ANEW(A, int32_t, S + 1), *sib = ANEW(A, int32_t, S + 1), *tmpl = ANEW(A, int32_t, placed + 1);
+        uint8_t *done = ANEW(A, uint8_t, S + 1);
+        if (!post || !cst || !kc || !kid || !sib || !tmpl || !done) return CMM_ERR_NOMEM;
+        int32_t rootk = NONE;
+        for (size_t c = 0; c < S; c++) kid[c] = NONE;
+        for (size_t c = 0; c < S; c++) { /* prepend in increasing index -> lists end up in decreasing order */
+            int32_t p = g->sparent[c];
+            if (p == NONE) { sib[c] = rootk; rootk = (int32_t)c; }
+            else { sib[c] = kid[p]; kid[p] = (int32_t)c; }
+        }
+        uint32_t num = 0;
+        size_t sp2 = 0;
+        memset(done, 0, S);
+        for (int32_t r0 = rootk; r0 != NONE; r0 = sib[r0]) {
+            cst[sp2++] = (uint32_t)r0;
+            while (sp2) {
+                uint32_t c = cst[sp2 - 1];
+                if (!done[c]) {
+                    done[c] = 1; num++;
+                    /* push children so that the first in kid-list is processed first */
+                    size_t base = sp2;
+                    for (int32_t d = kid[c]; d != NONE; d = sib[d]) cst[sp2++] = (uint32_t)d;
+                    for (size_t i = base, j = sp2 - 1; i < j; i++, j--) { uint32_t t = cst[i]; cst[i] = cst[j]; cst[j] = t; }
+                } else { post[c] = num++; sp2--; }
+            }
+        }
+        const uint32_t KMAX = 2 * (uint32_t)S + 2;
+        memset(kc, 0, (KMAX + 1) * sizeof *kc);
+#define HKEY(v) (L.cl[v] == NONE ? KMAX - 1 : post[L.cl[v]])
+        for (size_t r = 0; r < R; r++) {
+            size_t a0 = L.loff[r], n0 = L.loff[r + 1] - a0;
+            if (n0 < 2) continue;
+            bool sorted = true;
+            for (size_t i = 1; i < n0 && sorted; i++) sorted = HKEY(L.lay[a0 + i - 1]) <= HKEY(L.lay[a0 + i]);
+            if (sorted) continue;
+            for (size_t i = 1; i < n0; i++) { /* stable insertion sort; layers are short and nearly sorted */
+                int32_t v = L.lay[a0 + i];
+                uint32_t kv = HKEY(v);
+                size_t j = i;
+                while (j > 0 && HKEY(L.lay[a0 + j - 1]) > kv) { L.lay[a0 + j] = L.lay[a0 + j - 1]; j--; }
+                L.lay[a0 + j] = v;
+            }
+            for (size_t i = 0; i < n0; i++) L.pos[L.lay[a0 + i]] = (int32_t)i;
+        }
+#undef HKEY
+    }
     /* ---- crossing minimisation ---- */
     size_t maxw = 1;
     for (size_t r = 0; r < R; r++) if (L.loff[r + 1] - L.loff[r] > maxw) maxw = L.loff[r + 1] - L.loff[r];
@@ -1091,7 +1142,7 @@ static cmm_status layout_core(Graph *g) {
      * down-sweep measured non-improving (medium 485 -> 508) while costing ~45 µs; large ones need it */
     const unsigned maxit = (nseg > ORDER_ONE_SWEEP_MIN && nseg <= ORDER_ONE_SWEEP_MAX) ? 1 : 24;
     for (unsigned iter = 0; iter < maxit && since < patience && bestc > 0; iter++) {
-        bool down = (iter & 1u) == 0;
+        bool down = ((iter & 1u) == 0);
         if (clusters) cluster_keys(&L, S, csum, ccnt);
         if (down) for (size_t r = 1; r < R; r++) sweep_layer(&L, r, true, false, keys, idx, tmp, csum, ccnt, clusters);
         else for (size_t r = R - 1; r-- > 0;) sweep_layer(&L, r, false, false, keys, idx, tmp, csum, ccnt, clusters);
