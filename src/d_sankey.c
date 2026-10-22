@@ -1,7 +1,7 @@
 /* sankey(-beta): CSV rows `source,target,value` (RFC 4180 quoting, "" escapes, blank lines ok).
- * d3-sankey style layout: columns by longest path from sources with sinks justified to the last
- * column, node height = max(inflow, outflow) * ky, a few barycentric relaxation sweeps to order
- * nodes, links as cubic bands coloured by their source. Labels show the value (showValues). */
+ * Layout is a port of d3-sankey 0.12 as configured by mermaid 11 (justify alignment, node width 10,
+ * padding 12 (+15 with showValues), 6 relaxation iterations with collision resolution); links are
+ * cubic bands coloured by their source. Labels show the value (showValues). */
 #include <math.h>
 #include <stdio.h>
 
@@ -10,7 +10,7 @@
 #include "diagrams.h"
 #include "text.h"
 
-typedef struct SNode { Str name; double in, out, v, x, y, h, yin, yout, key; uint32_t col; bool sink_ok; } SNode;
+typedef struct SNode { Str name; double in, out, v, x, y, h; uint32_t col; } SNode;
 typedef struct SLink { uint32_t s, t; double v, y0, y1; } SLink;
 
 static constexpr char CSS[] =
@@ -93,77 +93,128 @@ DIAG_FN(sankey_render) {
         if (round > nn) return diag_fail(err_off, msg, off, "sankey links form a cycle");
     }
     for (size_t i = 0; i < nn; i++) if (N[i].col > maxc) maxc = N[i].col;
-    for (size_t i = 0; i < nn; i++) { /* justify: sinks to the last column */
+    /* --- port of d3-sankey 0.12 (mermaid 11: justify, nodeWidth 10, nodePadding 12 (+15 with
+       showValues), extent [[0,0],[width,height]], 6 iterations) --- */
+    const bool SHOWV = dcfg_bool("sankey.showValues", true);
+    uint32_t *soff = ANEW(a, uint32_t, nn + 1), *toff = ANEW(a, uint32_t, nn + 1);
+    uint32_t *sl = ANEW(a, uint32_t, nl), *tl = ANEW(a, uint32_t, nl), *fill = ANEW(a, uint32_t, nn);
+    if (!soff || !toff || !sl || !tl || !fill) return CMM_ERR_NOMEM;
+    for (size_t i = 0; i <= nn; i++) soff[i] = toff[i] = 0;
+    for (size_t l = 0; l < nl; l++) soff[L[l].s + 1]++, toff[L[l].t + 1]++;
+    for (size_t i = 0; i < nn; i++) soff[i + 1] += soff[i], toff[i + 1] += toff[i];
+    for (size_t i = 0; i < nn; i++) fill[i] = soff[i];
+    for (size_t l = 0; l < nl; l++) sl[fill[L[l].s]++] = (uint32_t)l;
+    for (size_t i = 0; i < nn; i++) fill[i] = toff[i];
+    for (size_t l = 0; l < nl; l++) tl[fill[L[l].t]++] = (uint32_t)l;
+    for (size_t i = 0; i < nn; i++) { /* justify: nodes without outgoing links to the last column */
         N[i].v = fmax(N[i].in, N[i].out);
-        if (N[i].out == 0 && N[i].in > 0) N[i].col = maxc;
+        if (soff[i + 1] == soff[i]) N[i].col = maxc;
     }
     const double W = fmin(fmax(dcfg_num("sankey.width", 600), 100), 4000);
     const double H = fmin(fmax(dcfg_num("sankey.height", 400), 100), 4000);
     constexpr double NW = 10;
-    constexpr double PAD = 25;
+    uint32_t *colcnt = ANEW(a, uint32_t, maxc + 2), *coff = ANEW(a, uint32_t, maxc + 2), *cn = ANEW(a, uint32_t, nn);
+    if (!colcnt || !coff || !cn) return CMM_ERR_NOMEM;
+    for (uint32_t c = 0; c <= maxc + 1; c++) colcnt[c] = coff[c] = 0;
+    for (size_t i = 0; i < nn; i++) colcnt[N[i].col]++;
+    uint32_t maxcnt = 0;
+    for (uint32_t c = 0; c <= maxc; c++) coff[c + 1] = coff[c] + colcnt[c], maxcnt = colcnt[c] > maxcnt ? colcnt[c] : maxcnt;
+    for (uint32_t c = 0; c <= maxc; c++) colcnt[c] = 0;
+    for (size_t i = 0; i < nn; i++) cn[coff[N[i].col] + colcnt[N[i].col]++] = (uint32_t)i; /* input order */
+    const double py = fmin(12.0 + (SHOWV ? 15 : 0), maxcnt > 1 ? H / (maxcnt - 1.0) : INFINITY);
     double ky = INFINITY;
-    double *colsum = ANEW(a, double, maxc + 1);
-    uint32_t *colcnt = ANEW(a, uint32_t, maxc + 1);
-    uint32_t *lord = ANEW(a, uint32_t, nn);
-    if (!colsum || !colcnt || !lord) return CMM_ERR_NOMEM;
-    for (uint32_t c = 0; c <= maxc; c++) colsum[c] = 0, colcnt[c] = 0; /* arena memory is not zeroed */
-    for (size_t i = 0; i < nn; i++) colsum[N[i].col] += N[i].v, colcnt[N[i].col]++;
-    for (uint32_t c = 0; c <= maxc; c++)
-        if (colsum[c] > 0) ky = fmin(ky, (H - (colcnt[c] - 1.0) * PAD) / colsum[c]);
+    for (uint32_t c = 0; c <= maxc; c++) {
+        double sum = 0;
+        for (uint32_t k = coff[c]; k < coff[c + 1]; k++) sum += N[cn[k]].v;
+        if (sum > 0) ky = fmin(ky, (H - (coff[c + 1] - coff[c] - 1.0) * py) / sum);
+    }
     if (!isfinite(ky) || ky <= 0) ky = 1;
-    for (size_t i = 0; i < nn; i++) {
-        N[i].x = maxc ? (W - NW) * N[i].col / maxc : 0;
-        N[i].h = N[i].v * ky;
-        N[i].key = (double)i;
+    #define Y1(i) (N[i].y + N[i].h)
+    #define LW(l) (L[l].v * ky)
+    for (uint32_t c = 0; c <= maxc; c++) {
+        double y = 0;
+        uint32_t k0 = coff[c], k1 = coff[c + 1];
+        for (uint32_t k = k0; k < k1; k++) { SNode *q = &N[cn[k]]; q->x = maxc ? (W - NW) * c / maxc : 0; q->y = y, q->h = q->v * ky, y = Y1(cn[k]) + py; }
+        y = (H - y + py) / (k1 - k0 + 1.0);
+        for (uint32_t k = k0; k < k1; k++) N[cn[k]].y += y * (k - k0 + 1);
     }
-    /* order nodes per column; relax by weighted barycentre of neighbours (left-to-right then back) */
-    for (int sweep = 0; sweep < 6; sweep++) {
-        for (uint32_t c = 0; c <= maxc; c++) {
-            size_t k = 0;
-            for (size_t i = 0; i < nn; i++) if (N[i].col == c) lord[k++] = (uint32_t)i;
-            for (size_t i = 1; i < k; i++) { /* insertion sort by key */
-                uint32_t t = lord[i];
-                size_t j = i;
-                while (j && N[lord[j - 1]].key > N[t].key) lord[j] = lord[j - 1], j--;
-                lord[j] = t;
-            }
-            double y = 0, tot = 0;
-            for (size_t i = 0; i < k; i++) tot += N[lord[i]].h;
-            y = (H - tot - (k - 1.0) * PAD) / 2;
-            for (size_t i = 0; i < k; i++) N[lord[i]].y = y, y += N[lord[i]].h + PAD;
+    /* link lists sorted by the other end's breadth (ties: link index) */
+    #define SORT_LINKS(arr, o0, o1, END)                                                       \
+        for (uint32_t i_ = (o0) + 1; i_ < (o1); i_++) {                                       \
+            uint32_t t_ = arr[i_], j_ = i_;                                                   \
+            while (j_ > (o0) && (N[L[arr[j_ - 1]].END].y > N[L[t_].END].y ||                    \
+                                 (N[L[arr[j_ - 1]].END].y == N[L[t_].END].y && arr[j_ - 1] > t_))) \
+                arr[j_] = arr[j_ - 1], j_--;                                                  \
+            arr[j_] = t_;                                                                     \
         }
-        for (size_t i = 0; i < nn; i++) { /* new key: barycentre of linked node centres */
-            double sw = 0, sy = 0;
-            for (size_t l = 0; l < nl; l++) {
-                uint32_t o = L[l].s == i ? L[l].t : L[l].t == i ? L[l].s : UINT32_MAX;
-                if (o == UINT32_MAX || ((sweep & 1) ? N[o].col < N[i].col : N[o].col > N[i].col)) continue;
-                sw += L[l].v, sy += L[l].v * (N[o].y + N[o].h / 2);
+    #define REORDER_NODE(i)                                                                    \
+        do {                                                                                  \
+            for (uint32_t q_ = toff[i]; q_ < toff[(i) + 1]; q_++) { uint32_t sn_ = L[tl[q_]].s; SORT_LINKS(sl, soff[sn_], soff[sn_ + 1], t); } \
+            for (uint32_t q_ = soff[i]; q_ < soff[(i) + 1]; q_++) { uint32_t tn_ = L[sl[q_]].t; SORT_LINKS(tl, toff[tn_], toff[tn_ + 1], s); } \
+        } while (0)
+    for (size_t i = 0; i < nn; i++) { SORT_LINKS(sl, soff[i], soff[i + 1], t); SORT_LINKS(tl, toff[i], toff[i + 1], s); }
+    for (int it = 0; it < 6; it++) {
+        double alpha = pow(0.99, it), beta = fmax(1 - alpha, (it + 1) / 6.0);
+        for (int pass = 0; pass < 2; pass++) { /* right-to-left, then left-to-right */
+            bool r2l = pass == 0;
+            for (int64_t ci = r2l ? (int64_t)maxc - 1 : 1; r2l ? ci >= 0 : ci <= (int64_t)maxc; ci += r2l ? -1 : 1) {
+                uint32_t c = (uint32_t)ci, k0 = coff[c], k1 = coff[c + 1];
+                for (uint32_t k = k0; k < k1; k++) {
+                    uint32_t i = cn[k];
+                    double y = 0, w = 0;
+                    if (r2l) {
+                        for (uint32_t q = soff[i]; q < soff[i + 1]; q++) {
+                            uint32_t l = sl[q], t = L[l].t;
+                            double v = L[l].v * (N[t].col - (double)N[i].col);
+                            /* sourceTop(i, t) */
+                            double yy = N[t].y - (toff[t + 1] - toff[t] - 1.0) * py / 2;
+                            for (uint32_t r = toff[t]; r < toff[t + 1] && L[tl[r]].s != i; r++) yy += LW(tl[r]) + py;
+                            for (uint32_t r = soff[i]; r < soff[i + 1] && L[sl[r]].t != t; r++) yy -= LW(sl[r]);
+                            y += yy * v, w += v;
+                        }
+                    } else {
+                        for (uint32_t q = toff[i]; q < toff[i + 1]; q++) {
+                            uint32_t l = tl[q], sn = L[l].s;
+                            double v = L[l].v * (N[i].col - (double)N[sn].col);
+                            /* targetTop(sn, i) */
+                            double yy = N[sn].y - (soff[sn + 1] - soff[sn] - 1.0) * py / 2;
+                            for (uint32_t r = soff[sn]; r < soff[sn + 1] && L[sl[r]].t != i; r++) yy += LW(sl[r]) + py;
+                            for (uint32_t r = toff[i]; r < toff[i + 1] && L[tl[r]].s != sn; r++) yy -= LW(tl[r]);
+                            y += yy * v, w += v;
+                        }
+                    }
+                    if (!(w > 0)) continue;
+                    N[i].y += (y / w - N[i].y) * alpha;
+                    REORDER_NODE(i);
+                }
+                for (uint32_t k = k0 + 1; k < k1; k++) { /* stable sort by breadth */
+                    uint32_t t = cn[k], j = k;
+                    while (j > k0 && N[cn[j - 1]].y > N[t].y) cn[j] = cn[j - 1], j--;
+                    cn[j] = t;
+                }
+                /* resolveCollisions(column, beta) */
+                uint32_t m = k0 + ((k1 - k0) >> 1), sub = cn[m];
+                double yc = N[sub].y - py;
+                for (int64_t k = (int64_t)m - 1; k >= (int64_t)k0; k--) { uint32_t i = cn[k]; double dy = (Y1(i) - yc) * beta; if (dy > 1e-6) N[i].y -= dy; yc = N[i].y - py; }
+                yc = Y1(sub) + py;
+                for (uint32_t k = m + 1; k < k1; k++) { uint32_t i = cn[k]; double dy = (yc - N[i].y) * beta; if (dy > 1e-6) N[i].y += dy; yc = Y1(i) + py; }
+                yc = H;
+                for (int64_t k = (int64_t)k1 - 1; k >= (int64_t)k0; k--) { uint32_t i = cn[k]; double dy = (Y1(i) - yc) * beta; if (dy > 1e-6) N[i].y -= dy; yc = N[i].y - py; }
+                yc = 0;
+                for (uint32_t k = k0; k < k1; k++) { uint32_t i = cn[k]; double dy = (yc - N[i].y) * beta; if (dy > 1e-6) N[i].y += dy; yc = Y1(i) + py; }
             }
-            if (sw > 0) N[i].key = sy / sw;
-            else N[i].key = N[i].y + N[i].h / 2;
         }
     }
-    /* link attachment points: sorted by the other end's y */
-    uint32_t *lo_ = ANEW(a, uint32_t, nl);
-    if (!lo_) return CMM_ERR_NOMEM;
-    for (size_t i = 0; i < nl; i++) lo_[i] = (uint32_t)i;
-    for (size_t i = 1; i < nl; i++) {
-        uint32_t t = lo_[i];
-        size_t j = i;
-        while (j && N[L[lo_[j - 1]].t].y + N[L[lo_[j - 1]].s].y * 1e-9 > N[L[t].t].y + N[L[t].s].y * 1e-9) lo_[j] = lo_[j - 1], j--;
-        lo_[j] = t;
+    for (size_t i = 0; i < nn; i++) { /* computeLinkBreadths */
+        double y0 = N[i].y, y1 = N[i].y;
+        for (uint32_t q = soff[i]; q < soff[i + 1]; q++) L[sl[q]].y0 = y0 + LW(sl[q]) / 2, y0 += LW(sl[q]);
+        for (uint32_t q = toff[i]; q < toff[i + 1]; q++) L[tl[q]].y1 = y1 + LW(tl[q]) / 2, y1 += LW(tl[q]);
     }
-    for (size_t i = 0; i < nn; i++) N[i].yout = N[i].yin = N[i].y;
-    for (size_t q = 0; q < nl; q++) { SLink *l = &L[lo_[q]]; l->y0 = N[l->s].yout + l->v * ky / 2; N[l->s].yout += l->v * ky; }
-    for (size_t i = 1; i < nl; i++) { /* re-sort by source y for the incoming side */
-        uint32_t t = lo_[i];
-        size_t j = i;
-        while (j && N[L[lo_[j - 1]].s].y > N[L[t].s].y) lo_[j] = lo_[j - 1], j--;
-        lo_[j] = t;
-    }
-    for (size_t q = 0; q < nl; q++) { SLink *l = &L[lo_[q]]; l->y1 = N[l->t].yin + l->v * ky / 2; N[l->t].yin += l->v * ky; }
+    #undef REORDER_NODE
+    #undef SORT_LINKS
+    #undef LW
+    #undef Y1
     double lw = 0, rw = 0;
-    const bool SHOWV = dcfg_bool("sankey.showValues", true);
     char nb[48];
     for (size_t i = 0; i < nn; i++) {
         (SHOWV ? snprintf(nb, sizeof nb, " %g", round(N[i].v * 100) / 100) : (nb[0] = 0));
@@ -171,9 +222,15 @@ DIAG_FN(sankey_render) {
         if (N[i].x < W / 2) rw = fmax(rw, N[i].x + NW + w - W); else lw = fmax(lw, w - N[i].x);
     }
     double top = title.n ? 40 : 0;
-    BBox bb = {-fmax(lw, 0), -top - 5 - 2 * nn, W + fmax(rw, 0), H + 5 + 2 * nn};
+    /* mermaid: viewBox = content bbox (nodes, link bands, labels ~ +-8px about the node centre) */
+    double ymin = 0, ymax = H;
+    for (size_t i = 0; i < nn; i++) {
+        double cy = N[i].y + N[i].h / 2;
+        ymin = fmin(ymin, fmin(N[i].y, cy - 8)), ymax = fmax(ymax, fmax(N[i].y + N[i].h, cy + 8));
+    }
+    BBox bb = {-fmax(lw, 0), ymin - top, W + fmax(rw, 0), ymax};
     if (!buf_reserve(out, 1024 + nl * 300 + nn * 300)) return CMM_ERR_NOMEM;
-    DG_HEAD(out, bb, 6, "sankey", CSS);
+    DG_HEAD(out, bb, 0, "sankey", CSS);
     for (size_t i = 0; i < nl; i++) {
         const SLink *l = &L[i];
         double x0 = N[l->s].x + NW, x1 = N[l->t].x, xm = (x0 + x1) / 2;
