@@ -24,10 +24,12 @@ typedef struct MNode {
 
 static constexpr char CSS[] = "#mermaid .mt{font-size:16px;}#mermaid .me{fill:none;}"
                               "#mermaid .ic{fill:#fff;stroke:#333;stroke-width:1px;}#mermaid .ict{font-size:11px;font-weight:bold;fill:#333;}";
-static const char *const SEC[] = {"#ffb8ff", "#b8ffff", "#ffe0e0", "#e4ffb8", "#ffffab", "#b8b8ff",
-                                  "#ff85ff", "#85ffff", "#ffb8b8", "#f5ffe0", "#ffffde"};
-static const char *const SECS[] = {"#c060c0", "#40b0b0", "#d08080", "#80b040", "#c0c040", "#6060d0",
-                                   "#d040d0", "#30c0c0", "#d06060", "#90b060", "#c0c070"};
+/* mermaid 11 default cScale (section k uses cScale[k+1]; root is the darker primary), darker strokes for borders */
+static const char *const SEC[] = {"#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2", "#ff8686",
+                                  "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"};
+static const char *const SECS[] = {"#cccc33", "#99cc33", "#7f33cc", "#cc33cc", "#cc3380", "#cc3333",
+                                   "#cc8033", "#80cc33", "#33cc80", "#33cccc", "#337fcc"};
+static const bool SECW[] = {false, false, true, false, false, false, false, false, false, false, false}; /* white text */
 
 static bool parse_node(Str s, Str *label, uint8_t *shape) {
     static const struct { const char *o, *c; uint8_t sh; } SH[] = {
@@ -66,6 +68,104 @@ static void place(MNode *v, uint32_t i, double x, double ytop, int dir) {
         place(v, c, nx, y, dir);
         y += v[c].sub;
     }
+}
+
+/* Sweep-and-prune broad phase: node indices kept sorted by left edge (insertion sort, nearly sorted between
+ * iterations so ~O(n)); a pair is only tested while the next left edge is within reach of the current right edge. */
+static void sap_sort(size_t n, const MNode V[static n], uint32_t ord[static n]) {
+    for (size_t i = 1; i < n; i++) {
+        uint32_t k = ord[i];
+        double key = V[k].x - V[k].w / 2;
+        size_t j = i;
+        while (j > 0 && V[ord[j - 1]].x - V[ord[j - 1]].w / 2 > key) { ord[j] = ord[j - 1]; j--; }
+        ord[j] = k;
+    }
+}
+/* overlap push between i<j (with margin), accumulated into f; the radial seed already fans branches out */
+static void mm_pair(const MNode V[], size_t i, size_t j, double margin, double fx[], double fy[]) {
+    double dx = V[j].x - V[i].x, dy = V[j].y - V[i].y;
+    double ox = (V[i].w + V[j].w) / 2 + margin - fabs(dx), oy = (V[i].h + V[j].h) / 2 + margin - fabs(dy);
+    if (ox > 0 && oy > 0) { /* overlapping (with margin): push along the cheaper axis */
+        if (ox < oy) { double sx = dx >= 0 ? 1 : -1; fx[j] += sx * ox * 0.5, fx[i] -= sx * ox * 0.5; }
+        else { double sy = dy >= 0 ? 1 : -1; fy[j] += sy * oy * 0.5, fy[i] -= sy * oy * 0.5; }
+    }
+}
+/* compaction (mermaid's cose-bilkent result is much tighter than a pure radial layout): springs pull each node
+ * toward a short rest length from its parent, grid-local box-overlap repulsion keeps everything apart. Root fixed.
+ * Stops early once the largest move per step is tiny. */
+[[nodiscard]] static bool mm_relax(Arena *a, size_t n, MNode V[static n]) {
+    if (n < 2) return true;
+    double *fx = ANEW(a, double, n), *fy = ANEW(a, double, n);
+    uint32_t *ord = ANEW(a, uint32_t, n);
+    if (!fx || !fy || !ord) return false;
+    for (size_t i = 0; i < n; i++) ord[i] = (uint32_t)i;
+    /* seed: pull every node in along its radial direction to the spring rest length from its parent
+     * (parents precede children), so the relaxation only has to fix local overlaps */
+    for (size_t i = 1; i < n; i++) {
+        uint32_t p = V[i].parent;
+        double dx = V[i].x - V[p].x, dy = V[i].y - V[p].y, d = fmax(1e-6, sqrt(dx * dx + dy * dy));
+        double ux = fabs(dx) / d, uy = fabs(dy) / d;
+        double ext = fmin(ux > 1e-6 ? (V[i].w + V[p].w) / 2 / ux : HUGE_VAL, uy > 1e-6 ? (V[i].h + V[p].h) / 2 / uy : HUGE_VAL);
+        double k = (ext + 40) / d;
+        if (k < 1) {
+            /* move the whole subtree: children are later in the array, shift them by the same delta */
+            double sx = dx * (k - 1), sy = dy * (k - 1);
+            V[i].x += sx, V[i].y += sy;
+            for (size_t c = i + 1; c < n; c++) {
+                uint32_t q = V[c].parent;
+                while (q != 0 && q != i) q = V[q].parent;
+                if (q == i) V[c].x += sx, V[c].y += sy;
+            }
+        }
+    }
+    for (int it = 0; it < 30; it++) {
+        double step = 0.5 * (1 - it / 40.0);
+        for (size_t i = 0; i < n; i++) fx[i] = fy[i] = 0;
+        for (size_t i = 1; i < n; i++) {
+            uint32_t p = V[i].parent;
+            double dx = V[i].x - V[p].x, dy = V[i].y - V[p].y, d = fmax(1e-6, sqrt(dx * dx + dy * dy));
+            double ux = fabs(dx) / d, uy = fabs(dy) / d; /* rest: boxes just clear along the edge, plus a link */
+            double ext = fmin(ux > 1e-6 ? (V[i].w + V[p].w) / 2 / ux : HUGE_VAL, uy > 1e-6 ? (V[i].h + V[p].h) / 2 / uy : HUGE_VAL);
+            double f = (d - (ext + 40)) * 0.3;
+            fx[i] -= f * dx / d, fy[i] -= f * dy / d;
+            fx[p] += f * dx / d * 0.5, fy[p] += f * dy / d * 0.5;
+        }
+        sap_sort(n, V, ord);
+        for (size_t s = 0; s < n; s++) {
+            uint32_t i = ord[s];
+            double xr = V[i].x + V[i].w / 2 + 14;
+            for (size_t t = s + 1; t < n && V[ord[t]].x - V[ord[t]].w / 2 < xr; t++) {
+                uint32_t j = ord[t];
+                if (i < j) mm_pair(V, i, j, 14, fx, fy); else mm_pair(V, j, i, 14, fx, fy);
+            }
+        }
+        double mx = 0;
+        for (size_t i = 1; i < n; i++) {
+            double m = sqrt(fx[i] * fx[i] + fy[i] * fy[i]), k = (m > 40 ? 40 / m : 1) * step * 2;
+            V[i].x += fx[i] * k, V[i].y += fy[i] * k;
+            mx = fmax(mx, m * k);
+        }
+        if (mx < 0.5) break;
+    }
+    for (int it = 0; it < 60; it++) { /* final hard de-overlap */
+        bool any = false;
+        sap_sort(n, V, ord);
+        for (size_t s = 0; s < n; s++)
+            for (size_t t = s + 1; t < n && V[ord[t]].x - V[ord[t]].w / 2 < V[ord[s]].x + V[ord[s]].w / 2 + 8; t++) {
+                    {
+                        uint32_t i = ord[s] < ord[t] ? ord[s] : ord[t], j = ord[s] < ord[t] ? ord[t] : ord[s];
+                        double dx = V[j].x - V[i].x, dy = V[j].y - V[i].y;
+                        double px = (V[i].w + V[j].w) / 2 + 8 - fabs(dx), py = (V[i].h + V[j].h) / 2 + 8 - fabs(dy);
+                        if (px <= 0 || py <= 0) continue;
+                        any = true;
+                        double wi = i ? 0.5 : 0, wj = 1 - wi;
+                        if (px < py) { double sx = dx >= 0 ? 1 : -1; V[j].x += sx * px * wj, V[i].x -= sx * px * wi; }
+                        else { double sy = dy >= 0 ? 1 : -1; V[j].y += sy * py * wj, V[i].y -= sy * py * wi; }
+                    }
+                }
+        if (!any) break;
+    }
+    return true;
 }
 
 DIAG_FN(mindmap_render) {
@@ -150,8 +250,8 @@ DIAG_FN(mindmap_render) {
     if (!tidy) {
         double *leaves = ANEW(a, double, v.n), *ang = ANEW(a, double, v.n), *wedge = ANEW(a, double, v.n);
         if (!leaves || !ang || !wedge) return CMM_ERR_NOMEM;
+        for (size_t i = 0; i < v.n; i++) leaves[i] = V[i].first == UINT32_MAX; /* arena memory is not zeroed */
         for (size_t i = v.n; i-- > 0;) { /* children come after parents */
-            if (V[i].first == UINT32_MAX) leaves[i] = 1;
             if (i) leaves[V[i].parent] += leaves[i];
         }
         ang[0] = 0, wedge[0] = 2 * M_PI;
@@ -181,59 +281,7 @@ DIAG_FN(mindmap_render) {
             rad[i] = r;
         }
         for (size_t i = 1; i < v.n; i++) V[i].x = rad[i] * cos(ang[i]), V[i].y = rad[i] * sin(ang[i]);
-        /* compaction (mermaid's cose-bilkent result is much tighter than a pure radial layout): springs pull each
-         * node toward a short rest length from its parent, box-overlap repulsion keeps everything apart. Root fixed. */
-        if (v.n <= 600) {
-            double *fx = ANEW(a, double, v.n), *fy = ANEW(a, double, v.n);
-            if (!fx || !fy) return CMM_ERR_NOMEM;
-            for (int it = 0; it < 250; it++) {
-                double step = 0.5 * (1 - it / 300.0);
-                for (size_t i = 0; i < v.n; i++) fx[i] = fy[i] = 0;
-                for (size_t i = 1; i < v.n; i++) {
-                    uint32_t p = V[i].parent;
-                    double dx = V[i].x - V[p].x, dy = V[i].y - V[p].y, d = fmax(1e-6, hypot(dx, dy));
-                    /* rest length: boxes just clear each other along the edge direction, plus a short link */
-                    double ux = fabs(dx) / d, uy = fabs(dy) / d;
-                    double ext = fmin(ux > 1e-6 ? (V[i].w + V[p].w) / 2 / ux : HUGE_VAL, uy > 1e-6 ? (V[i].h + V[p].h) / 2 / uy : HUGE_VAL);
-                    double f = (d - (ext + 40)) * 0.3;
-                    fx[i] -= f * dx / d, fy[i] -= f * dy / d;
-                    fx[p] += f * dx / d * 0.5, fy[p] += f * dy / d * 0.5;
-                }
-                for (size_t i = 0; i < v.n; i++)
-                    for (size_t j = i + 1; j < v.n; j++) {
-                        double dx = V[j].x - V[i].x, dy = V[j].y - V[i].y;
-                        double ox = (V[i].w + V[j].w) / 2 + 14 - fabs(dx), oy = (V[i].h + V[j].h) / 2 + 14 - fabs(dy);
-                        if (ox > 0 && oy > 0) { /* overlapping (with margin): push along the cheaper axis */
-                            if (ox < oy) { double sx = dx >= 0 ? 1 : -1; fx[j] += sx * ox * 0.5, fx[i] -= sx * ox * 0.5; }
-                            else { double sy = dy >= 0 ? 1 : -1; fy[j] += sy * oy * 0.5, fy[i] -= sy * oy * 0.5; }
-                        } else { /* weak long-range repulsion keeps branches fanned out */
-                            double d2 = fmax(dx * dx + dy * dy, 100), r = 1500 / d2;
-                            double d = sqrt(d2);
-                            fx[j] += r * dx / d, fy[j] += r * dy / d, fx[i] -= r * dx / d, fy[i] -= r * dy / d;
-                        }
-                    }
-                for (size_t i = 1; i < v.n; i++) {
-                    double m = hypot(fx[i], fy[i]), cap = 40;
-                    double k = m > cap ? cap / m : 1;
-                    V[i].x += fx[i] * k * step * 2, V[i].y += fy[i] * k * step * 2;
-                }
-            }
-            /* final hard de-overlap */
-            for (int it = 0; it < 60; it++) {
-                bool any = false;
-                for (size_t i = 0; i < v.n; i++)
-                    for (size_t j = i + 1; j < v.n; j++) {
-                        double dx = V[j].x - V[i].x, dy = V[j].y - V[i].y;
-                        double ox = (V[i].w + V[j].w) / 2 + 8 - fabs(dx), oy = (V[i].h + V[j].h) / 2 + 8 - fabs(dy);
-                        if (ox <= 0 || oy <= 0) continue;
-                        any = true;
-                        double wi = i ? 0.5 : 0, wj = 1 - wi;
-                        if (ox < oy) { double sx = dx >= 0 ? 1 : -1; V[j].x += sx * ox * wj, V[i].x -= sx * ox * wi; }
-                        else { double sy = dy >= 0 ? 1 : -1; V[j].y += sy * oy * wj, V[i].y -= sy * oy * wi; }
-                    }
-                if (!any) break;
-            }
-        }
+        if (!mm_relax(a, v.n, V)) return CMM_ERR_NOMEM;
     }
     for (int side = -1; side <= 1 && tidy; side += 2) {
         double tot = side > 0 ? hr : hl, y = -tot / 2;
@@ -250,7 +298,7 @@ DIAG_FN(mindmap_render) {
     for (size_t i = 1; i < v.n; i++) { /* edges: cubic from parent side to child side, thinner with depth */
         const MNode *p = &V[V[i].parent], *c = &V[i];
         if (!tidy) {
-            const char *col = SECS[c->sec % countof(SECS)];
+            const char *col = SEC[c->sec % countof(SEC)]; /* mermaid colours edges like their section's nodes */
             buf_lit(out, "<path class=\"me\" stroke=\""); buf_put(out, strlen(col), col);
             buf_lit(out, "\" stroke-width=\""); buf_num(out, fmax(2, 17 - 3.0 * c->depth)); buf_lit(out, "\" d=\"M");
             dg_pt(out, p->x, p->y); buf_ch(out, 'L'); dg_pt(out, c->x, c->y); buf_lit(out, "\"/>");
@@ -267,7 +315,8 @@ DIAG_FN(mindmap_render) {
     }
     for (size_t i = 0; i < v.n; i++) {
         const MNode *m = &V[i];
-        const char *fill = i ? SEC[m->sec % countof(SEC)] : "#9370DB", *st = i ? SECS[m->sec % countof(SECS)] : "#6a4fb0";
+        const char *fill = i ? SEC[m->sec % countof(SEC)] : "#0000ec", *st = i ? SECS[m->sec % countof(SECS)] : "#0000a0";
+        const char *tcls = !i || SECW[m->sec % countof(SECW)] ? "mt\" fill=\"#fff" : "mt";
         double x = m->x - m->w / 2, y = m->y - m->h / 2, w = m->w, h = m->h;
         buf_lit(out, "<g class=\"mindmap-node section-");
         char sn[16];
@@ -321,7 +370,7 @@ DIAG_FN(mindmap_render) {
             for (size_t k = nm.n; k-- > 0;) if (nm.p[k] == ' ' || nm.p[k] == '-' || nm.p[k] == ':') { nm = (Str){.p = nm.p + k + 1, .n = nm.n - k - 1}; break; }
             double cx = x + 18;
             buf_lit(out, "<g class=\"icon\"><title>"); buf_xml(out, m->icon); buf_lit(out, "</title>");
-            if (icon_draw(out, m->icon, cx - 11, m->y - 11, 22, i ? "mt" : "mt\" fill=\"#fff")) {
+            if (icon_draw(out, m->icon, cx - 11, m->y - 11, 22, tcls)) {
                 buf_lit(out, "</g>");
                 tx += 14;
                 goto label;
@@ -334,7 +383,7 @@ DIAG_FN(mindmap_render) {
             tx += 14;
         }
     label:
-        dg_text(out, m->label, 16, tx, m->y, "middle", i ? "mt" : "mt\" fill=\"#fff");
+        dg_text(out, m->label, 16, tx, m->y, "middle", tcls);
     }
     buf_lit(out, "</svg>\n");
     return out->oom ? CMM_ERR_NOMEM : CMM_OK;
