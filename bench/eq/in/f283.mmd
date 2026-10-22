@@ -1,0 +1,15 @@
+flowchart LR
+  n0[xxxxxxxxx n0]
+  n1[xxxxx n1]
+  n2[xxxxxxxx n2]
+  subgraph s0
+    n0
+    n2
+  end
+  subgraph s1
+    n1
+  end
+  n0 --> n1
+  n0 -->|l1| n0
+  n1 --> n0
+  n0 --> n0

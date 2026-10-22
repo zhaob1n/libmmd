@@ -1,0 +1,88 @@
+flowchart LR
+  n0[xxxxxxx n0]
+  n1[xxxx n1]
+  n2[xx n2]
+  n3[xxxxxxxxxx n3]
+  n4[x n4]
+  n5[xx n5]
+  n6[xxxxxxxxxxx n6]
+  n7[xx n7]
+  n8[x n8]
+  n9[xxxxxx n9]
+  n10[xxxxxxxx n10]
+  n11[xxxxxxxxxx n11]
+  n12[xxx n12]
+  n13[xxxxxxxx n13]
+  n14[xxxx n14]
+  n15[xxxx n15]
+  n16[xxxxxxxxxxxx n16]
+  n17[xx n17]
+  n18[xxxxx n18]
+  n19[xxxxxxxxxxx n19]
+  n20[xxxxxxxxx n20]
+  n21[xxxxxxxxxx n21]
+  n22[x n22]
+  n23[xxxxxxxxxx n23]
+  n24[xxxxx n24]
+  n25[xxxxxxxxxx n25]
+  n26[xxxxxx n26]
+  subgraph s0
+    n8
+    n6
+    n16
+  end
+  subgraph s1
+    n1
+    n26
+    n3
+    n2
+  end
+  n2 --> n12
+  n11 --> n16
+  n7 --> n6
+  n20 -->|l3| n20
+  n3 --> n20
+  n18 --> n7
+  n11 -->|l6| n16
+  n8 --> n7
+  n26 -->|l8| n13
+  n9 --> n25
+  n2 --> n13
+  n15 --> n25
+  n13 -->|l12| n3
+  n24 --> n18
+  n6 --> n10
+  n0 --> n14
+  n12 --> n15
+  n7 --> n2
+  n0 --> n2
+  n17 --> n5
+  n26 --> n1
+  n9 -->|l21| n5
+  n8 --> n19
+  n24 --> n13
+  n4 --> n9
+  n16 --> n18
+  n26 -->|l26| n16
+  n4 --> n6
+  n25 -->|l28| n18
+  n26 --> n8
+  n10 --> n10
+  n4 --> n7
+  n26 --> n25
+  n14 --> n10
+  n20 -->|l34| n5
+  n4 --> n25
+  n2 --> n26
+  n15 --> n21
+  n9 -->|l38| n24
+  n21 --> n12
+  n21 --> n19
+  n6 -->|l41| n4
+  n10 -->|l42| n15
+  n23 --> n20
+  n26 -->|l44| n6
+  n12 --> n8
+  n21 --> n1
+  n17 -->|l47| n13
+  n14 --> n5

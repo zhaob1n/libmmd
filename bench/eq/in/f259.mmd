@@ -1,0 +1,14 @@
+flowchart TD
+  n0[xxxxxxx n0]
+  n1[xxxxxxxxxx n1]
+  n2[xxxxxxxx n2]
+  n3[xxxxxxxxxxx n3]
+  subgraph s0
+    n0
+  end
+  n0 --> n2
+  n1 --> n3
+  n1 --> n2
+  n3 --> n0
+  n3 -->|l4| n0
+  n1 --> n3

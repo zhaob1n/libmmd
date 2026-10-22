@@ -1,0 +1,57 @@
+flowchart TD
+  n0[xxxxxxxxxxxx n0]
+  n1[xxxx n1]
+  n2[xx n2]
+  n3[x n3]
+  n4[xxxxxxxx n4]
+  n5[xxxx n5]
+  n6[xxxxxx n6]
+  n7[xxxxxxxx n7]
+  n8[xxxxxxxxxxx n8]
+  n9[xxx n9]
+  n10[xxxxxx n10]
+  n11[xxxxxxxxx n11]
+  n12[xxxxx n12]
+  n13[x n13]
+  n14[xxxxxxxxx n14]
+  n15[xxxxx n15]
+  n16[x n16]
+  subgraph s0
+    n0
+    n14
+  end
+  subgraph s1
+    n5
+    n3
+    n7
+  end
+  n1 -->|l0| n10
+  n13 --> n8
+  n16 --> n14
+  n10 --> n1
+  n8 --> n11
+  n2 -->|l5| n9
+  n9 -->|l6| n16
+  n13 -->|l7| n15
+  n9 --> n8
+  n12 --> n8
+  n12 -->|l10| n3
+  n2 -->|l11| n5
+  n3 --> n6
+  n13 -->|l13| n12
+  n1 --> n15
+  n12 --> n9
+  n13 --> n16
+  n8 --> n13
+  n4 -->|l18| n0
+  n16 --> n9
+  n10 --> n10
+  n1 --> n14
+  n16 --> n14
+  n11 --> n3
+  n6 --> n15
+  n6 -->|l25| n11
+  n9 --> n7
+  n6 --> n1
+  n5 --> n0
+  n15 --> n10

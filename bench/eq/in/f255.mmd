@@ -1,0 +1,19 @@
+flowchart BT
+  n0[xxxxxxxxxxx n0]
+  n1[xxxxxxxxxxx n1]
+  n2[xxxxxxxxxx n2]
+  n3[x n3]
+  n4[xxxxxx n4]
+  subgraph s0
+    n4
+    n2
+  end
+  subgraph s1
+    n3
+    n0
+    n1
+  end
+  n3 --> n2
+  n3 -->|l1| n1
+  n2 --> n4
+  n3 --> n0

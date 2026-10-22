@@ -1,0 +1,71 @@
+flowchart RL
+  n0[xxxxxxxxxxxx n0]
+  n1[xxxxx n1]
+  n2[xxxxxxxx n2]
+  n3[xxxx n3]
+  n4[xxxxxxxxxxxx n4]
+  n5[xxxx n5]
+  n6[xxxxxx n6]
+  n7[xxxxx n7]
+  n8[xxx n8]
+  n9[xxxxxxx n9]
+  n10[x n10]
+  n11[x n11]
+  n12[x n12]
+  n13[xxxxxxx n13]
+  n14[x n14]
+  n15[xxxxxxxxxxxx n15]
+  n16[xxxxxx n16]
+  n17[xxxxxxxx n17]
+  n18[xxxx n18]
+  n19[xxxxxxxxx n19]
+  n20[xxx n20]
+  n21[xxx n21]
+  n22[xxxxxxxxx n22]
+  n23[xxxxxxx n23]
+  subgraph s0
+    n13
+    n12
+    n23
+    n9
+    n19
+  end
+  subgraph s1
+    n11
+    n15
+  end
+  subgraph s2
+    n18
+    n16
+    n6
+    n14
+    n7
+  end
+  n2 --> n3
+  n1 --> n13
+  n6 -->|l2| n1
+  n5 --> n7
+  n16 --> n20
+  n0 --> n14
+  n2 --> n7
+  n15 --> n21
+  n10 --> n7
+  n16 --> n0
+  n17 --> n15
+  n22 --> n10
+  n18 --> n1
+  n9 --> n14
+  n2 --> n20
+  n18 --> n5
+  n16 -->|l16| n20
+  n0 -->|l17| n3
+  n7 --> n7
+  n10 -->|l19| n4
+  n13 -->|l20| n7
+  n6 --> n10
+  n15 --> n23
+  n7 -->|l23| n16
+  n20 --> n15
+  n17 --> n18
+  n0 --> n20
+  n21 -->|l27| n10

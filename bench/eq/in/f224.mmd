@@ -1,0 +1,25 @@
+flowchart LR
+  n0[xxxxxxxx n0]
+  n1[xx n1]
+  n2[xxxxxxxxx n2]
+  n3[xxxx n3]
+  n4[xx n4]
+  n5[xxxxxxx n5]
+  subgraph s0
+    n0
+    n2
+  end
+  subgraph s1
+    n4
+    n1
+  end
+  subgraph s2
+    n3
+  end
+  n3 --> n0
+  n5 --> n4
+  n4 --> n2
+  n0 --> n0
+  n0 -->|l4| n2
+  n4 --> n4
+  n0 --> n3
