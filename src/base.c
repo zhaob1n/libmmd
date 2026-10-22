@@ -180,7 +180,7 @@ static size_t fmt_num_slow(char *o, double v) {
     return k;
 }
 
-static inline size_t fmt_num(char *o, double v) {
+[[gnu::always_inline]] static inline size_t fmt_num(char *o, double v) {
     double t = v * 100.0;
     if (!(t > -999999.0 && t < 999999.0)) return fmt_num_slow(o, v); /* also NaN */
     int32_t c = (int32_t)(t + (v < 0 ? -0.5 : 0.5)); /* same double expression as the slow path */
