@@ -166,6 +166,14 @@ DIAG_FN(requirement_render) {
             }
         } else arrowhead(out, P, g.eptn[e]);
         dg_rect(out, g.elx[e] - g.elw[e] / 2, g.ely[e] - g.elh[e] / 2, g.elw[e], g.elh[e], 0, "rl");
+        { /* mermaid draws relation labels on a light grey plate */
+            double lw, lh;
+            unsigned ln;
+            label_measure(g.elabel[e], fs, &lw, &ln);
+            lh = ln * fs * 1.3;
+            buf_lit(out, "<rect fill=\"#e8e8e8\" fill-opacity=\".8\" x=\""); buf_num(out, g.elx[e] - lw / 2 - 2); buf_lit(out, "\" y=\""); buf_num(out, g.ely[e] - lh / 2);
+            buf_lit(out, "\" width=\""); buf_num(out, lw + 4); buf_lit(out, "\" height=\""); buf_num(out, lh); buf_lit(out, "\"/>");
+        }
         dg_text(out, g.elabel[e], fs, g.elx[e], g.ely[e], "middle", nullptr);
     }
     for (size_t v = 0; v < g.nn; v++) {
