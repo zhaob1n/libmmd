@@ -1,9 +1,10 @@
 /* treemap(-beta): indentation tree of `"Section"` and `"Leaf": value` lines (quotes optional),
  * `:::class` suffixes and `classDef name fill:..,stroke:..,color:..`. Parent values are the sum of
  * their children (an explicit parent value is used only when it has no children). Layout is the
- * squarified algorithm (Bruls et al.) inside each section, with a header band for section names. */
+ * a port of d3's treemap() (squarify, phi ratio) with mermaid 11.17's paddings, header band and label fitting. */
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "dgraph.h"
 #include "dcfg.h"
@@ -18,77 +19,114 @@ typedef struct TNode {
 typedef struct TCls { Str name, fill, stroke, color; } TCls;
 
 static constexpr char CSS[] =
-    "#mermaid .sh{font-size:12px;font-weight:bold;fill:#333;}#mermaid .lf{fill-opacity:.3;stroke-width:3px;}"
-    "#mermaid .sv{font-size:10px;font-style:italic;fill:#333;}"
-    "#mermaid .sec{fill-opacity:.6;stroke-width:2px;stroke-opacity:.4;}#mermaid .ttl{font-size:18px;fill:#333;}";
+    "#mermaid .sh{font-size:12px;font-weight:bold;}#mermaid .lf{fill-opacity:.3;stroke-width:3px;}"
+    "#mermaid .sv{font-size:10px;font-style:italic;}"
+    "#mermaid .sec{fill-opacity:.6;stroke-width:2px;stroke-opacity:.4;}#mermaid .ttl{font-size:16px;fill:#333;}";
 /* mermaid 11 default cScale (hsl(h,100%,~76%)): sections fill .6 opacity, leaves .3 with a 3px same-colour border */
 static const char *const SEC[] = {"#8686ff", "#ffff78", "#d7ff86", "#86c2ff", "#86ffff", "#86ffc2", "#ff86ff", "#ff8686"};
 static const char *const SECD[] = {"#3939ff", "#ffff2c", "#b5ff20", "#399cff", "#39ffff", "#39ff9c", "#ff39ff", "#ff3939"};
 static constexpr unsigned char TMI[] = {0, 1, 2, 11, 10, 9, 4, 6}; /* SEC[k] == cScale[TMI[k]] */
 static const char *const SECT[] = {"#fff", "#000", "#000", "#000", "#000", "#000", "#000", "#000"};
 
-static double worst(double s, double mn, double mx, double side) {
-    double s2 = s * s, w2 = side * side;
-    return fmax(w2 * mx / s2, s2 / (w2 * mn));
+/* ---- d3-hierarchy 3 treemap() port: squarify (ratio phi), paddings, .round(true) ---- */
+static void dice(TNode *V, const uint32_t *ch, size_t n, double sum, double x0, double y0, double x1, double y1) {
+    double k = sum ? (x1 - x0) / sum : 0;
+    for (size_t i = 0; i < n; i++) { TNode *t = &V[ch[i]]; t->y = y0, t->h = y1, t->x = x0, t->w = x0 += t->v * k; }
 }
-/* squarify children of p into rect (x,y,w,h); kids sorted by value descending in idx[0..k) */
-static void squarify(TNode *V, uint32_t *idx, size_t k, double x, double y, double w, double h) {
-    double total = 0;
-    for (size_t i = 0; i < k; i++) total += V[idx[i]].v;
-    if (total <= 0 || w <= 0 || h <= 0) {
-        for (size_t i = 0; i < k; i++) V[idx[i]].x = x, V[idx[i]].y = y, V[idx[i]].w = V[idx[i]].h = 0;
-        return;
-    }
-    double scale = w * h / total;
-    size_t i = 0;
-    while (i < k) {
-        double side = fmin(w, h), s = 0, mn = INFINITY, mx = 0, best = INFINITY;
-        size_t j = i;
-        for (; j < k; j++) {
-            double a = V[idx[j]].v * scale;
-            double s2 = s + a, mn2 = fmin(mn, a), mx2 = fmax(mx, a), wr = worst(s2, fmax(mn2, 1e-9), mx2, side);
-            if (j > i && wr > best) break;
-            s = s2, mn = mn2, mx = mx2, best = wr;
+static void slice(TNode *V, const uint32_t *ch, size_t n, double sum, double x0, double y0, double x1, double y1) {
+    double k = sum ? (y1 - y0) / sum : 0;
+    for (size_t i = 0; i < n; i++) { TNode *t = &V[ch[i]]; t->x = x0, t->w = x1, t->y = y0, t->h = y0 += t->v * k; }
+}
+/* x,y,w,h hold x0,y0,x1,y1 during layout */
+static void squarify(TNode *V, const uint32_t *ch, size_t n, double value, double x0, double y0, double x1, double y1) {
+    const double ratio = (1 + sqrt(5.0)) / 2;
+    size_t i0 = 0, i1 = 0;
+    while (i0 < n) {
+        double dx = x1 - x0, dy = y1 - y0, sum;
+        do sum = V[ch[i1++]].v; while (!sum && i1 < n);
+        double mn = sum, mx = sum, alpha = fmax(dy / dx, dx / dy) / (value * ratio), beta = sum * sum * alpha;
+        double minr = fmax(mx / beta, beta / mn);
+        for (; i1 < n; ++i1) {
+            double nv = V[ch[i1]].v;
+            sum += nv;
+            if (nv < mn) mn = nv;
+            if (nv > mx) mx = nv;
+            beta = sum * sum * alpha;
+            double nr = fmax(mx / beta, beta / mn);
+            if (nr > minr) { sum -= nv; break; }
+            minr = nr;
         }
-        /* lay row i..j along the short side */
-        double thick = s / side, off = 0;
-        for (size_t q = i; q < j; q++) {
-            double len = V[idx[q]].v * scale / fmax(thick, 1e-9);
-            TNode *t = &V[idx[q]];
-            if (w >= h) t->x = x, t->y = y + off, t->w = thick, t->h = len;
-            else t->x = x + off, t->y = y, t->w = len, t->h = thick;
-            off += len;
-        }
-        if (w >= h) x += thick, w -= thick; else y += thick, h -= thick;
-        i = j;
+        if (dx < dy) { double yy = value ? y0 + dy * sum / value : y1; dice(V, ch + i0, i1 - i0, sum, x0, y0, x1, yy); if (value) y0 = yy; }
+        else { double xx = value ? x0 + dx * sum / value : x1; slice(V, ch + i0, i1 - i0, sum, x0, y0, xx, y1); if (value) x0 = xx; }
+        value -= sum, i0 = i1;
     }
 }
 static int by_val_desc(const uint32_t *a, const uint32_t *b, const TNode *V) {
     double x = V[*a].v, y = V[*b].v;
     return (x < y) - (x > y);
 }
-static void sort_idx(TNode *V, uint32_t *idx, size_t k) { /* insertion sort: stable, tiny lists */
-    for (size_t i = 1; i < k; i++) {
-        uint32_t t = idx[i];
-        size_t j = i;
-        while (j && by_val_desc(&idx[j - 1], &t, V) > 0) idx[j] = idx[j - 1], j--;
-        idx[j] = t;
-    }
-}
-constexpr double HDR = 25;
-constexpr double PAD = 6;
-static void layout(TNode *V, uint32_t *scratch, uint32_t p) {
+static void sort_kids(TNode *V, uint32_t p, uint32_t *tmp) { /* hierarchy.sort: stable, value descending */
     size_t k = 0;
-    for (uint32_t c = V[p].first; c != UINT32_MAX; c = V[c].next) scratch[k++] = c;
+    for (uint32_t c = V[p].first; c != UINT32_MAX; c = V[c].next) tmp[k++] = c;
+    for (size_t i = 1; i < k; i++) {
+        uint32_t t = tmp[i];
+        size_t j = i;
+        while (j && by_val_desc(&tmp[j - 1], &t, V) > 0) tmp[j] = tmp[j - 1], j--;
+        tmp[j] = t;
+    }
     if (!k) return;
-    sort_idx(V, scratch, k);
-    double x = V[p].x + PAD, y = V[p].y + (p ? HDR : PAD), w = V[p].w - 2 * PAD, h = V[p].h - (p ? HDR : PAD) - PAD;
-    if (w < 0) w = 0;
-    if (h < 0) h = 0;
-    squarify(V, scratch, k, x, y, w, h);
-    for (uint32_t c = V[p].first; c != UINT32_MAX; c = V[c].next) layout(V, scratch + k, c);
+    V[p].first = tmp[0];
+    for (size_t i = 0; i + 1 < k; i++) V[tmp[i]].next = tmp[i + 1];
+    V[tmp[k - 1]].next = UINT32_MAX;
+}
+constexpr double HDR = 25;  /* SECTION_HEADER_HEIGHT */
+constexpr double SPAD = 10; /* SECTION_INNER_PADDING */
+/* positionNode: p = paddingStack[depth] (half the parent's paddingInner) */
+static void position(TNode *V, uint32_t *tmp, uint32_t id, double p, double inner) {
+    TNode *t = &V[id];
+    double x0 = t->x + p, y0 = t->y + p, x1 = t->w - p, y1 = t->h - p;
+    if (x1 < x0) x0 = x1 = (x0 + x1) / 2;
+    if (y1 < y0) y0 = y1 = (y0 + y1) / 2;
+    t->x = x0, t->y = y0, t->w = x1, t->h = y1;
+    if (t->first == UINT32_MAX) return;
+    double q = inner / 2;
+    x0 += SPAD - q, y0 += HDR + SPAD - q, x1 -= SPAD - q, y1 -= SPAD - q;
+    if (x1 < x0) x0 = x1 = (x0 + x1) / 2;
+    if (y1 < y0) y0 = y1 = (y0 + y1) / 2;
+    size_t k = 0;
+    for (uint32_t c = t->first; c != UINT32_MAX; c = V[c].next) tmp[k++] = c;
+    squarify(V, tmp, k, t->v, x0, y0, x1, y1);
+    for (uint32_t c = t->first; c != UINT32_MAX; c = V[c].next) position(V, tmp + k, c, q, inner);
 }
 
+
+static size_t ord_idx(Str *dom, size_t *n, Str name, bool root) {
+    for (size_t i = 0; i < *n; i++) if (dom[i].p ? (!root && str_eq(dom[i], name)) : root) return i;
+    dom[*n] = root ? (Str){} : name;
+    if (!root && !name.p) dom[*n] = (Str){.p = "", .n = 0};
+    return (*n)++;
+}
+static const TCls *find_cls(const TCls *c, size_t n, Str name) {
+    if (!name.n) return nullptr;
+    const TCls *r = nullptr;
+    for (size_t k = 0; k < n; k++) if (str_eq(c[k].name, name)) r = &c[k];
+    return r;
+}
+/* d3 ordinal ranges: cScale/cScalePeer start with "transparent", cScaleLabel does not */
+static void put_c(Buf *out, const char *pfx, size_t i) {
+    bool lab = !strcmp(pfx, "cScaleLabel");
+    if (!lab) {
+        i %= 13;
+        if (i == 0) { buf_lit(out, "transparent"); return; }
+        i--;
+    } else i %= 12;
+    const char *const *tab = lab ? SECT : !strcmp(pfx, "cScale") ? SEC : SECD;
+    const char *def = tab[i % countof(SEC)];
+    for (size_t k = 0; k < countof(TMI); k++) if (TMI[k] == i) def = tab[k];
+    if (lab) def = i == 0 || i == 3 ? "#fff" : "#000"; /* default theme: cScaleLabel0/3 = invert(labelTextColor) */
+    const char *c = dcfg_pal(pfx, i, def);
+    buf_put(out, strlen(c), c);
+}
 static Str unq(Str s) {
     s = str_trim(s);
     if (s.n >= 2 && (s.p[0] == '"' || s.p[0] == '\'') && s.p[s.n - 1] == s.p[0]) s = (Str){.p = s.p + 1, .n = s.n - 2};
@@ -173,65 +211,136 @@ DIAG_FN(treemap_render) {
             V[i].v = s;
         } else if (isnan(V[i].v)) V[i].v = 0;
     }
-    uint32_t sc = 0;
-    for (size_t i = 1; i < v.n; i++) V[i].sec = V[i].depth == 1 ? sc++ : V[V[i].parent].sec;
-    double top = title.n ? 40 : 0;
-    constexpr double W = 960;
-    constexpr double H = 500;
-    V[0].x = 0, V[0].y = top - PAD, V[0].w = W, V[0].h = H + PAD; /* root: no header */
-    uint32_t *scratch = ANEW(a, uint32_t, v.n + 1);
-    if (!scratch) return CMM_ERR_NOMEM;
-    layout(V, scratch, 0);
-    BBox bb = {0, 0, W, top + H};
-    if (!buf_reserve(out, 2048 + v.n * 500)) return CMM_ERR_NOMEM;
-    DG_HEAD(out, bb, 4, "treemap", CSS);
-    char nb[40];
+    /* mermaid 11.17 treemap renderer: size nodeWidth*10 x nodeHeight*10, title band 30 */
+    double inner = dcfg_num("treemap.padding", 10);
+    double W = dcfg_num("treemap.nodeWidth", 100) * SPAD, H = dcfg_num("treemap.nodeHeight", 40) * SPAD;
+    double top = title.n ? 30 : 0;
+    uint32_t *scratch = ANEW(a, uint32_t, v.n + 1), *bfs = ANEW(a, uint32_t, v.n), *leaves = ANEW(a, uint32_t, v.n);
+    if (!scratch || !bfs || !leaves) return CMM_ERR_NOMEM;
+    for (size_t i = 0; i < v.n; i++) sort_kids(V, (uint32_t)i, scratch);
+    V[0].x = 0, V[0].y = 0, V[0].w = W, V[0].h = H;
+    position(V, scratch, 0, 0, inner);
+    for (size_t i = 0; i < v.n; i++) { /* .round(true); then x,y,w,h back to origin + size, title offset */
+        TNode *t = &V[i];
+        double x0 = round(t->x), y0 = round(t->y), x1 = round(t->w), y1 = round(t->h);
+        t->x = x0, t->y = y0 + top, t->w = x1 - x0, t->h = y1 - y0;
+    }
+    /* descendants() (breadth-first) and leaves() (pre-order) in sorted child order */
+    size_t nb = 0, nlv = 0, head = 0;
+    bfs[nb++] = 0;
+    while (head < nb) for (uint32_t c = V[bfs[head++]].first; c != UINT32_MAX; c = V[c].next) bfs[nb++] = c;
+    {
+        size_t sp = 0;
+        scratch[sp++] = 0;
+        while (sp) {
+            uint32_t id = scratch[--sp];
+            if (V[id].first == UINT32_MAX) { if (id) leaves[nlv++] = id; continue; }
+            size_t s0 = sp;
+            for (uint32_t c = V[id].first; c != UINT32_MAX; c = V[c].next) scratch[sp++] = c;
+            for (size_t i = s0, j = sp - 1; i < j; i++, j--) { uint32_t t = scratch[i]; scratch[i] = scratch[j], scratch[j] = t; }
+        }
+    }
+    /* d3 scaleOrdinal: domain grows in first-use order; fill/peer see the root ("") first, labels do not */
+    Str *dom_f = ANEW(a, Str, v.n + 1), *dom_l = ANEW(a, Str, v.n + 1);
+    if (!dom_f || !dom_l) return CMM_ERR_NOMEM;
+    size_t nf = 0, nlab = 0;
+    BBox bb = {INFINITY, INFINITY, -INFINITY, -INFINITY};
+    if (title.n) bb_add(&bb, W / 2 - text_width(title, 16) / 2, 15 - 8, W / 2 + text_width(title, 16) / 2, 15 + 8);
+    for (size_t k = 0; k < nb; k++) if (V[bfs[k]].first != UINT32_MAX) {
+        ord_idx(dom_f, &nf, V[bfs[k]].label, bfs[k] == 0);
+        const TNode *t = &V[bfs[k]];
+        if (bfs[k]) bb_add(&bb, t->x, t->y, t->x + t->w, t->y + t->h);
+    }
+    for (size_t k = 0; k < nlv; k++) { const TNode *t = &V[leaves[k]]; bb_add(&bb, t->x, t->y, t->x + t->w, t->y + t->h); }
+    if (!(bb.x1 > bb.x0)) bb = (BBox){0, 0, W, H + top};
+    if (!buf_reserve(out, 2048 + v.n * 600)) return CMM_ERR_NOMEM;
+    DG_HEAD(out, bb, dcfg_num("treemap.diagramPadding", 8), "treemap", CSS);
+    bool showv = !str_eq(dcfg_get("treemap.showValues"), S("false"));
+    char nb_[40];
     size_t nl;
-    for (size_t i = 1; i < v.n; i++) {
-        const TNode *t = &V[i];
-        if (t->w < 1 || t->h < 1) continue;
-        const char *fill = dcfg_pal("cScale", TMI[t->sec % countof(SEC)], SEC[t->sec % countof(SEC)]),
-                   *st = dcfg_pal("cScalePeer", TMI[t->sec % countof(SECD)], SECD[t->sec % countof(SECD)]);
-        const TCls *uc = nullptr;
-        for (size_t k = 0; k < cls.n && t->cls.n; k++) if (str_eq(cls.v[k].name, t->cls)) uc = &cls.v[k];
-        bool leaf = t->first == UINT32_MAX;
-        if (leaf) buf_lit(out, "<rect class=\"lf");
-        else buf_lit(out, "<rect class=\"sec");
+    for (size_t k = 1; k < nb; k++) { /* sections */
+        const TNode *t = &V[bfs[k]];
+        if (t->first == UINT32_MAX) continue;
+        const TCls *uc = find_cls(cls.v, cls.n, t->cls);
+        size_t fi = ord_idx(dom_f, &nf, t->label, false), li = ord_idx(dom_l, &nlab, t->label, false);
+        buf_lit(out, "<rect class=\"sec");
         if (t->cls.n) { buf_ch(out, ' '); buf_xml(out, t->cls); }
         buf_lit(out, "\" x=\""); buf_num(out, t->x); buf_lit(out, "\" y=\""); buf_num(out, t->y);
         buf_lit(out, "\" width=\""); buf_num(out, t->w); buf_lit(out, "\" height=\""); buf_num(out, t->h);
         buf_lit(out, "\" fill=\"");
-        if (uc && uc->fill.n) buf_xml(out, uc->fill); else buf_put(out, strlen(fill), fill);
+        if (uc && uc->fill.n) buf_xml(out, uc->fill); else put_c(out, "cScale", fi);
         buf_lit(out, "\" stroke=\"");
-        if (uc && uc->stroke.n) buf_xml(out, uc->stroke); else if (leaf) buf_put(out, strlen(fill), fill); else buf_put(out, strlen(st), st);
+        if (uc && uc->stroke.n) buf_xml(out, uc->stroke); else put_c(out, "cScalePeer", fi);
         buf_lit(out, "\"/>");
-        fmt_val(t->v, sizeof nb, nb, &nl);
-        if (!leaf) {
-            if (t->w > 30) {
-                dg_text(out, t->label, 12, t->x + 6, t->y + HDR / 2, "start", "sh");
-                if (t->w > text_width(t->label, 12) + text_width((Str){.p = nb, .n = nl}, 10) + 24)
-                    dg_text(out, (Str){.p = nb, .n = nl}, 10, t->x + t->w - 6, t->y + HDR / 2, "end", "sv");
+        /* header label: x+6, clipped/ellipsised to the space left of the value */
+        double room = fmax(15, showv && t->v ? t->w - 10 - 30 - 10 - 6 : t->w - 12);
+        Str lab = t->label;
+        char *ell = nullptr;
+        if (text_width(lab, 12) > room) {
+            ell = ANEW(a, char, lab.n + 4);
+            if (!ell) return CMM_ERR_NOMEM;
+            size_t m = lab.n;
+            while (m > 0) {
+                m--;
+                while (m && ((unsigned char)lab.p[m] & 0xC0) == 0x80) m--;
+                memcpy(ell, lab.p, m), memcpy(ell + m, "...", 3);
+                if (!m || text_width((Str){.p = ell, .n = m + 3}, 12) <= room) break;
             }
-            continue;
+            lab = (Str){.p = ell, .n = m + 3};
+            if (!m && text_width(lab, 12) > room) lab = (Str){};
         }
-        /* mermaid fits leaf labels up to 38px; value at ~0.6x */
-        double fsz = fmin(38, fmax(8, fmin((t->w - 12) / fmax(1, text_width(t->label, 1)), t->h / 2.2)));
-        double vsz = fmax(8, fmin(23, fsz * 0.6));
-        const char *tc = dcfg_pal("cScaleLabel", TMI[t->sec % countof(SECT)], SECT[t->sec % countof(SECT)]);
-        if (t->w > 20 && t->h > 20) {
-            buf_lit(out, "<g fill=\""); buf_put(out, strlen(tc), tc); buf_lit(out, "\">");
-            char cl[64];
-            snprintf(cl, sizeof cl, "ln\" font-size=\"%.1f", fsz);
-            if (uc && uc->color.n) { dg_text_open(out, t->x + t->w / 2, t->y + t->h / 2 - fsz * 0.45, "middle", cl);
-                buf_lit(out, "<tspan fill=\""); buf_xml(out, uc->color); buf_lit(out, "\">"); buf_xml(out, t->label); buf_lit(out, "</tspan></text>"); }
-            else dg_text(out, t->label, fsz, t->x + t->w / 2, t->y + t->h / 2 - fsz * 0.45, "middle", cl);
-            char vc[64];
-            snprintf(vc, sizeof vc, "lv\" font-size=\"%.1f", vsz);
-            dg_text(out, (Str){.p = nb, .n = nl}, vsz, t->x + t->w / 2, t->y + t->h / 2 + fsz * 0.25 + vsz * 0.6, "middle", vc);
-            buf_lit(out, "</g>");
+        buf_lit(out, "<g fill=\""); put_c(out, "cScaleLabel", li); buf_lit(out, "\">");
+        if (lab.n) dg_text(out, lab, 12, t->x + 6, t->y + HDR / 2, "start", "sh");
+        if (showv && t->v) {
+            fmt_val(t->v, sizeof nb_, nb_, &nl);
+            dg_text(out, (Str){.p = nb_, .n = nl}, 10, t->x + t->w - 10, t->y + HDR / 2, "end", "sv");
         }
+        buf_lit(out, "</g>");
     }
-    if (title.n) dg_text(out, title, 18, W / 2, 20, "middle", "ttl");
+    bool cx = nlv > 20;
+    const double bl = cx ? 16 : 38, bv = cx ? 14 : 28, ml = cx ? 4 : 8, mv = cx ? 4 : 6, lp = cx ? 2 : 4, thr = cx ? 8 : 10, sp = cx ? 1 : 2;
+    for (size_t k = 0; k < nlv; k++) {
+        const TNode *t = &V[leaves[k]];
+        const TCls *uc = find_cls(cls.v, cls.n, t->cls);
+        size_t fi = ord_idx(dom_f, &nf, V[t->parent].label, t->parent == 0);
+        buf_lit(out, "<rect class=\"lf");
+        if (t->cls.n) { buf_ch(out, ' '); buf_xml(out, t->cls); }
+        buf_lit(out, "\" x=\""); buf_num(out, t->x); buf_lit(out, "\" y=\""); buf_num(out, t->y);
+        buf_lit(out, "\" width=\""); buf_num(out, t->w); buf_lit(out, "\" height=\""); buf_num(out, t->h);
+        buf_lit(out, "\" fill=\"");
+        if (uc && uc->fill.n) buf_xml(out, uc->fill); else put_c(out, "cScale", fi);
+        buf_lit(out, "\" stroke=\"");
+        if (uc && uc->stroke.n) buf_xml(out, uc->stroke); else put_c(out, "cScale", fi);
+        buf_lit(out, "\"/>");
+        size_t li = ord_idx(dom_l, &nlab, t->label, false);
+        double aw = t->w - 2 * lp, ah = t->h - 2 * lp;
+        if (aw < thr || ah < thr) continue;
+        double f = bl;
+        while (text_width(t->label, f) > aw && f > ml) f--;
+        double pv = fmax(mv, fmin(bv, round(f * 0.6)));
+        while (f + sp + pv > ah && f > ml) {
+            f--;
+            pv = fmax(mv, fmin(bv, round(f * 0.6)));
+        }
+        if (cx ? (f < ml || ah < ml) : (text_width(t->label, f) > aw || f < ml || ah < f)) continue;
+        buf_lit(out, "<g fill=\"");
+        if (uc && uc->color.n) buf_xml(out, uc->color); else put_c(out, "cScaleLabel", li);
+        buf_lit(out, "\">");
+        char cl[64];
+        snprintf(cl, sizeof cl, "ln\" font-size=\"%.0f", f);
+        dg_text(out, t->label, f, t->x + t->w / 2, t->y + t->h / 2, "middle", cl);
+        if (showv && t->v) {
+            fmt_val(t->v, sizeof nb_, nb_, &nl);
+            Str vs = {.p = nb_, .n = nl};
+            double vt = t->h / 2 + f / 2 + sp; /* dominant-baseline: hanging */
+            if (!(text_width(vs, pv) > aw || vt + pv > t->h - 4)) {
+                snprintf(cl, sizeof cl, "lv\" font-size=\"%.0f", pv);
+                dg_text(out, vs, pv, t->x + t->w / 2, t->y + vt + pv / 2, "middle", cl);
+            }
+        }
+        buf_lit(out, "</g>");
+    }
+    if (title.n) dg_text(out, title, 16, W / 2, 15, "middle", "ttl");
     buf_lit(out, "</svg>\n");
     return out->oom ? CMM_ERR_NOMEM : CMM_OK;
 }
