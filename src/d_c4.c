@@ -27,7 +27,7 @@ static constexpr char CSS[] =
     "#mermaid .cd{font-size:14px;}#mermaid .cb{fill:none;stroke:#444;stroke-width:1px;stroke-dasharray:7,7;}"
     "#mermaid .cbt{font-weight:bold;font-size:14px;fill:#444;}#mermaid .cbs{font-size:12px;fill:#444;}"
     "#mermaid .cr{fill:none;stroke:#444;stroke-width:1px;}#mermaid .crh{fill:#444;}#mermaid .crl{font-size:13px;fill:#444;}"
-    "#mermaid .crt{font-size:12px;font-style:italic;fill:#444;}#mermaid .crx{fill:inherit;}";
+    "#mermaid .crt{font-size:12px;font-style:italic;fill:#444;}#mermaid .crx{fill:inherit;}#mermaid .crc .cr{stroke:inherit;}#mermaid .crc .crh{fill:inherit;}";
 static const char *const FILL[2][4] = {{"#08427B", "#1168BD", "#438DD5", "#85BBF0"}, {"#686868", "#999999", "#B3B3B3", "#E6E6E6"}};
 static const char *const STROKE[2][4] = {{"#073B6F", "#3C7FC0", "#3C7FC0", "#78A8D8"}, {"#8A8A8A", "#8A8A8A", "#A6A6A6", "#D0D0D0"}};
 
@@ -70,16 +70,24 @@ static Str named(Str in, const char *key) {
     return (Str){};
 }
 
-static bool color_ok(Str c) { /* conservative: only chars legal in a CSS colour, so the attribute can't break out */
-    if (!c.n || c.n > 40) return false;
-    for (size_t i = 0; i < c.n; i++) {
-        char ch = c.p[i];
-        if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '#' || ch == '(' || ch == ')' || ch == ',' || ch == '.' || ch == '%' || ch == ' ')) return false;
+/* style values are arbitrary user strings (mermaid passes them through); they are only ever written as
+ * presentation-attribute values via put_attr, which escapes everything that could end the attribute. */
+static bool color_ok(Str c) { return c.n > 0 && c.n <= 256; }
+
+static void put_attr(Buf *b, Str s) {
+    for (size_t i = 0; i < s.n; i++) {
+        unsigned char ch = (unsigned char)s.p[i];
+        switch (ch) {
+        case '&': buf_lit(b, "&amp;"); break;
+        case '<': buf_lit(b, "&lt;"); break;
+        case '>': buf_lit(b, "&gt;"); break;
+        case '"': buf_lit(b, "&quot;"); break;
+        case '\'': buf_lit(b, "&#39;"); break;
+        default: if (ch >= 0x20 && ch != 0x7f) buf_ch(b, (char)ch); /* drop control bytes (invalid in XML) */
+        }
     }
-    return true;
 }
 
-static void put_s(Buf *b, Str s) { buf_put(b, s.n, s.p); }
 
 /* first crossing of the segment centre->(ox,oy) with the w*h box around (cx,cy) */
 static void rclip(double cx, double cy, double w, double h, double ox, double oy, double *x, double *y) {
@@ -409,15 +417,13 @@ DIAG_FN(c4_render) {
         rclip(g.nx[f], g.ny[f], g.nw[f], g.nh[f], g.nx[t], g.ny[t], &P[0], &P[1]);
         rclip(g.nx[t], g.ny[t], g.nw[t], g.nh[t], g.nx[f], g.ny[f], &P[2], &P[3]);
         bool lc = rst[e] && color_ok(rst[e]->line), tc = rst[e] && color_ok(rst[e]->text);
-        if (lc) { buf_lit(out, "<g stroke=\""); put_s(out, rst[e]->line); buf_lit(out, "\" fill=\""); put_s(out, rst[e]->line); buf_lit(out, "\">"); }
+        if (lc) { buf_lit(out, "<g class=\"crc\" stroke=\""); put_attr(out, rst[e]->line); buf_lit(out, "\" fill=\""); put_attr(out, rst[e]->line); buf_lit(out, "\">"); }
         buf_lit(out, "<path class=\"cr\"");
-        if (lc) { buf_lit(out, " style=\"stroke:"); put_s(out, rst[e]->line); buf_lit(out, "\""); }
         buf_lit(out, " d=\"M"); dg_pt(out, P[0], P[1]); buf_ch(out, 'L'); dg_pt(out, P[2], P[3]); buf_lit(out, "\"/>");
-        if (lc) { buf_lit(out, "<g style=\"fill:"); put_s(out, rst[e]->line); buf_lit(out, "\">"); }
         arrowhead(out, P + 2, P);
         if (cr.v[e].bi) arrowhead(out, P, P + 2);
-        if (lc) buf_lit(out, "</g></g>");
-        if (tc) { buf_lit(out, "<g style=\"fill:"); put_s(out, rst[e]->text); buf_lit(out, "\">"); }
+        if (lc) buf_lit(out, "</g>");
+        if (tc) { buf_lit(out, "<g fill=\""); put_attr(out, rst[e]->text); buf_lit(out, "\">"); }
         Str l = g.elabel[e];
         const char *nl = memchr(l.p, '\n', l.n);
         Str l1 = nl ? (Str){.p = l.p, .n = (size_t)(nl - l.p)} : l;
@@ -432,16 +438,15 @@ DIAG_FN(c4_render) {
         const char *fill = FILL[c->ext][c->kind], *stroke = STROKE[c->ext][c->kind];
         bool dark = !(c->kind == K_COMPONENT);
         const EStyle *u = nst[v];
-        char fb[48], sb[48];
-        if (u && color_ok(u->bg)) snprintf(fb, sizeof fb, "%.*s", (int)u->bg.n, u->bg.p), fill = fb;
-        if (u && color_ok(u->border)) snprintf(sb, sizeof sb, "%.*s", (int)u->border.n, u->border.p), stroke = sb;
+        Str fill_s = u && color_ok(u->bg) ? u->bg : (Str){.p = fill, .n = strlen(fill)};
+        Str stroke_s = u && color_ok(u->border) ? u->border : (Str){.p = stroke, .n = strlen(stroke)};
         buf_lit(out, "<g class=\"c4-element\" fill=\"");
-        if (u && color_ok(u->font)) put_s(out, u->font);
+        if (u && color_ok(u->font)) put_attr(out, u->font);
         else buf_put(out, strlen(dark ? "#fff" : "#000"), dark ? "#fff" : "#000");
         buf_lit(out, "\">");
         if (c->form == F_DB) {
             double ry = 10;
-            buf_lit(out, "<path fill=\""); buf_put(out, strlen(fill), fill); buf_lit(out, "\" stroke=\""); buf_put(out, strlen(stroke), stroke);
+            buf_lit(out, "<path fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
             buf_lit(out, "\" d=\"M"); dg_pt(out, x0, y0 + ry);
             buf_lit(out, "a"); buf_num(out, w / 2); buf_ch(out, ','); buf_num(out, ry); buf_lit(out, " 0 0 1 "); buf_num(out, w); buf_lit(out, ",0");
             buf_lit(out, "v"); buf_num(out, h - 2 * ry);
@@ -451,7 +456,7 @@ DIAG_FN(c4_render) {
             y0 += 2 * ry - 4;
         } else if (c->form == F_QUEUE) {
             double rx = 10;
-            buf_lit(out, "<path fill=\""); buf_put(out, strlen(fill), fill); buf_lit(out, "\" stroke=\""); buf_put(out, strlen(stroke), stroke);
+            buf_lit(out, "<path fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
             buf_lit(out, "\" d=\"M"); dg_pt(out, x0 + rx, y0);
             buf_lit(out, "h"); buf_num(out, w - 2 * rx);
             buf_lit(out, "a"); buf_num(out, rx); buf_ch(out, ','); buf_num(out, h / 2); buf_lit(out, " 0 0 1 0,"); buf_num(out, h);
@@ -461,14 +466,14 @@ DIAG_FN(c4_render) {
             buf_lit(out, "a"); buf_num(out, rx); buf_ch(out, ','); buf_num(out, h / 2); buf_lit(out, " 0 0 0 0,"); buf_num(out, h); buf_lit(out, "\"/>");
         } else if (c->kind == K_PERSON) { /* mermaid 11: rounded body with a large head circle above it */
             double r = fmin(36, w / 4), by = y0 + r * 1.4, bh = h - r * 1.4;
-            buf_lit(out, "<rect fill=\""); buf_put(out, strlen(fill), fill); buf_lit(out, "\" stroke=\""); buf_put(out, strlen(stroke), stroke);
+            buf_lit(out, "<rect fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
             buf_lit(out, "\" rx=\""); buf_num(out, fmin(30, bh / 3)); buf_lit(out, "\" x=\""); buf_num(out, x0); buf_lit(out, "\" y=\""); buf_num(out, by);
             buf_lit(out, "\" width=\""); buf_num(out, w); buf_lit(out, "\" height=\""); buf_num(out, bh); buf_lit(out, "\"/>");
-            buf_lit(out, "<circle fill=\""); buf_put(out, strlen(fill), fill); buf_lit(out, "\" stroke=\""); buf_put(out, strlen(stroke), stroke);
+            buf_lit(out, "<circle fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
             buf_lit(out, "\" cx=\""); buf_num(out, cx); buf_lit(out, "\" cy=\""); buf_num(out, y0 + r); buf_lit(out, "\" r=\""); buf_num(out, r); buf_lit(out, "\"/>");
             y0 = by;
         } else {
-            buf_lit(out, "<rect rx=\"2.5\" fill=\""); buf_put(out, strlen(fill), fill); buf_lit(out, "\" stroke=\""); buf_put(out, strlen(stroke), stroke);
+            buf_lit(out, "<rect rx=\"2.5\" fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
             buf_lit(out, "\" x=\""); buf_num(out, x0); buf_lit(out, "\" y=\""); buf_num(out, y0);
             buf_lit(out, "\" width=\""); buf_num(out, w); buf_lit(out, "\" height=\""); buf_num(out, h); buf_lit(out, "\"/>");
         }

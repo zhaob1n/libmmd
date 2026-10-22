@@ -8,6 +8,13 @@
 
 typedef struct JTask { Str name; double score; uint32_t sec; uint32_t a0, na; } JTask;
 
+/* byte-wise string order, as JS Array.prototype.sort() does for ASCII */
+static bool jr_less(Str x, Str y) {
+    size_t n = x.n < y.n ? x.n : y.n;
+    int c = n ? memcmp(x.p, y.p, n) : 0;
+    return c < 0 || (c == 0 && x.n < y.n);
+}
+
 static constexpr char CSS[] =
     "#mermaid .face{fill:#FFF8DC;stroke:#999;stroke-width:1px;}#mermaid .feat{fill:none;stroke:#666;stroke-width:1.5px;}"
     "#mermaid .eye{fill:#666;}#mermaid .tl{stroke:#666;stroke-width:1px;stroke-dasharray:4 4;}"
@@ -73,6 +80,18 @@ DIAG_FN(journey_render) {
         if (!VEC_PUSH(a, &tk, t)) return CMM_ERR_NOMEM;
     }
     if (!tk.n) return diag_fail(err_off, msg, off, "journey has no tasks");
+    { /* mermaid lists (and colours) actors in sorted order: insertion sort, then remap task refs */
+        uint32_t *rank = ANEW(a, uint32_t, actors.n + 1), *inv = ANEW(a, uint32_t, actors.n + 1);
+        if (!rank || !inv) return CMM_ERR_NOMEM;
+        for (size_t i = 0; i < actors.n; i++) rank[i] = (uint32_t)i;
+        for (size_t i = 1; i < actors.n; i++)
+            for (size_t j = i; j > 0 && jr_less(actors.v[j], actors.v[j - 1]); j--) {
+                Str t = actors.v[j]; actors.v[j] = actors.v[j - 1]; actors.v[j - 1] = t;
+                uint32_t r = rank[j]; rank[j] = rank[j - 1]; rank[j - 1] = r;
+            }
+        for (size_t i = 0; i < actors.n; i++) inv[rank[i]] = (uint32_t)i;
+        for (size_t i = 0; i < refs.n; i++) refs.v[i] = inv[refs.v[i]];
+    }
     double lw = 0;
     for (size_t i = 0; i < actors.n; i++) {
         double w = text_width(actors.v[i], 14);
