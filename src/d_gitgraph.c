@@ -50,6 +50,13 @@ static bool attrs(Str s, Attr *at) {
     return true;
 }
 
+/* mermaid gives unordered branches order parseFloat(`0.${index}`) (so they precede order >= 1) */
+static double mm_order(size_t i) {
+    double d = 1;
+    for (size_t t = i; t; t /= 10) d *= 10;
+    return i ? (double)i / d : 0;
+}
+
 DIAG_FN(gitgraph_render) {
     (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
@@ -123,7 +130,7 @@ DIAG_FN(gitgraph_render) {
             for (size_t b = 0; b < br.n; b++)
                 if (str_eq(br.v[b].name, bn)) return diag_fail(err_off, msg, (size_t)(bn.p - src), "branch already exists");
             if (!attrs(rest, &at)) return diag_fail(err_off, msg, (size_t)(rest.p - src), "bad branch attributes");
-            Branch b = {.name = bn, .order = at.has_order ? at.order : (double)br.n, .head = br.v[cur].head,
+            Branch b = {.name = bn, .order = at.has_order ? at.order : mm_order(br.n), .head = br.v[cur].head,
                         .has_head = br.v[cur].has_head, .idx = (uint32_t)br.n};
             if (!VEC_PUSH(a, &br, b)) return CMM_ERR_NOMEM;
             cur = (uint32_t)br.n - 1;
