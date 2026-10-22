@@ -186,6 +186,22 @@ static void bc_sort(size_t n, BcItem a[static n], BcItem tmp[static n]) {
     while (i < h) a[k++] = tmp[i++];
 }
 
+/* one key per cluster, shared by all layers (mean normalised slot of its members), so sibling clusters keep
+ * the same relative order in every layer -> cluster boxes can be made rectangular without overlap */
+static void cluster_keys(const Lay *L, size_t S, double gk[static S + 1], uint32_t cnt[static S + 1]) {
+    memset(gk, 0, (S + 1) * sizeof *gk);
+    memset(cnt, 0, (S + 1) * sizeof *cnt);
+    for (size_t r = 0; r < L->R; r++) {
+        size_t a = L->loff[r], n = L->loff[r + 1] - a;
+        for (size_t i = 0; i < n; i++) {
+            int32_t v = L->lay[a + i];
+            double t = ((double)i + 0.5) / (double)n;
+            for (int32_t c = L->cl[v]; c != NONE; c = L->g->sparent[c]) gk[c] += t, cnt[c]++;
+        }
+    }
+    for (size_t c = 0; c < S; c++) if (cnt[c]) gk[c] /= cnt[c];
+}
+
 /* ---------- one barycenter sweep over layer r ---------- */
 static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint32_t *idx, uint32_t *tmp,
                         double *csum, uint32_t *ccnt, bool clusters) {
@@ -220,14 +236,7 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint3
         (void)idx; (void)tmp;
         return;
     }
-    {
-        Graph *g = L->g;
-        for (size_t i = 0; i < n; i++) {
-            int32_t v = L->lay[a + i];
-            if (L->border[v]) continue;
-            for (int32_t c = L->cl[v]; c != NONE; c = g->sparent[c]) { csum[c] += L->bc[v]; ccnt[c]++; }
-        }
-    }
+    (void)ccnt; /* csum holds layer-independent cluster keys (see cluster_keys) */
     for (size_t i = 0; i < n; i++) {
         int32_t v = L->lay[a + i];
         Key *k = &keys[i];
@@ -238,7 +247,7 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint3
             for (int32_t c = L->cl[v]; c != NONE && cn < countof(chain); c = L->g->sparent[c]) chain[cn++] = c;
             while (cn && d < MAX_KEY_DEPTH - 1) {
                 int32_t c = chain[--cn];
-                k->bc[d] = ccnt[c] ? csum[c] / ccnt[c] : 0;
+                k->bc[d] = csum[c] * (double)n;
                 k->id[d] = -(c + 1);
                 d++;
             }
@@ -247,13 +256,6 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint3
         k->id[d] = v;
         k->len = d + 1;
         idx[i] = (uint32_t)i;
-    }
-    if (clusters) {
-        Graph *g = L->g;
-        for (size_t i = 0; i < n; i++) {
-            int32_t v = L->lay[a + i];
-            for (int32_t c = L->cl[v]; c != NONE; c = g->sparent[c]) { csum[c] = 0; ccnt[c] = 0; }
-        }
     }
     msort(n, idx, tmp, keys);
     for (size_t i = 0; i < n; i++) tmp[i] = (uint32_t)L->lay[a + idx[i]];
@@ -408,6 +410,15 @@ static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, 
             int32_t v = W->order[a + i];
             uint32_t k0 = off[v], k1 = off[v + 1], m = k1 - k0;
             if (!m) continue;
+            if (L->border[v]) { /* cluster side chains form one rigid block */
+                int32_t w = (int32_t)adj[k0];
+                if (prev < W->posl[w]) {
+                    W->align[w] = v;
+                    W->align[v] = W->root[v] = W->root[w];
+                    prev = W->posl[w];
+                }
+                continue;
+            }
             /* neighbours sorted by pass position */
             int32_t *ws = W->nbuf;
             for (uint32_t k = 0; k < m; k++) {
@@ -498,6 +509,37 @@ static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, 
                     }
                 }
                 k0 = k1;
+            }
+        }
+    }
+    /* segments crossing a cluster side chain may not be aligned (the chain must stay straight) */
+    {
+        /* chains never cross each other, so an edge crosses one iff the number of chain
+           borders right of its head differs from the number right of its tail (O(V+E)) */
+        int32_t *sr = ANEW(A, int32_t, V + 1), *sp = ANEW(A, int32_t, V + 1);
+        if (!sr || !sp) return false;
+        for (size_t r = 1; r < R; r++) {
+            size_t a = L->loff[r], n = L->loff[r + 1] - a, pn = a - L->loff[r - 1];
+            bool any = false;
+            for (size_t i = 0; i <= n; i++) sr[i] = 0;
+            for (size_t i = 0; i <= pn; i++) sp[i] = 0;
+            for (size_t i = 0; i < n; i++) {
+                int32_t b = L->lay[a + i];
+                if (!L->border[b] || L->poff[b + 1] == L->poff[b]) continue;
+                sr[i] = 1;
+                sp[L->pos[L->pidx[L->poff[b]]]] = 1;
+                any = true;
+            }
+            if (!any) continue;
+            for (size_t i = n; i-- > 0;) sr[i] += sr[i + 1];
+            for (size_t i = pn; i-- > 0;) sp[i] += sp[i + 1];
+            for (size_t j = 0; j < n; j++) {
+                int32_t v = L->lay[a + j];
+                if (L->border[v]) continue;
+                for (uint32_t k = L->poff[v]; k < L->poff[v + 1]; k++) {
+                    int32_t u = (int32_t)L->pidx[k];
+                    if (sr[j + 1] != sp[L->pos[u] + 1] && !pset_add(A, &conf, u, v)) return false;
+                }
             }
         }
     }
@@ -910,6 +952,7 @@ static cmm_status layout_core(Graph *g) {
     memset(csum, 0, (S + 1) * sizeof *csum);
     memset(ccnt, 0, (S + 1) * sizeof *ccnt);
     bool clusters = S > 0;
+    if (clusters) cluster_keys(&L, S, csum, ccnt);
     if (clusters) /* establish cluster contiguity (borders at extremes) before any scoring */
         for (size_t r = 0; r < R; r++) sweep_layer(&L, r, false, true, keys, idx, tmp, csum, ccnt, clusters);
     uint64_t bestc = cross_all(&L, cbuf, fen);
@@ -922,6 +965,7 @@ static cmm_status layout_core(Graph *g) {
     if (!tdirty) return CMM_ERR_NOMEM;
     for (unsigned iter = 0; iter < 24 && since < 2 && bestc > 0; iter++) {
         bool down = (iter & 1u) == 0;
+        if (clusters) cluster_keys(&L, S, csum, ccnt);
         if (down) for (size_t r = 1; r < R; r++) sweep_layer(&L, r, true, false, keys, idx, tmp, csum, ccnt, clusters);
         else for (size_t r = R - 1; r-- > 0;) sweep_layer(&L, r, false, false, keys, idx, tmp, csum, ccnt, clusters);
         uint64_t c = cross_all(&L, cbuf, fen);
@@ -945,8 +989,39 @@ static cmm_status layout_core(Graph *g) {
     PROF("order");
     /* ---- x via Brandes-Köpf ---- */
     if (!bk(&L)) return CMM_ERR_NOMEM;
+    /* pull long-edge dummy chains (as a rigid block) toward the endpoints' mean x, order-preserving */
+    for (size_t e = 0; e < E; e++) {
+        if (!EVALID(e)) continue;
+        int32_t u = EU(e), v = EV(e), span = rank[v] - rank[u];
+        if (span < 2) continue;
+        double lo = -INFINITY, hi = INFINITY, x0 = L.x[N + choff[e]];
+        bool rigid = true;
+        for (int32_t k = 1; k < span && rigid; k++) {
+            int32_t d = (int32_t)(N + choff[e] + (size_t)(k - 1));
+            if (fabs(L.x[d] - x0) > 0.5 || L.w[d] > 0) { rigid = false; break; }
+            int32_t r = L.rank[d], i = L.pos[d];
+            size_t a = L.loff[r], n = L.loff[r + 1] - a;
+            if (i > 0) { int32_t q = L.lay[a + (size_t)i - 1]; lo = dmax(lo, L.x[q] + sep(&L, q, d)); }
+            if ((size_t)i + 1 < n) { int32_t q = L.lay[a + (size_t)i + 1]; hi = dmin(hi, L.x[q] - sep(&L, d, q)); }
+        }
+        if (!rigid || lo > hi) continue;
+        double t = dmax(lo, dmin(hi, (L.x[u] + L.x[v]) / 2));
+        for (int32_t k = 1; k < span; k++) L.x[N + choff[e] + (size_t)(k - 1)] = t;
+    }
 
     PROF("bk");
+#ifdef CMM_PROFILE
+    for (size_t c = 0; c < S; c++) {
+        if (cmax[c] < cmin[c]) continue;
+        double mn[2] = {1e18, 1e18}, mx[2] = {-1e18, -1e18};
+        for (int32_t r = cmin[c]; r <= cmax[c]; r++)
+            for (unsigned side = 0; side < 2; side++) {
+                double x = L.x[bbase[c] + 2 * (size_t)(r - cmin[c]) + side];
+                mn[side] = dmin(mn[side], x), mx[side] = dmax(mx[side], x);
+            }
+        fprintf(stderr, "cl %zu ranks %d-%d left %.0f..%.0f right %.0f..%.0f\n", c, cmin[c], cmax[c], mn[0], mx[0], mn[1], mx[1]);
+    }
+#endif
     /* ---- rank axis ---- */
     double *ry = ANEW(A, double, R + 1), *rh = ANEW(A, double, R + 1);
     double *gtop = ANEW(A, double, R + 1), *gbot = ANEW(A, double, R + 1);
@@ -1481,6 +1556,19 @@ static int32_t seg_hit(Router *R, double px, double py, double qx, double qy, in
 
 static bool pt_in(const Box *b, double x, double y) { return x > b->x0 && x < b->x1 && y > b->y0 && y < b->y1; }
 
+/* is (x,y) strictly inside some obstacle other than s1/s2? (one grid cell, no segment test) */
+static bool pt_buried(const Router *R, double x, double y, int32_t s1, int32_t s2) {
+    const Grid *G = &R->G;
+    if (x < G->x0 || y < G->y0) return false;
+    size_t cx = (size_t)((x - G->x0) / G->cs), cy = (size_t)((y - G->y0) / G->cs);
+    if (cx >= G->gw || cy >= G->gh) return false;
+    for (uint32_t k = G->off[cy * G->gw + cx]; k < G->off[cy * G->gw + cx + 1]; k++) {
+        int32_t v = (int32_t)G->idx[k];
+        if (v != s1 && v != s2 && pt_in(&R->nb[v], x, y)) return true;
+    }
+    return false;
+}
+
 /* shortest visibility path S->T; writes interior corners to out (max cap pts). Returns count or -1. */
 static inline double edist(double dx, double dy) { return sqrt(dx * dx + dy * dy); }
 
@@ -1519,10 +1607,7 @@ static int vis_path(Router *R, Arena *A, double sx, double sy, double tx, double
         /* drop corners buried in another obstacle */
         size_t m = 2;
         for (size_t i = 2; i < nc; i++) {
-            bool bad = false;
-            int32_t h = seg_hit(R, cx[i], cy[i], cx[i], cy[i], s1, s2);
-            if (h != NONE && pt_in(&R->nb[h], cx[i], cy[i])) bad = true;
-            if (!bad) cx[m] = cx[i], cy[m] = cy[i], m++;
+            if (!pt_buried(R, cx[i], cy[i], s1, s2)) cx[m] = cx[i], cy[m] = cy[i], m++;
         }
         nc = m;
         /* Dijkstra (dense, O(V^2) with lazy visibility) */
@@ -1594,8 +1679,8 @@ static int side_path(Router *R, double sx, double sy, double tx, double ty, int3
         {b->x0, b->y0, b->x0, b->y1}, {b->x1, b->y0, b->x1, b->y1}, /* left, right side */
         {b->x0, b->y0, b->x1, b->y0}, {b->x0, b->y1, b->x1, b->y1}, /* top, bottom side */
     };
-    double best = INFINITY;
-    int bk = -1;
+    double len[4];
+    unsigned ord[4] = {0, 1, 2, 3};
     for (unsigned k = 0; k < 4; k++) {
         double *q = c[k];
         /* visit the corner nearer S first */
@@ -1603,11 +1688,16 @@ static int side_path(Router *R, double sx, double sy, double tx, double ty, int3
             double t0 = q[0], t1 = q[1];
             q[0] = q[2], q[1] = q[3], q[2] = t0, q[3] = t1;
         }
-        double L = edist(q[0] - sx, q[1] - sy) + edist(q[2] - q[0], q[3] - q[1]) + edist(tx - q[2], ty - q[3]);
-        if (L >= best) continue;
+        len[k] = edist(q[0] - sx, q[1] - sy) + edist(q[2] - q[0], q[3] - q[1]) + edist(tx - q[2], ty - q[3]);
+    }
+    for (unsigned i = 1; i < 4; i++) /* stable insertion sort by length: first clear one is the best */
+        for (unsigned j = i; j > 0 && len[ord[j]] < len[ord[j - 1]]; j--) { unsigned t = ord[j]; ord[j] = ord[j - 1]; ord[j - 1] = t; }
+    int bk = -1;
+    for (unsigned i = 0; i < 4 && bk < 0; i++) {
+        const double *q = c[ord[i]];
         if (seg_hit(R, sx, sy, q[0], q[1], s1, s2) != NONE || seg_hit(R, q[0], q[1], q[2], q[3], s1, s2) != NONE ||
             seg_hit(R, q[2], q[3], tx, ty, s1, s2) != NONE) continue;
-        best = L, bk = (int)k;
+        bk = (int)ord[i];
     }
     if (bk < 0) return -1;
     memcpy(out, c[bk], sizeof c[bk]);
@@ -1796,12 +1886,15 @@ static void labels_on_curve(Graph *g) {
 cmm_status flow_layout(Graph *g) {
     cmm_status st = layout_rec(g, 0);
     if (st) return st;
+    PROF("");
     simplify_pts(g); /* fewer segments for the obstacle test */
     if (!(g->flags & CMM_F_NO_AVOID)) {
         if (!route_avoid(g)) return CMM_ERR_NOMEM;
+        PROF("route");
         simplify_pts(g);
     }
     labels_on_curve(g);
     if (!place_titles(g)) return CMM_ERR_NOMEM;
+    PROF("post");
     return CMM_OK;
 }

@@ -1,0 +1,8 @@
+v4 (taskset -c 2, min of 3 runs, µs). v1 = original baseline bench.
+size    v1      O2(avoid on)  O2 no-avoid  clang PGO+LTO  gcc PGO+LTO
+small   11.6    13.1          12.1         11.4           13.4
+medium  403.2   547.1         391.8        525.8          545.3
+large   8889    9058          8093         8425           9303
+xlarge  54288   54455         49689        51689          54755
+Changes: lazy A* visibility routing, side-hug detours, early sweep stop (same crossings),
+buf_num digit-pair path, dummy-chain straightening, label overlap resolution.
