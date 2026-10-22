@@ -1,5 +1,6 @@
 /* journey: title, sections, tasks "name : score : actor, actor". Mermaid-like layout: section
  * headers, task boxes, a face per task placed by score, actor legend with coloured dots. */
+#include <math.h>
 #include <stdio.h>
 
 #include "dgraph.h"
@@ -98,24 +99,29 @@ DIAG_FN(journey_render) {
         double w = text_width(actors.v[i], 14);
         if (w > lw) lw = w;
     }
+    /* mermaid journeyRenderer: leftMargin 150 (+ legend width when > 75), sections at y 50, tasks at
+       y = 2*height + diagramMarginY = 110, faces at 300 + (5-score)*30, axis at 4*height = 200 */
     constexpr double TW = 150;
     constexpr double TM = 50;
-    constexpr double SY = 60;
-    constexpr double TY = 120;
+    constexpr double SY = 50;
+    constexpr double TY = 110;
     constexpr double BOX = 50;
-    constexpr double FACE0 = 200;
-    constexpr double AX = 340;
-    double left = actors.n ? lw + 60 : 20, W = left + tk.n * (TW + TM);
-    BBox bb = {0, 0, W, AX + 30};
+    constexpr double FACE0 = 300;
+    constexpr double AX = 200;
+    constexpr double LINE_END = 450;
+    double left = 150 + (lw > 75 ? lw : 0);
+    double stopx = tk.n ? left + (double)(tk.n - 1) * (TW + TM) + 100 : left;
+    double W = left + stopx + 100, H = fmax(LINE_END, (double)actors.n * 50) + 20 + (title.n ? 70 : 0);
+    BBox bb = {0, -25, W, H - 25};
     if (!buf_reserve(out, 4096 + tk.n * 1500)) return CMM_ERR_NOMEM;
-    DG_HEAD(out, bb, 4, "journey", CSS);
+    DG_HEAD(out, bb, 0, "journey", CSS);
     if (title.n) dg_text(out, title, 20, left, 25, "start", "ttl");
     for (size_t i = 0; i < actors.n; i++) {
-        double y = 60 + i * 24;
+        double y = 60 + i * 20;
         buf_lit(out, "<circle class=\"adot\" r=\"7\" cx=\"20\" cy=\""); buf_num(out, y);
         buf_lit(out, "\" fill=\""); buf_put(out, strlen(ACTCOL[i % countof(ACTCOL)]), ACTCOL[i % countof(ACTCOL)]);
         buf_lit(out, "\"/>");
-        dg_text(out, actors.v[i], 14, 35, y, "start", "tx");
+        dg_text(out, actors.v[i], 14, 40, y, "start", "tx");
     }
     for (size_t i = 0; i < tk.n;) { /* section headers span their tasks */
         size_t j = i;
@@ -131,15 +137,15 @@ DIAG_FN(journey_render) {
     for (size_t i = 0; i < tk.n; i++) {
         const JTask *t = &tk.v[i];
         double x = left + i * (TW + TM), cx = x + TW / 2;
-        double s = t->score < 0 ? 0 : t->score > 5 ? 5 : t->score, fy = FACE0 + (5 - s) * 25;
-        dg_line(out, cx, TY + BOX, cx, AX, "tl");
+        double s = t->score < 0 ? 0 : t->score > 5 ? 5 : t->score, fy = FACE0 + (5 - s) * 30;
+        dg_line(out, cx, TY, cx, LINE_END, "tl");
         dg_rect_fill(out, x, TY, TW, BOX, 3, "tbox", dcfg_pal("fillType", t->sec % countof(SECCOL), SECCOL[t->sec % countof(SECCOL)]));
         Str nm = dg_wrap(a, t->name, 14, TW - 10);
         dg_text(out, nm, 14, cx, TY + BOX / 2, "middle", "tx");
         face(out, cx, fy, s);
         for (uint32_t k = 0; k < t->na; k++) {
             uint32_t ai = refs.v[t->a0 + k];
-            buf_lit(out, "<circle class=\"adot\" r=\"7\" cx=\""); buf_num(out, x + 10 + k * 16);
+            buf_lit(out, "<circle class=\"adot\" r=\"7\" cx=\""); buf_num(out, x + 14 + k * 10);
             buf_lit(out, "\" cy=\""); buf_num(out, TY); buf_lit(out, "\" fill=\"");
             buf_put(out, strlen(ACTCOL[ai % countof(ACTCOL)]), ACTCOL[ai % countof(ACTCOL)]);
             buf_lit(out, "\"/>");
@@ -148,7 +154,7 @@ DIAG_FN(journey_render) {
     buf_lit(out, "<defs><marker id=\"jarrow\" markerWidth=\"6\" markerHeight=\"6\" refX=\"5\" refY=\"3\" orient=\"auto\">"
                  "<path d=\"M0,0L6,3L0,6Z\"/></marker></defs>");
     buf_lit(out, "<line class=\"axis\" marker-end=\"url(#jarrow)\" x1=\""); buf_num(out, left);
-    buf_lit(out, "\" y1=\""); buf_num(out, AX); buf_lit(out, "\" x2=\""); buf_num(out, W - 10);
+    buf_lit(out, "\" y1=\""); buf_num(out, AX); buf_lit(out, "\" x2=\""); buf_num(out, W - left - 4);
     buf_lit(out, "\" y2=\""); buf_num(out, AX); buf_lit(out, "\"/>");
     buf_lit(out, "</svg>\n");
     return out->oom ? CMM_ERR_NOMEM : CMM_OK;
