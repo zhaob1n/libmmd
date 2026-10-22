@@ -184,13 +184,27 @@ static void exchange(RG *g, uint32_t e, uint32_t nf) {
         cut_one(g, g->path[i]);
 }
 
+/* adds v to the tree; nout[x] counts x's incident edges whose other end is outside the tree */
+static void ft_add(RG *g, uint32_t *nout, uint32_t v) {
+    t_add_node(g, v);
+    uint32_t n = 0;
+    for (uint32_t k = g->eoff[v]; k < g->eoff[v + 1]; k++) {
+        uint32_t e = g->eidx[k];
+        uint32_t w = (uint32_t)(g->sv[e] == (int32_t)v ? g->sw[e] : g->sv[e]);
+        if (g->tin[w]) nout[w]--; else n++;
+    }
+    nout[v] = n;
+}
+
 static bool feasible_tree(RG *g, uint32_t *snap) {
     size_t M = g->M;
-    t_add_node(g, 0);
+    uint32_t *nout = g->acnt; /* free until the simplex loop */
+    ft_add(g, nout, 0);
     for (;;) {
         size_t n0 = g->nint + g->nnon;
         t_nodes(g, snap);
         for (size_t i = 0; i < n0; i++) {
+            if (!nout[snap[i]]) continue; /* every neighbour already in the tree: dfs adds nothing */
             size_t sp = 0;
             g->stk[sp] = snap[i], g->sit[sp] = g->eoff[snap[i]], sp++;
             while (sp) {
@@ -199,7 +213,7 @@ static bool feasible_tree(RG *g, uint32_t *snap) {
                 uint32_t e = g->eidx[g->sit[sp - 1]++];
                 uint32_t w = (uint32_t)(g->sv[e] == (int32_t)u ? g->sw[e] : g->sv[e]);
                 if (g->tin[w] || slack(g, e)) continue;
-                t_add_node(g, w);
+                ft_add(g, nout, w);
                 if (!t_add_edge(g, (int32_t)u, (int32_t)w, (int32_t)e)) return false;
                 g->stk[sp] = w, g->sit[sp] = g->eoff[w], sp++;
             }
