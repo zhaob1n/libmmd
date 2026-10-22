@@ -83,7 +83,8 @@ uint8_t flow_curve_kind(Str name);
  * so it bulges SELFLOOP_BULGE*r beyond the node side */
 static inline double selfloop_r(unsigned k) { return 40 + 18 * (double)k; }
 static inline double selfloop_u(unsigned k) { return 20 + 8 * (double)k; }
-constexpr double SELFLOOP_BULGE = 0.75, SELFLOOP_GAP = 6; /* mermaid flowchart.curve name -> CURVE_* (unknown => basis) */
+constexpr double SELFLOOP_BULGE = 0.75;
+constexpr double SELFLOOP_GAP = 6; /* mermaid flowchart.curve name -> CURVE_* (unknown => basis) */
 void node_size(Graph *g, size_t v);
 
 #endif

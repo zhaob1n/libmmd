@@ -1,0 +1,12 @@
+---
+config:
+  theme: dark
+---
+classDiagram
+  class Animal {
+    +String name
+    +move() void
+  }
+  Animal <|-- Dog : extends
+  Dog *-- Tail
+  note for Dog "good boy"

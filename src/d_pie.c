@@ -79,7 +79,7 @@ DIAG_FN(pie_render) {
     for (size_t j = 0; j < sl.n; j++) {
         size_t i = ord[j];
         double frac = total > 0 ? sl.v[i].v / total : 0, a1 = ang + frac * 2 * M_PI;
-        const char *col = COLORS[i % countof(COLORS)];
+        const char *col = dcfg_pal("pie", i % countof(COLORS) + 1, COLORS[i % countof(COLORS)]);
         if (frac >= 1 - 1e-12) {
             buf_lit(out, "<circle class=\"slice\" cx=\""); buf_num(out, CX); buf_lit(out, "\" cy=\""); buf_num(out, CY);
             buf_lit(out, "\" r=\""); buf_num(out, R); buf_lit(out, "\" fill=\""); buf_put(out, strlen(col), col); buf_lit(out, "\"/>");
@@ -105,7 +105,7 @@ DIAG_FN(pie_render) {
     buf_lit(out, "\" r=\""); buf_num(out, R + 1); buf_lit(out, "\"/>");
     double ly = CY - sl.n * 22 / 2.0;
     for (size_t i = 0; i < sl.n; i++, ly += 22) {
-        const char *col = COLORS[i % countof(COLORS)];
+        const char *col = dcfg_pal("pie", i % countof(COLORS) + 1, COLORS[i % countof(COLORS)]);
         buf_lit(out, "<rect width=\"18\" height=\"18\" x=\""); buf_num(out, CX + R + 50); buf_lit(out, "\" y=\"");
         buf_num(out, ly); buf_lit(out, "\" fill=\""); buf_put(out, strlen(col), col); buf_lit(out, "\" stroke=\"#000\"/>");
         Str lab = sl.v[i].label;

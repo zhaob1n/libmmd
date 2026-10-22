@@ -1,0 +1,10 @@
+---
+config:
+  theme: forest
+---
+stateDiagram-v2
+  [*] --> Still
+  Still --> Moving
+  Moving --> Crash
+  Crash --> [*]
+  note left of Moving: careful

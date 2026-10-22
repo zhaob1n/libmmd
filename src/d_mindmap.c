@@ -9,6 +9,7 @@
 #include <math.h>
 
 #include "dgraph.h"
+#include "dcfg.h"
 #include "icons.h"
 #include "diagrams.h"
 #include "text.h"
@@ -298,7 +299,7 @@ DIAG_FN(mindmap_render) {
     for (size_t i = 1; i < v.n; i++) { /* edges: cubic from parent side to child side, thinner with depth */
         const MNode *p = &V[V[i].parent], *c = &V[i];
         if (!tidy) {
-            const char *col = SEC[c->sec % countof(SEC)]; /* mermaid colours edges like their section's nodes */
+            const char *col = dcfg_pal("cScale", c->sec % countof(SEC) + 1, SEC[c->sec % countof(SEC)]); /* mermaid colours edges like their section's nodes */
             buf_lit(out, "<path class=\"me\" stroke=\""); buf_put(out, strlen(col), col);
             buf_lit(out, "\" stroke-width=\""); buf_num(out, fmax(2, 17 - 3.0 * c->depth)); buf_lit(out, "\" d=\"M");
             dg_pt(out, p->x, p->y); buf_ch(out, 'L'); dg_pt(out, c->x, c->y); buf_lit(out, "\"/>");
@@ -315,7 +316,7 @@ DIAG_FN(mindmap_render) {
     }
     for (size_t i = 0; i < v.n; i++) {
         const MNode *m = &V[i];
-        const char *fill = i ? SEC[m->sec % countof(SEC)] : "#0000ec", *st = i ? SECS[m->sec % countof(SECS)] : "#0000a0";
+        const char *fill = i ? dcfg_pal("cScale", m->sec % countof(SEC) + 1, SEC[m->sec % countof(SEC)]) : dcfg_pal("cScale", 0, "#0000ec"), *st = i ? SECS[m->sec % countof(SECS)] : "#0000a0";
         const char *tcls = !i || SECW[m->sec % countof(SECW)] ? "mt\" fill=\"#fff" : "mt";
         double x = m->x - m->w / 2, y = m->y - m->h / 2, w = m->w, h = m->h;
         buf_lit(out, "<g class=\"mindmap-node section-");

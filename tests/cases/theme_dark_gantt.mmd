@@ -1,0 +1,13 @@
+---
+config:
+  theme: dark
+---
+gantt
+  title Plan
+  dateFormat YYYY-MM-DD
+  section A
+  Design :done, d1, 2024-01-01, 5d
+  Build  :active, b1, after d1, 7d
+  section B
+  Test   :crit, t1, after b1, 3d
+  Ship   :s1, after t1, 2d

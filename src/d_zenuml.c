@@ -137,7 +137,8 @@ static void stmt(ZT *z, Str s, bool block) {
                 break;
             }
         put_name(o, from); buf_lit(o, "-->>");
-        if (direct) buf_ch(o, '-'); put_name(o, to); buf_lit(o, ": "); put_text(o, r); buf_ch(o, '\n');
+        if (direct) buf_ch(o, '-');
+        put_name(o, to); buf_lit(o, ": "); put_text(o, r); buf_ch(o, '\n');
         return;
     }
     if (s.p[0] == '@') { /* @Actor A, @Database "B", @Starter(A) */

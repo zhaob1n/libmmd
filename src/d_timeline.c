@@ -95,7 +95,7 @@ DIAG_FN(timeline_render) {
             size_t j = i;
             while (j < per.n && per.v[j].sec == per.v[i].sec) j++;
             double x = GAP + i * (PW + GAP), w = (j - i) * (PW + GAP) - GAP;
-            dg_rect_fill(out, x, TOPY, w, SH, 6, "box", COL[MULTI ? per.v[i].sec % countof(COL) : 0]);
+            dg_rect_fill(out, x, TOPY, w, SH, 6, "box", dcfg_pal("cScale", MULTI ? per.v[i].sec % countof(COL) : 0, COL[MULTI ? per.v[i].sec % countof(COL) : 0]));
             TXG(out, MULTI ? per.v[i].sec : 0);
             dg_text(out, dg_wrap(a, secs.v[per.v[i].sec], 14, w - 10), 14, x + w / 2, TOPY + SH / 2, "middle", "tx");
             buf_lit(out, "</g>");
@@ -106,7 +106,7 @@ DIAG_FN(timeline_render) {
     for (size_t i = 0; i < per.n; i++) {
         double x = GAP + i * (PW + GAP), cx = x + PW / 2;
         size_t ci = !MULTI ? 0 : secs.n ? per.v[i].sec : i;
-        const char *col = COL[ci % countof(COL)];
+        const char *col = dcfg_pal("cScale", ci % countof(COL), COL[ci % countof(COL)]);
         double y = py + PH + 40, last = y;
         for (uint32_t k = 0; k < per.v[i].ne; k++) last = y, y += eh[per.v[i].e0 + k] + EG;
         if (per.v[i].ne) dg_line(out, cx, py + PH, cx, last, "ln");
