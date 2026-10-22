@@ -20,6 +20,8 @@ static const DiagEnt DIAGS[] = {
     {S("journey"), journey_render},
     {S("timeline"), timeline_render},
     {S("quadrantChart"), quadrant_render},
+    {S("xychart-beta"), xychart_render},
+    {S("xychart"), xychart_render},
 };
 
 DiagFn diag_lookup(Str kw) {
