@@ -111,6 +111,14 @@ DIAG_FN(gitgraph_render) {
                 if (!at.id.n || k == cm.n) return diag_fail(err_off, msg, lo, "cherry-pick of unknown commit");
                 c.type = C_CHERRY, c.p2 = (uint32_t)k;
                 c.tag = at.tag;
+                if (!c.tag.n) { /* mermaid default tag: cherry-pick:<src>[|parent:<p>] */
+                    size_t tl = at.id.n + at.parent.n + 24;
+                    char *t2 = arena_alloc(a, tl, 1);
+                    if (!t2) return CMM_ERR_NOMEM;
+                    int l2 = cm.v[k].type == C_MERGE ? snprintf(t2, tl, "cherry-pick:%.*s|parent:%.*s", (int)at.id.n, at.id.p, (int)at.parent.n, at.parent.p)
+                                                     : snprintf(t2, tl, "cherry-pick:%.*s", (int)at.id.n, at.id.p);
+                    c.tag = (Str){.p = t2, .n = (size_t)l2};
+                }
                 char *t = arena_alloc(a, at.id.n + 16, 1);
                 if (!t) return CMM_ERR_NOMEM;
                 int len = snprintf(t, at.id.n + 16, "cherry:%.*s", (int)at.id.n, at.id.p);
@@ -168,12 +176,12 @@ DIAG_FN(gitgraph_render) {
     }
     for (size_t i = 0; i < br.n; i++) lane[ord[i]] = (uint32_t)i;
     constexpr double STEP = 50;
-    constexpr double LANE = 60;
+    constexpr double LANE = 90; /* mermaid setBranchPosition: 50 + 40 (rotateCommitLabel, default on) */
     constexpr double R = 10;
     double bnw = 0;
     for (size_t i = 0; i < br.n; i++) { double w = text_width(br.v[i].name, 14); if (w > bnw) bnw = w; }
     double p0 = dir == 0 ? bnw + 40 : 70; /* main-axis origin */
-    double q0 = dir == 0 ? (title.n ? 90 : 50) : bnw / 2 + 30;
+    double q0 = dir == 0 ? 50 : bnw / 2 + 30;
     double plen = p0 + (double)cm.n * STEP + 30;
     double lanesep = dir == 0 ? LANE : (bnw + 30 > LANE ? bnw + 30 : LANE);
     double qlen = q0 + (double)br.n * lanesep;
@@ -182,17 +190,17 @@ DIAG_FN(gitgraph_render) {
     /* LR: mermaid sizes the viewBox to the drawn content (+8): branch labels on top, the rotated commit
      * labels (see below) at the bottom */
     double top = q0 - 11, bot = q0 + (br.n ? (double)(br.n - 1) : 0) * lanesep + 11;
-    if (title.n) top = fmin(top, 4);
+    if (title.n) top = fmin(top, q0 - 41); /* insertTitle: baseline at -titleTopMargin (25) above lane 0 */
     if (dir == 0)
         for (size_t i = 0; i < cm.n; i++) {
             double q = q0 + lane[cm.v[i].lane] * lanesep, tw = text_width(cm.v[i].id, 10);
-            bot = fmax(bot, q + (tw / 2 - 8 + 28.5) / sqrt(2) + 10 + tw / 25 * 8.5); /* rotated about (x - 10, y) */
+            if (cm.v[i].type != C_CHERRY) bot = fmax(bot, q + (tw / 2 - 8 + 28.5) / sqrt(2) + 10 + tw / 25 * 8.5); /* rotated about (x - 10, y) */
             if (cm.v[i].tag.n) top = fmin(top, q - R - 28);
         }
     BBox bb = dir == 0 ? (BBox){0, top - 4, plen, bot + 4} : (BBox){0, title.n ? -40 : 0, qlen, plen};
     if (!buf_reserve(out, 4096 + cm.n * 900)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 4, "gitGraph", CSS);
-    if (title.n) dg_text(out, title, 18, dir == 0 ? plen / 2 : qlen / 2, dir == 0 ? 20 : -20, "middle", "ttl");
+    if (title.n) dg_text(out, title, 18, dir == 0 ? plen / 2 : qlen / 2, dir == 0 ? q0 - 31.3 : -20, "middle", "ttl");
     /* branch lines + labels */
     for (size_t b = 0; b < br.n; b++) {
         double q = q0 + lane[b] * lanesep;
@@ -284,7 +292,8 @@ DIAG_FN(gitgraph_render) {
         }
         Str lab = c->id;
         double tw = text_width(lab, 10);
-        if (dir == 0) { /* mermaid rotateCommitLabel (default on): label hangs down-left at -45 degrees */
+        if (c->type == C_CHERRY) { /* mermaid drawCommits: no commit label on cherry-picks */
+        } else if (dir == 0) { /* mermaid rotateCommitLabel (default on): label hangs down-left at -45 degrees */
             double rx = -7.5 - (tw + 10) / 25 * 9.5, ry = 10 + tw / 25 * 8.5;
             buf_lit(out, "<g transform=\"translate("); dg_pt(out, rx, ry); buf_lit(out, ") rotate(-45 ");
             buf_num(out, x - 10); buf_ch(out, ' '); buf_num(out, y); buf_lit(out, ")\">");
