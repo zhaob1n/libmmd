@@ -1556,6 +1556,19 @@ static int32_t seg_hit(Router *R, double px, double py, double qx, double qy, in
 
 static bool pt_in(const Box *b, double x, double y) { return x > b->x0 && x < b->x1 && y > b->y0 && y < b->y1; }
 
+/* is (x,y) strictly inside some obstacle other than s1/s2? (one grid cell, no segment test) */
+static bool pt_buried(const Router *R, double x, double y, int32_t s1, int32_t s2) {
+    const Grid *G = &R->G;
+    if (x < G->x0 || y < G->y0) return false;
+    size_t cx = (size_t)((x - G->x0) / G->cs), cy = (size_t)((y - G->y0) / G->cs);
+    if (cx >= G->gw || cy >= G->gh) return false;
+    for (uint32_t k = G->off[cy * G->gw + cx]; k < G->off[cy * G->gw + cx + 1]; k++) {
+        int32_t v = (int32_t)G->idx[k];
+        if (v != s1 && v != s2 && pt_in(&R->nb[v], x, y)) return true;
+    }
+    return false;
+}
+
 /* shortest visibility path S->T; writes interior corners to out (max cap pts). Returns count or -1. */
 static inline double edist(double dx, double dy) { return sqrt(dx * dx + dy * dy); }
 
@@ -1594,10 +1607,7 @@ static int vis_path(Router *R, Arena *A, double sx, double sy, double tx, double
         /* drop corners buried in another obstacle */
         size_t m = 2;
         for (size_t i = 2; i < nc; i++) {
-            bool bad = false;
-            int32_t h = seg_hit(R, cx[i], cy[i], cx[i], cy[i], s1, s2);
-            if (h != NONE && pt_in(&R->nb[h], cx[i], cy[i])) bad = true;
-            if (!bad) cx[m] = cx[i], cy[m] = cy[i], m++;
+            if (!pt_buried(R, cx[i], cy[i], s1, s2)) cx[m] = cx[i], cy[m] = cy[i], m++;
         }
         nc = m;
         /* Dijkstra (dense, O(V^2) with lazy visibility) */
@@ -1669,8 +1679,8 @@ static int side_path(Router *R, double sx, double sy, double tx, double ty, int3
         {b->x0, b->y0, b->x0, b->y1}, {b->x1, b->y0, b->x1, b->y1}, /* left, right side */
         {b->x0, b->y0, b->x1, b->y0}, {b->x0, b->y1, b->x1, b->y1}, /* top, bottom side */
     };
-    double best = INFINITY;
-    int bk = -1;
+    double len[4];
+    unsigned ord[4] = {0, 1, 2, 3};
     for (unsigned k = 0; k < 4; k++) {
         double *q = c[k];
         /* visit the corner nearer S first */
@@ -1678,11 +1688,16 @@ static int side_path(Router *R, double sx, double sy, double tx, double ty, int3
             double t0 = q[0], t1 = q[1];
             q[0] = q[2], q[1] = q[3], q[2] = t0, q[3] = t1;
         }
-        double L = edist(q[0] - sx, q[1] - sy) + edist(q[2] - q[0], q[3] - q[1]) + edist(tx - q[2], ty - q[3]);
-        if (L >= best) continue;
+        len[k] = edist(q[0] - sx, q[1] - sy) + edist(q[2] - q[0], q[3] - q[1]) + edist(tx - q[2], ty - q[3]);
+    }
+    for (unsigned i = 1; i < 4; i++) /* stable insertion sort by length: first clear one is the best */
+        for (unsigned j = i; j > 0 && len[ord[j]] < len[ord[j - 1]]; j--) { unsigned t = ord[j]; ord[j] = ord[j - 1]; ord[j - 1] = t; }
+    int bk = -1;
+    for (unsigned i = 0; i < 4 && bk < 0; i++) {
+        const double *q = c[ord[i]];
         if (seg_hit(R, sx, sy, q[0], q[1], s1, s2) != NONE || seg_hit(R, q[0], q[1], q[2], q[3], s1, s2) != NONE ||
             seg_hit(R, q[2], q[3], tx, ty, s1, s2) != NONE) continue;
-        best = L, bk = (int)k;
+        bk = (int)ord[i];
     }
     if (bk < 0) return -1;
     memcpy(out, c[bk], sizeof c[bk]);
@@ -1871,12 +1886,15 @@ static void labels_on_curve(Graph *g) {
 cmm_status flow_layout(Graph *g) {
     cmm_status st = layout_rec(g, 0);
     if (st) return st;
+    PROF("");
     simplify_pts(g); /* fewer segments for the obstacle test */
     if (!(g->flags & CMM_F_NO_AVOID)) {
         if (!route_avoid(g)) return CMM_ERR_NOMEM;
+        PROF("route");
         simplify_pts(g);
     }
     labels_on_curve(g);
     if (!place_titles(g)) return CMM_ERR_NOMEM;
+    PROF("post");
     return CMM_OK;
 }
