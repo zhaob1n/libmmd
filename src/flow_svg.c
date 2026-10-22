@@ -303,7 +303,10 @@ cmm_status flow_svg(const Graph *g, Buf *b) {
             bb_add(&bb, g->elx[e] - g->elw[e] / 2, g->ely[e] - g->elh[e] / 2, g->elx[e] + g->elw[e] / 2, g->ely[e] + g->elh[e] / 2);
         if (g->efrom[e] == g->eto[e] && !(g->nflags[g->efrom[e]] & NF_HIDDEN)) {
             int32_t v = g->efrom[e];
-            bb_add(&bb, g->nx[v], g->ny[v], g->nx[v] + g->nw[v] / 2 + 40, g->ny[v]);
+            unsigned k = 0; /* same nesting index as the drawn loop; include its control polygon */
+            for (size_t f = 0; f < e; f++) k += g->efrom[f] == v && g->eto[f] == v;
+            double x = g->nx[v] + g->nw[v] / 2, q = g->nh[v] / 4 + selfloop_u(k);
+            bb_add(&bb, x, g->ny[v] - q, x + selfloop_r(k), g->ny[v] + q);
         }
     }
     if (bb.x0 == INFINITY) bb = (BBox){0, 0, 0, 0};

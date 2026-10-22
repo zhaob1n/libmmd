@@ -26,5 +26,12 @@ for f in "$DIR"/cases/*.mmd; do
 done
 # stdin path
 if echo "graph LR; a-->b" | "$BIN" | check_xml /dev/stdin; then echo "ok   stdin"; pass=$((pass+1)); else echo "FAIL stdin"; fail=$((fail+1)); fi
+# bounds: every rendered case and every repo fixture must keep all geometry inside its viewBox
+mkdir -p "$OUT/bounds"
+for f in "$DIR"/../bench/mmdr_fixtures/*.mmd "$DIR"/../bench/inputs/*.mmd; do
+  "$BIN" "$f" -o "$OUT/bounds/$(basename "$f" .mmd).svg" 2>/dev/null || true
+done
+if python3 "$DIR/bounds.py" "$OUT"/*.svg "$OUT"/bounds/*.svg; then echo "ok   bounds"; pass=$((pass+1));
+else echo "FAIL bounds"; fail=$((fail+1)); fi
 echo "passed=$pass failed=$fail"
 [[ $fail == 0 ]]
