@@ -18,6 +18,7 @@ static double prof_now(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC
 #include <stdlib.h>
 
 #include "graph.h"
+#include "dorder.h"
 #include "nsimplex.h"
 #include "rich.h"
 #include "text.h"
@@ -721,8 +722,214 @@ static void port_sort(size_t n, PortKey a[static n]) {
 /* hybrid cycle removal thresholds (see results_v7): greedy only for big graphs with many back edges */
 constexpr size_t ACYC_GREEDY_MIN_N = 1500;
 constexpr size_t ORDER_ONE_SWEEP_MIN = 512;
+constexpr size_t DAGRE_ORDER_MAX_V = 2000;
+constexpr size_t DAGRE_ORDER_MAX_S = 1024;
 constexpr size_t ORDER_ONE_SWEEP_MAX = 4096;
 constexpr size_t ACYC_GREEDY_REV_DIV = 20; /* DFS reverses >= 5% of nodes' worth of edges */
+
+/* JS array-index value of an id (graphlib keys enumerate these first, ascending), or -1 */
+static int64_t js_ikey(Str s) {
+    if (!s.n || s.n > 10 || (s.n > 1 && s.p[0] == '0')) return -1;
+    int64_t v = 0;
+    for (size_t i = 0; i < s.n; i++) {
+        if (s.p[i] < '0' || s.p[i] > '9') return -1;
+        v = v * 10 + (s.p[i] - '0');
+    }
+    return v < 4294967295 ? v : -1;
+}
+
+typedef struct SuccRec { int32_t tgt, next; uint32_t cnt, seq; } SuccRec;
+typedef struct SuccSim { SuccRec *r; size_t n, cap; int32_t *head; uint32_t seq; Arena *A; } SuccSim;
+
+static bool succ_add(SuccSim *s, int32_t u, int32_t w) {
+    for (int32_t i = s->head[u]; i >= 0; i = s->r[i].next)
+        if (s->r[i].tgt == w && s->r[i].cnt) { s->r[i].cnt++; return true; }
+    if (s->n == s->cap) {
+        size_t nc = s->cap * 2 + 16;
+        SuccRec *p = ANEW(s->A, SuccRec, nc);
+        if (!p) return false;
+        if (s->n) memcpy(p, s->r, s->n * sizeof *p);
+        s->r = p, s->cap = nc;
+    }
+    s->r[s->n] = (SuccRec){w, s->head[u], 1, s->seq++};
+    s->head[u] = (int32_t)s->n++;
+    return true;
+}
+static void succ_del(SuccSim *s, int32_t u, int32_t w) {
+    for (int32_t i = s->head[u]; i >= 0; i = s->r[i].next)
+        if (s->r[i].tgt == w && s->r[i].cnt) { s->r[i].cnt--; return; }
+}
+
+/* dagre (mermaid) order step on our ranks: reconstruct dagre's node order, dummy parents
+ * (parentDummyChains) and successor order, then run the faithful order() port. */
+static cmm_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32_t *ef, const int32_t *et,
+                                   const uint8_t *rev, const uint32_t *revord, size_t nrevord, const int32_t *esub,
+                                   const int32_t *rank, const uint32_t *choff, const int32_t *cmin,
+                                   const int32_t *cmax, const uint32_t *bbase, const int32_t *sdepth,
+                                   uint64_t *bestc) {
+    Arena *A = L->A;
+    size_t N = L->N, V = L->V, S = L->S, NS = V + S;
+#define DV(e) (ef[e] != NONE && et[e] != NONE && ef[e] != et[e])
+#define DU(e) (rev[e] ? et[e] : ef[e])
+#define DW(e) (rev[e] ? ef[e] : et[e])
+    int64_t *ikey = ANEW(A, int64_t, NS + 1);
+    int32_t *par = ANEW(A, int32_t, NS + 1);
+    uint32_t *nord = ANEW(A, uint32_t, NS + 1), *eseq = ANEW(A, uint32_t, E + 1);
+    uint32_t *doff = ANEW(A, uint32_t, V + 2), *kid = ANEW(A, uint32_t, S + 1), *stk = ANEW(A, uint32_t, S + 1);
+    int32_t *path = ANEW(A, int32_t, 2 * S + 4);
+    uint8_t *inseq = ANEW(A, uint8_t, E + 1);
+    if (!ikey || !par || !nord || !eseq || !doff || !kid || !stk || !path || !inseq) return CMM_ERR_NOMEM;
+    for (size_t x = 0; x < NS; x++) ikey[x] = -1, par[x] = NONE;
+    for (size_t v = 0; v < N; v++) ikey[v] = js_ikey(g->nid[v]), par[v] = g->nparent[v];
+    for (size_t c = 0; c < S; c++) ikey[V + c] = js_ikey(g->sid[c]), par[V + c] = g->sparent[c];
+    /* edge order after mermaid's adjustClustersAndEdges and dagre's acyclic */
+    size_t ne = 0;
+    memset(inseq, 0, E + 1);
+    for (unsigned pass = 0; pass < 2; pass++)
+        for (size_t e = 0; e < E; e++) {
+            if (!DV(e) || rev[e]) continue;
+            bool sub = esub[2 * e] != NONE || esub[2 * e + 1] != NONE;
+            if (sub == (pass == 1)) eseq[ne++] = (uint32_t)e, inseq[e] = 1;
+        }
+    for (size_t i = 0; i < nrevord; i++) if (DV(revord[i]) && !inseq[revord[i]]) eseq[ne++] = revord[i], inseq[revord[i]] = 1;
+    /* g.nodes(): subgraphs in reverse closing order, then vertices; array-index ids first */
+    size_t nn = 0, nc = 0;
+    {
+        /* iterative post-order over the cluster forest with children in ascending index */
+        uint32_t *post = kid; /* reuse */
+        size_t np = 0;
+        uint8_t *done = ANEW(A, uint8_t, S + 1);
+        if (!done) return CMM_ERR_NOMEM;
+        memset(done, 0, S + 1);
+        for (size_t r = 0; r < S; r++) {
+            if (g->sparent[r] != NONE) continue;
+            size_t sp = 0;
+            stk[sp++] = (uint32_t)r;
+            while (sp) {
+                uint32_t c = stk[sp - 1];
+                size_t nxt = S;
+                for (size_t k = 0; k < S; k++) if (g->sparent[k] == (int32_t)c && !done[k]) { nxt = k; break; }
+                if (nxt < S) { stk[sp++] = (uint32_t)nxt; continue; }
+                done[c] = 1, post[np++] = c, sp--;
+            }
+        }
+        for (size_t i = np; i-- > 0;) nord[nn++] = (uint32_t)V + post[i];
+        nc = nn;
+    }
+    for (size_t v = 0; v < N; v++) if (L->rank[v] >= 0) nord[nn++] = (uint32_t)v;
+    { /* stable: integer-like keys first, ascending */
+        size_t a = 0;
+        uint32_t *tmp = ANEW(A, uint32_t, nn + 1);
+        if (!tmp) return CMM_ERR_NOMEM;
+        for (size_t i = 0; i < nn; i++) if (ikey[nord[i]] >= 0) tmp[a++] = nord[i];
+        for (size_t i = 1; i < a; i++) {
+            uint32_t x = tmp[i];
+            size_t j = i;
+            while (j > 0 && ikey[tmp[j - 1]] > ikey[x]) { tmp[j] = tmp[j - 1]; j--; }
+            tmp[j] = x;
+        }
+        for (size_t i = 0; i < nn; i++) if (ikey[nord[i]] < 0) tmp[a++] = nord[i];
+        memcpy(nord, tmp, nn * sizeof *nord);
+    }
+    (void)nc;
+    /* dummies in normalize order, with parentDummyChains parents */
+    for (size_t q = 0; q < ne; q++) {
+        size_t e = eseq[q];
+        int32_t u = DU(e), w = DW(e), span = rank[w] - rank[u];
+        if (span < 2) continue;
+        int32_t pu = g->nparent[u], pw = g->nparent[w], lca = cluster_lca(g, sdepth, pu, pw);
+        size_t pl = 0;
+        for (int32_t c = pu; c != lca; c = g->sparent[c]) path[pl++] = c;
+        path[pl++] = lca;
+        size_t mark = pl;
+        for (int32_t c = pw; c != lca; c = g->sparent[c]) path[pl++] = c;
+        for (size_t a = mark, b = pl; a + 1 < b; a++, b--) { int32_t t = path[a]; path[a] = path[b - 1]; path[b - 1] = t; }
+        size_t pi = 0;
+        int32_t pv = path[0];
+        bool asc = true;
+        for (int32_t k = 1; k < span; k++) {
+            int32_t r = rank[u] + k;
+            if (asc) {
+                while (pv != lca && cmax[pv] < r) pv = path[++pi];
+                if (pv == lca) asc = false;
+            }
+            if (!asc) {
+                while (pi + 1 < pl && cmin[path[pi + 1]] <= r) pi++;
+                pv = path[pi];
+            }
+            size_t d = N + choff[e] + (size_t)(k - 1);
+            while (pv != NONE && (cmin[pv] > r || cmax[pv] < r)) pv = g->sparent[pv];
+            par[d] = pv;
+            nord[nn++] = (uint32_t)d;
+        }
+    }
+    for (size_t c = 0; c < S; c++)
+        for (int32_t r = cmin[c]; r <= cmax[c]; r++)
+            for (unsigned side = 0; side < 2; side++) {
+                size_t d = bbase[c] + 2 * (size_t)(r - cmin[c]) + side;
+                par[d] = (int32_t)c;
+                nord[nn++] = (uint32_t)d;
+            }
+    /* successor order (graphlib _sucs key order) of real nodes */
+    SuccSim sim = {.A = A, .head = ANEW(A, int32_t, N + 1)};
+    if (!sim.head) return CMM_ERR_NOMEM;
+    for (size_t v = 0; v < N; v++) sim.head[v] = -1;
+    for (unsigned pass = 0; pass < 2; pass++)
+        for (size_t e = 0; e < E; e++) {
+            if (!DV(e)) continue;
+            bool sub = esub[2 * e] != NONE || esub[2 * e + 1] != NONE;
+            if (sub == (pass == 1) && !succ_add(&sim, ef[e], et[e])) return CMM_ERR_NOMEM;
+        }
+    for (size_t i = 0; i < nrevord; i++) {
+        uint32_t e = revord[i];
+        if (!DV(e)) continue;
+        succ_del(&sim, ef[e], et[e]);
+        if (!succ_add(&sim, et[e], ef[e])) return CMM_ERR_NOMEM;
+    }
+    for (size_t q = 0; q < ne; q++) {
+        size_t e = eseq[q];
+        int32_t u = DU(e), w = DW(e);
+        if (rank[w] - rank[u] < 2) continue;
+        succ_del(&sim, u, w);
+        if (!succ_add(&sim, u, (int32_t)(N + choff[e]))) return CMM_ERR_NOMEM;
+    }
+    size_t tot = 0;
+    for (size_t v = 0; v < V; v++) {
+        doff[v] = (uint32_t)tot;
+        if (v < N) { for (int32_t i = sim.head[v]; i >= 0; i = sim.r[i].next) if (sim.r[i].cnt) tot++; }
+        else tot += L->soff[v + 1] - L->soff[v];
+    }
+    doff[V] = (uint32_t)tot;
+    uint32_t *didx = ANEW(A, uint32_t, tot + 1);
+    if (!didx) return CMM_ERR_NOMEM;
+    for (size_t v = 0; v < V; v++) {
+        uint32_t o = doff[v], n = doff[v + 1] - o;
+        if (v >= N) { memcpy(didx + o, L->sidx + L->soff[v], n * sizeof *didx); continue; }
+        uint32_t k = 0;
+        for (int32_t i = sim.head[v]; i >= 0; i = sim.r[i].next) if (sim.r[i].cnt) didx[o + k++] = (uint32_t)i;
+        /* sort record ids: integer-like target keys first ascending, then insertion seq */
+        for (uint32_t a = 1; a < n; a++) {
+            uint32_t x = didx[o + a], b = a;
+            for (; b > 0; b--) {
+                const SuccRec *p = &sim.r[didx[o + b - 1]], *c = &sim.r[x];
+                int64_t kp = p->tgt < (int32_t)N ? ikey[p->tgt] : -1, kc = c->tgt < (int32_t)N ? ikey[c->tgt] : -1;
+                bool lt = (kc >= 0) != (kp >= 0) ? kc >= 0 : kc >= 0 ? kc < kp : c->seq < p->seq;
+                if (!lt) break;
+                didx[o + b] = didx[o + b - 1];
+            }
+            didx[o + b] = x;
+        }
+        for (uint32_t a = 0; a < n; a++) didx[o + a] = (uint32_t)sim.r[didx[o + a]].tgt;
+    }
+    DOrder d = {.V = V, .S = S, .R = L->R, .rank = L->rank, .par = par, .nn = nn, .nord = nord, .ikey = ikey,
+                .poff = L->poff, .pidx = L->pidx, .soff = L->soff, .sidx = L->sidx, .doff = doff, .didx = didx,
+                .cmin = cmin, .cmax = cmax, .bbase = bbase, .loff = L->loff, .lay = L->lay, .pos = L->pos};
+    if (!dagre_order(A, &d, bestc)) return CMM_ERR_NOMEM;
+#undef DV
+#undef DU
+#undef DW
+    return CMM_OK;
+}
 
 static cmm_status layout_core(Graph *g) {
     Arena *A = g->arena;
@@ -738,6 +945,9 @@ static cmm_status layout_core(Graph *g) {
     int32_t *sdepth = ANEW(A, int32_t, S), *srep = ANEW(A, int32_t, S);
     int32_t *ef = ANEW(A, int32_t, E), *et = ANEW(A, int32_t, E), *mlen = ANEW(A, int32_t, E);
     uint8_t *rev = ANEW(A, uint8_t, E);
+    uint32_t *revord = ANEW(A, uint32_t, E + 1);
+    size_t nrevord = 0;
+    if (!revord) return CMM_ERR_NOMEM;
     if (!g->nw || !g->nh || !g->nx || !g->ny || !g->eptoff || !g->eptn || !g->elx || !g->ely || !g->elw ||
         !g->elh || !g->sx || !g->sy || !g->sw || !g->sh || !sdepth || !srep || !ef || !et || !mlen || !rev)
         return CMM_ERR_NOMEM;
@@ -808,6 +1018,7 @@ static cmm_status layout_core(Graph *g) {
         memset(state, 0, N * sizeof *state);
         for (size_t e = 0; e < E; e++) rev[e] = 0;
         size_t nrev = 0;
+        nrevord = 0;
         for (size_t r = 0; r < N; r++) {
             if (state[r] || hid[r]) continue;
             size_t sp = 0;
@@ -817,7 +1028,7 @@ static cmm_status layout_core(Graph *g) {
                 if (it[u] == ooff[u + 1]) { state[u] = 2; sp--; continue; }
                 uint32_t e = oidx[it[u]++], w = (uint32_t)et[e];
                 if (hid[w]) continue;
-                if (state[w] == 1) rev[e] = 1, nrev++;
+                if (state[w] == 1) rev[e] = 1, nrev++, revord[nrevord++] = e;
                 else if (!state[w]) { state[w] = 1; it[w] = ooff[w]; stk[sp++] = w; }
             }
         }
@@ -829,6 +1040,7 @@ static cmm_status layout_core(Graph *g) {
         fprintf(stderr, "  fas: N=%zu dfs_rev=%zu -> %s\n", N, nrev, greedy ? "greedy" : "dfs");
 #endif
         if (greedy && !greedy_fas(A, N, E, ef, et, valid, hid, rev)) return CMM_ERR_NOMEM;
+        if (greedy) { nrevord = 0; for (size_t e = 0; e < E; e++) if (rev[e]) revord[nrevord++] = (uint32_t)e; }
     }
     /* effective DAG CSR */
     #define EU(e) (rev[e] ? et[e] : ef[e])
@@ -1141,7 +1353,10 @@ static cmm_status layout_core(Graph *g) {
     if (!tdirty) return CMM_ERR_NOMEM;
     /* mid-size graphs (medium bench and up to a few thousand segments): the up-sweep after the first
      * down-sweep measured non-improving (medium 485 -> 508) while costing ~45 µs; large ones need it */
-    const unsigned maxit = (nseg > ORDER_ONE_SWEEP_MIN && nseg <= ORDER_ONE_SWEEP_MAX) ? 1 : 24;
+    const bool use_dagre = g->order_mode != CMM_ORDER_FAST && S <= DAGRE_ORDER_MAX_S &&
+                           (g->order_mode == CMM_ORDER_DAGRE || V <= DAGRE_ORDER_MAX_V);
+    if (use_dagre) tbudget = 0;
+    const unsigned maxit = use_dagre ? 0 : (nseg > ORDER_ONE_SWEEP_MIN && nseg <= ORDER_ONE_SWEEP_MAX) ? 1 : 24;
     for (unsigned iter = 0; iter < maxit && since < patience && bestc > 0; iter++) {
         bool down = ((iter & 1u) == 0);
         if (clusters) cluster_keys(&L, S, csum, ccnt);
@@ -1168,6 +1383,10 @@ static cmm_status layout_core(Graph *g) {
 #ifdef CMM_PROFILE
     fprintf(stderr, "  crossings=%llu tbudget_left=%lld\n", (unsigned long long)bestc, (long long)tbudget);
 #endif
+    if (use_dagre) {
+        cmm_status dr = dagre_prep_order(&L, g, E, ef, et, rev, revord, nrevord, esub, rank, choff, cmin, cmax, bbase, sdepth, &bestc);
+        if (dr) return dr;
+    }
     PROF("order");
     /* ---- x via Brandes-Köpf ---- */
     if (!bk(&L)) return CMM_ERR_NOMEM;
@@ -1414,7 +1633,7 @@ static Box content_box(const Graph *g) {
 
 [[nodiscard]] static bool gsub_alloc(Graph *d, const Graph *g, Dir dir, size_t nn, size_t ne, size_t ns) {
     Arena *A = g->arena;
-    *d = (Graph){.arena = g->arena, .dir = dir, .theme = g->theme, .flags = g->flags, .acyclicer = g->acyclicer, .node_sep = g->node_sep,
+    *d = (Graph){.arena = g->arena, .dir = dir, .theme = g->theme, .flags = g->flags, .acyclicer = g->acyclicer, .order_mode = g->order_mode, .node_sep = g->node_sep,
                  .rank_sep = g->rank_sep, .font_size = g->font_size, .nn = nn, .ne = ne, .ns = ns,
                  .ncap = nn, .ecap = ne, .scap = ns};
     d->nid = ANEW(A, Str, nn + 1); d->nlabel = ANEW(A, Str, nn + 1); d->nclass = ANEW(A, Str, nn + 1);

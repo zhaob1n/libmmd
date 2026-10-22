@@ -178,6 +178,11 @@ static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n],
         g.acyclicer = str_eq(cr, S("dfs")) ? CMM_ACYC_DFS : str_eq(cr, S("greedy")) ? CMM_ACYC_GREEDY : CMM_ACYC_AUTO;
         if (g.flags & CMM_F_FAS_DFS) g.acyclicer = CMM_ACYC_DFS;
         if (g.flags & CMM_F_FAS_GREEDY) g.acyclicer = CMM_ACYC_GREEDY;
+        Str om = dcfg_get("flowchart.order");
+        g.order_mode = str_eq(om, S("dagre")) ? CMM_ORDER_DAGRE : str_eq(om, S("fast")) ? CMM_ORDER_FAST : CMM_ORDER_AUTO;
+        const char *oe = getenv("CMM_ORDER");
+        if (oe && *oe == 'd') g.order_mode = CMM_ORDER_DAGRE;
+        if (oe && *oe == 'f') g.order_mode = CMM_ORDER_FAST;
         Str cv = dcfg_get("flowchart.curve");
         g.curve = flow_curve_kind(cv);
         if ((st = flow_parse(&g, n, src, off, &eoff, msg))) goto fail;

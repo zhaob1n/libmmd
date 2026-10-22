@@ -50,7 +50,7 @@ CFLAGS += -std=$(STD) -fms-extensions -fPIC -fvisibility=hidden $(WARN) -Iinclud
 LDLIBS = -lm
 BUILD ?= build
 DIAG_SRCS := $(wildcard src/d_*.c)
-SRCS := src/base.c src/text.c src/flow_parse.c src/layout.c src/nsimplex.c src/flow_svg.c src/seq.c src/rich.c src/dgraph.c $(DIAG_SRCS) src/cmermaid.c
+SRCS := src/base.c src/text.c src/flow_parse.c src/layout.c src/nsimplex.c src/dorder.c src/flow_svg.c src/seq.c src/rich.c src/dgraph.c $(DIAG_SRCS) src/cmermaid.c
 OBJS := $(SRCS:src/%.c=$(BUILD)/%.o)
 
 SONAME := libcmermaid.so.$(SOMAJOR)
