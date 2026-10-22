@@ -1,0 +1,11 @@
+flowchart LR
+    classDef green fill:#9f6,stroke:#333,stroke-width:2px;
+    classDef orange fill:#f96,stroke:#333,stroke-width:4px,color:#fff
+    A:::green --> B --> C
+    class B orange
+    style C fill:#bbf,stroke:#f66,stroke-width:2px,color:#fff,stroke-dasharray: 5 5
+    linkStyle 0 stroke:#ff3,stroke-width:4px,color:red;
+    linkStyle default stroke:#999
+    D["`**Markdown** string
+    on two lines`"] --> E["unicode: 你好世界 — ünïcödé 🚀"]
+    E --> F["line one<br/>line two<br>three"]

@@ -1,0 +1,27 @@
+---
+title: Subgraphs demo
+config:
+  flowchart:
+    nodeSpacing: 40
+---
+%%{init: {"flowchart": {"rankSpacing": 60}}}%%
+flowchart TB
+    c1-->a2
+    subgraph one [First one]
+    a1-->a2
+    end
+    subgraph two
+    direction LR
+    b1-->b2
+    end
+    subgraph three
+      c1-->c2
+      subgraph nested [Nested ✓]
+        n1 --> n2
+      end
+    end
+    one --> two
+    three --> two
+    two --> c2
+    %% comment line
+    click a1 "https://example.com" "tooltip"
