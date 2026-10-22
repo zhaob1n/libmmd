@@ -113,6 +113,7 @@ typedef struct Lay {
     uint32_t *bstart, *bcur, *bstk;
     double nodesep;
     double cpad;
+    double *rpad; /* extra right-side room (self-loops + their labels), nullptr if none */
 } Lay;
 
 /* ---------- sorting helpers ---------- */
@@ -429,6 +430,7 @@ static int32_t cluster_lca(const Graph *g, const int32_t *depth, int32_t a, int3
 
 static double sep(const Lay *L, int32_t u, int32_t v) {
     double s = (L->w[u] + L->w[v]) / 2;
+    if (L->rpad) s += L->rpad[u];
     s += (L->dummy[u] ? EDGE_SEP : L->nodesep) / 2 + (L->dummy[v] ? EDGE_SEP : L->nodesep) / 2;
     int32_t cu = L->cl[u], cv = L->cl[v];
     if (cu != cv) {
@@ -917,6 +919,25 @@ static cmm_status layout_core(Graph *g) {
         L.w[v] = LW(v);
         L.h[v] = LH(v);
     }
+    /* self-loops are drawn right of the node (TB/BT): reserve room for the outermost loop and the
+     * stacked labels so neighbours in the layer don't collide (dagre does this with selfedge dummies) */
+    if (!horiz) {
+        unsigned *nl = nullptr;
+        for (size_t e = 0; e < E; e++) {
+            int32_t a = g->efrom[e];
+            if (a == NONE || a != g->eto[e] || g->estroke[e] == ST_INVISIBLE) continue;
+            if (!L.rpad) {
+                L.rpad = ANEW(A, double, V);
+                nl = ANEW(A, unsigned, N);
+                if (!L.rpad || !nl) return CMM_ERR_NOMEM;
+                memset(L.rpad, 0, V * sizeof *L.rpad);
+                memset(nl, 0, N * sizeof *nl);
+            }
+            unsigned k = nl[a]++;
+            double ext = SELFLOOP_BULGE * selfloop_r(k) + (g->elabel[e].n ? SELFLOOP_GAP + g->elw[e] : 0);
+            if (ext > L.rpad[a]) L.rpad[a] = ext;
+        }
+    }
     size_t nseg = 0;
     for (size_t e = 0; e < E; e++) {
         if (!EVALID(e)) continue;
@@ -1250,9 +1271,13 @@ static cmm_status layout_core(Graph *g) {
         g->elx[e] = g->ely[e] = 0;
         int32_t a = ef[e], b = et[e];
         if (a == NONE || b == NONE) continue;
-        if (a == b) { /* self loop: handled by the SVG writer around the node */
-            g->elx[e] = g->nx[a] + g->nw[a] / 2 + 30 + g->elw[e] / 2;
-            g->ely[e] = g->ny[a];
+        if (a == b) { /* self loop: drawn by the SVG writer; labels right of the outermost loop, stacked */
+            unsigned k = 0, cnt = 0;
+            for (size_t f = 0; f < E; f++)
+                if (g->efrom[f] == a && g->eto[f] == a) { if (f < e) k++; cnt++; }
+            double lh = g->elh[e] + 4;
+            g->elx[e] = g->nx[a] + g->nw[a] / 2 + SELFLOOP_BULGE * selfloop_r(cnt - 1) + SELFLOOP_GAP + g->elw[e] / 2;
+            g->ely[e] = g->ny[a] + ((double)k - (double)(cnt - 1) / 2) * lh;
             continue;
         }
         int32_t span = rank[EV(e)] - rank[EU(e)];

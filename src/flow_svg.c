@@ -366,7 +366,7 @@ cmm_status flow_svg(const Graph *g, Buf *b) {
             int32_t v = g->efrom[e];
             unsigned k = 0; /* nest repeated self-loops so they stay distinct */
             for (size_t f = 0; f < e; f++) k += g->efrom[f] == v && g->eto[f] == v;
-            double x = g->nx[v] + g->nw[v] / 2, y = g->ny[v], q = g->nh[v] / 4, r = 40 + 18 * k, u = 20 + 8 * k;
+            double x = g->nx[v] + g->nw[v] / 2, y = g->ny[v], q = g->nh[v] / 4, r = selfloop_r(k), u = selfloop_u(k);
             buf_ch(b, 'M'); pt(b, x, y - q);
             buf_ch(b, 'C'); pt(b, x + r, y - q - u); buf_ch(b, ' '); pt(b, x + r, y + q + u);
             buf_ch(b, ' '); pt(b, x, y + q);
