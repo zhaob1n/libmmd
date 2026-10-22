@@ -9,15 +9,15 @@
 #include "text.h"
 
 typedef struct Axis { Str id, label; } Axis;
-static const char *const COL[] = {"#6c5ce7", "#e17055", "#00a884", "#fdcb6e", "#0984e3", "#d63031",
-                                  "#a29bfe", "#55efc4", "#e84393", "#636e72", "#fab1a0", "#2d3436"};
+/* mermaid 11 default cScale (radarCurve-N) */
+static const char *const COL[] = {"#8686ff", "#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2", "#ff8686", "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"};
 typedef struct Curve { Str id, label; uint32_t v0; } Curve;
 
 static constexpr char CSS[] =
     "#mermaid .gr{fill:#DEDEDE;fill-opacity:.3;stroke:#DEDEDE;stroke-width:1px;}"
     "#mermaid .ax{stroke:#333;stroke-width:2px;}#mermaid .al{font-size:12px;fill:#333;}"
-    "#mermaid .cv{fill-opacity:.35;stroke-width:2px;}#mermaid .lg{font-size:12px;fill:#333;}"
-    "#mermaid .ttl{font-size:16px;fill:#333;font-weight:bold;}";
+    "#mermaid .cv{fill-opacity:.5;stroke-width:2px;}#mermaid .lg{font-size:12px;fill:#333;}"
+    "#mermaid .lb{fill-opacity:.5;}#mermaid .ttl{font-size:16px;fill:#333;font-weight:bold;}";
 
 /* id or id["label"] at the front of s */
 static void id_label(Str *s, Str *id, Str *label) {
@@ -171,7 +171,7 @@ DIAG_FN(radar_render) {
     if (legend)
         for (size_t c = 0; c < cv.n; c++) {
             double y = cy - R + 20 * (double)c;
-            dg_rect_fill(out, CX + R + 50, y - 6, 12, 12, 0, nullptr, COL[c % countof(COL)]);
+            dg_rect_fill(out, CX + R + 50, y - 6, 12, 12, 0, "lb", COL[c % countof(COL)]);
             dg_text(out, cv.v[c].label, 12, CX + R + 68, y, "start", "lg");
         }
     if (title.n) dg_text(out, title, 16, CX, 22, "middle", "ttl");
