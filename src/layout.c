@@ -19,6 +19,7 @@ static double prof_now(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC
 
 #include "graph.h"
 #include "dorder.h"
+#include "drank.h"
 #include "nsimplex.h"
 #include "rich.h"
 #include "text.h"
@@ -100,6 +101,8 @@ typedef struct Lay {
     Graph *g;
     Arena *A;
     size_t N, V, R;
+    size_t tbase, nco;      /* dagre ranking: _bt/_bb nodes at tbase + 2i (+1) for cluster corder[i] */
+    const int32_t *corder;
     int32_t *rank, *cl, *pos, *lay;
     uint32_t *loff;
     uint8_t *dummy, *border;
@@ -722,7 +725,7 @@ static void port_sort(size_t n, PortKey a[static n]) {
 /* hybrid cycle removal thresholds (see results_v7): greedy only for big graphs with many back edges */
 constexpr size_t ACYC_GREEDY_MIN_N = 1500;
 constexpr size_t ORDER_ONE_SWEEP_MIN = 512;
-constexpr size_t DAGRE_ORDER_MAX_V = 512; /* dagre order (>=5 full sweeps) costs ~2x the fast path; medium bench is V=528 */
+constexpr size_t DAGRE_RANK_MAX_N = 96; /* dagre rank+order below this many nodes; medium bench is N=100 */
 constexpr size_t DAGRE_ORDER_MAX_S = 1024;
 constexpr size_t ORDER_ONE_SWEEP_MAX = 4096;
 constexpr size_t ACYC_GREEDY_REV_DIV = 20; /* DFS reverses >= 5% of nodes' worth of edges */
@@ -817,6 +820,7 @@ static cmm_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
         nc = nn;
     }
     for (size_t v = 0; v < N; v++) if (L->rank[v] >= 0) nord[nn++] = (uint32_t)v;
+    size_t nbeg = nn;
     { /* stable: integer-like keys first, ascending */
         size_t a = 0;
         uint32_t *tmp = ANEW(A, uint32_t, nn + 1);
@@ -832,6 +836,13 @@ static cmm_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
         memcpy(nord, tmp, nn * sizeof *nord);
     }
     (void)nc;
+    (void)nbeg;
+    for (size_t i = 0; i < L->nco; i++) /* nestingGraph _bt/_bb, in creation order */
+        for (unsigned k = 0; k < 2; k++) {
+            size_t d = L->tbase + 2 * i + k;
+            par[d] = L->corder[i];
+            nord[nn++] = (uint32_t)d;
+        }
     /* dummies in normalize order, with parentDummyChains parents */
     for (size_t q = 0; q < ne; q++) {
         size_t e = eseq[q];
@@ -932,6 +943,110 @@ static cmm_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
     return CMM_OK;
 }
 
+/* dagre ranking on the nesting graph: node/children/edge orders as mermaid feeds dagre */
+static cmm_status dagre_rank_graph(Arena *A, const Graph *g, size_t N, size_t E, size_t S, const int32_t *ef,
+                                   const int32_t *et, const uint8_t *rev, const uint32_t *revord, size_t nrevord,
+                                   const int32_t *esub, const int32_t *mlen, int32_t *rank, int32_t **ctop,
+                                   int32_t **cbot, int32_t **corder) {
+#define DV(e) (ef[e] != NONE && et[e] != NONE && ef[e] != et[e] && !(g->nflags[ef[e]] & NF_HIDDEN) && \
+               !(g->nflags[et[e]] & NF_HIDDEN))
+    int64_t *ikey = ANEW(A, int64_t, N + S + 1);
+    uint32_t *ins = ANEW(A, uint32_t, N + S + 1), *real = ANEW(A, uint32_t, N + 1);
+    uint32_t *koff = ANEW(A, uint32_t, S + 3), *kid = ANEW(A, uint32_t, N + S + 1), *stk = ANEW(A, uint32_t, S + 1);
+    uint8_t *done = ANEW(A, uint8_t, S + 1), *inseq = ANEW(A, uint8_t, E + 1), *lab = ANEW(A, uint8_t, E + 1);
+    int32_t *eu = ANEW(A, int32_t, E + 1), *ev = ANEW(A, int32_t, E + 1), *ml = ANEW(A, int32_t, E + 1);
+    *ctop = ANEW(A, int32_t, S + 1), *cbot = ANEW(A, int32_t, S + 1), *corder = ANEW(A, int32_t, S + 1);
+    if (!ikey || !ins || !real || !koff || !kid || !stk || !done || !inseq || !lab || !eu || !ev || !ml || !*ctop ||
+        !*cbot || !*corder)
+        return CMM_ERR_NOMEM;
+    for (size_t v = 0; v < N; v++) ikey[v] = js_ikey(g->nid[v]), ins[v] = (uint32_t)(S + v);
+    for (size_t c = 0; c < S; c++) ikey[N + c] = js_ikey(g->sid[c]);
+    { /* clusters are inserted in reverse closing (post-order) order */
+        size_t np = 0, nq = 0;
+        memset(done, 0, S + 1);
+        uint32_t *post = real;
+        for (size_t r = 0; r < S; r++) {
+            if (g->sparent[r] != NONE) continue;
+            size_t sp = 0;
+            stk[sp++] = (uint32_t)r;
+            while (sp) {
+                uint32_t c = stk[sp - 1];
+                size_t nxt = S;
+                for (size_t k = 0; k < S; k++) if (g->sparent[k] == (int32_t)c && !done[k]) { nxt = k; break; }
+                if (nxt < S) { stk[sp++] = (uint32_t)nxt; continue; }
+                done[c] = 1, post[np++] = c, sp--;
+            }
+        }
+        for (size_t i = np; i-- > 0;) ins[N + post[i]] = (uint32_t)nq++;
+    }
+    /* items ordered by g.nodes(): integer keys ascending first, then insertion */
+    size_t NI = N + S, ni = 0;
+    uint32_t *items = ANEW(A, uint32_t, NI + 1), *tmp = ANEW(A, uint32_t, NI + 1);
+    if (!items || !tmp) return CMM_ERR_NOMEM;
+    for (size_t x = 0; x < NI; x++) {
+        if (x < N && (g->nflags[x] & NF_HIDDEN)) continue;
+        items[ni++] = (uint32_t)x;
+    }
+    for (size_t i = 1; i < ni; i++) { /* insertion order */
+        uint32_t x = items[i];
+        size_t j = i;
+        while (j > 0 && ins[items[j - 1]] > ins[x]) { items[j] = items[j - 1]; j--; }
+        items[j] = x;
+    }
+    {
+        size_t a = 0;
+        for (size_t i = 0; i < ni; i++) if (ikey[items[i]] >= 0) tmp[a++] = items[i];
+        for (size_t i = 1; i < a; i++) {
+            uint32_t x = tmp[i];
+            size_t j = i;
+            while (j > 0 && ikey[tmp[j - 1]] > ikey[x]) { tmp[j] = tmp[j - 1]; j--; }
+            tmp[j] = x;
+        }
+        for (size_t i = 0; i < ni; i++) if (ikey[items[i]] < 0) tmp[a++] = items[i];
+        memcpy(items, tmp, ni * sizeof *items);
+    }
+    size_t nreal = 0;
+    for (size_t i = 0; i < ni; i++) if (items[i] < N) real[nreal++] = items[i];
+    memset(koff, 0, (S + 3) * sizeof *koff);
+    for (size_t i = 0; i < ni; i++) {
+        uint32_t x = items[i];
+        int32_t p = x < N ? g->nparent[x] : g->sparent[x - N];
+        koff[(p == NONE ? S : (size_t)p) + 2]++;
+    }
+    for (size_t p = 0; p <= S; p++) koff[p + 2] += koff[p + 1];
+    for (size_t i = 0; i < ni; i++) {
+        uint32_t x = items[i];
+        int32_t p = x < N ? g->nparent[x] : g->sparent[x - N];
+        kid[koff[(p == NONE ? S : (size_t)p) + 1]++] = x;
+    }
+    /* g.edges(): non-cluster edges, cluster edges (adjustClustersAndEdges), then acyclic reversals */
+    size_t ne = 0;
+    memset(inseq, 0, E + 1);
+    for (unsigned pass = 0; pass < 3; pass++) {
+        size_t cnt = pass < 2 ? E : nrevord;
+        for (size_t q = 0; q < cnt; q++) {
+            size_t e = pass < 2 ? q : revord[q];
+            if (!DV(e) || inseq[e]) continue;
+            if (pass < 2) {
+                if (rev[e]) continue;
+                bool sub = esub[2 * e] != NONE || esub[2 * e + 1] != NONE;
+                if (sub != (pass == 1)) continue;
+            }
+            inseq[e] = 1;
+            eu[ne] = rev[e] ? et[e] : ef[e];
+            ev[ne] = rev[e] ? ef[e] : et[e];
+            ml[ne] = mlen[e];
+            lab[ne] = g->elw[e] > 0 && g->elh[e] > 0;
+            ne++;
+        }
+    }
+    DRankIn in = {.N = N, .S = S, .nreal = nreal, .real = real, .ikey = ikey, .id = g->nid, .koff = koff,
+                  .kid = kid, .E = ne, .eu = eu, .ev = ev, .minlen = ml, .lab = lab};
+    if (!dagre_rank(A, &in, rank, *ctop, *cbot, *corder)) return CMM_ERR_NOMEM;
+#undef DV
+    return CMM_OK;
+}
+
 static cmm_status layout_core(Graph *g) {
     Arena *A = g->arena;
     size_t N = g->nn, E = g->ne, S = g->ns;
@@ -989,8 +1104,11 @@ static cmm_status layout_core(Graph *g) {
         g->elh[e] = ln ? ln * g->font_size * 1.5 + 4 : 0;
         if (ln && a != NONE && b != NONE && a != b) has_labels = true;
     }
-    for (size_t e = 0; e < E; e++) mlen[e] = g->elen[e] * (has_labels ? 2 : 1);
-    double ranksep = has_labels ? g->rank_sep / 2 : g->rank_sep;
+    /* dagre-faithful path (makeSpaceForEdgeLabels always doubles minlen, nesting-graph ranking, dagre order) */
+    const bool drank = g->order_mode != CMM_ORDER_FAST && S <= DAGRE_ORDER_MAX_S &&
+                       (g->order_mode == CMM_ORDER_DAGRE || N <= DAGRE_RANK_MAX_N);
+    for (size_t e = 0; e < E; e++) mlen[e] = g->elen[e] * (has_labels || drank ? 2 : 1);
+    double ranksep = has_labels || drank ? g->rank_sep / 2 : g->rank_sep;
 
     /* layout-space sizes (transposed for LR/RL) */
     #define LW(v) (horiz ? g->nh[v] : g->nw[v])
@@ -1078,11 +1196,19 @@ static cmm_status layout_core(Graph *g) {
             ev[e] = valid[e] ? EV(e) : 0;
         }
         for (size_t v = 0; v < N; v++) hid[v] = (g->nflags[v] & NF_HIDDEN) ? 1 : 0;
-        if (!network_simplex(A, N, E, eu, ev, mlen, valid, hid, rank, 20 * N + 100)) return CMM_ERR_NOMEM;
+        if (!drank && !network_simplex(A, N, E, eu, ev, mlen, valid, hid, rank, 20 * N + 100)) return CMM_ERR_NOMEM;
+    }
+    int32_t *ctop = nullptr, *cbot = nullptr, *corder = nullptr;
+    size_t nco = 0;
+    if (drank) {
+        cmm_status st = dagre_rank_graph(A, g, N, E, S, ef, et, rev, revord, nrevord, esub, mlen, rank, &ctop, &cbot, &corder);
+        if (st != CMM_OK) return st;
+        while (nco < S && corder[nco] >= 0) nco++;
     }
     int32_t minr = INT32_MAX, maxr = 0;
     for (size_t v = 0; v < N; v++) if (!(g->nflags[v] & NF_HIDDEN) && rank[v] < minr) minr = rank[v];
-    if (minr == INT32_MAX) minr = 0;
+    if (minr == INT32_MAX || drank) minr = 0;
+    for (size_t s = 0; s < (drank ? S : 0); s++) if (cbot[s] > maxr) maxr = cbot[s];
     for (size_t v = 0; v < N; v++) {
         rank[v] -= minr;
         if (!(g->nflags[v] & NF_HIDDEN) && rank[v] > maxr) maxr = rank[v];
@@ -1110,13 +1236,22 @@ static cmm_status layout_core(Graph *g) {
             if (rank[v] > cmax[c]) cmax[c] = rank[v];
         }
     }
+    if (drank)
+        for (size_t s = 0; s < S; s++) cmin[s] = ctop[s], cmax[s] = cbot[s];
+#ifdef CMM_RANKDUMP
+    if (getenv("CMM_DUMPRANK")) {
+        for (size_t v = 0; v < N; v++)
+            if (!(g->nflags[v] & NF_HIDDEN)) fprintf(stderr, "R %.*s %d\n", (int)g->nid[v].n, g->nid[v].p, rank[v]);
+        for (size_t s = 0; s < S; s++) fprintf(stderr, "C %.*s %d %d\n", (int)g->sid[s].n, g->sid[s].p, cmin[s], cmax[s]);
+    }
+#endif
     size_t B = 0;
     for (size_t s = 0; s < S; s++) {
         bbase[s] = (uint32_t)(N + D + B);
         if (cmax[s] >= cmin[s]) B += 2 * (size_t)(cmax[s] - cmin[s] + 1);
     }
-    size_t V = N + D + B;
-    Lay L = {.g = g, .A = A, .N = N, .V = V, .R = (size_t)maxr + 1, .sdepth = sdepth,
+    size_t V = N + D + B + 2 * nco;
+    Lay L = {.g = g, .A = A, .N = N, .V = V, .tbase = N + D + B, .nco = nco, .corder = corder, .R = (size_t)maxr + 1, .sdepth = sdepth,
              .nodesep = g->node_sep, .cpad = horiz ? CLUSTER_PAD + CLUSTER_TITLE / 2 : CLUSTER_PAD};
     L.rank = ANEW(A, int32_t, V); L.cl = ANEW(A, int32_t, V); L.pos = ANEW(A, int32_t, V);
     L.lay = ANEW(A, int32_t, V); L.loff = ANEW(A, uint32_t, L.R + 2); L.dummy = ANEW(A, uint8_t, V);
@@ -1186,6 +1321,14 @@ static cmm_status layout_core(Graph *g) {
             }
         nseg += 2 * (size_t)(cmax[c] - cmin[c]);
     }
+    for (size_t i = 0; i < nco; i++)
+        for (unsigned k = 0; k < 2; k++) {
+            size_t d = L.tbase + 2 * i + k;
+            L.rank[d] = k ? cmax[corder[i]] : cmin[corder[i]];
+            L.cl[d] = corder[i];
+            L.dummy[d] = 1;
+            L.w[d] = L.h[d] = 0;
+        }
     L.pidx = ANEW(A, uint32_t, nseg + 1);
     L.sidx = ANEW(A, uint32_t, nseg + 1);
     uint32_t *pfill = ANEW(A, uint32_t, V + 1), *sfill = ANEW(A, uint32_t, V + 1);
@@ -1228,8 +1371,7 @@ static cmm_status layout_core(Graph *g) {
             }
 
     PROF("normalize");
-    const bool use_dagre = g->order_mode != CMM_ORDER_FAST && S <= DAGRE_ORDER_MAX_S &&
-                           (g->order_mode == CMM_ORDER_DAGRE || V <= DAGRE_ORDER_MAX_V);
+    const bool use_dagre = drank;
     /* ---- initial order: DFS by rank ---- */
     size_t R = L.R;
     uint32_t *cnt = ANEW(A, uint32_t, R + 1), *byrank = ANEW(A, uint32_t, V + 1);
