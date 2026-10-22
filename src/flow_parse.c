@@ -690,7 +690,8 @@ cmm_status flow_parse(Graph *g, size_t n, const char src[static n], size_t off, 
         if (pk(&p, 0) == '%' && pk(&p, 1) == '%') { (void)rest_of_line(&p); continue; }
         size_t save = p.i;
         Str w = read_word(&p);
-        bool kwb = w.n && (p.i >= p.n || is_sp(p.s[p.i]) || p.s[p.i] == '\n' || p.s[p.i] == ';');
+        bool kwb = w.n && (p.i >= p.n || is_sp(p.s[p.i]) || p.s[p.i] == '\n' || p.s[p.i] == ';' ||
+                           ((p.s[p.i] == ':' || p.s[p.i] == '{') && (str_eq(w, S("accTitle")) || str_eq(w, S("accDescr")))));
         if (kwb && is_keyword(w)) {
             if ((st = parse_stmt(&p, w))) goto out;
         } else {

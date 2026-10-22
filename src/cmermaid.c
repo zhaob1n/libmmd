@@ -163,6 +163,7 @@ static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n],
     char msg[160] = {};
     size_t eoff = 0;
     cmm_status st = CMM_OK;
+    dcfg_begin(&arena, n, src, off); /* %%{init}%% / frontmatter keys + accTitle/accDescr, all diagram kinds */
     if (str_eq(kw, S("graph")) || str_eq(kw, S("flowchart")) || str_eq(kw, S("flowchart-elk"))) {
         Graph g = {.arena = &arena, .title = cfg.title,
                    .theme = (uint8_t)(opt && opt->theme ? opt->theme : cfg.theme ? cfg.theme : CMM_THEME_DEFAULT),
@@ -172,7 +173,7 @@ static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n],
         if ((st = flow_layout(&g))) goto fail;
         if (!buf_reserve(&b, 256 + g.nn * 320 + g.ne * 200)) { st = CMM_ERR_NOMEM; goto fail; }
         if ((st = flow_svg(&g, &b))) goto fail;
-    } else if (dcfg_begin(&arena, n, src, off), str_eq(kw, S("sequenceDiagram"))) {
+    } else if (str_eq(kw, S("sequenceDiagram"))) {
         if ((st = seq_render(&arena, n, src, off, cfg.title, fs, &b, &eoff, msg))) goto fail;
     } else if (diag_lookup(kw)) {
         if ((st = diag_lookup(kw)(&arena, n, src, off, cfg.title, fs, &b, &eoff, msg))) goto fail;

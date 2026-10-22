@@ -4,6 +4,7 @@
 #include "graph.h"
 #include "rich.h"
 #include "text.h"
+#include "dcfg.h"
 
 typedef struct Theme {
     const char *bg, *font, *text, *node_fill, *node_stroke, *line, *cluster_fill, *cluster_stroke, *label_bg, *marker;
@@ -276,15 +277,21 @@ cmm_status flow_svg(const Graph *g, Buf *b) {
     buf_num(b, vw); buf_lit(b, "\" height=\""); buf_num(b, vh);
     buf_lit(b, "\" viewBox=\""); buf_num(b, vx); buf_ch(b, ' '); buf_num(b, vy); buf_ch(b, ' ');
     buf_num(b, vw); buf_ch(b, ' '); buf_num(b, vh);
-    buf_lit(b, "\" role=\"graphics-document document\" aria-roledescription=\"flowchart-v2\"><style>");
+    buf_lit(b, "\" role=\"graphics-document document\" aria-roledescription=\"flowchart-v2");
+    dcfg_svg_aria(b); /* closes the tag; <title>/<desc> from accTitle/accDescr */
+    buf_lit(b, "<style>");
     const Theme *th = &THEMES[g->theme <= CMM_THEME_NEUTRAL && g->theme ? g->theme : CMM_THEME_DEFAULT];
     emit_css(b, th);
+    dcfg_theme_css(b, "flowchart"); /* themeVariables overrides, same table as the other diagrams */
     for (size_t e = 0; e < g->ne; e++) if (g->eflags[e] & EF_ANIM) { buf_lit(b, ANIM_CSS); break; }
     buf_lit(b, "</style>");
     buf_lit(b, DEFS);
     buf_lit(b, "<rect x=\""); buf_num(b, vx); buf_lit(b, "\" y=\""); buf_num(b, vy);
     buf_lit(b, "\" width=\""); buf_num(b, vw); buf_lit(b, "\" height=\""); buf_num(b, vh);
-    buf_lit(b, "\" fill=\""); put_cstr(b, th->bg); buf_lit(b, "\"/>");
+    buf_lit(b, "\" fill=\"");
+    Str bgv = dcfg_background();
+    if (bgv.n) buf_str(b, bgv); else put_cstr(b, th->bg);
+    buf_lit(b, "\"/>");
     if (g->title.n) text_lines(b, g->title, 18, (bb.x0 + bb.x1) / 2, bb.y0 - title_h / 2, "title");
     buf_lit(b, "<g class=\"root\"><g class=\"clusters\">");
     /* parents before children */
