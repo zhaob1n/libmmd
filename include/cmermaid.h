@@ -36,7 +36,8 @@ typedef enum cmm_theme {
 } cmm_theme;
 
 enum {
-    CMM_F_ROUTE_AVOID = 1u, /* flowchart: detour edges around non-incident nodes */
+    CMM_F_ROUTE_AVOID = 1u, /* (default since v3; kept for compatibility) */
+    CMM_F_NO_AVOID = 2u,    /* flowchart: disable re-routing edges around non-incident nodes */
 };
 
 typedef struct cmm_options {

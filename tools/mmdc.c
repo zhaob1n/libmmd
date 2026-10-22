@@ -7,7 +7,7 @@
 #include "cmermaid.h"
 
 [[noreturn]] static void usage(int code) {
-    fputs("usage: mmdc-c [-i input.mmd|-] [-o output.svg|-] [-t default|dark|forest|neutral] [--avoid]\n", code ? stderr : stdout);
+    fputs("usage: mmdc-c [-i input.mmd|-] [-o output.svg|-] [-t default|dark|forest|neutral] [--no-avoid]\n", code ? stderr : stdout);
     exit(code);
 }
 
@@ -50,6 +50,7 @@ int main(int argc, char **argv) {
                 if (!strcmp(t, names[k])) opt.theme = (cmm_theme)(CMM_THEME_DEFAULT + k);
             if (opt.theme == CMM_THEME_AUTO) usage(2);
         } else if (!strcmp(argv[i], "--avoid")) opt.flags |= CMM_F_ROUTE_AVOID;
+        else if (!strcmp(argv[i], "--no-avoid")) opt.flags |= CMM_F_NO_AVOID;
         else if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) usage(0);
         else if (argv[i][0] != '-' || !argv[i][1]) in = argv[i];
         else usage(2);
