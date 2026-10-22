@@ -441,7 +441,8 @@ typedef struct BKWork {
 } BKWork;
 
 /* vertical alignment + horizontal compaction for one of the 4 variants */
-static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, double *out) {
+/* sepv[i]: separation between lay[i-1] and lay[i] (symmetric, so shared by all 4 passes) */
+static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, const double *sepv, double *out) {
     size_t V = L->V, R = L->R;
     /* build pass layer order */
     for (size_t r = 0; r < R; r++) {
@@ -479,8 +480,7 @@ static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, 
                 while (j && W->posl[ws[j - 1]] > W->posl[w]) { ws[j] = ws[j - 1]; j--; }
                 ws[j] = w;
             }
-            double mp = (m - 1) / 2.0;
-            for (uint32_t j = (uint32_t)floor(mp); j <= (uint32_t)ceil(mp); j++) {
+            for (uint32_t j = (m - 1) / 2; j <= m / 2; j++) { /* lower/upper median */
                 int32_t w = ws[j];
                 if (W->align[v] == v && prev < W->posl[w] && !pset_has(conf, v, w)) {
                     W->align[w] = v;
@@ -503,7 +503,7 @@ static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, 
             int32_t ru = W->root[u], rv = W->root[v];
             uint32_t k = W->qbuf[ru]++;
             W->bidx[k] = (uint32_t)rv;
-            W->bw[k] = sep(L, u, v);
+            W->bw[k] = sepv[left ? i : L->loff[r] + L->loff[r + 1] - i];
             W->indeg[rv]++;
         }
     /* Kahn over roots */
@@ -615,7 +615,11 @@ static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, 
         !W.bw || !W.xs || !W.nbuf || !xss[0] || !xss[1] || !xss[2] || !xss[3])
         return false;
     (void)E;
-    for (unsigned k = 0; k < 4; k++) { (void)bk_pass(L, &conf, k < 2, (k & 1u) == 0, &W, xss[k]); PROF("bk-pass"); }
+    double *sepv = ANEW(A, double, V + 1);
+    if (!sepv) return false;
+    for (size_t r = 0; r < R; r++)
+        for (size_t i = L->loff[r] + 1; i < L->loff[r + 1]; i++) sepv[i] = sep(L, L->lay[i - 1], L->lay[i]);
+    for (unsigned k = 0; k < 4; k++) { (void)bk_pass(L, &conf, k < 2, (k & 1u) == 0, &W, sepv, xss[k]); PROF("bk-pass"); }
     /* align to the narrowest layout */
     double mins[4], maxs[4], best = INFINITY;
     unsigned bi = 0;
