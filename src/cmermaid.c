@@ -155,6 +155,7 @@ static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n],
     size_t k = off;
     while (k < n && !is_sp(src[k]) && src[k] != '\n' && src[k] != ';') k++;
     Str kw = {.p = src + off, .n = k - off};
+    if (kw.n > 1 && kw.p[kw.n - 1] == ':') kw.n--; /* "gitGraph:" */
 
     Arena arena = *ap;
     Buf b = *bp;

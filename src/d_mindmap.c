@@ -42,7 +42,6 @@ static bool parse_node(Str s, Str *label, uint8_t *shape) {
             if (s.n - i >= ol + cl && !memcmp(s.p + i, SH[k].o, ol) && s.n >= cl &&
                 !memcmp(s.p + s.n - cl, SH[k].c, cl)) {
                 Str in = {.p = s.p + i + ol, .n = s.n - i - ol - cl};
-                if (in.n >= 2 && in.p[0] == '"' && in.p[in.n - 1] == '"') in = (Str){.p = in.p + 1, .n = in.n - 2};
                 *label = in, *shape = SH[k].sh;
                 return true;
             }
@@ -187,6 +186,17 @@ DIAG_FN(mindmap_render) {
             continue;
         }
         unsigned in = dg_indent(&it, lo);
+        size_t bt = 0;
+        for (size_t i = 0; i < line.n; i++) bt += line.p[i] == '`';
+        if (bt & 1) { /* "`markdown` string spanning lines: extend to the line holding the closing backtick */
+            const char *e = memchr(src + it.i, '`', n - it.i);
+            if (e) {
+                const char *nl = memchr(e, '\n', n - (size_t)(e - src));
+                size_t end = nl ? (size_t)(nl - src) : n;
+                it.i = nl ? end + 1 : n;
+                line = str_trim((Str){.p = line.p, .n = end - lo});
+            }
+        }
         MNode m = {.parent = UINT32_MAX, .first = UINT32_MAX, .next = UINT32_MAX};
         for (size_t i = 0; i + 3 <= line.n; i++)
             if (!memcmp(line.p + i, ":::", 3)) {
@@ -202,6 +212,9 @@ DIAG_FN(mindmap_render) {
                 break;
             }
         if (!parse_node(line, &m.label, &m.shape)) return diag_fail(err_off, msg, lo, "bad node");
+        bool ok;
+        m.label = label_normalize(a, m.label, &ok); /* "quoted", "`markdown`", <br> */
+        if (!ok) return CMM_ERR_NOMEM;
         if (v.n) {
             if (in <= ind.v[0]) return diag_fail(err_off, msg, lo, "mindmap can only have one root");
             uint32_t p = (uint32_t)v.n - 1;

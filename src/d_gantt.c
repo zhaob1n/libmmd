@@ -337,7 +337,13 @@ DIAG_FN(gantt_render) {
         if (!t.name.n) return diag_fail(err_off, msg, lo, "empty task name");
         if (!VEC_PUSH(a, &tv, t)) return CMM_ERR_NOMEM;
     }
-    if (!tv.n) return diag_fail(err_off, msg, off, "gantt has no tasks");
+    if (!tv.n) { /* mermaid draws an empty 784x100 canvas (title only) */
+        if (!buf_reserve(out, 2048 + title.n)) return CMM_ERR_NOMEM;
+        DG_HEAD(out, ((BBox){0, 0, 776, 92}), 4, "gantt", CSS);
+        if (title.n) dg_text(out, title, 18, 388, 21, "middle", "title");
+        buf_lit(out, "</svg>\n");
+        return CMM_OK;
+    }
     for (size_t i = 0; i < exraw.n; i++) {
         double t;
         if (parse_date(c.fmt, exraw.v[i], &t) || parse_date(S("YYYY-MM-DD"), exraw.v[i], &t))
