@@ -920,7 +920,7 @@ static cmm_status layout_core(Graph *g) {
     int64_t tbudget = 2000000 + 40 * (int64_t)nseg;
     uint8_t *tdirty = ANEW(A, uint8_t, R + 2);
     if (!tdirty) return CMM_ERR_NOMEM;
-    for (unsigned iter = 0; iter < 24 && since < 4 && bestc > 0; iter++) {
+    for (unsigned iter = 0; iter < 24 && since < 2 && bestc > 0; iter++) {
         bool down = (iter & 1u) == 0;
         if (down) for (size_t r = 1; r < R; r++) sweep_layer(&L, r, true, false, keys, idx, tmp, csum, ccnt, clusters);
         else for (size_t r = R - 1; r-- > 0;) sweep_layer(&L, r, false, false, keys, idx, tmp, csum, ccnt, clusters);
