@@ -179,9 +179,17 @@ DIAG_FN(gitgraph_render) {
     double qlen = q0 + (double)br.n * lanesep;
 #define PX(p, q) (dir == 0 ? (p) : (q))
 #define PY(p, q) (dir == 0 ? (q) : dir == 1 ? (p) : plen - (p))
-    double hang = 10; /* rotated commit labels hang below the last lane */
-    for (size_t i = 0; i < cm.n; i++) if (lane[cm.v[i].lane] + 1 == (double)br.n || br.n == 0) hang = fmax(hang, text_width(cm.v[i].id, 10) * 0.72 + 8 - lanesep / 2);
-    BBox bb = dir == 0 ? (BBox){0, 0, plen, qlen + hang} : (BBox){0, title.n ? -40 : 0, qlen, plen};
+    /* LR: mermaid sizes the viewBox to the drawn content (+8): branch labels on top, the rotated commit
+     * labels (see below) at the bottom */
+    double top = q0 - 11, bot = q0 + (br.n ? (double)(br.n - 1) : 0) * lanesep + 11;
+    if (title.n) top = fmin(top, 4);
+    if (dir == 0)
+        for (size_t i = 0; i < cm.n; i++) {
+            double q = q0 + lane[cm.v[i].lane] * lanesep, tw = text_width(cm.v[i].id, 10);
+            bot = fmax(bot, q + (tw / 2 - 8 + 28.5) / sqrt(2) + 10 + tw / 25 * 8.5); /* rotated about (x - 10, y) */
+            if (cm.v[i].tag.n) top = fmin(top, q - R - 28);
+        }
+    BBox bb = dir == 0 ? (BBox){0, top - 4, plen, bot + 4} : (BBox){0, title.n ? -40 : 0, qlen, plen};
     if (!buf_reserve(out, 4096 + cm.n * 900)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 4, "gitGraph", CSS);
     if (title.n) dg_text(out, title, 18, dir == 0 ? plen / 2 : qlen / 2, dir == 0 ? 20 : -20, "middle", "ttl");
@@ -277,10 +285,11 @@ DIAG_FN(gitgraph_render) {
         Str lab = c->id;
         double tw = text_width(lab, 10);
         if (dir == 0) { /* mermaid rotateCommitLabel (default on): label hangs down-left at -45 degrees */
-            double ax = x + 4, ay = y + R + 10;
-            buf_lit(out, "<g transform=\"rotate(-45 "); buf_num(out, ax); buf_ch(out, ' '); buf_num(out, ay); buf_lit(out, ")\">");
-            dg_rect_fill(out, ax - tw - 2, ay - 7, tw + 4, 14, 0, "clb", nullptr);
-            dg_text(out, lab, 10, ax - tw / 2, ay, "middle", "cl");
+            double rx = -7.5 - (tw + 10) / 25 * 9.5, ry = 10 + tw / 25 * 8.5;
+            buf_lit(out, "<g transform=\"translate("); dg_pt(out, rx, ry); buf_lit(out, ") rotate(-45 ");
+            buf_num(out, x - 10); buf_ch(out, ' '); buf_num(out, y); buf_lit(out, ")\">");
+            dg_rect_fill(out, x - tw / 2 - 2, y + 13.5, tw + 4, 15, 0, "clb", nullptr);
+            dg_text(out, lab, 10, x, y + 21, "middle", "cl");
             buf_lit(out, "</g>");
         } else {
             double lx = x + R + 6 + tw / 2, ly = y;
