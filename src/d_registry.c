@@ -18,6 +18,8 @@ static const DiagEnt DIAGS[] = {
     {S("pie"), pie_render},
     {S("gantt"), gantt_render},
     {S("journey"), journey_render},
+    {S("timeline"), timeline_render},
+    {S("quadrantChart"), quadrant_render},
 };
 
 DiagFn diag_lookup(Str kw) {
