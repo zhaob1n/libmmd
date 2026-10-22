@@ -720,7 +720,8 @@ static void port_sort(size_t n, PortKey a[static n]) {
 
 /* hybrid cycle removal thresholds (see results_v7): greedy only for big graphs with many back edges */
 constexpr size_t ACYC_GREEDY_MIN_N = 1500;
-constexpr size_t ORDER_ONE_SWEEP_MIN = 512, ORDER_ONE_SWEEP_MAX = 4096;
+constexpr size_t ORDER_ONE_SWEEP_MIN = 512;
+constexpr size_t ORDER_ONE_SWEEP_MAX = 4096;
 constexpr size_t ACYC_GREEDY_REV_DIV = 20; /* DFS reverses >= 5% of nodes' worth of edges */
 
 static cmm_status layout_core(Graph *g) {

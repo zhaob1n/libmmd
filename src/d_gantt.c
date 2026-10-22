@@ -259,6 +259,11 @@ DIAG_FN(gantt_render) {
     if (!dg_next_line(&it, &line, &lo)) return diag_fail(err_off, msg, off, "empty gantt");
     GCtx c = {.a = a, .fmt = S("YYYY-MM-DD")};
     Str axis = S("%Y-%m-%d"), tick = {}, today_style = {};
+    { /* config defaults; in-diagram axisFormat/tickInterval lines override */
+        Str ca = dcfg_get("gantt.axisFormat"), ct = dcfg_get("gantt.tickInterval");
+        if (ca.n && ca.n <= 64) axis = ca;
+        if (ct.n && ct.n <= 32) tick = ct;
+    }
     int week_start = 0;
     VEC(Str) secs = {};
     VEC(Task) tv = {};

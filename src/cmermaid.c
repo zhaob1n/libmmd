@@ -164,7 +164,9 @@ static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n],
     size_t eoff = 0;
     cmm_status st = CMM_OK;
     dcfg_begin(&arena, n, src, off); /* %%{init}%% / frontmatter keys + accTitle/accDescr, all diagram kinds */
+    dcfg_set_theme(opt && opt->theme ? opt->theme : cfg.theme);
     if (str_eq(kw, S("graph")) || str_eq(kw, S("flowchart")) || str_eq(kw, S("flowchart-elk"))) {
+        dcfg_set_theme(0); /* flowchart applies named themes itself (Graph.theme) */
         Graph g = {.arena = &arena, .title = cfg.title,
                    .theme = (uint8_t)(opt && opt->theme ? opt->theme : cfg.theme ? cfg.theme : CMM_THEME_DEFAULT),
                    .flags = opt ? opt->flags : 0, .node_sep = cfg.node_sep,

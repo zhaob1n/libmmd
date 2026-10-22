@@ -1,0 +1,13 @@
+---
+config:
+  theme: dark
+---
+sequenceDiagram
+  participant A as Alice
+  actor B as Bob
+  A->>+B: Hello
+  loop retry
+    B-->>A: ack
+  end
+  Note over A,B: dark note
+  B-->>-A: done

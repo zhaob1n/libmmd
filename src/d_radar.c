@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include "dgraph.h"
+#include "dcfg.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -147,7 +148,7 @@ DIAG_FN(radar_render) {
         dg_text(out, ax.v[k].label, 12, CX + R * 1.05 * c + (fabs(c) < 0.1 ? 0 : c > 0 ? 4 : -4), cy + R * 1.05 * s + s * 6, anc, "al");
     }
     for (size_t c = 0; c < cv.n; c++) {
-        const char *col = COL[c % countof(COL)];
+        const char *col = dcfg_pal("cScale", c % countof(COL), COL[c % countof(COL)]);
         double P[2 * 64];
         size_t m = na < 64 ? na : 64;
         for (size_t k = 0; k < m; k++) {
@@ -171,7 +172,7 @@ DIAG_FN(radar_render) {
     if (legend)
         for (size_t c = 0; c < cv.n; c++) {
             double y = cy - R + 20 * (double)c;
-            dg_rect_fill(out, CX + R + 50, y - 6, 12, 12, 0, "lb", COL[c % countof(COL)]);
+            dg_rect_fill(out, CX + R + 50, y - 6, 12, 12, 0, "lb", dcfg_pal("cScale", c % countof(COL), COL[c % countof(COL)]));
             dg_text(out, cv.v[c].label, 12, CX + R + 68, y, "start", "lg");
         }
     if (title.n) dg_text(out, title, 16, CX, 22, "middle", "ttl");

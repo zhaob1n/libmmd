@@ -1,0 +1,13 @@
+---
+config:
+  theme: dark
+---
+stateDiagram-v2
+  [*] --> Idle
+  Idle --> Busy: go
+  state Busy {
+    [*] --> Work
+    Work --> [*]
+  }
+  Busy --> [*]
+  note right of Idle: waiting

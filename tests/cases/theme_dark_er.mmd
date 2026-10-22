@@ -1,0 +1,10 @@
+---
+config:
+  theme: dark
+---
+erDiagram
+  CUSTOMER ||--o{ ORDER : places
+  ORDER {
+    int id PK
+    string status
+  }

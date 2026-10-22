@@ -163,9 +163,10 @@ DIAG_FN(sankey_render) {
     }
     for (size_t q = 0; q < nl; q++) { SLink *l = &L[lo_[q]]; l->y1 = N[l->t].yin + l->v * ky / 2; N[l->t].yin += l->v * ky; }
     double lw = 0, rw = 0;
+    const bool SHOWV = dcfg_bool("sankey.showValues", true);
     char nb[48];
     for (size_t i = 0; i < nn; i++) {
-        snprintf(nb, sizeof nb, " %g", round(N[i].v * 100) / 100);
+        (SHOWV ? snprintf(nb, sizeof nb, " %g", round(N[i].v * 100) / 100) : (nb[0] = 0));
         double w = text_width(N[i].name, 14) + text_width((Str){.p = nb, .n = strlen(nb)}, 14) + 8;
         if (N[i].x < W / 2) rw = fmax(rw, N[i].x + NW + w - W); else lw = fmax(lw, w - N[i].x);
     }
@@ -189,7 +190,7 @@ DIAG_FN(sankey_render) {
     constexpr double LH = 17;
     for (size_t i = 0; i < nn; i++) {
         bool right = N[i].x < W / 2;
-        snprintf(nb, sizeof nb, " %g", round(N[i].v * 100) / 100);
+        (SHOWV ? snprintf(nb, sizeof nb, " %g", round(N[i].v * 100) / 100) : (nb[0] = 0));
         double w = text_width(N[i].name, 14) + text_width((Str){.p = nb, .n = strlen(nb)}, 14);
         lx0[i] = right ? N[i].x + NW + 6 : N[i].x - 6 - w;
         lx1[i] = lx0[i] + w, ly[i] = N[i].y + N[i].h / 2, lbo[i] = (uint32_t)i;
@@ -216,7 +217,7 @@ DIAG_FN(sankey_render) {
     }
     for (size_t i = 0; i < nn; i++) {
         dg_rect_fill(out, N[i].x, N[i].y, NW, N[i].h, 0, "sn", PAL[i % countof(PAL)]);
-        int k = snprintf(nb, sizeof nb, " %g", round(N[i].v * 100) / 100);
+        int k = (SHOWV ? snprintf(nb, sizeof nb, " %g", round(N[i].v * 100) / 100) : (nb[0] = 0));
         if (N[i].x < W / 2) dg_text_open(out, lx0[i], ly[i], "start", "st");
         else dg_text_open(out, lx1[i], ly[i], "end", "st");
         buf_xml(out, N[i].name);

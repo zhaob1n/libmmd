@@ -1,0 +1,11 @@
+---
+config:
+  theme: forest
+---
+classDiagram
+  class Shape {
+    <<interface>>
+    +area() double
+  }
+  Shape <|.. Circle
+  Shape <|.. Square

@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include "dcfg.h"
+#include "cmermaid.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -220,7 +221,8 @@ void dcfg_begin(Arena *a, size_t n, const char src[static n], size_t off) {
     }
 }
 
-void dcfg_end(void) { cur = (DCfg){}; cur_a = nullptr; cur_cap = 0; }
+static int cur_theme; /* CMM_THEME_* chosen by CLI option or init/frontmatter */
+void dcfg_end(void) { cur_theme = 0; cur = (DCfg){}; cur_a = nullptr; cur_cap = 0; }
 const DCfg *dcfg_cur(void) { return &cur; }
 
 Str dcfg_get(const char *key) {
@@ -263,7 +265,48 @@ Str dcfg_css(const char *key) {
     return v;
 }
 
-Str dcfg_background(void) { return dcfg_css("themeVariables.background"); }
+typedef struct ThemeKV { const char *k, *v; } ThemeKV;
+#include "d_themes.h"
+
+void dcfg_set_theme(int theme) { cur_theme = theme; }
+
+/* user themeVariables.<var> first, then the named theme's preset (mermaid's own values) */
+Str dcfg_tv(const char *var) {
+    char key[96];
+    snprintf(key, sizeof key, "themeVariables.%s", var);
+    Str v = dcfg_css(key);
+    if (v.n) return v;
+    const ThemeKV *t = nullptr;
+    size_t n = 0;
+    switch (cur_theme) {
+    case CMM_THEME_DARK: t = TH_DARK, n = countof(TH_DARK); break;
+    case CMM_THEME_FOREST: t = TH_FOREST, n = countof(TH_FOREST); break;
+    case CMM_THEME_NEUTRAL: t = TH_NEUTRAL, n = countof(TH_NEUTRAL); break;
+    default: break;
+    }
+    for (size_t i = 0; i < n; i++)
+        if (!strcmp(t[i].k, var)) return (Str){.p = t[i].v, .n = strlen(t[i].v)};
+    return (Str){};
+}
+
+const char *dcfg_pal(const char *prefix, size_t i, const char def[static 1]) {
+    if (!cur.n && cur_theme <= CMM_THEME_DEFAULT) return def;
+    static thread_local char ring[8][208];
+    static thread_local unsigned slot;
+    char var[48];
+    snprintf(var, sizeof var, "%s%zu", prefix, i);
+    Str v = dcfg_tv(var);
+    if (!v.n || v.n >= sizeof ring[0]) return def;
+    char *o = ring[slot++ % countof(ring)];
+    memcpy(o, v.p, v.n);
+    o[v.n] = 0;
+    return o;
+}
+
+Str dcfg_background(void) {
+    Str v = dcfg_tv("background");
+    return (cur_theme > CMM_THEME_DEFAULT && v.n == 5 && !memcmp(v.p, "white", 5)) ? (Str){} : v;
+}
 
 /* themeVariable -> CSS template ('$' = value); kind "*" applies to every diagram */
 typedef struct TV { const char *kind, *var, *tpl; } TV;
@@ -363,15 +406,109 @@ static const TV TVS[] = {
     {"sequence", "labelBoxBorderColor", "#mermaid .labelBox{stroke:$;}"},
     {"sequence", "sequenceNumberColor", "#mermaid .sequenceNumber{fill:$;}"},
     {"sankey", "textColor", "#mermaid .sankey-label{fill:$;}"},
+    /* class names as actually emitted by d_*.c / seq.c (also drive the named themes) */
+    {"sequence", "actorBorder", "#mermaid .actor-man circle,#mermaid .actor-line{stroke:$;}"},
+    {"sequence", "actorBkg", "#mermaid .actor-man circle{fill:$;}"},
+    {"sequence", "actorTextColor", "#mermaid .actor+text,#mermaid .actor~text{fill:$;}"},
+    {"sequence", "textColor", "#mermaid text{fill:$;}"},
+    {"sequence", "actorLineColor", "#mermaid .lifeline{stroke:$;}"},
+    {"sequence", "signalColor", "#mermaid .msg,#mermaid .destroy{stroke:$;}#mermaid .seqnum{fill:$;}#mermaid marker path,#mermaid marker polygon{fill:$;stroke:$;}"},
+    {"sequence", "activationBkgColor", "#mermaid .act{fill:$;}"},
+    {"sequence", "activationBorderColor", "#mermaid .act{stroke:$;}"},
+    {"sequence", "labelBoxBorderColor", "#mermaid .block,#mermaid .block-sep,#mermaid .block-tab{stroke:$;}"},
+    {"sequence", "labelBoxBkgColor", "#mermaid .block-tab{fill:$;}"},
+    {"sequence", "noteTextColor", "#mermaid .note+text{fill:$;}"},
+    {"statediagram", "mainBkg", "#mermaid .st,#mermaid .choice,#mermaid .comp-t{fill:$;}"},
+    {"statediagram", "nodeBorder", "#mermaid .st,#mermaid .choice,#mermaid .comp,#mermaid .comp-t,#mermaid .div{stroke:$;}"},
+    {"statediagram", "lineColor", "#mermaid .tr,#mermaid .endo{stroke:$;}#mermaid .bar,#mermaid .start,#mermaid .endi{fill:$;}#mermaid marker path{fill:$;stroke:$;}"},
+    {"statediagram", "background", "#mermaid .comp,#mermaid .endo{fill:$;}"},
+    {"statediagram", "edgeLabelBackground", "#mermaid .lbl{fill:$;}"},
+    {"statediagram", "noteBorderColor", "#mermaid .note-l{stroke:$;}"},
+    {"statediagram", "textColor", "#mermaid text{fill:$;}"},
+    {"statediagram", "noteTextColor", "#mermaid .note+text{fill:$;}"},
+    {"classDiagram", "mainBkg", "#mermaid .cls{fill:$;}"},
+    {"classDiagram", "nodeBorder", "#mermaid .cls,#mermaid .div{stroke:$;}"},
+    {"classDiagram", "lineColor", "#mermaid marker path{stroke:$;}"},
+    {"classDiagram", "edgeLabelBackground", "#mermaid .lbl{fill:$;}"},
+    {"classDiagram", "clusterBkg", "#mermaid .ns{fill:$;}"},
+    {"classDiagram", "clusterBorder", "#mermaid .ns{stroke:$;}"},
+    {"classDiagram", "noteBorderColor", "#mermaid .note{stroke:$;}"},
+    {"classDiagram", "textColor", "#mermaid text{fill:$;}"},
+    {"erDiagram", "mainBkg", "#mermaid .ent{fill:$;}"},
+    {"erDiagram", "nodeBorder", "#mermaid .ent,#mermaid .row0,#mermaid .row1{stroke:$;}"},
+    {"erDiagram", "attributeBackgroundColorOdd", "#mermaid .row0{fill:$;}"},
+    {"erDiagram", "attributeBackgroundColorEven", "#mermaid .row1{fill:$;}"},
+    {"erDiagram", "lineColor", "#mermaid .mk,#mermaid .mkc{stroke:$;}"},
+    {"erDiagram", "background", "#mermaid .mkc,#mermaid .lbl{fill:$;}"},
+    {"erDiagram", "textColor", "#mermaid text{fill:$;}"},
+    {"requirementDiagram", "requirementBackground", "#mermaid .rq{fill:$;}"},
+    {"requirementDiagram", "requirementBorderColor", "#mermaid .rq,#mermaid .rqd{stroke:$;}"},
+    {"requirementDiagram", "relationColor", "#mermaid .rr{stroke:$;}#mermaid .rh{fill:$;}"},
+    {"requirementDiagram", "relationLabelBackground", "#mermaid .rl{fill:$;}"},
+    {"requirementDiagram", "requirementTextColor", "#mermaid text{fill:$;}"},
+    {"block", "mainBkg", "#mermaid .bn{fill:$;}"},
+    {"block", "nodeBorder", "#mermaid .bn,#mermaid .bg{stroke:$;}"},
+    {"block", "clusterBkg", "#mermaid .bg{fill:$;}"},
+    {"block", "edgeLabelBackground", "#mermaid .bl{fill:$;}"},
+    {"block", "lineColor", "#mermaid marker path{fill:$;stroke:$;}"},
+    {"block", "textColor", "#mermaid text{fill:$;}"},
+    {"kanban", "background", "#mermaid .ki{fill:$;}"},
+    {"kanban", "nodeBorder", "#mermaid .kc,#mermaid .ki{stroke:$;}"},
+    {"kanban", "textColor", "#mermaid .kt,#mermaid .kl{fill:$;}"},
+    {"gantt", "taskTextColor", "#mermaid .tin{fill:$;}"},
+    {"gantt", "taskTextOutsideColor", "#mermaid .tout{fill:$;}"},
+    {"gantt", "taskTextDarkColor", "#mermaid .done+.tin,#mermaid .tin.dk{fill:$;}"},
+    {"gantt", "excludeBkgColor", "#mermaid .exr{fill:$;}"},
+    {"gantt", "todayLineColor", "#mermaid .today{stroke:$;}"},
+    {"gantt", "textColor", "#mermaid .tick,#mermaid .stitle{fill:$;}"},
+    {"gantt", "titleColor", "#mermaid .ttl{fill:$;}"},
+    {"pie", "pieStrokeColor", "#mermaid .slice{stroke:$;}"},
+    {"pie", "pieTitleTextColor", "#mermaid .ttl{fill:$;}"},
+    {"pie", "pieSectionTextColor", "#mermaid .pct{fill:$;}"},
+    {"pie", "pieLegendTextColor", "#mermaid text:not(.pct):not(.ttl){fill:$;}"},
+    {"quadrantChart", "quadrantExternalBorderStrokeFill", "#mermaid .bd{stroke:$;}"},
+    {"quadrantChart", "quadrantInternalBorderStrokeFill", "#mermaid .in{stroke:$;}"},
+    {"quadrantChart", "quadrant1TextFill", "#mermaid .ql{fill:$;}"},
+    {"quadrantChart", "quadrantXAxisTextFill", "#mermaid .al{fill:$;}"},
+    {"quadrantChart", "quadrantPointTextFill", "#mermaid .pl{fill:$;}"},
+    {"quadrantChart", "quadrantTitleFill", "#mermaid .ttl{fill:$;}"},
+    {"xychart", "xyChart.xAxisLineColor", "#mermaid .ax,#mermaid .tk,#mermaid .lg{stroke:$;}"},
+    {"xychart", "xyChart.xAxisLabelColor", "#mermaid .tl,#mermaid .at{fill:$;}"},
+    {"xychart", "xyChart.titleColor", "#mermaid .ttl{fill:$;}"},
+    {"gitGraph", "commitLabelColor", "#mermaid .cl{fill:$;}"},
+    {"gitGraph", "commitLabelBackground", "#mermaid .clb{fill:$;}"},
+    {"gitGraph", "tagLabelColor", "#mermaid .tg{fill:$;}"},
+    {"gitGraph", "tagLabelBackground", "#mermaid .tgb{fill:$;}"},
+    {"gitGraph", "tagLabelBorder", "#mermaid .tgb{stroke:$;}"},
+    {"gitGraph", "textColor", "#mermaid .bn,#mermaid .ttl{fill:$;}"},
+    {"gitGraph", "lineColor", "#mermaid .bl{stroke:$;}"},
+    {"packet", "packet.blockFillColor", "#mermaid .pb{fill:$;}"},
+    {"packet", "packet.blockStrokeColor", "#mermaid .pb{stroke:$;}"},
+    {"packet", "packet.labelColor", "#mermaid .pl,#mermaid .pn{fill:$;}"},
+    {"packet", "packet.titleColor", "#mermaid .ttl{fill:$;}"},
+    {"radar", "radar.axisColor", "#mermaid .ax{stroke:$;}"},
+    {"radar", "radar.graticuleColor", "#mermaid .gr{fill:$;stroke:$;}"},
+    {"radar", "textColor", "#mermaid .al,#mermaid .lg,#mermaid .ttl{fill:$;}"},
+    {"treemap", "textColor", "#mermaid .sh,#mermaid .sv,#mermaid .ttl{fill:$;}"},
+    {"sankey", "textColor", "#mermaid .st{fill:$;}"},
+    {"mindmap", "lineColor", "#mermaid .ic{stroke:$;}"},
+    {"mindmap", "background", "#mermaid .ic{fill:$;}"},
+    {"timeline", "lineColor", "#mermaid .axis,#mermaid .ln{stroke:$;}"},
+    {"timeline", "background", "#mermaid .ev{fill:$;}"},
+    {"timeline", "textColor", "#mermaid .ev+text{fill:$;}"},
+    {"journey", "lineColor", "#mermaid .axis,#mermaid .adot,#mermaid .tl{stroke:$;}"},
+    {"journey", "textColor", "#mermaid .ttl{fill:$;}"},
+    {"architecture", "lineColor", "#mermaid .ae{stroke:$;}#mermaid .ah,#mermaid .aj{fill:$;}"},
+    {"architecture", "textColor", "#mermaid text{fill:$;}"},
+    {"c4", "textColor", "#mermaid .cbt,#mermaid .cbs,#mermaid .crl,#mermaid .crt{fill:$;}"},
+    {"c4", "lineColor", "#mermaid .cb{stroke:$;}"},
 };
 
 void dcfg_theme_css(Buf *b, const char *kind) {
-    if (!cur.n) return;
-    char key[96];
+    if (!cur.n && cur_theme <= CMM_THEME_DEFAULT) return;
     for (size_t i = 0; i < countof(TVS); i++) {
         if (strcmp(TVS[i].kind, "*") && strcmp(TVS[i].kind, kind)) continue;
-        snprintf(key, sizeof key, "themeVariables.%s", TVS[i].var);
-        Str v = dcfg_css(key);
+        Str v = dcfg_tv(TVS[i].var);
         if (!v.n) continue;
         for (const char *t = TVS[i].tpl; *t; t++)
             if (*t == '$') buf_str(b, v); else buf_ch(b, *t);

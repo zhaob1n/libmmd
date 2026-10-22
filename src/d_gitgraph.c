@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include "dgraph.h"
+#include "dcfg.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -179,7 +180,7 @@ DIAG_FN(gitgraph_render) {
     /* branch lines + labels */
     for (size_t b = 0; b < br.n; b++) {
         double q = q0 + lane[b] * lanesep;
-        const char *col = COL[lane[b] % countof(COL)];
+        const char *col = dcfg_pal("git", lane[b] % countof(COL), COL[lane[b] % countof(COL)]);
         buf_lit(out, "<line class=\"bl\" stroke=\""); buf_put(out, strlen(col), col);
         buf_lit(out, "\" x1=\""); buf_num(out, PX(p0 - 10, q)); buf_lit(out, "\" y1=\""); buf_num(out, PY(p0 - 10, q));
         buf_lit(out, "\" x2=\""); buf_num(out, PX(plen - 10, q)); buf_lit(out, "\" y2=\""); buf_num(out, PY(plen - 10, q));
@@ -201,7 +202,7 @@ DIAG_FN(gitgraph_render) {
             double pp = p0 + (double)par * STEP, pq = q0 + lane[cm.v[par].lane] * lanesep;
             /* colour: the lane that is not the lower-index main lane (mermaid colours by the branch going away) */
             uint32_t cl = lane[cm.v[par].lane] > lane[c->lane] ? lane[cm.v[par].lane] : lane[c->lane];
-            const char *col = COL[cl % countof(COL)];
+            const char *col = dcfg_pal("git", cl % countof(COL), COL[cl % countof(COL)]);
             buf_lit(out, "<path class=\"ar\" stroke=\""); buf_put(out, strlen(col), col); buf_lit(out, "\" d=\"M");
             dg_pt(out, PX(pp, pq), PY(pp, pq));
             /* orthogonal route with rounded corners. Branch-out (and cherry-pick) turns at the parent and runs
@@ -244,7 +245,7 @@ DIAG_FN(gitgraph_render) {
     for (size_t i = 0; i < cm.n; i++) {
         const Commit *c = &cm.v[i];
         double p = p0 + (double)i * STEP, q = q0 + lane[c->lane] * lanesep, x = PX(p, q), y = PY(p, q);
-        const char *col = COL[lane[c->lane] % countof(COL)];
+        const char *col = dcfg_pal("git", lane[c->lane] % countof(COL), COL[lane[c->lane] % countof(COL)]);
         if (c->type == C_HIGHLIGHT) {
             dg_rect_fill(out, x - R, y - R, 2 * R, 2 * R, 0, nullptr, col);
             dg_rect_fill(out, x - R + 3, y - R + 3, 2 * R - 6, 2 * R - 6, 0, nullptr, "#fff");

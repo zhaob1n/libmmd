@@ -13,6 +13,10 @@ typedef struct DCfg {
 /* parse preamble src[0..off) and scan the body for acc lines; state lives until dcfg_end() */
 void dcfg_begin(Arena *a, size_t n, const char src[static n], size_t off);
 void dcfg_end(void);
+void dcfg_set_theme(int theme); /* CMM_THEME_* */
+Str dcfg_tv(const char *var);
+/* palette entry <prefix><i> (pie1.., cScale0.., git0..) from themeVariables / named theme, else def */
+const char *dcfg_pal(const char *prefix, size_t i, const char def[static 1]); /* themeVariables.<var> or named-theme preset */
 const DCfg *dcfg_cur(void);
 Str dcfg_get(const char *key);                  /* last match, or empty; "themeVariables.x" etc. */
 double dcfg_num(const char *key, double def);   /* bounded number, optional "px" suffix */
