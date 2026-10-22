@@ -2,7 +2,8 @@
  * bare text = default (underlined). `::icon(fa fa-x)` adds an icon badge to the previous node and
  * `:::a b` adds CSS classes (both as their own line or as a suffix).
  * Layout: radial (the shape mermaid's default cose-bilkent converges to): each root child gets a wedge
- * proportional to its leaf count, rings are pushed out until siblings fit. `layout: tidy-tree` in the
+ * proportional to its leaf count, rings are pushed out until siblings fit; then a short spring/overlap
+ * relaxation compacts it toward mermaid's tighter force-directed look. `layout: tidy-tree` in the
  * front matter/init selects the two-sided tidy tree. */
 #include <stdio.h>
 #include <math.h>
@@ -180,6 +181,59 @@ DIAG_FN(mindmap_render) {
             rad[i] = r;
         }
         for (size_t i = 1; i < v.n; i++) V[i].x = rad[i] * cos(ang[i]), V[i].y = rad[i] * sin(ang[i]);
+        /* compaction (mermaid's cose-bilkent result is much tighter than a pure radial layout): springs pull each
+         * node toward a short rest length from its parent, box-overlap repulsion keeps everything apart. Root fixed. */
+        if (v.n <= 600) {
+            double *fx = ANEW(a, double, v.n), *fy = ANEW(a, double, v.n);
+            if (!fx || !fy) return CMM_ERR_NOMEM;
+            for (int it = 0; it < 250; it++) {
+                double step = 0.5 * (1 - it / 300.0);
+                for (size_t i = 0; i < v.n; i++) fx[i] = fy[i] = 0;
+                for (size_t i = 1; i < v.n; i++) {
+                    uint32_t p = V[i].parent;
+                    double dx = V[i].x - V[p].x, dy = V[i].y - V[p].y, d = fmax(1e-6, hypot(dx, dy));
+                    /* rest length: boxes just clear each other along the edge direction, plus a short link */
+                    double ux = fabs(dx) / d, uy = fabs(dy) / d;
+                    double ext = fmin(ux > 1e-6 ? (V[i].w + V[p].w) / 2 / ux : HUGE_VAL, uy > 1e-6 ? (V[i].h + V[p].h) / 2 / uy : HUGE_VAL);
+                    double f = (d - (ext + 40)) * 0.3;
+                    fx[i] -= f * dx / d, fy[i] -= f * dy / d;
+                    fx[p] += f * dx / d * 0.5, fy[p] += f * dy / d * 0.5;
+                }
+                for (size_t i = 0; i < v.n; i++)
+                    for (size_t j = i + 1; j < v.n; j++) {
+                        double dx = V[j].x - V[i].x, dy = V[j].y - V[i].y;
+                        double ox = (V[i].w + V[j].w) / 2 + 14 - fabs(dx), oy = (V[i].h + V[j].h) / 2 + 14 - fabs(dy);
+                        if (ox > 0 && oy > 0) { /* overlapping (with margin): push along the cheaper axis */
+                            if (ox < oy) { double sx = dx >= 0 ? 1 : -1; fx[j] += sx * ox * 0.5, fx[i] -= sx * ox * 0.5; }
+                            else { double sy = dy >= 0 ? 1 : -1; fy[j] += sy * oy * 0.5, fy[i] -= sy * oy * 0.5; }
+                        } else { /* weak long-range repulsion keeps branches fanned out */
+                            double d2 = fmax(dx * dx + dy * dy, 100), r = 1500 / d2;
+                            double d = sqrt(d2);
+                            fx[j] += r * dx / d, fy[j] += r * dy / d, fx[i] -= r * dx / d, fy[i] -= r * dy / d;
+                        }
+                    }
+                for (size_t i = 1; i < v.n; i++) {
+                    double m = hypot(fx[i], fy[i]), cap = 40;
+                    double k = m > cap ? cap / m : 1;
+                    V[i].x += fx[i] * k * step * 2, V[i].y += fy[i] * k * step * 2;
+                }
+            }
+            /* final hard de-overlap */
+            for (int it = 0; it < 60; it++) {
+                bool any = false;
+                for (size_t i = 0; i < v.n; i++)
+                    for (size_t j = i + 1; j < v.n; j++) {
+                        double dx = V[j].x - V[i].x, dy = V[j].y - V[i].y;
+                        double ox = (V[i].w + V[j].w) / 2 + 8 - fabs(dx), oy = (V[i].h + V[j].h) / 2 + 8 - fabs(dy);
+                        if (ox <= 0 || oy <= 0) continue;
+                        any = true;
+                        double wi = i ? 0.5 : 0, wj = 1 - wi;
+                        if (ox < oy) { double sx = dx >= 0 ? 1 : -1; V[j].x += sx * ox * wj, V[i].x -= sx * ox * wi; }
+                        else { double sy = dy >= 0 ? 1 : -1; V[j].y += sy * oy * wj, V[i].y -= sy * oy * wi; }
+                    }
+                if (!any) break;
+            }
+        }
     }
     for (int side = -1; side <= 1 && tidy; side += 2) {
         double tot = side > 0 ? hr : hl, y = -tot / 2;
