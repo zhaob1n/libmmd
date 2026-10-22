@@ -94,6 +94,7 @@ typedef struct Lay {
     const Item *items;
     size_t nitems;
     unsigned shape_row, box_row;
+    double gapx; /* widened so relation labels fit between neighbours */
     double *nx, *ny, *sx, *sy, *sw, *sh;
 } Lay;
 
@@ -112,7 +113,7 @@ static void lay(Lay *L, int32_t parent, double x, double y, double *ow, double *
         if (it.box || g->nparent[it.idx] != parent) continue;
         if (col == L->shape_row) cy += rowh + C4_GAPY, rowx = x, rowh = 0, col = 0;
         L->nx[it.idx] = rowx + g->nw[it.idx] / 2, L->ny[it.idx] = cy + g->nh[it.idx] / 2;
-        rowx += g->nw[it.idx] + C4_GAPX, rowh = fmax(rowh, g->nh[it.idx]), maxw = fmax(maxw, rowx - C4_GAPX - x);
+        rowx += g->nw[it.idx] + L->gapx, rowh = fmax(rowh, g->nh[it.idx]), maxw = fmax(maxw, rowx - L->gapx - x);
         col++;
     }
     if (col) cy += rowh + C4_GAPY;
@@ -323,7 +324,14 @@ DIAG_FN(c4_render) {
     g.sx = ANEW(a, double, g.ns + 1), g.sy = ANEW(a, double, g.ns + 1), g.sw = ANEW(a, double, g.ns + 1), g.sh = ANEW(a, double, g.ns + 1);
     g.elx = ANEW(a, double, g.ne + 1), g.ely = ANEW(a, double, g.ne + 1);
     if (!g.nx || !g.ny || !g.sx || !g.sy || !g.sw || !g.sh || !g.elx || !g.ely) return CMM_ERR_NOMEM;
-    Lay L = {.g = &g, .items = items.v, .nitems = items.n, .shape_row = shape_row, .box_row = box_row,
+    double gapx = C4_GAPX;
+    for (size_t e = 0; e < g.ne; e++) {
+        double lw;
+        unsigned ln;
+        label_measure(g.elabel[e], 13, &lw, &ln);
+        gapx = fmax(gapx, fmin(lw + 30, 260));
+    }
+    Lay L = {.g = &g, .items = items.v, .nitems = items.n, .shape_row = shape_row, .box_row = box_row, .gapx = gapx,
              .nx = g.nx, .ny = g.ny, .sx = g.sx, .sy = g.sy, .sw = g.sw, .sh = g.sh};
     double tw_ = 0, th_ = 0;
     lay(&L, NONE, 0, 0, &tw_, &th_, 0);
@@ -339,6 +347,8 @@ DIAG_FN(c4_render) {
         for (size_t e = 0; e < g.ne; e++)
             if (f != NONE && ((g.efrom[e] == f && g.eto[e] == t) || (g.efrom[e] == t && g.eto[e] == f))) rst[e] = &rs.v[i];
         }
+    double *lbw = ANEW(a, double, g.ne + 1), *lbh = ANEW(a, double, g.ne + 1);
+    if (!lbw || !lbh) return CMM_ERR_NOMEM;
     for (size_t e = 0; e < g.ne; e++) {
         int32_t f = g.efrom[e], t = g.eto[e];
         double x0, y0, x1, y1;
@@ -348,7 +358,35 @@ DIAG_FN(c4_render) {
         double lw;
         unsigned ln;
         label_measure(g.elabel[e], 13, &lw, &ln);
-        g.elx[e] = (x0 + x1) / 2 + (rst[e] ? rst[e]->ox : 0), g.ely[e] = (y0 + y1) / 2 + (rst[e] ? rst[e]->oy : 0);
+        /* label placement: slide along the edge / step off it to dodge element boxes and earlier labels */
+        {
+            const char *nl2 = memchr(g.elabel[e].p, '\n', g.elabel[e].n);
+            double lh = nl2 ? 34 : 18, best = HUGE_VAL, bx = (x0 + x1) / 2, by = (y0 + y1) / 2;
+            double len = hypot(x1 - x0, y1 - y0), nx = len > 0 ? -(y1 - y0) / len : 0, ny = len > 0 ? (x1 - x0) / len : 1;
+            static constexpr double TS[] = {.5, .42, .58, .34, .66, .26, .74};
+            static constexpr double OS[] = {0, -1, 1};
+            for (size_t oi = 0; oi < countof(OS); oi++)
+                for (size_t ti = 0; ti < countof(TS); ti++) {
+                    double off = OS[oi] * (fabs(nx) > fabs(ny) ? lw / 2 + 6 : lh / 2 + 4);
+                    double cx = x0 + (x1 - x0) * TS[ti] + nx * off, cy = y0 + (y1 - y0) * TS[ti] + ny * off;
+                    double ax0 = cx - lw / 2 - 3, ax1 = cx + lw / 2 + 3, ay0 = cy - lh / 2, ay1 = cy + lh / 2, sc = 0;
+                    for (size_t v = 0; v < g.nn; v++) {
+                        double ox = fmin(ax1, g.nx[v] + g.nw[v] / 2) - fmax(ax0, g.nx[v] - g.nw[v] / 2);
+                        double oy = fmin(ay1, g.ny[v] + g.nh[v] / 2) - fmax(ay0, g.ny[v] - g.nh[v] / 2);
+                        if (ox > 0 && oy > 0) sc += ox * oy;
+                    }
+                    for (size_t q = 0; q < e; q++) {
+                        double qw = lbw[q] / 2 + 3, qh = lbh[q] / 2;
+                        double ox = fmin(ax1, g.elx[q] + qw) - fmax(ax0, g.elx[q] - qw);
+                        double oy = fmin(ay1, g.ely[q] + qh) - fmax(ay0, g.ely[q] - qh);
+                        if (ox > 0 && oy > 0) sc += 2 * ox * oy;
+                    }
+                    sc += (fabs(TS[ti] - .5) * 40 + fabs(OS[oi]) * 60); /* prefer the middle, on the line */
+                    if (sc < best) best = sc, bx = cx, by = cy;
+                }
+            lbw[e] = lw, lbh[e] = lh;
+            g.elx[e] = bx + (rst[e] ? rst[e]->ox : 0), g.ely[e] = by + (rst[e] ? rst[e]->oy : 0);
+        }
         bb_add(&bb, g.elx[e] - lw / 2, g.ely[e] - 20, g.elx[e] + lw / 2, g.ely[e] + 20);
     }
     if (!buf_reserve(out, 2048 + g.nn * 900 + g.ne * 500 + g.ns * 300)) return CMM_ERR_NOMEM;
@@ -359,8 +397,8 @@ DIAG_FN(c4_render) {
         Str t = g.stitle[s];
         const char *nl = memchr(t.p, '\n', t.n);
         Str t1 = nl ? (Str){.p = t.p, .n = (size_t)(nl - t.p)} : t;
-        dg_text(out, t1, 14, g.sx[s] + 10, g.sy[s] + 14, "start", "cbt");
-        if (nl) dg_text(out, (Str){.p = nl + 1, .n = t.n - (size_t)(nl + 1 - t.p)}, 12, g.sx[s] + 10, g.sy[s] + 30, "start", "cbs");
+        dg_text(out, t1, 14, g.sx[s] + g.sw[s] / 2, g.sy[s] + 14, "middle", "cbt"); /* mermaid centres boundary titles */
+        if (nl) dg_text(out, (Str){.p = nl + 1, .n = t.n - (size_t)(nl + 1 - t.p)}, 12, g.sx[s] + g.sw[s] / 2, g.sy[s] + 30, "middle", "cbs");
     }
     for (size_t e = 0; e < g.ne; e++) {
         int32_t f = g.efrom[e], t = g.eto[e];
