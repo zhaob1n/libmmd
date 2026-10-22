@@ -150,7 +150,7 @@ void buf_int(Buf *b, int64_t v) {
 }
 
 /* fixed 2-decimal, trimmed; writes at most 26 bytes, returns the count */
-static inline size_t fmt_num(char *o, double v) {
+static size_t fmt_num_slow(char *o, double v) {
     if (!(v == v) || v > 1e15 || v < -1e15) v = 0; /* NaN / absurd guard */
     int64_t c = (int64_t)(v * 100.0 + (v < 0 ? -0.5 : 0.5));
     size_t k = 0;
@@ -179,6 +179,34 @@ static inline size_t fmt_num(char *o, double v) {
     }
     return k;
 }
+
+static inline size_t fmt_num(char *o, double v) {
+    double t = v * 100.0;
+    if (!(t > -999999.0 && t < 999999.0)) return fmt_num_slow(o, v); /* also NaN */
+    int32_t c = (int32_t)(t + (v < 0 ? -0.5 : 0.5)); /* same double expression as the slow path */
+    char *p = o;
+    uint32_t u = (uint32_t)c;
+    if (c < 0) *p++ = '-', u = 0 - u;
+    uint32_t ip = u / 100, fp = u - ip * 100;
+    if (ip >= 100) {
+        uint32_t hi = ip / 100, lo = ip - hi * 100;
+        if (hi >= 10) memcpy(p, DIGITS2 + hi * 2, 2), p += 2;
+        else *p++ = (char)('0' + hi);
+        memcpy(p, DIGITS2 + lo * 2, 2), p += 2;
+    } else if (ip >= 10) memcpy(p, DIGITS2 + ip * 2, 2), p += 2;
+    else *p++ = (char)('0' + ip);
+    if (fp) {
+        *p++ = '.';
+        memcpy(p, DIGITS2 + fp * 2, 2);
+        p += 1 + (fp % 10 != 0);
+    }
+    return (size_t)(p - o);
+}
+
+#ifdef CMM_FMT_TEST
+size_t cmm_fmt_fast(char *o, double v) { return fmt_num(o, v); }
+size_t cmm_fmt_slow(char *o, double v) { return fmt_num_slow(o, v); }
+#endif
 
 void buf_num(Buf *b, double v) {
     if (!buf_reserve(b, 26)) return;
