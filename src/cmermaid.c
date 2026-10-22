@@ -194,6 +194,7 @@ static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n],
         PMARK("setup");
         if ((st = flow_parse(&g, n, src, off, &eoff, msg))) goto fail;
         PMARK("parse");
+        g.iso_toggle = true; /* mermaid: isolated subgraphs flip direction */
         if ((st = flow_layout(&g))) goto fail;
         PMARK("layout-misc");
         Str *lanes = nullptr;

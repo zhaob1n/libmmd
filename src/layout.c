@@ -1816,6 +1816,10 @@ static Box content_box(const Graph *g) {
     return b;
 }
 
+constexpr double ISO_RANK_EXTRA = 25;   /* mermaid sub-graph ranksep = ranksep + 25 */
+constexpr double ISO_PAD_RANK = 37.5;   /* isolated cluster padding along its rank axis */
+constexpr double ISO_PAD_CROSS = 35;    /* ... and across it */
+
 [[nodiscard]] static bool gsub_alloc(Graph *d, const Graph *g, Dir dir, size_t nn, size_t ne, size_t ns) {
     Arena *A = g->arena;
     *d = (Graph){.arena = g->arena, .dir = dir, .theme = g->theme, .flags = g->flags, .acyclicer = g->acyclicer, .order_mode = g->order_mode, .iso_toggle = g->iso_toggle, .node_sep = g->node_sep,
@@ -1882,8 +1886,8 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
         int32_t p = g->sparent[s], pc = p == NONE ? NONE : cand[p];
         gix[s] = NONE;
         if (pc != NONE) cand[s] = pc;
-        else if (g->iso_toggle && !ext[s] && !(g->sflags[s] & SF_DIRSET)) {
-            g->sdir[s] = g->dir == DIR_TB ? DIR_LR : DIR_TB;
+        else if (g->iso_toggle && !ext[s]) { /* mermaid renders it as its own graph */
+            if (!(g->sflags[s] & SF_DIRSET)) g->sdir[s] = g->dir == DIR_TB ? DIR_LR : DIR_TB;
             cand[s] = (int32_t)s; gix[s] = (int32_t)++K;
         } else if ((g->sflags[s] & SF_DIRSET) && g->sdir[s] != g->dir && !ext[s]) { cand[s] = (int32_t)s; gix[s] = (int32_t)++K; }
         else cand[s] = NONE;
@@ -1912,6 +1916,8 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
         else owner[v] = gix[c];
         if (owner[v] >= 0) nmap[v] = (int32_t)cn[owner[v]]++;
     }
+    if (g->iso_toggle) /* mermaid inserts cluster nodes (reverse order) before vertices */
+        for (size_t v = 0; v < N; v++) if (owner[v] == 0) nmap[v] += (int32_t)K;
     for (size_t k = 1; k <= K; k++) cn[0]++; /* proxies */
     for (size_t s = 0; s < S; s++) {
         int32_t k = cand[s] == NONE ? 0 : gix[cand[s]];
@@ -1929,6 +1935,8 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
     }
     for (size_t k = 0; k <= K; k++)
         if (!gsub_alloc(&G[k], g, k ? g->sdir[cands[k]] : g->dir, cn[k], ce[k], cs[k])) return CMM_ERR_NOMEM;
+    if (g->iso_toggle)
+        for (size_t k = 1; k <= K; k++) G[k].rank_sep += ISO_RANK_EXTRA;
     for (size_t v = 0; v < N; v++) {
         if (owner[v] < 0) continue;
         Graph *d = &G[owner[v]];
@@ -1943,7 +1951,7 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
     int32_t *proxy = ANEW(A, int32_t, K + 1);
     if (!proxy) return CMM_ERR_NOMEM;
     for (size_t k = 1; k <= K; k++) {
-        int32_t s = cands[k], i = (int32_t)pfill[0]++, p = g->sparent[s];
+        int32_t s = cands[k], i = g->iso_toggle ? (int32_t)(K - k) : (int32_t)pfill[0]++, p = g->sparent[s];
         Graph *d = &G[0];
         proxy[k] = i;
         d->nid[i] = g->sid[s]; d->nlabel[i] = (Str){}; d->nclass[i] = d->nstyle[i] = (Str){};
@@ -1969,7 +1977,9 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
     }
     /* inner layouts first: they size the proxies */
     Box *cb = ANEW(A, Box, K + 1);
-    if (!cb) return CMM_ERR_NOMEM;
+    double *ipx = ANEW(A, double, K + 1), *ipy = ANEW(A, double, K + 1);
+    if (!cb || !ipx || !ipy) return CMM_ERR_NOMEM;
+    for (size_t k = 0; k <= K; k++) ipx[k] = ipy[k] = 0;
     for (size_t k = 1; k <= K; k++) {
         cmm_status st = layout_rec(&G[k], depth + 1);
         if (st) return st;
@@ -1981,6 +1991,13 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
         if (b.x0 == INFINITY) b = (Box){0, 0, dmax(tw, 40), 20};
         cb[k] = b;
         double w = dmax(b.x1 - b.x0, tw) + 2 * CLUSTER_PAD, h = b.y1 - b.y0 + 2 * CLUSTER_PAD + CLUSTER_TITLE;
+        if (g->iso_toggle) { /* mermaid: dagre margins + cluster padding, title sits in the top margin */
+            bool lr = G[k].dir == DIR_LR || G[k].dir == DIR_RL;
+            ipx[k] = lr ? ISO_PAD_RANK : ISO_PAD_CROSS;
+            ipy[k] = lr ? ISO_PAD_CROSS : ISO_PAD_RANK;
+            w = dmax(b.x1 - b.x0, tw) + 2 * ipx[k];
+            h = b.y1 - b.y0 + 2 * ipy[k];
+        }
         G[0].nw[proxy[k]] = w;
         G[0].nh[proxy[k]] = h;
     }
@@ -1997,7 +2014,7 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
         double w = G[0].nw[p], h = G[0].nh[p], x0 = G[0].nx[p] - w / 2, y0 = G[0].ny[p] - h / 2;
         g->sx[s] = x0, g->sy[s] = y0, g->sw[s] = w, g->sh[s] = h;
         ox[k] = G[0].nx[p] - (cb[k].x0 + cb[k].x1) / 2;
-        oy[k] = y0 + CLUSTER_TITLE + CLUSTER_PAD - cb[k].y0;
+        oy[k] = g->iso_toggle ? y0 + ipy[k] - cb[k].y0 : y0 + CLUSTER_TITLE + CLUSTER_PAD - cb[k].y0;
     }
     for (size_t v = 0; v < N; v++) {
         if (owner[v] < 0) { g->nw[v] = g->nh[v] = g->nx[v] = g->ny[v] = 0; continue; }

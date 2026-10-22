@@ -343,7 +343,7 @@ cmm_status flow_svg(const Graph *g, Buf *b) {
         buf_lit(b, "\" width=\""); buf_num(b, g->sw[s]); buf_lit(b, "\" height=\""); buf_num(b, g->sh[s]); buf_ch(b, '"');
         style_attr(b, g, g->sclass[s], g->sstyle[s], false, false);
         buf_lit(b, "/>");
-        text_lines(b, g->stitle[s], fs, g->stx ? g->stx[s] : g->sx[s] + g->sw[s] / 2, g->sy[s] + 15 + 12 - 6, "cluster-label");
+        text_lines(b, g->stitle[s], fs, g->stx ? g->stx[s] : g->sx[s] + g->sw[s] / 2, g->sy[s] + 12, "cluster-label");
         buf_lit(b, "</g>");
     }
     buf_lit(b, "</g><g class=\"edgePaths\">");
