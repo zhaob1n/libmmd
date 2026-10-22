@@ -10,8 +10,8 @@
 typedef struct KItem { Str label, assigned, ticket, priority; uint32_t col; double h; } KItem;
 
 static constexpr char CSS[] =
-    "#mermaid .kc{stroke:#9370DB;stroke-width:1px;}#mermaid .kt{font-size:16px;fill:#333;font-weight:bold;}"
-    "#mermaid .ki{fill:#fff;stroke:#9370DB;stroke-width:1px;}#mermaid .kl{font-size:14px;fill:#333;}"
+    "#mermaid .kc{stroke:#9370DB;stroke-width:1px;}#mermaid .kt{font-size:16px;fill:#333;}"
+    "#mermaid .ki{fill:#fff;stroke:#9370DB;stroke-width:1px;}#mermaid .kl{font-size:16px;fill:#333;}"
     "#mermaid .km{font-size:12px;fill:#666;}#mermaid .kp{stroke-width:4px;}";
 static const char *const COLF[] = {"#ECECFF", "#ffffde", "#e8f4ea", "#fde8e8", "#e8f0fd", "#f8e8fd"};
 
@@ -80,22 +80,22 @@ DIAG_FN(kanban_render) {
     }
     if (!cols.n) return diag_fail(err_off, msg, off, "kanban has no columns");
     constexpr double CW = 200;
-    constexpr double GAP = 10;
-    constexpr double PADC = 10;
+    constexpr double GAP = 5; /* mermaid 11: 200px columns, 5px apart, 185px cards */
+    constexpr double PADC = 7.5;
     double top = title.n ? 40 : 0, colh = 0;
     double *ch = ANEW(a, double, cols.n);
     if (!ch) return CMM_ERR_NOMEM;
-    for (size_t c = 0; c < cols.n; c++) ch[c] = 50;
+    for (size_t c = 0; c < cols.n; c++) ch[c] = 30;
     for (size_t i = 0; i < items.n; i++) {
         KItem *k = &items.v[i];
-        Str w = dg_wrap(a, k->label, 14, CW - 2 * PADC - 36);
+        Str w = dg_wrap(a, k->label, 16, 175);
         if (!w.p && k->label.n) return CMM_ERR_NOMEM;
         k->label = w;
         double tw;
         unsigned nl;
-        label_measure(w, 14, &tw, &nl);
-        k->h = nl * 20 + 16 + (k->assigned.n || k->ticket.n ? 20 : 0);
-        ch[k->col] += k->h + 8;
+        label_measure(w, 16, &tw, &nl);
+        k->h = nl * 24 + 20 + (k->assigned.n || k->ticket.n ? 20 : 0);
+        ch[k->col] += k->h + 5;
     }
     for (size_t c = 0; c < cols.n; c++) if (ch[c] > colh) colh = ch[c];
     double W = (double)cols.n * (CW + GAP) - GAP;
@@ -106,10 +106,10 @@ DIAG_FN(kanban_render) {
     if (!cy) return CMM_ERR_NOMEM;
     for (size_t c = 0; c < cols.n; c++) {
         double x = (double)c * (CW + GAP);
-        dg_rect_fill(out, x, top, CW, colh + 10, 5, "kc", COLF[c % countof(COLF)]);
+        dg_rect_fill(out, x, top, CW, ch[c] + 5, 5, "kc", COLF[c % countof(COLF)]); /* mermaid sizes each column to its cards */
         Str t = dg_wrap(a, cols.v[c], 16, CW - 20);
-        dg_text(out, t.p ? t : cols.v[c], 16, x + CW / 2, top + 25, "middle", "kt");
-        cy[c] = top + 50;
+        dg_text(out, t.p ? t : cols.v[c], 16, x + CW / 2, top + 13, "middle", "kt");
+        cy[c] = top + 28;
     }
     for (size_t i = 0; i < items.n; i++) {
         const KItem *k = &items.v[i];
@@ -126,10 +126,10 @@ DIAG_FN(kanban_render) {
             buf_lit(out, "\" y2=\""); buf_num(out, y + k->h - 3); buf_lit(out, "\"/>");
         }
         double meta = k->assigned.n || k->ticket.n ? 20 : 0;
-        dg_text(out, k->label, 14, x + 10, y + (k->h - meta) / 2, "start", "kl");
+        dg_text(out, k->label, 16, x + 10, y + (k->h - meta) / 2, "start", "kl");
         if (k->ticket.n) dg_text(out, k->ticket, 12, x + 10, y + k->h - 14, "start", "km");
         if (k->assigned.n) dg_text(out, k->assigned, 12, x + w - 8, y + k->h - 14, "end", "km");
-        cy[k->col] += k->h + 8;
+        cy[k->col] += k->h + 5;
     }
     if (title.n) dg_text(out, title, 18, W / 2, 18, "middle", "kt");
     buf_lit(out, "</svg>\n");
