@@ -12,10 +12,8 @@ static constexpr char CSS[] =
     "#mermaid .slice{stroke:#000;stroke-width:2px;opacity:0.7;}"
     "#mermaid .outer{fill:none;stroke:#000;stroke-width:2px;}"
     "#mermaid .pct{font-size:17px;}#mermaid .ttl{font-size:25px;}";
-static const char *const COLORS[] = {"#ECECFF", "#ffffde", "#b5ff20", "#b9b9ff",
-                                     "#ffff45", "#d7ff86", "#ff86ff",
-                                     "#20ffff", "#ff2020", "#ff20ff",
-                                     "#20ff8f", "#ff5353"};
+/* mermaid default theme pie1..pie12 (hsl adjustments of primary/secondary/tertiary) */
+static const char *const COLORS[] = {"#ececff", "#ffffde", "#f9ffec", "#b9b9ff", "#ffffab", "#e8ffb9", "#ffb9ff", "#b9ffff", "#ffecec", "#ff86ff", "#86ffff", "#ffb9b9"};
 
 DIAG_FN(pie_render) {
     LineIt it = {.s = src, .n = n, .i = off};
@@ -70,9 +68,18 @@ DIAG_FN(pie_render) {
     if (!buf_reserve(out, 2048 + sl.n * 600)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 8, "pie", CSS);
     if (title.n) dg_text(out, title, 25, CX, -14, "middle", "ttl");
+    /* slices are drawn largest first (stable), colours stay bound to declaration order */
+    uint32_t *ord = ANEW(a, uint32_t, sl.n);
+    if (!ord) return CMM_ERR_NOMEM;
+    for (size_t i = 0; i < sl.n; i++) {
+        size_t k = i;
+        while (k > 0 && sl.v[ord[k - 1]].v < sl.v[i].v) { ord[k] = ord[k - 1]; k--; }
+        ord[k] = (uint32_t)i;
+    }
     double ang = 0;
     char fill[64];
-    for (size_t i = 0; i < sl.n; i++) {
+    for (size_t j = 0; j < sl.n; j++) {
+        size_t i = ord[j];
         double frac = total > 0 ? sl.v[i].v / total : 0, a1 = ang + frac * 2 * M_PI;
         const char *col = COLORS[i % countof(COLORS)];
         if (frac >= 1 - 1e-12) {
@@ -88,7 +95,8 @@ DIAG_FN(pie_render) {
         ang = a1;
     }
     ang = 0;
-    for (size_t i = 0; i < sl.n; i++) { /* percentage labels, mermaid places at 0.75 R */
+    for (size_t j = 0; j < sl.n; j++) { /* percentage labels, mermaid places at 0.75 R */
+        size_t i = ord[j];
         double frac = total > 0 ? sl.v[i].v / total : 0, mid = ang + frac * M_PI;
         ang += frac * 2 * M_PI;
         if (frac <= 0) continue;

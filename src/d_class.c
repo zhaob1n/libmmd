@@ -89,6 +89,11 @@ static Str class_ref(CP *p, Str s, Str *label) {
     return s;
 }
 
+/* a label seen at any reference (Name~T~ / Name["x"]) replaces the default id label */
+static void ref_label(Graph *g, int32_t v, Str label) {
+    if (label.n && g->nlabel[v].p == g->nid[v].p && g->nlabel[v].n == g->nid[v].n) g->nlabel[v] = label;
+}
+
 static cmm_status add_member(CP *p, int32_t v, Str t) {
     t = str_trim(t);
     if (!t.n) return CMM_OK;
@@ -339,6 +344,7 @@ static cmm_status parse(CP *p, LineIt *it) {
             if (!ia.n || !ib.n) return cfail(p, off, "relation needs two classes");
             int32_t va = cls(p, ia), vb = cls(p, ib);
             if (va == NONE || vb == NONE) return CMM_ERR_NOMEM;
+            ref_label(g, va, la), ref_label(g, vb, lb);
             bool ok;
             lab = label_normalize(p->A, lab, &ok);
             if (ok) lab = generics(p->A, lab, &ok);
@@ -354,6 +360,7 @@ static cmm_status parse(CP *p, LineIt *it) {
             if (!id.n) return cfail(p, off, "expected class name before ':'");
             int32_t v = cls(p, id);
             if (v == NONE) return CMM_ERR_NOMEM;
+            ref_label(g, v, label);
             cmm_status st = add_member(p, v, (Str){.p = c + 1, .n = line.n - (size_t)(c + 1 - line.p)});
             if (st) return st;
             continue;
@@ -362,7 +369,10 @@ static cmm_status parse(CP *p, LineIt *it) {
         for (size_t k = 0; k < id.n; k++)
             if (is_sp(id.p[k]) || id.p[k] == '{' || id.p[k] == '(' || id.p[k] == '"')
                 return cfail(p, off + k, "unrecognised statement in class diagram");
-        if (!id.n || cls(p, id) == NONE) return id.n ? CMM_ERR_NOMEM : cfail(p, off, "unrecognised statement");
+        if (!id.n) return cfail(p, off, "unrecognised statement");
+        int32_t v = cls(p, id);
+        if (v == NONE) return CMM_ERR_NOMEM;
+        ref_label(g, v, label);
     }
     if (body != NONE) return cfail(p, it->n, "unterminated class body (missing '}')");
     if (p->ns_depth) return cfail(p, it->n, "unterminated namespace (missing '}')");
