@@ -168,3 +168,8 @@ Mermaid-exact text metrics (Liberation/Arial advances+kerning), mermaid node pad
   labelRank (proxy rank on nesting-graph ranks before removeEmptyRanks).
 - Small render 15.0 us (target 11.7 us not met); medium 590 us (dagre-exact ordering now applies).
 - bench/eq/: byte-identity harness. See bench/results_v12.txt.
+
+## v13 (speed)
+Byte-identical output. medium 590.5 → 481.5 µs, small 15.1 → 14.6 µs (min, this box). v1 is at 407 / 11.9, so the targets are not met yet.
+Main gains came from incremental network simplex (rank cycles 449k → 231k) and from dorder sort/crossing shortcuts.
+Build with `-DCMM_PROFILE` to get per-phase cycle counters. See bench/results_v13.txt and bench/prof13/.

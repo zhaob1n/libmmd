@@ -1,0 +1,27 @@
+phase cycles/render (5000 renders)
+  setup            3776    0.3%
+  parse           60039    4.1%
+  sizes           20160    1.4%
+  acyc            14227    1.0%
+  r-prep          34301    2.4%
+  r-ns           196590   13.5%
+  rank             5259    0.4%
+  normalize       26905    1.8%
+  oldseed          3402    0.2%
+  dprep           47832    3.3%
+  o-init          22901    1.6%
+  o-sweep        284206   19.5%
+  o-cross        135306    9.3%
+  order            1838    0.1%
+  bk-conf         37100    2.6%
+  bk-pass        205613   14.1%
+  bk              29393    2.0%
+  clusters         6914    0.5%
+  ports            9774    0.7%
+  edges           27496    1.9%
+  route          130368    9.0%
+  post            26849    1.8%
+  layout-misc         42    0.0%
+  svg            124137    8.5%
+  total         1454430
+bench/inputs/medium.mmd: bytes_in=4415 svg_bytes=64313 min=485.1us median=597.4us

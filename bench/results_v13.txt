@@ -1,0 +1,16 @@
+Round 13 — pure speed, byte-identical output (bench/eq bad=0 at every commit)
+min µs, build/bench, same box (noisy; mins)
+                 small    medium
+v1 41835c5       11.9     406-408   (v1 emits a different, larger SVG: 80341 B vs 64313 B)
+v8 3126817       12.6     406.8
+round start      15.1     590.5     (214b025)
+round end        14.6     481.5     (b0a1ddf)
+Targets medium<=v1, small<=v1: NOT met (medium -18.5%, small -3%).
+
+Per-phase cycles/render, medium (before -> after): see prof13/before_*.txt, after_*.txt
+  parse 75.8k->60.0k  rank(prep+ns) 448.8k->231k  o-sweep 335k->284k  o-cross 152k->135k
+  bk-pass 215k->206k  route 139k->130k  svg 134k->124k  total 1782k->1454k
+Small total 47.8k->44.8k; svg 22% is largest phase.
+Commits: incremental network simplex; feasible tree skips saturated nodes; dorder flat sort +
+crossing early stop; PMARK profiler; sortSubgraph skips topo w/o cg edges; shape token lengths.
+-O3 instead of -O2: within noise (no change made).
