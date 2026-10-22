@@ -27,7 +27,7 @@ static void emit_css(Buf *b, const Theme *t) {
     buf_lit(b, "#mermaid{font-family:"); put_cstr(b, t->font); buf_lit(b, ";font-size:16px;fill:"); put_cstr(b, t->text); buf_lit(b, ";}");
     buf_lit(b, "#mermaid .node rect,#mermaid .node circle,#mermaid .node ellipse,#mermaid .node polygon,#mermaid .node path{fill:");
     put_cstr(b, t->node_fill); buf_lit(b, ";stroke:"); put_cstr(b, t->node_stroke); buf_lit(b, ";stroke-width:1px;}");
-    buf_lit(b, "#mermaid .flowchart-link{stroke:"); put_cstr(b, t->line); buf_lit(b, ";fill:none;stroke-width:2px;}#mermaid .thick{stroke-width:3.5px;}#mermaid .dotted{stroke-dasharray:3;}");
+    buf_lit(b, "#mermaid .flowchart-link{stroke:"); put_cstr(b, t->line); buf_lit(b, ";fill:none;stroke-width:1px;}#mermaid .thick{stroke-width:3.5px;}#mermaid .dotted{stroke-dasharray:3;}");
     buf_lit(b, "#mermaid .edgeLabel rect{fill:"); put_cstr(b, t->label_bg); buf_lit(b, ";stroke:none;}");
     buf_lit(b, "#mermaid .cluster rect{fill:"); put_cstr(b, t->cluster_fill); buf_lit(b, ";stroke:");
     put_cstr(b, t->cluster_stroke); buf_lit(b, ";stroke-width:1px;}");

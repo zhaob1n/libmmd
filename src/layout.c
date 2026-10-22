@@ -44,6 +44,26 @@ static void measure(Graph *g, Str *lab, double *w, unsigned *lines) {
         return;
     }
     label_measure(*lab, fs, w, lines);
+    double maxw = RICH_WRAP_PX * fs / 16;
+    if (*w <= maxw) return;
+    /* mermaid htmlLabels wrap plain labels at wrappingWidth too (greedy, at spaces) */
+    char *o = arena_alloc(g->arena, lab->n + 1, 1);
+    if (!o) return;
+    memcpy(o, lab->p, lab->n);
+    o[lab->n] = 0;
+    size_t ls = 0, lastsp = SIZE_MAX, n = lab->n;
+    for (size_t i = 0; i <= n; i++) {
+        if (i < n && o[i] != ' ' && o[i] != '\n') continue;
+        if (lastsp != SIZE_MAX && text_width((Str){.p = o + ls, .n = i - ls}, fs) > maxw) {
+            o[lastsp] = '\n';
+            ls = lastsp + 1;
+        }
+        if (i == n) break;
+        if (o[i] == '\n') ls = i + 1, lastsp = SIZE_MAX;
+        else lastsp = i;
+    }
+    *lab = (Str){.p = o, .n = n};
+    label_measure(*lab, fs, w, lines);
 }
 
 void node_size(Graph *g, size_t v) {
