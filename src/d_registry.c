@@ -23,6 +23,7 @@ static const DiagEnt DIAGS[] = {
     {S("xychart-beta"), xychart_render},
     {S("xychart"), xychart_render},
     {S("gitGraph"), gitgraph_render},
+    {S("mindmap"), mindmap_render},
 };
 
 DiagFn diag_lookup(Str kw) {
