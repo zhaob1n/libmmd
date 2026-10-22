@@ -7,6 +7,7 @@
 #include <time.h>
 
 #include "dgraph.h"
+#include "dcfg.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -348,10 +349,10 @@ DIAG_FN(gantt_render) {
     if (hi_t <= lo_t) hi_t = lo_t + DAY;
 
     /* geometry (mermaid defaults: barHeight 20, barGap 4, topPadding 50, leftPadding 75) */
-    constexpr double BH = 20;
-    constexpr double GAP = 4;
-    constexpr double TOP = 50;
-    constexpr double LEFT = 75;
+    const double BH = fmin(fmax(dcfg_num("gantt.barHeight", 20), 4), 200);
+    const double GAP = fmin(fmax(dcfg_num("gantt.barGap", 4), 0), 100);
+    const double TOP = fmin(fmax(dcfg_num("gantt.topPadding", 50), 0), 500);
+    const double LEFT = fmin(fmax(dcfg_num("gantt.leftPadding", 75), 0), 1000);
     double left = LEFT;
     for (size_t i = 0; i < secs.n; i++) {
         double tw = text_width(secs.v[i], 11) + 20;

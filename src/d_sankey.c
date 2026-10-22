@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #include "dgraph.h"
+#include "dcfg.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -96,8 +97,8 @@ DIAG_FN(sankey_render) {
         N[i].v = fmax(N[i].in, N[i].out);
         if (N[i].out == 0 && N[i].in > 0) N[i].col = maxc;
     }
-    constexpr double W = 600;
-    constexpr double H = 400;
+    const double W = fmin(fmax(dcfg_num("sankey.width", 600), 100), 4000);
+    const double H = fmin(fmax(dcfg_num("sankey.height", 400), 100), 4000);
     constexpr double NW = 10;
     constexpr double PAD = 25;
     double ky = INFINITY;

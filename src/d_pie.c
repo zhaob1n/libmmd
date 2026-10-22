@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include "dgraph.h"
+#include "dcfg.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -56,6 +57,7 @@ DIAG_FN(pie_render) {
     }
     if (!sl.n) return diag_fail(err_off, msg, off, "pie has no slices");
     constexpr double R = 185;
+    const double TPOS = fmin(fmax(dcfg_num("pie.textPosition", 0.75), 0), 1);
     constexpr double CX = 225;
     constexpr double CY = 225;
     double lw = 0;
@@ -97,7 +99,7 @@ DIAG_FN(pie_render) {
         ang += frac * 2 * M_PI;
         if (frac <= 0) continue;
         int len = snprintf(fill, sizeof fill, "%.0f%%", frac * 100);
-        dg_text(out, (Str){.p = fill, .n = (size_t)len}, 17, CX + 0.75 * R * sin(mid), CY - 0.75 * R * cos(mid), "middle", "pct");
+        dg_text(out, (Str){.p = fill, .n = (size_t)len}, 17, CX + TPOS * R * sin(mid), CY - TPOS * R * cos(mid), "middle", "pct");
     }
     buf_lit(out, "<circle class=\"outer\" cx=\""); buf_num(out, CX); buf_lit(out, "\" cy=\""); buf_num(out, CY);
     buf_lit(out, "\" r=\""); buf_num(out, R + 1); buf_lit(out, "\"/>");

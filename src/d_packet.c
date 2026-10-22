@@ -1,9 +1,11 @@
 /* packet(-beta): `start-end: "label"`, `start: "label"` or `+bits: "label"` fields packed into
  * 32-bit rows (mermaid defaults: bitWidth 32, rowHeight 32, paddingX 5, paddingY 5). Fields that
  * straddle a row boundary are split; bit numbers are printed above each field's ends. */
+#include <math.h>
 #include <stdio.h>
 
 #include "dgraph.h"
+#include "dcfg.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -24,7 +26,7 @@ static bool num(Str *s, uint32_t *v) {
 
 DIAG_FN(packet_render) {
     (void)fs;
-    constexpr uint32_t BPR = 32;
+    const uint32_t BPR = (uint32_t)fmin(fmax(dcfg_num("packet.bitsPerRow", 32), 1), 256);
     constexpr double BW = 32;
     constexpr double RH = 32;
     constexpr double PX = 5;

@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #include "dgraph.h"
+#include "dcfg.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -153,8 +154,8 @@ DIAG_FN(xychart_render) {
     /* categories: explicit, numeric range or 1..n */
     size_t nc = cats.n ? cats.n : np;
     char nb[48];
-    constexpr double PW = 700;
-    constexpr double PH = 400;
+    const double PW = fmin(fmax(dcfg_num("xyChart.width", 700), 100), 4000);
+    const double PH = fmin(fmax(dcfg_num("xyChart.height", 500), 100), 4000) - 100;
     double tl = 0;
     for (double v = ymin; v <= ymax + step * 1e-6; v += step) {
         double w = text_width((Str){.p = nb, .n = fmt_num(v, sizeof nb, nb)}, 14);
@@ -166,7 +167,7 @@ DIAG_FN(xychart_render) {
     for (size_t i = 0; i < cats.n; i++) { double w = text_width(cats.v[i], 14); if (w > catw) catw = w; }
     double leftw = horiz ? (cats.n ? catw : tl) : tl;
     double ox = 20 + (horiz ? (xt.n ? 26 : 0) : (yt.n ? 26 : 0)) + leftw + 10, oy = title.n ? 50 : 15;
-    double pw = horiz ? 700 : PW, ph = horiz ? 450 : PH;
+    double pw = PW, ph = horiz ? PH + 50 : PH;
     /* legend for named series, right of the plot */
     double legw = 0;
     for (size_t s = 0; s < ser.n; s++) if (ser.v[s].name.n) legw = fmax(legw, text_width(ser.v[s].name, 14) + 40);
