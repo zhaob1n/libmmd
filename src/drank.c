@@ -26,6 +26,7 @@ typedef struct RG {
     int32_t *par, *pe;
     uint32_t *post, *stk, *sit, *nboff, *nbt;
     uint64_t *nbk;
+    uint32_t *acnt, *adj, *path; /* incremental tree adjacency (capacity = graph degree) */
 } RG;
 
 static int64_t slack(const RG *g, size_t e) { return g->r[g->sw[e]] - g->r[g->sv[e]] - g->ml[e]; }
@@ -111,34 +112,76 @@ static void lowlim(RG *g) {
     }
 }
 
-static void cutvalues(RG *g) {
-    for (size_t i = 0; i + 1 < g->M; i++) {
-        uint32_t c = g->post[i];
-        int32_t p = g->par[c], ge = g->tge[g->pe[c]];
-        bool tail = g->sv[ge] == (int32_t)c;
-        int64_t cut = g->wt[ge];
-        for (uint32_t k = g->eoff[c]; k < g->eoff[c + 1]; k++) {
-            uint32_t e = g->eidx[k];
-            bool out = g->sv[e] == (int32_t)c;
-            int32_t o = out ? g->sw[e] : g->sv[e];
-            if (o == p) continue;
-            bool head = out == tail;
-            cut += head ? g->wt[e] : -g->wt[e];
-            if (g->par[o] == (int32_t)c) {
-                int64_t oc = g->tcut[g->pe[o]];
-                cut += head ? -oc : oc;
-            }
+static void cut_one(RG *g, uint32_t c) {
+    int32_t p = g->par[c], ge = g->tge[g->pe[c]];
+    bool tail = g->sv[ge] == (int32_t)c;
+    int64_t cut = g->wt[ge];
+    for (uint32_t k = g->eoff[c]; k < g->eoff[c + 1]; k++) {
+        uint32_t e = g->eidx[k];
+        bool out = g->sv[e] == (int32_t)c;
+        int32_t o = out ? g->sw[e] : g->sv[e];
+        if (o == p) continue;
+        bool head = out == tail;
+        cut += head ? g->wt[e] : -g->wt[e];
+        if (g->par[o] == (int32_t)c) {
+            int64_t oc = g->tcut[g->pe[o]];
+            cut += head ? -oc : oc;
         }
-        g->tcut[g->pe[c]] = cut;
     }
+    g->tcut[g->pe[c]] = cut;
 }
 
-static void update_ranks(RG *g) {
-    for (size_t i = g->M - 1; i-- > 0;) {
-        uint32_t v = g->post[i];
-        int32_t p = g->par[v], ge = g->tge[g->pe[v]];
-        g->r[v] = g->sv[ge] == (int32_t)v ? g->r[p] - g->ml[ge] : g->r[p] + g->ml[ge];
+static void cutvalues(RG *g) {
+    for (size_t i = 0; i + 1 < g->M; i++) cut_one(g, g->post[i]);
+}
+
+static void adj_add(RG *g, uint32_t v, uint32_t t) { g->adj[g->eoff[v] + g->acnt[v]++] = t; }
+static void adj_del(RG *g, uint32_t v, uint32_t t) {
+    uint32_t *a = g->adj + g->eoff[v], n = g->acnt[v];
+    for (uint32_t i = 0; i < n; i++) if (a[i] == t) { a[i] = a[n - 1]; g->acnt[v] = n - 1; return; }
+}
+static inline bool is_anc(const RG *g, uint32_t x, uint32_t y) { return g->low[x] <= g->lim[y] && g->lim[y] <= g->lim[x]; }
+
+/* Exchange tree edge e for graph edge f (tree index nf already appended). Only the subtree of the
+ * LCA of f's endpoints changes: renumber low/lim inside its [low, lim] range, recompute par/pe and
+ * ranks there, and recompute cut values on the cycle. Results equal dagre's full recomputation:
+ * cut values depend only on the tree, subtree membership only on the fixed root, ranks on both. */
+static void exchange(RG *g, uint32_t e, uint32_t nf) {
+    uint32_t a = (uint32_t)g->ta[nf], b = (uint32_t)g->tb[nf];
+    uint32_t L = a;
+    while (!is_anc(g, L, b)) L = (uint32_t)g->par[L];
+    /* cycle nodes (old tree paths to L): exactly the nodes whose subtree set changes */
+    size_t np = 0;
+    for (uint32_t x = a; x != L; x = (uint32_t)g->par[x]) g->path[np++] = x;
+    for (uint32_t x = b; x != L; x = (uint32_t)g->par[x]) g->path[np++] = x;
+    adj_del(g, (uint32_t)g->ta[e], e), adj_del(g, (uint32_t)g->tb[e], e);
+    adj_add(g, a, nf), adj_add(g, b, nf);
+    int64_t next = g->low[L];
+    size_t sp = 0;
+    int32_t skip = g->pe[L];
+    g->stk[sp] = L, g->sit[sp] = 0, sp++;
+    g->low[L] = next;
+    while (sp) {
+        uint32_t v = g->stk[sp - 1];
+        if (g->sit[sp - 1] == g->acnt[v]) { g->lim[v] = next++; sp--; continue; }
+        uint32_t t = g->adj[g->eoff[v] + g->sit[sp - 1]++];
+        if ((int32_t)t == g->pe[v] && (v != L || (int32_t)t == skip)) continue;
+        uint32_t w = (uint32_t)(g->ta[t] == (int32_t)v ? g->tb[t] : g->ta[t]);
+        g->par[w] = (int32_t)v, g->pe[w] = (int32_t)t;
+        int32_t ge = g->tge[t];
+        g->r[w] = g->sv[ge] == (int32_t)w ? g->r[v] - g->ml[ge] : g->r[v] + g->ml[ge];
+        g->low[w] = next;
+        g->stk[sp] = w, g->sit[sp] = 0, sp++;
     }
+    /* children before parents: ascending lim (postorder); disjoint */
+    for (size_t i = 1; i < np; i++) {
+        uint32_t x = g->path[i];
+        size_t j = i;
+        while (j > 0 && g->lim[g->path[j - 1]] > g->lim[x]) { g->path[j] = g->path[j - 1]; j--; }
+        g->path[j] = x;
+    }
+    for (size_t i = 0; i < np; i++)
+        cut_one(g, g->path[i]);
 }
 
 static bool feasible_tree(RG *g, uint32_t *snap) {
@@ -199,6 +242,9 @@ static bool network_simplex_dagre(RG *g, size_t maxit) {
     if (!feasible_tree(g, g->post)) return false;
     lowlim(g);
     cutvalues(g);
+    memset(g->acnt, 0, M * sizeof *g->acnt);
+    for (size_t t = 0; t < g->nte; t++)
+        if (g->talive[t]) adj_add(g, (uint32_t)g->ta[t], (uint32_t)t), adj_add(g, (uint32_t)g->tb[t], (uint32_t)t);
     for (size_t it = 0; it < maxit; it++) {
         size_t e = SIZE_MAX;
         for (size_t t = 0; t < g->nte; t++)
@@ -212,19 +258,39 @@ static bool network_simplex_dagre(RG *g, size_t maxit) {
         int64_t tl = g->low[tail], tm = g->lim[tail];
         size_t f = SIZE_MAX;
         int64_t best = 0;
-        for (size_t x = 0; x < g->SE; x++) {
-            int64_t lv = g->lim[g->sv[x]], lw = g->lim[g->sw[x]];
-            bool dv = tl <= lv && lv <= tm, dw = tl <= lw && lw <= tm;
-            if (flip != dv || flip == dw) continue;
-            int64_t s = slack(g, x);
-            if (f == SIZE_MAX || s < best) f = x, best = s;
-        }
+        if (2 * (size_t)(tm - tl + 1) < M) {
+            /* small tail subtree: only its incident edges can cross; same min (slack, edge index) */
+            size_t sp = 0;
+            g->stk[sp++] = (uint32_t)tail;
+            while (sp) {
+                uint32_t u = g->stk[--sp];
+                for (uint32_t k = g->eoff[u]; k < g->eoff[u + 1]; k++) {
+                    uint32_t x = g->eidx[k];
+                    bool out = g->sv[x] == (int32_t)u;
+                    int64_t lo = g->lim[out ? g->sw[x] : g->sv[x]];
+                    if (tl <= lo && lo <= tm) continue;
+                    if (out != flip) continue; /* into the subtree, or out of it when flipped */
+                    int64_t s = slack(g, x);
+                    if (f == SIZE_MAX || s < best || (s == best && x < f)) f = x, best = s;
+                }
+                for (uint32_t i = 0; i < g->acnt[u]; i++) {
+                    uint32_t t = g->adj[g->eoff[u] + i];
+                    if ((int32_t)t == g->pe[u]) continue;
+                    g->stk[sp++] = (uint32_t)(g->ta[t] == (int32_t)u ? g->tb[t] : g->ta[t]);
+                }
+            }
+        } else
+            for (size_t x = 0; x < g->SE; x++) {
+                int64_t lv = g->lim[g->sv[x]], lw = g->lim[g->sw[x]];
+                bool dv = tl <= lv && lv <= tm, dw = tl <= lw && lw <= tm;
+                if (flip != dv || flip == dw) continue;
+                int64_t s = slack(g, x);
+                if (f == SIZE_MAX || s < best) f = x, best = s;
+            }
         if (f == SIZE_MAX) break;
         g->talive[e] = 0;
         if (!t_add_edge(g, g->sv[f], g->sw[f], (int32_t)f)) break;
-        lowlim(g);
-        cutvalues(g);
-        update_ranks(g);
+        exchange(g, (uint32_t)e, (uint32_t)(g->nte - 1));
     }
     return true;
 }
@@ -397,8 +463,9 @@ bool dagre_rank(Arena *A, const DRankIn *in, int32_t rank[], int32_t top[], int3
     g.post = ANEW(A, uint32_t, M + 1), g.stk = ANEW(A, uint32_t, M + 1), g.sit = ANEW(A, uint32_t, M + 1);
     g.nboff = ANEW(A, uint32_t, M + 2);
     g.nbk = ANEW(A, uint64_t, 4 * M + 4);
+    g.acnt = ANEW(A, uint32_t, M + 1), g.adj = ANEW(A, uint32_t, 2 * SE + 1), g.path = ANEW(A, uint32_t, 2 * M + 2);
     if (!g.r || !g.tin || !g.tord || !g.tnon || !g.ta || !g.tb || !g.tge || !g.talive || !g.tcut || !g.low ||
-        !g.lim || !g.par || !g.pe || !g.post || !g.stk || !g.sit || !g.nboff || !g.nbk)
+        !g.lim || !g.par || !g.pe || !g.post || !g.stk || !g.sit || !g.nboff || !g.nbk || !g.acnt || !g.adj || !g.path)
         return false;
     memset(g.tin, 0, M);
     if (!network_simplex_dagre(&g, maxit)) return false;
