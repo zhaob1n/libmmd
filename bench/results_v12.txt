@@ -1,0 +1,12 @@
+v12 (2026-10-23, Asia/Shanghai)
+Speed (build/bench, min of runs; box is ~7% slower than at v8: v8 commit 3126817 recorded 11.7us, now measures 12.5-12.8us)
+  small   15.0us  (v11 15.2us; always_inline fmt_num 15.2->14.7, dagre-exact label ranks +0.3) -- target 11.7us NOT met
+  medium  590us   (was 434us: N=100 now uses dagre-exact ordering, DAGRE_RANK_MAX_N 96->256)
+  large   8.34ms  (fast ordering, unchanged)
+Position error vs mermaid (bench/posagree.py, centroid-aligned node centres, n=619)
+  start                 mean 67.72 median 45.02 p90 168.44 max 364.37
+  cpad=0 in dagre mode  mean 45.06 median 12.28 p90 154.45 max 226.22
+  DAGRE_RANK_MAX_N 256  mean  8.22 median  3.05 p90  20.67 max 165.81
+  exact label bbox      mean  6.04 median  0.00 p90  14.61 max 132.02
+  dagre labelRank       mean  1.61 median  0.00 p90   6.13 max  29.34
+Byte-identity harness: bench/eq/cmp.sh (525 inputs), ref regenerated after intentional output changes.

@@ -160,3 +160,11 @@ mermaid itself fails to render `block_full` and `radar_full` (partial named curv
 
 ## v11
 Mermaid-exact text metrics (Liberation/Arial advances+kerning), mermaid node padding, self-loop helper nodes. See bench/results_v11.txt.
+
+## v12
+
+- Node-centre error vs mermaid: 67.7 px -> 1.61 px mean (median 0, p90 6.1). Sources fixed: double cluster
+  padding in dagre mode, dagre ordering threshold (now N<=256), exact edge-label bbox sizes, and dagre's
+  labelRank (proxy rank on nesting-graph ranks before removeEmptyRanks).
+- Small render 15.0 us (target 11.7 us not met); medium 590 us (dagre-exact ordering now applies).
+- bench/eq/: byte-identity harness. See bench/results_v12.txt.
