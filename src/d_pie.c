@@ -89,7 +89,7 @@ DIAG_FN(pie_render) {
             buf_lit(out, "<path class=\"slice\" fill=\""); buf_put(out, strlen(col), col); buf_lit(out, "\" d=\"M");
             dg_pt(out, CX, CY); buf_ch(out, 'L'); dg_pt(out, CX + R * sin(ang), CY - R * cos(ang));
             buf_lit(out, "A"); buf_num(out, R); buf_ch(out, ','); buf_num(out, R);
-            buf_lit(out, frac > 0.5 ? " 0 1 1 " : " 0 0 1 ");
+            if (frac > 0.5) buf_lit(out, " 0 1 1 "); else buf_lit(out, " 0 0 1 ");
             dg_pt(out, CX + R * sin(a1), CY - R * cos(a1)); buf_lit(out, "Z\"/>");
         }
         ang = a1;

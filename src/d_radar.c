@@ -114,7 +114,7 @@ DIAG_FN(radar_render) {
                 for (size_t q = 0; q < na; q++) if (str_eq(ax.v[q].id, key)) slot = q;
             }
             double d;
-            if (!dg_parse_num(e, &d)) return diag_fail(err_off, msg, (size_t)(e.p - src), "curve value is not a number");
+            if (!dg_parse_num(e, &d) || !isfinite(d)) d = 0; /* mermaid/mmdr: non-numeric -> 0 (centre) */
             if (slot < na) vals.v[cv.v[c].v0 + slot] = d;
             if (d > dmax) dmax = d;
         }
