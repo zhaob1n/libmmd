@@ -243,7 +243,7 @@ DIAG_FN(mindmap_render) {
         V[i].w = w + 2 * pad, V[i].h = nl * 24 + (V[i].shape == M_DEF ? 8 : 20);
         if (V[i].shape == M_CIR) V[i].w = V[i].h = fmax(V[i].w, V[i].h);
         if (V[i].shape == M_HEX) V[i].w += 20;
-        if (V[i].icon.n) V[i].w += 28, V[i].h = fmax(V[i].h, 32);
+        /* mermaid-cli: ::icon() classes (fa/mdi) need page CSS it never loads, so no glyph and no space */
         if (i) V[i].sec = V[i].depth == 1 ? 0 : V[V[i].parent].sec;
     }
     /* sections = index among root's children; alternate sides */
@@ -269,9 +269,12 @@ DIAG_FN(mindmap_render) {
             if (i) leaves[V[i].parent] += leaves[i];
         }
         ang[0] = 0, wedge[0] = 2 * M_PI;
+        unsigned nroot = 0;
+        for (uint32_t c = V[0].first; c != UINT32_MAX; c = V[c].next) nroot++;
         for (size_t i = 0; i < v.n; i++) { /* split each wedge among children, start angle at -90deg + offset */
             double start = ang[i] - wedge[i] / 2;
             if (!i) start = -M_PI / 2 - (V[0].first != UINT32_MAX ? M_PI / (double)leaves[0] : 0);
+            if (!i && nroot == 2) start = -M_PI * leaves[V[0].first] / fmax(1, leaves[0]); /* cose: two branches go right, left */
             for (uint32_t c = V[i].first; c != UINT32_MAX; c = V[c].next) {
                 wedge[c] = wedge[i] * leaves[c] / fmax(1, leaves[i]);
                 ang[c] = start + wedge[c] / 2;
@@ -379,24 +382,6 @@ DIAG_FN(mindmap_render) {
         }
         buf_lit(out, "</g>");
         double tx = m->x;
-        if (m->icon.n) { /* badge with the icon's initial (fa-book -> B), label shifted right */
-            Str nm = m->icon;
-            for (size_t k = nm.n; k-- > 0;) if (nm.p[k] == ' ' || nm.p[k] == '-' || nm.p[k] == ':') { nm = (Str){.p = nm.p + k + 1, .n = nm.n - k - 1}; break; }
-            double cx = x + 18;
-            buf_lit(out, "<g class=\"icon\"><title>"); buf_xml(out, m->icon); buf_lit(out, "</title>");
-            if (icon_draw(out, m->icon, cx - 11, m->y - 11, 22, tcls)) {
-                buf_lit(out, "</g>");
-                tx += 14;
-                goto label;
-            }
-            buf_lit(out, "<title>"); buf_xml(out, m->icon); buf_lit(out, "</title><circle class=\"ic\" cx=\"");
-            buf_num(out, cx); buf_lit(out, "\" cy=\""); buf_num(out, m->y); buf_lit(out, "\" r=\"10\"/>");
-            char g[2] = {nm.n ? (char)(nm.p[0] >= 'a' && nm.p[0] <= 'z' ? nm.p[0] - 32 : nm.p[0]) : '?', 0};
-            dg_text(out, (Str){.p = g, .n = 1}, 11, cx, m->y, "middle", "ict");
-            buf_lit(out, "</g>");
-            tx += 14;
-        }
-    label:
         dg_text(out, m->label, 16, tx, m->y, "middle", tcls);
     }
     buf_lit(out, "</svg>\n");
