@@ -463,6 +463,7 @@ DIAG_FN(class_render) {
         h += (na ? na * lh : 0) + MPAD * 2 + (nm ? nm * lh : 0) + MPAD;
         dg_size(g, (int32_t)v, w + 2 * MPAD + 10, h);
     }
+    g->iso_toggle = true;
     if ((st = flow_layout(g))) return st;
     BBox bb = dg_bbox(g);
     if (title.n) bb.y0 -= 30;

@@ -1818,7 +1818,7 @@ static Box content_box(const Graph *g) {
 
 [[nodiscard]] static bool gsub_alloc(Graph *d, const Graph *g, Dir dir, size_t nn, size_t ne, size_t ns) {
     Arena *A = g->arena;
-    *d = (Graph){.arena = g->arena, .dir = dir, .theme = g->theme, .flags = g->flags, .acyclicer = g->acyclicer, .order_mode = g->order_mode, .node_sep = g->node_sep,
+    *d = (Graph){.arena = g->arena, .dir = dir, .theme = g->theme, .flags = g->flags, .acyclicer = g->acyclicer, .order_mode = g->order_mode, .iso_toggle = g->iso_toggle, .node_sep = g->node_sep,
                  .rank_sep = g->rank_sep, .font_size = g->font_size, .nn = nn, .ne = ne, .ns = ns,
                  .ncap = nn, .ecap = ne, .scap = ns};
     d->nid = ANEW(A, Str, nn + 1); d->nlabel = ANEW(A, Str, nn + 1); d->nclass = ANEW(A, Str, nn + 1);
@@ -1882,7 +1882,10 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
         int32_t p = g->sparent[s], pc = p == NONE ? NONE : cand[p];
         gix[s] = NONE;
         if (pc != NONE) cand[s] = pc;
-        else if ((g->sflags[s] & SF_DIRSET) && g->sdir[s] != g->dir && !ext[s]) { cand[s] = (int32_t)s; gix[s] = (int32_t)++K; }
+        else if (g->iso_toggle && !ext[s] && !(g->sflags[s] & SF_DIRSET)) {
+            g->sdir[s] = g->dir == DIR_TB ? DIR_LR : DIR_TB;
+            cand[s] = (int32_t)s; gix[s] = (int32_t)++K;
+        } else if ((g->sflags[s] & SF_DIRSET) && g->sdir[s] != g->dir && !ext[s]) { cand[s] = (int32_t)s; gix[s] = (int32_t)++K; }
         else cand[s] = NONE;
     }
     if (!K) return layout_core(g);
@@ -1933,6 +1936,7 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
         d->nid[i] = g->nid[v]; d->nlabel[i] = g->nlabel[v]; d->nclass[i] = g->nclass[v];
         d->nstyle[i] = g->nstyle[v]; d->nshape[i] = g->nshape[v]; d->nflags[i] = g->nflags[v];
         d->nparent[i] = p == NONE || cand[p] == p ? NONE : smap[p];
+        if ((g->nflags[v] & NF_FIXED) && g->nw && d->nw) d->nw[i] = g->nw[v], d->nh[i] = g->nh[v]; /* preset sizes (er/class) */
     }
     size_t *pfill = cn; /* proxies go after the outer graph's real nodes */
     pfill[0] -= K;

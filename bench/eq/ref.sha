@@ -443,6 +443,7 @@ f0d216bf71363703 tests/cases/block_full.mmd
 7a76f22945085de9 tests/cases/c4_full.mmd
 0c120cfb80ce4094 tests/cases/c4_styles.mmd
 974763ad18fd3f41 tests/cases/class_full.mmd
+66e7dcac0900aadb tests/cases/class_ns_iso.mmd
 1b04ddb2e9c9ec6a tests/cases/config_keys.mmd
 b2a9983ee0faecb0 tests/cases/config_pie.mmd
 3f90ebf94953c684 tests/cases/config_quadrant.mmd
@@ -457,7 +458,9 @@ b2a9983ee0faecb0 tests/cases/config_pie.mmd
 4c22cdfc36d2c18f tests/cases/edge_ids.mmd
 9ee58fad9009c249 tests/cases/edges.mmd
 9aeade426974b49a tests/cases/er_full.mmd
-16f03414993360d2 tests/cases/er_subgraph.mmd
+a213467f489f1f3a tests/cases/er_sub_dir.mmd
+cbcf02243168a79b tests/cases/er_sub_iso.mmd
+4efcb3559bcaf1c6 tests/cases/er_subgraph.mmd
 e3b0c44298fc1c14 tests/cases/err1.mmd
 9d4e350b9eb52396 tests/cases/eventmodeling_04.mmd
 af7e6f9cbf935c8d tests/cases/eventmodeling_06.mmd

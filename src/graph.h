@@ -29,6 +29,7 @@ typedef struct Graph {
     uint8_t acyclicer; /* CMM_ACYC_* */
     uint8_t order_mode; /* CMM_ORDER_* */
     uint8_t curve;     /* CURVE_* (flowchart.curve) */
+    bool iso_toggle;   /* mermaid unified renderer (er/class/state): clusters with no external links lay out in the other direction */
     double node_sep, rank_sep, font_size;
 
     /* nodes (SoA) */

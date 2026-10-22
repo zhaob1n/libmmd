@@ -166,7 +166,12 @@ static cmm_status parse(EP *p, LineIt *it) {
         if (p->sgn && str_eq(line, S("end"))) { p->sgn--; continue; }
         if (str_eq(w, S("direction"))) {
             Str d = dg_word(&rest);
-            g->dir = str_eq(d, S("LR")) ? DIR_LR : str_eq(d, S("RL")) ? DIR_RL : str_eq(d, S("BT")) ? DIR_BT : DIR_TB;
+            Dir dd = str_eq(d, S("LR")) ? DIR_LR : str_eq(d, S("RL")) ? DIR_RL : str_eq(d, S("BT")) ? DIR_BT : DIR_TB;
+            if (p->sgn) { /* subgraph direction (used when the subgraph has no external links) */
+                int32_t c = p->sg[p->sgn - 1];
+                g->sdir[c] = dd;
+                g->sflags[c] |= SF_DIRSET;
+            } else g->dir = dd;
             continue;
         }
         if (str_starts(w, S("accTitle")) || str_starts(w, S("accDescr"))) continue;
@@ -312,6 +317,7 @@ DIAG_FN(er_render) {
         if (tw < 100) { e->cw[0] += 100 - tw; tw = 100; }
         dg_size(g, (int32_t)v, tw, e->an ? hh + e->an * rh : 75);
     }
+    g->iso_toggle = true;
     if ((st = flow_layout(g))) return st;
     BBox bb = dg_bbox(g);
     if (title.n) bb.y0 -= 30;
