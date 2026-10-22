@@ -14,3 +14,11 @@ Small total 47.8k->44.8k; svg 22% is largest phase.
 Commits: incremental network simplex; feasible tree skips saturated nodes; dorder flat sort +
 crossing early stop; PMARK profiler; sortSubgraph skips topo w/o cg edges; shape token lengths.
 -O3 instead of -O2: within noise (no change made).
+
+Round 13b (after merge of diagrams 523bee4; HEAD 24078ec)
+  medium min 478.1 µs, small min 14.3 µs. Ir/render (callgrind): small 237.5k->236.1k, medium 3.964M->3.934M
+  medium cycles/render: parse 56.5k r-ns 183.5k o-sweep 266.6k o-cross 128.1k bk-pass 191.0k route 119.5k svg 117.0k total 1355k
+  small: svg 10.0k parse 4.5k o-sweep 4.9k bk-pass 3.9k r-ns 1.4k total 44.1k
+  Checked, no worthwhile gain: NS leaving-edge scan (<8k Ir/render, so no bitset), CSS emission (~25 appends, already cheap),
+  pset/sep inlining (+0.1%), BK passes (linear, ~160 Ir/node/pass), -O3.
+  Targets still not met. The profile is flat; what remains needs algorithmic restructuring, not micro-tuning.
