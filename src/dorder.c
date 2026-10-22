@@ -300,42 +300,50 @@ static uint64_t cross_count(const DOrder *d, const int32_t *lay, uint32_t *tree,
     return cc;
 }
 
+static void *dscratch(Arena *A, bool ua, size_t sz, bool zero) {
+    void *p = ua ? arena_alloc(A, sz ? sz : 1, alignof(max_align_t)) : zero ? calloc(1, sz ? sz : 1) : malloc(sz ? sz : 1);
+    if (p && ua && zero) memset(p, 0, sz);
+    return p;
+}
+
 bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
-    (void)A;
     size_t V = d->V, S = d->S, R = d->R, NS = V + S;
     DT(t_start);
     Ctx c = {.d = d, .V = V, .S = S, .NS = NS};
     bool ok = false;
-    uint32_t *rioff = calloc(R + 2, sizeof *rioff), *ri = nullptr, *dstk = nullptr, *dit = nullptr;
+    /* small graphs: scratch from the render arena (no per-call malloc/free churn) */
+    bool ua = NS <= 1024 && S <= 32;
+#define SA(sz, zero) dscratch(A, ua, (sz), (zero))
+    uint32_t *rioff = SA((R + 2) * sizeof *rioff, true), *ri = nullptr, *dstk = nullptr, *dit = nullptr;
     uint32_t *tree = nullptr, *cbuf = nullptr;
     int32_t *best = nullptr;
     uint8_t *vis = nullptr;
     size_t maxdeg = 1, maxw = 1;
     for (size_t v = 0; v < V; v++) if (d->soff[v + 1] - d->soff[v] > maxdeg) maxdeg = d->soff[v + 1] - d->soff[v];
     for (size_t r = 0; r < R; r++) if (d->loff[r + 1] - d->loff[r] > maxw) maxw = d->loff[r + 1] - d->loff[r];
-    c.nx = malloc(NS * sizeof *c.nx);
-    c.khead = malloc((S + 1) * sizeof *c.khead);
-    c.ktail = malloc((S + 1) * sizeof *c.ktail);
-    c.knext = malloc(NS * sizeof *c.knext);
-    c.mtag = calloc(NS, sizeof *c.mtag);
-    c.mix = malloc(NS * sizeof *c.mix);
-    c.sub = malloc((S + 1) * sizeof *c.sub);
-    c.ord = malloc(NS * sizeof *c.ord);
-    c.src = malloc(NS * sizeof *c.src);
-    c.outl = malloc(NS * sizeof *c.outl);
-    c.sbuf = malloc(2 * NS * sizeof *c.sbuf);
-    c.stmp = malloc(NS * sizeof *c.stmp);
-    c.cga = malloc((S * S + 1) * sizeof *c.cga);
-    c.cgb = malloc((S * S + 1) * sizeof *c.cgb);
-    c.cgbits = calloc((S * S + 63) / 64 + 1, sizeof *c.cgbits);
-    c.prev = malloc((S + 1) * sizeof *c.prev);
-    c.ptag = calloc(S + 1, sizeof *c.ptag);
-    dstk = malloc((V + 1) * sizeof *dstk);
-    dit = malloc((V + 1) * sizeof *dit);
-    vis = calloc(V + 1, 1);
-    best = malloc((V + 1) * sizeof *best);
-    tree = malloc(4 * (maxw + 1) * sizeof *tree);
-    cbuf = malloc((maxdeg + 1) * sizeof *cbuf);
+    c.nx = SA(NS * sizeof *c.nx, false);
+    c.khead = SA((S + 1) * sizeof *c.khead, false);
+    c.ktail = SA((S + 1) * sizeof *c.ktail, false);
+    c.knext = SA(NS * sizeof *c.knext, false);
+    c.mtag = SA((NS) * sizeof *c.mtag, true);
+    c.mix = SA(NS * sizeof *c.mix, false);
+    c.sub = SA((S + 1) * sizeof *c.sub, false);
+    c.ord = SA(NS * sizeof *c.ord, false);
+    c.src = SA(NS * sizeof *c.src, false);
+    c.outl = SA(NS * sizeof *c.outl, false);
+    c.sbuf = SA(2 * NS * sizeof *c.sbuf, false);
+    c.stmp = SA(NS * sizeof *c.stmp, false);
+    c.cga = SA((S * S + 1) * sizeof *c.cga, false);
+    c.cgb = SA((S * S + 1) * sizeof *c.cgb, false);
+    c.cgbits = SA(((S * S + 63) / 64 + 1) * sizeof *c.cgbits, true);
+    c.prev = SA((S + 1) * sizeof *c.prev, false);
+    c.ptag = SA((S + 1) * sizeof *c.ptag, true);
+    dstk = SA((V + 1) * sizeof *dstk, false);
+    dit = SA((V + 1) * sizeof *dit, false);
+    vis = SA((V + 1) * 1, true);
+    best = SA((V + 1) * sizeof *best, false);
+    tree = SA(4 * (maxw + 1) * sizeof *tree, false);
+    cbuf = SA((maxdeg + 1) * sizeof *cbuf, false);
     if (!rioff || !c.nx || !c.khead || !c.ktail || !c.knext || !c.mtag || !c.mix || !c.sub || !c.ord || !c.src ||
         !c.outl || !c.sbuf || !c.stmp || !c.cga || !c.cgb || !c.cgbits || !c.prev || !c.ptag || !dstk || !dit ||
         !vis || !best || !tree || !cbuf)
@@ -347,7 +355,7 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
         else for (int32_t r = d->cmin[x - V]; r <= d->cmax[x - V]; r++) rioff[r + 1]++;
     }
     for (size_t r = 0; r < R; r++) rioff[r + 1] += rioff[r];
-    ri = malloc((rioff[R] + 1) * sizeof *ri);
+    ri = SA((rioff[R] + 1) * sizeof *ri, false);
     if (!ri) goto done;
     {
         uint32_t *fill = c.ord; /* reuse as [R] fill pointers when R <= NS, else separate */
@@ -363,7 +371,7 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
     }
     /* initOrder: DFS from simple nodes sorted (stably) by rank, successors in dagre order */
     {
-        uint32_t *fillp = malloc((R + 1) * sizeof *fillp);
+        uint32_t *fillp = SA((R + 1) * sizeof *fillp, false);
         if (!fillp) goto done;
         for (size_t r = 0; r < R; r++) fillp[r] = d->loff[r];
         for (size_t r = 0; r < R; r++)
@@ -383,7 +391,7 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
                     dstk[sp++] = w;
                 }
             }
-        free(fillp);
+        if (!ua) free(fillp);
         for (size_t r = 0; r < R; r++)
             for (uint32_t i = d->loff[r]; i < d->loff[r + 1]; i++) d->pos[d->lay[i]] = (int32_t)(i - d->loff[r]);
     }
@@ -446,6 +454,7 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
         fprintf(stderr, "  dsweep %u cc=%llu\n", it, (unsigned long long)cc);
 #endif
         if (cc < bestcc) { last = 0; bestcc = cc; memcpy(best, d->pos, V * sizeof *best); }
+        if (bestcc == 0) break; /* dagre keeps sweeping, but nothing can beat 0 (strict <) */
     }
     memcpy(d->pos, best, V * sizeof *best);
     for (size_t v = 0; v < V; v++) if (d->rank[v] >= 0) d->lay[d->loff[d->rank[v]] + (uint32_t)d->pos[v]] = (int32_t)v;
@@ -455,9 +464,13 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
 #endif
     ok = true;
 done:
+#undef SA
+    if (!ua) {
     free(rioff); free(ri); free(dstk); free(dit); free(vis); free(best); free(tree); free(cbuf);
     free(c.nx); free(c.khead); free(c.ktail); free(c.knext); free(c.mtag); free(c.mix); free(c.sub); free(c.ord);
     free(c.src); free(c.outl); free(c.sbuf); free(c.stmp); free(c.cga); free(c.cgb); free(c.cgbits); free(c.prev);
-    free(c.ptag); free(c.ent); free(c.lk);
+    free(c.ptag);
+    }
+    free(c.ent); free(c.lk);
     return ok;
 }
