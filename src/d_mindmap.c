@@ -8,6 +8,7 @@
 #include <math.h>
 
 #include "dgraph.h"
+#include "icons.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -265,13 +266,20 @@ DIAG_FN(mindmap_render) {
             Str nm = m->icon;
             for (size_t k = nm.n; k-- > 0;) if (nm.p[k] == ' ' || nm.p[k] == '-' || nm.p[k] == ':') { nm = (Str){.p = nm.p + k + 1, .n = nm.n - k - 1}; break; }
             double cx = x + 18;
-            buf_lit(out, "<g class=\"icon\"><title>"); buf_xml(out, m->icon); buf_lit(out, "</title><circle class=\"ic\" cx=\"");
+            buf_lit(out, "<g class=\"icon\"><title>"); buf_xml(out, m->icon); buf_lit(out, "</title>");
+            if (icon_draw(out, m->icon, cx - 11, m->y - 11, 22, i ? "mt" : "mt\" fill=\"#fff")) {
+                buf_lit(out, "</g>");
+                tx += 14;
+                goto label;
+            }
+            buf_lit(out, "<title>"); buf_xml(out, m->icon); buf_lit(out, "</title><circle class=\"ic\" cx=\"");
             buf_num(out, cx); buf_lit(out, "\" cy=\""); buf_num(out, m->y); buf_lit(out, "\" r=\"10\"/>");
             char g[2] = {nm.n ? (char)(nm.p[0] >= 'a' && nm.p[0] <= 'z' ? nm.p[0] - 32 : nm.p[0]) : '?', 0};
             dg_text(out, (Str){.p = g, .n = 1}, 11, cx, m->y, "middle", "ict");
             buf_lit(out, "</g>");
             tx += 14;
         }
+    label:
         dg_text(out, m->label, 16, tx, m->y, "middle", i ? "mt" : "mt\" fill=\"#fff");
     }
     buf_lit(out, "</svg>\n");

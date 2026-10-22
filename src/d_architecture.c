@@ -7,6 +7,7 @@
 #include <math.h>
 
 #include "dgraph.h"
+#include "icons.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -15,7 +16,7 @@ typedef struct AGroup { Str id, icon, label; int32_t parent; double x0, y0, x1, 
 typedef struct AEdge { uint32_t a, b; char pa, pb; bool arr_a, arr_b; Str label; } AEdge;
 
 static constexpr double PITCH_X = 200;
-static constexpr double PITCH_Y = 170;
+static constexpr double PITCH_Y = 210;
 static constexpr double IS = 80; /* icon size */
 static constexpr char CSS[] =
     "#mermaid .ai{fill:#087ebf;}#mermaid .ag{fill:none;stroke:#cccccc;stroke-width:2px;stroke-dasharray:8;}"
@@ -81,6 +82,7 @@ static void glyph(Buf *b, Str icon, double x, double y, double s) { /* x,y top-l
         buf_lit(b, " 0 0 1 "); buf_num(b, 2 * u); buf_ch(b, ','); buf_num(b, -19.8 * u); buf_lit(b, "a"); buf_num(b, 13 * u); buf_ch(b, ',');
         buf_num(b, 13 * u); buf_lit(b, " 0 0 1 "); buf_num(b, 24 * u); buf_ch(b, ','); buf_num(b, -3 * u); buf_lit(b, "a"); buf_num(b, 10 * u);
         buf_ch(b, ','); buf_num(b, 10 * u); buf_lit(b, " 0 0 1 "); buf_num(b, 2 * u); buf_ch(b, ','); buf_num(b, 22.8 * u); buf_lit(b, "z\"/>");
+    } else if (icon_draw(b, icon, x + 16 * u, y + 16 * u, 48 * u, "awf")) {
     } else { /* unknown icon: question mark */
         buf_lit(b, "<text class=\"awf\" text-anchor=\"middle\" dominant-baseline=\"central\" font-size=\""); buf_num(b, 40 * u);
         buf_lit(b, "\" x=\""); buf_num(b, x + 40 * u); buf_lit(b, "\" y=\""); buf_num(b, y + 40 * u); buf_lit(b, "\">?</text>");
@@ -189,6 +191,46 @@ DIAG_FN(architecture_render) {
         for (size_t k = c0; k < t; k++) mx = N[q[k]].gx < mx ? N[q[k]].gx : mx, Mx = N[q[k]].gx > Mx ? N[q[k]].gx : Mx;
         for (size_t k = c0; k < t; k++) N[q[k]].gx += xoff - mx;
         xoff += Mx - mx + 1;
+    }
+    /* group non-overlap: while two unrelated groups' grid boxes intersect, insert columns (or rows) so the
+     * later group and everything beyond the earlier one shifts clear; relative placement is preserved */
+    if (gv.n > 1) {
+        int32_t *bx0 = ANEW(a, int32_t, gv.n), *bx1 = ANEW(a, int32_t, gv.n), *by0 = ANEW(a, int32_t, gv.n), *by1 = ANEW(a, int32_t, gv.n);
+        if (!bx0 || !bx1 || !by0 || !by1) return CMM_ERR_NOMEM;
+        for (size_t iter = 0; iter < 4 * gv.n * gv.n + 8; iter++) {
+            for (size_t g = 0; g < gv.n; g++) bx0[g] = by0[g] = INT32_MAX, bx1[g] = by1[g] = INT32_MIN;
+            for (size_t i = 0; i < nn; i++)
+                for (int32_t g = N[i].group; g != NONE; g = gv.v[g].parent) {
+                    bx0[g] = N[i].gx < bx0[g] ? N[i].gx : bx0[g], bx1[g] = N[i].gx > bx1[g] ? N[i].gx : bx1[g];
+                    by0[g] = N[i].gy < by0[g] ? N[i].gy : by0[g], by1[g] = N[i].gy > by1[g] ? N[i].gy : by1[g];
+                }
+            bool fixed = false;
+            for (size_t ga = 0; ga < gv.n && !fixed; ga++)
+                for (size_t gb = 0; gb < gv.n && !fixed; gb++) {
+                    if (ga == gb || bx0[ga] == INT32_MAX || bx0[gb] == INT32_MAX) continue;
+                    bool rel = false;
+                    for (int32_t g = gv.v[ga].parent; g != NONE; g = gv.v[g].parent) rel |= (size_t)g == gb;
+                    for (int32_t g = gv.v[gb].parent; g != NONE; g = gv.v[g].parent) rel |= (size_t)g == ga;
+                    if (rel) continue;
+                    if (bx1[ga] < bx0[gb] || bx1[gb] < bx0[ga] || by1[ga] < by0[gb] || by1[gb] < by0[ga]) continue;
+                    /* B = the one starting later on the chosen axis (ties: higher index) */
+                    int32_t ox = (bx1[ga] < bx1[gb] ? bx1[ga] : bx1[gb]) - (bx0[ga] > bx0[gb] ? bx0[ga] : bx0[gb]);
+                    int32_t oy = (by1[ga] < by1[gb] ? by1[ga] : by1[gb]) - (by0[ga] > by0[gb] ? by0[ga] : by0[gb]);
+                    bool horiz = ox <= oy;
+                    size_t A = ga, B = gb;
+                    int32_t a0 = horiz ? bx0[ga] : by0[ga], b0 = horiz ? bx0[gb] : by0[gb];
+                    if (b0 < a0 || (b0 == a0 && gb < ga)) A = gb, B = ga;
+                    int32_t amax = horiz ? bx1[A] : by1[A], bmin = horiz ? bx0[B] : by0[B], d = amax - bmin + 1;
+                    for (size_t i = 0; i < nn; i++) {
+                        bool inb = false, ina = false;
+                        for (int32_t g = N[i].group; g != NONE; g = gv.v[g].parent) inb |= (size_t)g == B, ina |= (size_t)g == A;
+                        int32_t *c = horiz ? &N[i].gx : &N[i].gy;
+                        if (inb || (!ina && *c > amax)) *c += d;
+                    }
+                    fixed = true;
+                }
+            if (!fixed) break;
+        }
     }
     int32_t my = INT32_MAX;
     for (size_t i = 0; i < nn; i++) if (N[i].gy < my) my = N[i].gy;
