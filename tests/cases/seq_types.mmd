@@ -1,0 +1,12 @@
+sequenceDiagram
+    participant B@{ "type": "boundary" } as Gate
+    participant C@{ "type": "control" }
+    participant E@{ "type": "entity" }
+    participant D@{ "type": "database" }
+    participant L@{ "type": "collections" }
+    participant Q@{ "type": "queue" }
+    B->>C: req
+    C->>E: load
+    E->>D: query
+    D-->>L: rows
+    L->>Q: enqueue

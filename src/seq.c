@@ -12,10 +12,13 @@ typedef enum : uint8_t { EV_MSG, EV_NOTE, EV_BEGIN, EV_ELSE, EV_END, EV_ACT, EV_
 typedef enum : uint8_t { NP_LEFT, NP_RIGHT, NP_OVER } NotePos;
 typedef enum : uint8_t { HD_NONE, HD_ARROW, HD_CROSS, HD_ASYNC } Head;
 
+/* participant @{type} shapes (mermaid 11): box, boundary, control, entity, database, collections, queue */
+enum : uint8_t { PS_BOX, PS_BOUNDARY, PS_CONTROL, PS_ENTITY, PS_DATABASE, PS_COLLECTIONS, PS_QUEUE };
 typedef struct Part {
     Str id, label;
     int32_t box;                     /* index into SP.boxes or -1 */
     bool actor, created, destroyed;  /* created/destroyed mid-diagram */
+    uint8_t shape;                   /* PS_* from @{type} */
     bool pend_create, pend_destroy;  /* render-time state */
     double x, w, y0, y1;             /* lifeline extent (y1 == 0 => bottom) */
 } Part;
@@ -193,6 +196,9 @@ static cmm_status parse_line(SP *p, Str line, size_t off) {
         if (!ok) return CMM_ERR_NOMEM;
         Part *pp = &p->parts.v[k];
         pp->actor = str_eq(w, S("actor")) || str_eq(type, S("actor"));
+        pp->shape = str_eq(type, S("boundary")) ? PS_BOUNDARY : str_eq(type, S("control")) ? PS_CONTROL
+                  : str_eq(type, S("entity")) ? PS_ENTITY : str_eq(type, S("database")) ? PS_DATABASE
+                  : str_eq(type, S("collections")) ? PS_COLLECTIONS : str_eq(type, S("queue")) ? PS_QUEUE : PS_BOX;
         if (p->cur_box >= 0) pp->box = p->cur_box;
         if (create) {
             pp->created = true;
@@ -346,6 +352,8 @@ static unsigned nlines(Str s) {
     return k;
 }
 
+static void sq_pt(Buf *b, double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
+
 static void actor_box(Buf *b, const Part *pa, double y, double fs) {
     if (pa->actor) {
         double x = pa->x, t = y + 4;
@@ -359,7 +367,45 @@ static void actor_box(Buf *b, const Part *pa, double y, double fs) {
         text_(b, pa->label, fs, x, y + ACT_H - 6, "middle", "actor-label");
         return;
     }
-    rect(b, pa->x - pa->w / 2, y, pa->w, ACT_H, "actor");
+    double x = pa->x, t = y + 4;
+    switch (pa->shape) { /* icon on top, label underneath (like actor) */
+    case PS_BOUNDARY:
+        buf_lit(b, "<g class=\"actor-man\">");
+        line_(b, x - 22, t + 8, x - 22, t + 40, "actor-line");
+        line_(b, x - 22, t + 24, x - 10, t + 24, "actor-line");
+        buf_lit(b, "<circle cx=\""); buf_num(b, x + 4); buf_lit(b, "\" cy=\""); buf_num(b, t + 24); buf_lit(b, "\" r=\"14\"/></g>");
+        text_(b, pa->label, fs, x, y + ACT_H - 6, "middle", "actor-label");
+        return;
+    case PS_CONTROL:
+    case PS_ENTITY:
+        buf_lit(b, "<g class=\"actor-man\"><circle cx=\""); buf_num(b, x); buf_lit(b, "\" cy=\""); buf_num(b, t + 22);
+        buf_lit(b, "\" r=\"14\"/>");
+        if (pa->shape == PS_ENTITY) line_(b, x - 14, t + 38, x + 14, t + 38, "actor-line");
+        else { buf_lit(b, "<path class=\"actor-line\" d=\"M"); sq_pt(b, x + 6, t + 3); buf_ch(b, 'L'); sq_pt(b, x - 1, t + 8);
+               buf_ch(b, 'L'); sq_pt(b, x + 6, t + 13); buf_lit(b, "\"/>"); }
+        buf_lit(b, "</g>");
+        text_(b, pa->label, fs, x, y + ACT_H - 6, "middle", "actor-label");
+        return;
+    case PS_DATABASE: {
+        double rx = 18, ry = 5, top = t + 4, h = 34;
+        buf_lit(b, "<path class=\"actor\" d=\"M"); sq_pt(b, x - rx, top); buf_lit(b, "a"); buf_num(b, rx); buf_ch(b, ','); buf_num(b, ry);
+        buf_lit(b, " 0 0 0 "); buf_num(b, 2 * rx); buf_lit(b, ",0a"); buf_num(b, rx); buf_ch(b, ','); buf_num(b, ry);
+        buf_lit(b, " 0 0 0 "); buf_num(b, -2 * rx); buf_lit(b, ",0v"); buf_num(b, h); buf_ch(b, 'a'); buf_num(b, rx); buf_ch(b, ',');
+        buf_num(b, ry); buf_lit(b, " 0 0 0 "); buf_num(b, 2 * rx); buf_lit(b, ",0v"); buf_num(b, -h); buf_lit(b, "\"/>");
+        text_(b, pa->label, fs, x, y + ACT_H - 6, "middle", "actor-label");
+        return;
+    }
+    case PS_COLLECTIONS: rect(b, pa->x - pa->w / 2 + 5, y + 5, pa->w, ACT_H, "actor"); break; /* stacked copy behind */
+    default: break;
+    }
+    if (pa->shape == PS_QUEUE) { /* horizontal cylinder */
+        double x0 = pa->x - pa->w / 2, w = pa->w, ry = ACT_H / 2, rx = 8;
+        buf_lit(b, "<path class=\"actor\" d=\"M"); sq_pt(b, x0 + rx, y); buf_ch(b, 'h'); buf_num(b, w - 2 * rx);
+        buf_ch(b, 'a'); buf_num(b, rx); buf_ch(b, ','); buf_num(b, ry); buf_lit(b, " 0 0 1 0,"); buf_num(b, ACT_H);
+        buf_ch(b, 'h'); buf_num(b, -(w - 2 * rx)); buf_ch(b, 'a'); buf_num(b, rx); buf_ch(b, ','); buf_num(b, ry);
+        buf_lit(b, " 0 0 1 0,"); buf_num(b, -ACT_H); buf_lit(b, "M"); sq_pt(b, x0 + w - rx, y); buf_ch(b, 'a'); buf_num(b, rx);
+        buf_ch(b, ','); buf_num(b, ry); buf_lit(b, " 0 0 0 0,"); buf_num(b, ACT_H); buf_lit(b, "\"/>");
+    } else rect(b, pa->x - pa->w / 2, y, pa->w, ACT_H, "actor");
     unsigned k = nlines(pa->label);
     text_(b, pa->label, fs, pa->x, y + ACT_H / 2 - (k - 1) * fs * 0.75, "middle", "actor-label");
 }
