@@ -13,7 +13,7 @@ typedef struct SNode { Str name; double in, out, v, x, y, h, yin, yout, key; uin
 typedef struct SLink { uint32_t s, t; double v, y0, y1; } SLink;
 
 static constexpr char CSS[] =
-    "#mermaid .sl{fill:none;stroke-opacity:.5;}#mermaid .sn{stroke:none;}#mermaid .st{font-size:14px;fill:#333;paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-opacity:.8;}";
+    "#mermaid .sl{fill:none;stroke-opacity:.5;}#mermaid .sn{stroke:none;}#mermaid .st{font-size:14px;fill:#333;}";
 static const char *const PAL[] = {"#4e79a7", "#f28e2c", "#e15759", "#76b7b2", "#59a14f", "#edc949",
                                   "#af7aa1", "#ff9da7", "#9c755f", "#bab0ab"};
 
@@ -103,8 +103,8 @@ DIAG_FN(sankey_render) {
     double ky = INFINITY;
     double *colsum = ANEW(a, double, maxc + 1);
     uint32_t *colcnt = ANEW(a, uint32_t, maxc + 1);
-    uint32_t *ord = ANEW(a, uint32_t, nn);
-    if (!colsum || !colcnt || !ord) return CMM_ERR_NOMEM;
+    uint32_t *lord = ANEW(a, uint32_t, nn);
+    if (!colsum || !colcnt || !lord) return CMM_ERR_NOMEM;
     for (size_t i = 0; i < nn; i++) colsum[N[i].col] += N[i].v, colcnt[N[i].col]++;
     for (uint32_t c = 0; c <= maxc; c++)
         if (colsum[c] > 0) ky = fmin(ky, (H - (colcnt[c] - 1.0) * PAD) / colsum[c]);
@@ -118,17 +118,17 @@ DIAG_FN(sankey_render) {
     for (int sweep = 0; sweep < 6; sweep++) {
         for (uint32_t c = 0; c <= maxc; c++) {
             size_t k = 0;
-            for (size_t i = 0; i < nn; i++) if (N[i].col == c) ord[k++] = (uint32_t)i;
+            for (size_t i = 0; i < nn; i++) if (N[i].col == c) lord[k++] = (uint32_t)i;
             for (size_t i = 1; i < k; i++) { /* insertion sort by key */
-                uint32_t t = ord[i];
+                uint32_t t = lord[i];
                 size_t j = i;
-                while (j && N[ord[j - 1]].key > N[t].key) ord[j] = ord[j - 1], j--;
-                ord[j] = t;
+                while (j && N[lord[j - 1]].key > N[t].key) lord[j] = lord[j - 1], j--;
+                lord[j] = t;
             }
             double y = 0, tot = 0;
-            for (size_t i = 0; i < k; i++) tot += N[ord[i]].h;
+            for (size_t i = 0; i < k; i++) tot += N[lord[i]].h;
             y = (H - tot - (k - 1.0) * PAD) / 2;
-            for (size_t i = 0; i < k; i++) N[ord[i]].y = y, y += N[ord[i]].h + PAD;
+            for (size_t i = 0; i < k; i++) N[lord[i]].y = y, y += N[lord[i]].h + PAD;
         }
         for (size_t i = 0; i < nn; i++) { /* new key: barycentre of linked node centres */
             double sw = 0, sy = 0;
@@ -163,12 +163,12 @@ DIAG_FN(sankey_render) {
     double lw = 0, rw = 0;
     char nb[48];
     for (size_t i = 0; i < nn; i++) {
-        snprintf(nb, sizeof nb, " %g", N[i].v);
+        snprintf(nb, sizeof nb, " %g", round(N[i].v * 100) / 100);
         double w = text_width(N[i].name, 14) + text_width((Str){.p = nb, .n = strlen(nb)}, 14) + 8;
         if (N[i].x < W / 2) rw = fmax(rw, N[i].x + NW + w - W); else lw = fmax(lw, w - N[i].x);
     }
     double top = title.n ? 40 : 0;
-    BBox bb = {-fmax(lw, 0), -top - 5, W + fmax(rw, 0), H + 5};
+    BBox bb = {-fmax(lw, 0), -top - 5 - 2 * nn, W + fmax(rw, 0), H + 5 + 2 * nn};
     if (!buf_reserve(out, 1024 + nl * 300 + nn * 300)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 6, "sankey", CSS);
     for (size_t i = 0; i < nl; i++) {
@@ -180,11 +180,43 @@ DIAG_FN(sankey_render) {
         dg_pt(out, x0, l->y0); buf_ch(out, 'C'); dg_pt(out, xm, l->y0); buf_ch(out, ' '); dg_pt(out, xm, l->y1);
         buf_ch(out, ' '); dg_pt(out, x1, l->y1); buf_lit(out, "\"/>");
     }
+    /* label collision avoidance: boxes overlapping horizontally are pushed apart vertically */
+    double *lx0 = ANEW(a, double, nn), *lx1 = ANEW(a, double, nn), *ly = ANEW(a, double, nn);
+    uint32_t *lbo = ANEW(a, uint32_t, nn);
+    if (!lx0 || !lx1 || !ly || !lbo) return CMM_ERR_NOMEM;
+    constexpr double LH = 17;
+    for (size_t i = 0; i < nn; i++) {
+        bool right = N[i].x < W / 2;
+        snprintf(nb, sizeof nb, " %g", round(N[i].v * 100) / 100);
+        double w = text_width(N[i].name, 14) + text_width((Str){.p = nb, .n = strlen(nb)}, 14);
+        lx0[i] = right ? N[i].x + NW + 6 : N[i].x - 6 - w;
+        lx1[i] = lx0[i] + w, ly[i] = N[i].y + N[i].h / 2, lbo[i] = (uint32_t)i;
+    }
+    for (size_t i = 1; i < nn; i++) {
+        uint32_t t = lbo[i];
+        size_t j = i;
+        while (j && ly[lbo[j - 1]] > ly[t]) lbo[j] = lbo[j - 1], j--;
+        lbo[j] = t;
+    }
+    for (int it = 0; it < 8; it++) {
+        bool moved = false;
+        for (size_t p = 0; p < nn; p++)
+            for (size_t q = p + 1; q < nn; q++) {
+                uint32_t u = lbo[p], v = lbo[q];
+                if (lx1[u] <= lx0[v] || lx1[v] <= lx0[u]) continue;
+                double d = ly[v] - ly[u];
+                if (fabs(d) >= LH) continue;
+                double push = (LH - fabs(d)) / 2 + 0.01;
+                if (d >= 0) ly[u] -= push, ly[v] += push; else ly[u] += push, ly[v] -= push;
+                moved = true;
+            }
+        if (!moved) break;
+    }
     for (size_t i = 0; i < nn; i++) {
         dg_rect_fill(out, N[i].x, N[i].y, NW, N[i].h, 0, "sn", PAL[i % countof(PAL)]);
-        bool right = N[i].x < W / 2;
-        int k = snprintf(nb, sizeof nb, " %g", N[i].v);
-        dg_text_open(out, right ? N[i].x + NW + 6 : N[i].x - 6, N[i].y + N[i].h / 2, right ? "start" : "end", "st");
+        int k = snprintf(nb, sizeof nb, " %g", round(N[i].v * 100) / 100);
+        if (N[i].x < W / 2) dg_text_open(out, lx0[i], ly[i], "start", "st");
+        else dg_text_open(out, lx1[i], ly[i], "end", "st");
         buf_xml(out, N[i].name);
         buf_xml(out, (Str){.p = nb, .n = (size_t)k});
         buf_lit(out, "</text>");
