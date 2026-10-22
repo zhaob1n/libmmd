@@ -318,19 +318,23 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint3
 }
 
 /* ---------- transpose: adjacent swaps that strictly reduce crossings ---------- */
-static uint64_t pair_cost(const Lay *L, int32_t u, int32_t v) {
-    uint64_t c = 0;
+
+/* returns crossings removed; *budget bounds the pair-cost work (early stop on huge graphs) */
+/* both orders at once: *cuv = crossings with u left of v, *cvu = with v left of u */
+static void pair_cost2(const Lay *L, int32_t u, int32_t v, uint64_t *cuv, uint64_t *cvu) {
+    uint64_t a = 0, b = 0;
     for (unsigned side = 0; side < 2; side++) {
         const uint32_t *off = side ? L->soff : L->poff, *adj = side ? L->sidx : L->pidx;
         for (uint32_t i = off[u]; i < off[u + 1]; i++) {
             int32_t pa = L->pos[adj[i]];
-            for (uint32_t j = off[v]; j < off[v + 1]; j++) c += pa > L->pos[adj[j]];
+            for (uint32_t j = off[v]; j < off[v + 1]; j++) {
+                int32_t pb = L->pos[adj[j]];
+                a += pa > pb, b += pb > pa;
+            }
         }
     }
-    return c;
+    *cuv = a, *cvu = b;
 }
-
-/* returns crossings removed; *budget bounds the pair-cost work (early stop on huge graphs) */
 static uint64_t transpose(Lay *L, int64_t *budget, uint8_t dirty[static L->R + 2]) {
     /* dirty[r+1]: layer r changed in the last pass (dirty[0], dirty[R+1] are sentinels) */
     uint64_t gain = 0;
@@ -349,7 +353,8 @@ static uint64_t transpose(Lay *L, int64_t *budget, uint8_t dirty[static L->R + 2
                 if (!du || !dv) continue; /* isolated in both directions: swap never matters */
                 *budget -= (int64_t)du * dv + 1;
                 if (*budget < 0) return gain;
-                uint64_t cuv = pair_cost(L, u, v), cvu = pair_cost(L, v, u);
+                uint64_t cuv, cvu;
+                pair_cost2(L, u, v, &cuv, &cvu);
                 if (cvu < cuv) {
                     L->lay[i] = v, L->lay[i + 1] = u;
                     L->pos[v]--, L->pos[u]++;
