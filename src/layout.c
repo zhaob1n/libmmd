@@ -88,6 +88,9 @@ typedef struct Lay {
     double *lsum, *lval; /* per-cluster scratch for compound ordering (S+1) */
     uint32_t *lcnt;
     int32_t *plist;
+    size_t S;
+    struct BcItem *items;
+    uint32_t *bstart, *bcur, *bstk;
     double nodesep;
     double cpad;
 } Lay;
@@ -98,37 +101,6 @@ typedef struct Key {
     int32_t id[MAX_KEY_DEPTH];
     uint32_t len;
 } Key;
-
-static inline int key_cmp(const Key *a, const Key *b) {
-    uint32_t n = a->len < b->len ? a->len : b->len;
-    for (uint32_t i = 0; i < n; i++) {
-        if (a->bc[i] < b->bc[i]) return -1;
-        if (a->bc[i] > b->bc[i]) return 1;
-        if (a->id[i] != b->id[i]) return a->id[i] < b->id[i] ? -1 : 1;
-    }
-    return (int)a->len - (int)b->len;
-}
-
-/* stable merge sort of idx[0..n) by keys[idx] */
-static void msort(size_t n, uint32_t idx[static n], uint32_t tmp[static n], const Key keys[]) {
-    for (size_t i = 1; i < n && n <= 16; i++) { /* insertion for tiny */
-        uint32_t t = idx[i];
-        size_t j = i;
-        while (j && key_cmp(&keys[idx[j - 1]], &keys[t]) > 0) { idx[j] = idx[j - 1]; j--; }
-        idx[j] = t;
-    }
-    if (n <= 16) return;
-    for (size_t wdt = 1; wdt < n; wdt *= 2) {
-        for (size_t lo = 0; lo < n; lo += 2 * wdt) {
-            size_t mid = lo + wdt < n ? lo + wdt : n, hi = lo + 2 * wdt < n ? lo + 2 * wdt : n;
-            size_t a = lo, b = mid, k = lo;
-            while (a < mid && b < hi) tmp[k++] = key_cmp(&keys[idx[b]], &keys[idx[a]]) < 0 ? idx[b++] : idx[a++];
-            while (a < mid) tmp[k++] = idx[a++];
-            while (b < hi) tmp[k++] = idx[b++];
-        }
-        memcpy(idx, tmp, n * sizeof *idx);
-    }
-}
 
 static void sort_u32_small(size_t n, uint32_t a[static n]) {
     for (size_t i = 1; i < n; i++) {
@@ -291,32 +263,38 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint3
         g0 = g1;
     }
     for (size_t i = 0; i < np; i++) { int32_t c = L->plist[i]; L->lsum[c] = 0, L->lcnt[c] = 0; }
+    /* hierarchical sort: bucket items (nodes + present clusters) by parent, sort buckets, emit depth-first */
+    size_t S = L->S, m = n + np;
+    BcItem *it = L->items, *tb = L->items + m;
+    uint32_t *bs = L->bstart; /* bucket starts, S+2 entries; bucket S = root */
+    memset(bs, 0, (S + 2) * sizeof *bs);
+    for (size_t i = 0; i < n; i++) { int32_t c = L->cl[L->lay[a + i]]; bs[(c == NONE ? S : (size_t)c) + 1]++; }
+    for (size_t i = 0; i < np; i++) { int32_t c = L->g->sparent[L->plist[i]]; bs[(c == NONE ? S : (size_t)c) + 1]++; }
+    for (size_t c = 0; c <= S; c++) bs[c + 1] += bs[c];
+    uint32_t *cur = L->bcur;
+    memcpy(cur, bs, (S + 1) * sizeof *cur);
     for (size_t i = 0; i < n; i++) {
-        int32_t v = L->lay[a + i];
-        Key *k = &keys[i];
-        uint32_t d = 0;
-        if (clusters) {
-            int32_t chain[64];
-            uint32_t cn = 0;
-            for (int32_t c = L->cl[v]; c != NONE && cn < countof(chain); c = L->g->sparent[c]) chain[cn++] = c;
-            while (cn && d < MAX_KEY_DEPTH - 1) {
-                int32_t c = chain[--cn];
-                k->bc[d] = L->lval[c];
-                k->id[d] = -(c + 1);
-                d++;
-            }
-        }
-        k->bc[d] = L->bc[v];
-        k->id[d] = v;
-        k->len = d + 1;
-        idx[i] = (uint32_t)i;
+        int32_t v = L->lay[a + i], c = L->cl[v];
+        it[cur[c == NONE ? S : (size_t)c]++] = (BcItem){.bc = L->bc[v], .id = v};
     }
-    msort(n, idx, tmp, keys);
-    for (size_t i = 0; i < n; i++) tmp[i] = (uint32_t)L->lay[a + idx[i]];
-    for (size_t i = 0; i < n; i++) {
-        L->lay[a + i] = (int32_t)tmp[i];
-        L->pos[tmp[i]] = (int32_t)i;
+    for (size_t i = 0; i < np; i++) {
+        int32_t c0 = L->plist[i], c = L->g->sparent[c0];
+        it[cur[c == NONE ? S : (size_t)c]++] = (BcItem){.bc = L->lval[c0], .id = -(c0 + 1)};
     }
+    for (size_t c = 0; c <= S; c++) if (bs[c + 1] - bs[c] > 1) bc_sort(bs[c + 1] - bs[c], it + bs[c], tb);
+    /* iterative DFS from the root bucket */
+    uint32_t *stk = L->bstk;
+    size_t sp = 0, o = 0;
+    cur[S] = bs[S];
+    stk[sp++] = (uint32_t)S;
+    while (sp) {
+        uint32_t c = stk[sp - 1];
+        if (cur[c] == bs[c + 1]) { sp--; continue; }
+        BcItem x = it[cur[c]++];
+        if (x.id >= 0) { L->lay[a + o] = x.id; L->pos[x.id] = (int32_t)o; o++; }
+        else { uint32_t cc = (uint32_t)(-x.id - 1); cur[cc] = bs[cc]; stk[sp++] = cc; }
+    }
+    (void)keys; (void)idx; (void)tmp;
 }
 
 /* ---------- transpose: adjacent swaps that strictly reduce crossings ---------- */
@@ -1005,7 +983,10 @@ static cmm_status layout_core(Graph *g) {
     if (!keys || !idx || !tmp || !cbuf || !fen || !csum || !ccnt || !best) return CMM_ERR_NOMEM;
     L.lsum = ANEW(A, double, S + 1), L.lval = ANEW(A, double, S + 1);
     L.lcnt = ANEW(A, uint32_t, S + 1), L.plist = ANEW(A, int32_t, S + 1);
-    if (!L.lsum || !L.lval || !L.lcnt || !L.plist) return CMM_ERR_NOMEM;
+    L.S = S;
+    L.items = ANEW(A, BcItem, 2 * (maxw + S + 1));
+    L.bstart = ANEW(A, uint32_t, S + 2), L.bcur = ANEW(A, uint32_t, S + 2), L.bstk = ANEW(A, uint32_t, S + 2);
+    if (!L.lsum || !L.lval || !L.lcnt || !L.plist || !L.items || !L.bstart || !L.bcur || !L.bstk) return CMM_ERR_NOMEM;
     memset(L.lsum, 0, (S + 1) * sizeof *L.lsum);
     memset(L.lcnt, 0, (S + 1) * sizeof *L.lcnt);
     memset(csum, 0, (S + 1) * sizeof *csum);
