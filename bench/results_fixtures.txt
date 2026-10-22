@@ -23,3 +23,11 @@ flowchart_parallel_label_stack.mmd                 0.01       0.66      180.56  
 flowchart_parallel_merges.mmd                      0.02       0.67      135.25      139.13  207.8x
 flowchart_path_occlusion_maze.mmd                  0.05       0.93     1274.86     1277.10 1377.4x
 flowchart_port_alignment_matrix.mmd                0.02       0.89      421.55      394.42  444.8x
+flowchart_ports_heavy.mmd                          0.04       0.84     1631.49     1367.24 1636.1x
+flowchart_selfloop_bidi.mmd                        0.02       3.94      468.95      487.46  123.8x
+flowchart_small.mmd                                0.01       0.68       32.26       32.39   47.7x
+flowchart_sparse_components.mmd                    0.02       0.80      131.42      134.14  167.5x
+flowchart_subgraph_boundary_intrusion.mmd          0.02       0.73      744.79      770.69 1056.5x
+flowchart_tiny.mmd                                 0.00       0.86        1.92        3.48    4.1x
+flowchart_weave.mmd                                0.02       0.74      891.52      900.52 1214.6x
+small.mmd                                          0.01       0.68      134.40      136.36  200.3x

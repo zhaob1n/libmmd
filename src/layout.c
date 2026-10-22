@@ -59,7 +59,7 @@ typedef struct Lay {
     size_t N, V, R;
     int32_t *rank, *cl, *pos, *lay;
     uint32_t *loff;
-    uint8_t *dummy;
+    uint8_t *dummy, *border;
     double *w, *h, *x, *bc;
     uint32_t *poff, *pidx, *soff, *sidx;
     int32_t *sdepth;
@@ -165,7 +165,7 @@ static void bc_sort(size_t n, BcItem a[static n], BcItem tmp[static n]) {
 }
 
 /* ---------- one barycenter sweep over layer r ---------- */
-static void sweep_layer(Lay *L, size_t r, bool down, Key *keys, uint32_t *idx, uint32_t *tmp,
+static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint32_t *idx, uint32_t *tmp,
                         double *csum, uint32_t *ccnt, bool clusters) {
     size_t a = L->loff[r], b = L->loff[r + 1], n = b - a;
     if (n < 2) return;
@@ -174,13 +174,14 @@ static void sweep_layer(Lay *L, size_t r, bool down, Key *keys, uint32_t *idx, u
         int32_t v = L->lay[a + i];
         uint32_t k0 = off[v], k1 = off[v + 1];
         double bcv;
-        if (k1 > k0) {
+        if (k1 > k0 && !self) {
             double s = 0;
             for (uint32_t k = k0; k < k1; k++) s += L->pos[adj[k]];
             bcv = s / (k1 - k0);
         } else {
             bcv = (double)i * 1.0; /* no neighbours: keep current slot */
         }
+        if (L->border[v]) bcv = L->border[v] == 1 ? -1e18 : 1e18;
         L->bc[v] = bcv;
     }
     if (!clusters) {
@@ -201,6 +202,7 @@ static void sweep_layer(Lay *L, size_t r, bool down, Key *keys, uint32_t *idx, u
         Graph *g = L->g;
         for (size_t i = 0; i < n; i++) {
             int32_t v = L->lay[a + i];
+            if (L->border[v]) continue;
             for (int32_t c = L->cl[v]; c != NONE; c = g->sparent[c]) { csum[c] += L->bc[v]; ccnt[c]++; }
         }
     }
@@ -214,7 +216,7 @@ static void sweep_layer(Lay *L, size_t r, bool down, Key *keys, uint32_t *idx, u
             for (int32_t c = L->cl[v]; c != NONE && cn < countof(chain); c = L->g->sparent[c]) chain[cn++] = c;
             while (cn && d < MAX_KEY_DEPTH - 1) {
                 int32_t c = chain[--cn];
-                k->bc[d] = csum[c] / ccnt[c];
+                k->bc[d] = ccnt[c] ? csum[c] / ccnt[c] : 0;
                 k->id[d] = -(c + 1);
                 d++;
             }
@@ -627,7 +629,24 @@ cmm_status flow_layout(Graph *g) {
         if (EVALID(e)) D += (size_t)(rank[EV(e)] - rank[EU(e)] - 1);
     }
     choff[E] = (uint32_t)D;
-    size_t V = N + D;
+    /* cluster rank spans (over real members) and border-node budget */
+    int32_t *cmin = ANEW(A, int32_t, S + 1), *cmax = ANEW(A, int32_t, S + 1);
+    uint32_t *bbase = ANEW(A, uint32_t, S + 1);
+    if (!cmin || !cmax || !bbase) return CMM_ERR_NOMEM;
+    for (size_t s = 0; s < S; s++) cmin[s] = INT32_MAX, cmax[s] = -1;
+    for (size_t v = 0; v < N; v++) {
+        if (g->nflags[v] & NF_HIDDEN) continue;
+        for (int32_t c = g->nparent[v]; c != NONE; c = g->sparent[c]) {
+            if (rank[v] < cmin[c]) cmin[c] = rank[v];
+            if (rank[v] > cmax[c]) cmax[c] = rank[v];
+        }
+    }
+    size_t B = 0;
+    for (size_t s = 0; s < S; s++) {
+        bbase[s] = (uint32_t)(N + D + B);
+        if (cmax[s] >= cmin[s]) B += 2 * (size_t)(cmax[s] - cmin[s] + 1);
+    }
+    size_t V = N + D + B;
     Lay L = {.g = g, .A = A, .N = N, .V = V, .R = (size_t)maxr + 1, .sdepth = sdepth,
              .nodesep = g->node_sep, .cpad = horiz ? CLUSTER_PAD + CLUSTER_TITLE / 2 : CLUSTER_PAD};
     L.rank = ANEW(A, int32_t, V); L.cl = ANEW(A, int32_t, V); L.pos = ANEW(A, int32_t, V);
@@ -663,6 +682,22 @@ cmm_status flow_layout(Graph *g) {
         }
         nseg += (size_t)span;
     }
+    L.border = ANEW(A, uint8_t, V + 1);
+    if (!L.border) return CMM_ERR_NOMEM;
+    memset(L.border, 0, V + 1);
+    for (size_t c = 0; c < S; c++) {
+        if (cmax[c] < cmin[c]) continue;
+        for (int32_t r = cmin[c]; r <= cmax[c]; r++)
+            for (unsigned side = 0; side < 2; side++) {
+                size_t d = bbase[c] + 2 * (size_t)(r - cmin[c]) + side;
+                L.rank[d] = r;
+                L.cl[d] = (int32_t)c;
+                L.dummy[d] = 1;
+                L.border[d] = (uint8_t)(1 + side);
+                L.w[d] = L.h[d] = 0;
+            }
+        nseg += 2 * (size_t)(cmax[c] - cmin[c]);
+    }
     L.pidx = ANEW(A, uint32_t, nseg + 1);
     L.sidx = ANEW(A, uint32_t, nseg + 1);
     uint32_t *pfill = ANEW(A, uint32_t, V + 1), *sfill = ANEW(A, uint32_t, V + 1);
@@ -678,6 +713,13 @@ cmm_status flow_layout(Graph *g) {
             L.poff[CHAIN(e, k + 1, span) + 1]++;
         }
     }
+    for (size_t c = 0; c < S; c++)
+        for (int32_t r = cmin[c]; r < cmax[c]; r++)
+            for (unsigned side = 0; side < 2; side++) {
+                size_t d = bbase[c] + 2 * (size_t)(r - cmin[c]) + side;
+                L.soff[d + 1]++;
+                L.poff[d + 2 + 1]++;
+            }
     for (size_t v = 0; v < V; v++) { L.poff[v + 1] += L.poff[v]; L.soff[v + 1] += L.soff[v]; }
     for (size_t v = 0; v < V; v++) { pfill[v] = L.poff[v]; sfill[v] = L.soff[v]; }
     for (size_t e = 0; e < E; e++) {
@@ -689,6 +731,13 @@ cmm_status flow_layout(Graph *g) {
             L.pidx[pfill[b]++] = (uint32_t)a;
         }
     }
+    for (size_t c = 0; c < S; c++)
+        for (int32_t r = cmin[c]; r < cmax[c]; r++)
+            for (unsigned side = 0; side < 2; side++) {
+                size_t d = bbase[c] + 2 * (size_t)(r - cmin[c]) + side;
+                L.sidx[sfill[d]++] = (uint32_t)(d + 2);
+                L.pidx[pfill[d + 2]++] = (uint32_t)d;
+            }
 
     PROF("normalize");
     /* ---- initial order: DFS by rank ---- */
@@ -742,13 +791,15 @@ cmm_status flow_layout(Graph *g) {
     memset(csum, 0, (S + 1) * sizeof *csum);
     memset(ccnt, 0, (S + 1) * sizeof *ccnt);
     bool clusters = S > 0;
+    if (clusters) /* establish cluster contiguity (borders at extremes) before any scoring */
+        for (size_t r = 0; r < R; r++) sweep_layer(&L, r, false, true, keys, idx, tmp, csum, ccnt, clusters);
     uint64_t bestc = cross_all(&L, cbuf, fen);
     memcpy(best, L.lay, placed * sizeof *best);
     unsigned since = 0;
     for (unsigned iter = 0; iter < 24 && since < 4 && bestc > 0; iter++) {
         bool down = (iter & 1u) == 0;
-        if (down) for (size_t r = 1; r < R; r++) sweep_layer(&L, r, true, keys, idx, tmp, csum, ccnt, clusters);
-        else for (size_t r = R - 1; r-- > 0;) sweep_layer(&L, r, false, keys, idx, tmp, csum, ccnt, clusters);
+        if (down) for (size_t r = 1; r < R; r++) sweep_layer(&L, r, true, false, keys, idx, tmp, csum, ccnt, clusters);
+        else for (size_t r = R - 1; r-- > 0;) sweep_layer(&L, r, false, false, keys, idx, tmp, csum, ccnt, clusters);
         uint64_t c = cross_all(&L, cbuf, fen);
         if (c < bestc) { bestc = c; memcpy(best, L.lay, placed * sizeof *best); since = 0; }
         else since++;
@@ -765,16 +816,7 @@ cmm_status flow_layout(Graph *g) {
     /* ---- rank axis ---- */
     double *ry = ANEW(A, double, R + 1), *rh = ANEW(A, double, R + 1);
     double *gtop = ANEW(A, double, R + 1), *gbot = ANEW(A, double, R + 1);
-    int32_t *cmin = ANEW(A, int32_t, S + 1), *cmax = ANEW(A, int32_t, S + 1);
-    if (!ry || !rh || !gtop || !gbot || !cmin || !cmax) return CMM_ERR_NOMEM;
-    for (size_t s = 0; s < S; s++) cmin[s] = INT32_MAX, cmax[s] = -1;
-    for (size_t v = 0; v < N; v++) {
-        if (L.rank[v] < 0) continue;
-        for (int32_t c = g->nparent[v]; c != NONE; c = g->sparent[c]) {
-            if (L.rank[v] < cmin[c]) cmin[c] = L.rank[v];
-            if (L.rank[v] > cmax[c]) cmax[c] = L.rank[v];
-        }
-    }
+    if (!ry || !rh || !gtop || !gbot) return CMM_ERR_NOMEM;
     for (size_t r = 0; r <= R; r++) rh[r] = 0, gtop[r] = 0, gbot[r] = 0;
     for (size_t v = 0; v < V; v++) {
         if (L.rank[v] < 0) continue;
