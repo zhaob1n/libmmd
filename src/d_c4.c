@@ -102,44 +102,81 @@ typedef struct Lay {
     const Item *items;
     size_t nitems;
     unsigned shape_row, box_row;
-    double gapx; /* widened so relation labels fit between neighbours */
+    double maxx, maxy; /* globalBoundaryMax */
     double *nx, *ny, *sx, *sy, *sw, *sh;
 } Lay;
 
-constexpr double C4_MARGIN = 50;
-constexpr double C4_BPAD = 20;
-constexpr double C4_GAPX = 90;
-constexpr double C4_GAPY = 70;
+/* mermaid c4Renderer port: Bounds.insert / drawInsideBoundary (positions only) */
+constexpr double C4_SHAPE_MARGIN = 50;  /* conf.c4ShapeMargin */
+constexpr double C4_DMX = 50;           /* conf.diagramMarginX */
+constexpr double C4_DMY = 10;           /* conf.diagramMarginY */
+constexpr double C4_SCREEN_W = 800;     /* screen.availWidth under mermaid-cli's headless browser */
+constexpr double C4_LBL_H = 22;         /* boundary label line (16px bold) */
+constexpr double C4_TYPE_H = 19;        /* boundary [type] line (14px) */
 
-/* lay out the contents of container `parent` (NONE = root) with top-left (x, y); returns content size */
-static void lay(Lay *L, int32_t parent, double x, double y, double *ow, double *oh, unsigned depth) {
-    double cy = y, maxw = 0, rowx = x, rowh = 0;
-    unsigned col = 0;
+typedef struct Bnd {
+    double x0, x1, y0, y1;     /* data */
+    double nx0, nx1, ny0, ny1; /* nextData */
+    double lim;
+    unsigned cnt;
+} Bnd;
+
+static void bnd_set(Bnd *b, double x, double y) { b->x0 = b->x1 = b->nx0 = b->nx1 = x, b->y0 = b->y1 = b->ny0 = b->ny1 = y; }
+
+static void bnd_insert(Bnd *b, unsigned shape_row, double w, double h, double *ox, double *oy) {
+    constexpr double m = C4_SHAPE_MARGIN;
+    b->cnt++;
+    double sx = b->nx0 == b->nx1 ? b->nx1 + m : b->nx1 + 2 * m, ex = sx + w, sy = b->ny0 + 2 * m, ey = sy + h;
+    if (sx >= b->lim || ex >= b->lim || b->cnt > shape_row) {
+        sx = b->nx0 + m;
+        sy = b->ny1 + 2 * m;
+        b->nx1 = ex = sx + w;
+        b->ny0 = b->ny1;
+        b->ny1 = ey = sy + h;
+        b->cnt = 1;
+    }
+    *ox = sx, *oy = sy;
+    b->x0 = fmin(b->x0, sx), b->y0 = fmin(b->y0, sy), b->x1 = fmax(b->x1, ex), b->y1 = fmax(b->y1, ey);
+    b->nx0 = fmin(b->nx0, sx), b->ny0 = fmin(b->ny0, sy), b->nx1 = fmax(b->nx1, ex), b->ny1 = fmax(b->ny1, ey);
+}
+
+constexpr int32_t C4_GLOBAL = -2; /* mermaid's implicit "global" boundary (not drawn) */
+
+/* drawInsideBoundary(parentBounds, boundaries whose parent is `parent`) */
+static void lay(Lay *L, Bnd *P, int32_t parent, unsigned depth) {
     const Graph *g = L->g;
-    for (size_t i = 0; i < L->nitems; i++) {
-        Item it = L->items[i];
-        if (it.box || g->nparent[it.idx] != parent) continue;
-        if (col == L->shape_row) cy += rowh + C4_GAPY, rowx = x, rowh = 0, col = 0;
-        L->nx[it.idx] = rowx + g->nw[it.idx] / 2, L->ny[it.idx] = cy + g->nh[it.idx] / 2;
-        rowx += g->nw[it.idx] + L->gapx, rowh = fmax(rowh, g->nh[it.idx]), maxw = fmax(maxw, rowx - L->gapx - x);
-        col++;
+    size_t nb = 0;
+    if (parent == C4_GLOBAL) nb = 1;
+    else for (size_t i = 0; i < L->nitems; i++) nb += L->items[i].box && g->sparent[L->items[i].idx] == parent;
+    if (!nb) return;
+    Bnd cur = {.lim = P->lim / (double)(L->box_row < nb ? L->box_row : nb)};
+    size_t bi = 0;
+    for (size_t k = 0; k < (parent == C4_GLOBAL ? 1 : L->nitems); k++) {
+        int32_t s;
+        if (parent == C4_GLOBAL) s = NONE;
+        else if (!L->items[k].box || g->sparent[L->items[k].idx] != parent) continue;
+        else s = L->items[k].idx;
+        bool typed = s == NONE || memchr(g->stitle[s].p, '\n', g->stitle[s].n);
+        double Y = 8 + C4_LBL_H + (typed ? 5 + C4_TYPE_H : 0);
+        if (bi == 0 || bi % L->box_row == 0) bnd_set(&cur, P->x0 + C4_DMX, P->y1 + C4_DMY + Y);
+        else bnd_set(&cur, cur.x1 != cur.x0 ? cur.x1 + C4_DMX : cur.x0, cur.y0);
+        bi++;
+        bool any = false;
+        for (size_t i = 0; i < L->nitems; i++) {
+            Item it = L->items[i];
+            if (it.box || g->nparent[it.idx] != s) continue;
+            double x, y;
+            bnd_insert(&cur, L->shape_row, g->nw[it.idx], g->nh[it.idx], &x, &y);
+            L->nx[it.idx] = x + g->nw[it.idx] / 2, L->ny[it.idx] = y + g->nh[it.idx] / 2;
+            any = true;
+        }
+        if (any) cur.x1 += C4_SHAPE_MARGIN, cur.y1 += C4_SHAPE_MARGIN; /* bumpLastMargin */
+        if (depth < 64) lay(L, &cur, s, depth + 1);
+        if (s != NONE) L->sx[s] = cur.x0, L->sy[s] = cur.y0, L->sw[s] = cur.x1 - cur.x0, L->sh[s] = cur.y1 - cur.y0;
+        P->y1 = fmax(cur.y1 + C4_SHAPE_MARGIN, P->y1);
+        P->x1 = fmax(cur.x1 + C4_SHAPE_MARGIN, P->x1);
+        L->maxx = fmax(L->maxx, P->x1), L->maxy = fmax(L->maxy, P->y1);
     }
-    if (col) cy += rowh + C4_GAPY;
-    rowx = x, rowh = 0, col = 0;
-    for (size_t i = 0; i < L->nitems; i++) {
-        Item it = L->items[i];
-        if (!it.box || g->sparent[it.idx] != parent) continue;
-        if (col == L->box_row) cy += rowh + C4_MARGIN / 2, rowx = x, rowh = 0, col = 0;
-        int32_t s = it.idx;
-        double th = memchr(g->stitle[s].p, '\n', g->stitle[s].n) ? 46 : 30, w = 0, h = 0;
-        if (depth < 64) lay(L, s, rowx + C4_BPAD, cy + th + C4_BPAD, &w, &h, depth + 1);
-        L->sx[s] = rowx, L->sy[s] = cy;
-        L->sw[s] = fmax(w + 2 * C4_BPAD, text_width(g->stitle[s], 14) + 30), L->sh[s] = h + th + 2 * C4_BPAD;
-        rowx += L->sw[s] + C4_MARGIN / 2, rowh = fmax(rowh, L->sh[s]), maxw = fmax(maxw, rowx - C4_MARGIN / 2 - x);
-        col++;
-    }
-    if (col) cy += rowh + C4_MARGIN;
-    *ow = maxw, *oh = fmax(0, cy - y - C4_MARGIN);
 }
 
 static bool is(Str s, const char *lit) { return s.n == strlen(lit) && !memcmp(s.p, lit, s.n); }
@@ -333,18 +370,13 @@ DIAG_FN(c4_render) {
     g.sx = ANEW(a, double, g.ns + 1), g.sy = ANEW(a, double, g.ns + 1), g.sw = ANEW(a, double, g.ns + 1), g.sh = ANEW(a, double, g.ns + 1);
     g.elx = ANEW(a, double, g.ne + 1), g.ely = ANEW(a, double, g.ne + 1);
     if (!g.nx || !g.ny || !g.sx || !g.sy || !g.sw || !g.sh || !g.elx || !g.ely) return CMM_ERR_NOMEM;
-    double gapx = C4_GAPX;
-    for (size_t e = 0; e < g.ne; e++) {
-        double lw;
-        unsigned ln;
-        label_measure(g.elabel[e], 13, &lw, &ln);
-        gapx = fmax(gapx, fmin(lw + 30, 260));
-    }
-    Lay L = {.g = &g, .items = items.v, .nitems = items.n, .shape_row = shape_row, .box_row = box_row, .gapx = gapx,
+    Lay L = {.g = &g, .items = items.v, .nitems = items.n, .shape_row = shape_row, .box_row = box_row,
              .nx = g.nx, .ny = g.ny, .sx = g.sx, .sy = g.sy, .sw = g.sw, .sh = g.sh};
-    double tw_ = 0, th_ = 0;
-    lay(&L, NONE, 0, 0, &tw_, &th_, 0);
-    BBox bb = {0, 0, fmax(tw_, 1), fmax(th_, 1)};
+    Bnd screen = {.lim = C4_SCREEN_W};
+    bnd_set(&screen, C4_DMX, C4_DMY);
+    L.maxx = C4_DMX, L.maxy = C4_DMY;
+    lay(&L, &screen, C4_GLOBAL, 0);
+    BBox bb = {0, 0, L.maxx + C4_DMX, L.maxy + C4_DMY};
     if (ttl.n) bb.y0 -= 34, bb.x1 = fmax(bb.x1, text_width(ttl, 18) + 20);
     /* resolve style overrides */
     const EStyle **nst = ANEW(a, const EStyle *, g.nn);
