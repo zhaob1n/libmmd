@@ -1342,8 +1342,136 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
     return CMM_OK;
 }
 
+/* ---------- post passes on the final geometry ---------- */
+/* segment p->q vs box: entry parameter in [0,1] or -1 */
+static double seg_box(double px, double py, double qx, double qy, const Box *b) {
+    double t0 = 0, t1 = 1, d[2] = {qx - px, qy - py}, p0[2] = {px, py}, lo[2] = {b->x0, b->y0}, hi[2] = {b->x1, b->y1};
+    for (unsigned k = 0; k < 2; k++) {
+        if (fabs(d[k]) < 1e-12) { if (p0[k] < lo[k] || p0[k] > hi[k]) return -1; continue; }
+        double ta = (lo[k] - p0[k]) / d[k], tb = (hi[k] - p0[k]) / d[k];
+        if (ta > tb) { double t = ta; ta = tb; tb = t; }
+        if (ta > t0) t0 = ta;
+        if (tb < t1) t1 = tb;
+        if (t0 > t1) return -1;
+    }
+    return t0;
+}
+
+/* optional: detour polyline segments around nodes they pass through (CMM_F_ROUTE_AVOID) */
+[[nodiscard]] static bool route_avoid(Graph *g) {
+    Arena *A = g->arena;
+    size_t N = g->nn, E = g->ne;
+    constexpr double M = 12;
+    size_t segs = 0;
+    for (size_t e = 0; e < E; e++) segs += g->eptn[e];
+    if ((double)segs * (double)N > 4e8) return true; /* too big: skip (bounded cost) */
+    Box *nb = ANEW(A, Box, N + 1);
+    if (!nb) return false;
+    for (size_t v = 0; v < N; v++)
+        nb[v] = (Box){g->nx[v] - g->nw[v] / 2 - M, g->ny[v] - g->nh[v] / 2 - M, g->nx[v] + g->nw[v] / 2 + M, g->ny[v] + g->nh[v] / 2 + M};
+    VEC(double) out = {};
+    VEC(double) cur = {};
+    for (size_t e = 0; e < E; e++) {
+        uint32_t np = g->eptn[e];
+        const double *P = g->pts.v + g->eptoff[e];
+        size_t base = out.n;
+        if (np < 2) { g->eptoff[e] = (uint32_t)base; continue; }
+        cur.n = 0;
+        for (uint32_t i = 0; i < 2 * np; i++) if (!VEC_PUSH(A, &cur, P[i])) return false;
+        int32_t a = g->efrom[e], b = g->eto[e];
+        unsigned inserted = 0;
+        for (size_t i = 0; i + 1 < cur.n / 2 && inserted < 24; i++) {
+            double px = cur.v[2 * i], py = cur.v[2 * i + 1], qx = cur.v[2 * i + 2], qy = cur.v[2 * i + 3];
+            double bt = 2;
+            int32_t hit = NONE;
+            for (size_t v = 0; v < N; v++) {
+                if ((int32_t)v == a || (int32_t)v == b || (g->nflags[v] & NF_HIDDEN) || g->nw[v] <= 0) continue;
+                const Box *bx = &nb[v];
+                if (fmax(px, qx) < bx->x0 || fmin(px, qx) > bx->x1 || fmax(py, qy) < bx->y0 || fmin(py, qy) > bx->y1) continue;
+                double t = seg_box(px, py, qx, qy, bx);
+                if (t >= 0 && t < bt) { bt = t; hit = (int32_t)v; }
+            }
+            if (hit == NONE) continue;
+            const Box *bx = &nb[hit];
+            double c[4];
+            if (fabs(qy - py) >= fabs(qx - px)) { /* mostly vertical: pass left or right */
+                double xm = px + (qx - px) * 0.5, sx = (xm - bx->x0 < bx->x1 - xm) ? bx->x0 : bx->x1;
+                bool down = qy > py;
+                c[0] = sx, c[1] = down ? bx->y0 : bx->y1, c[2] = sx, c[3] = fmin(fmax(qy, bx->y0), bx->y1); /* stop at the far side or the target level */
+            } else {
+                double ym = py + (qy - py) * 0.5, sy = (ym - bx->y0 < bx->y1 - ym) ? bx->y0 : bx->y1;
+                bool right = qx > px;
+                c[0] = right ? bx->x0 : bx->x1, c[1] = sy, c[2] = fmin(fmax(qx, bx->x0), bx->x1), c[3] = sy;
+            }
+            /* insert c after point i */
+            for (unsigned k = 0; k < 4; k++) if (!VEC_PUSH(A, &cur, 0.0)) return false;
+            memmove(cur.v + 2 * i + 6, cur.v + 2 * i + 2, (cur.n - 4 - (2 * i + 2)) * sizeof *cur.v);
+            memcpy(cur.v + 2 * i + 2, c, sizeof c);
+            inserted++;
+        }
+        for (size_t i = 0; i < cur.n; i++) if (!VEC_PUSH(A, &out, cur.v[i])) return false;
+        g->eptoff[e] = (uint32_t)base;
+        g->eptn[e] = (uint32_t)(cur.n / 2);
+    }
+    g->pts.v = out.v, g->pts.n = out.n, g->pts.cap = out.cap;
+    return true;
+}
+
+/* place each cluster title where no edge crosses the title band (prefer centred) */
+[[nodiscard]] static bool place_titles(Graph *g) {
+    size_t S = g->ns, E = g->ne;
+    g->stx = ANEW(g->arena, double, S + 1);
+    if (!g->stx) return false;
+    for (size_t s = 0; s < S; s++) {
+        double mid = g->sx[s] + g->sw[s] / 2;
+        g->stx[s] = mid;
+        if (g->sw[s] <= 0 || !g->stitle[s].n) continue;
+        double tw;
+        unsigned tl;
+        measure(g, &g->stitle[s], &tw, &tl);
+        double half = tw / 2 + 6, lo = g->sx[s] + half, hi = g->sx[s] + g->sw[s] - half;
+        if (hi < lo) continue;
+        double y0 = g->sy[s] + 4, y1 = g->sy[s] + CLUSTER_TITLE + 8;
+        double best = mid, bestd = INFINITY;
+        /* crossing x-intervals; candidates: centred, then just beside each crossing */
+        double cand[64];
+        double iv[2 * 64];
+        size_t ni = 0, nc = 0;
+        cand[nc++] = mid;
+        for (size_t e = 0; e < E && ni < 64; e++) {
+            for (uint32_t i = 0; i + 1 < g->eptn[e] && ni < 64; i++) {
+                const double *P = g->pts.v + g->eptoff[e] + 2 * i;
+                double ya = P[1], yb = P[3];
+                if (fmax(ya, yb) < y0 || fmin(ya, yb) > y1) continue;
+                double xa = P[0], xb = P[2];
+                if (fabs(yb - ya) > 1e-9) { /* restrict to the band */
+                    double ta = (y0 - ya) / (yb - ya), tb = (y1 - ya) / (yb - ya);
+                    ta = fmin(fmax(ta, 0), 1), tb = fmin(fmax(tb, 0), 1);
+                    double x1 = xa + (xb - xa) * ta, x2 = xa + (xb - xa) * tb;
+                    xa = x1, xb = x2;
+                }
+                double l = fmin(xa, xb) - 3, r = fmax(xa, xb) + 3;
+                if (r < g->sx[s] || l > g->sx[s] + g->sw[s]) continue;
+                iv[2 * ni] = l, iv[2 * ni + 1] = r, ni++;
+                if (nc + 2 <= countof(cand)) { cand[nc++] = l - half; cand[nc++] = r + half; }
+            }
+        }
+        if (!ni) continue;
+        for (size_t c = 0; c < nc; c++) {
+            double x = fmin(fmax(cand[c], lo), hi);
+            bool free_ = true;
+            for (size_t i = 0; i < ni && free_; i++) if (x + half > iv[2 * i] && x - half < iv[2 * i + 1]) free_ = false;
+            if (free_ && fabs(x - mid) < bestd) { bestd = fabs(x - mid); best = x; }
+        }
+        g->stx[s] = best;
+    }
+    return true;
+}
+
 cmm_status flow_layout(Graph *g) {
     cmm_status st = layout_rec(g, 0);
     if (st) return st;
+    if ((g->flags & CMM_F_ROUTE_AVOID) && !route_avoid(g)) return CMM_ERR_NOMEM;
+    if (!place_titles(g)) return CMM_ERR_NOMEM;
     return CMM_OK;
 }
