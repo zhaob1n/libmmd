@@ -113,6 +113,8 @@ typedef struct Arena {
 /* grow an array previously allocated from the arena (or nullptr). */
 [[nodiscard]] void *arena_grow(Arena *a, void *old, size_t *cap, size_t elem, size_t align);
 void arena_free(Arena *a);
+/* Drop all allocations but keep (coalesced) memory for reuse. */
+void arena_reset(Arena *a);
 [[nodiscard]] Str arena_strdup(Arena *a, Str s);
 
 #define ANEW(a, T, n) arena_alloc_array((a), (n), sizeof(T), alignof(T))

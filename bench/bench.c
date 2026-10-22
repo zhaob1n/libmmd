@@ -1,5 +1,6 @@
 /* in-process benchmark: bench file.mmd [iters] -> prints min/median us per render */
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -29,7 +30,19 @@ int main(int argc, char **argv) {
     if (!src || !t || fread(src, 1, (size_t)sz, f) != (size_t)sz) { fclose(f); free(src); free(t); return 1; }
     fclose(f);
     size_t outlen = 0;
-    for (int i = 0; i < iters; i++) {
+    bool use_ctx = argc > 3 && strcmp(argv[3], "ctx") == 0;
+    cmm_context *ctx = use_ctx ? cmm_context_new() : nullptr;
+    if (use_ctx && !ctx) { free(src); free(t); return 1; }
+    for (int i = 0; use_ctx && i < iters; i++) {
+        const char *svg;
+        cmm_error e;
+        double t0 = now_us();
+        cmm_status st = cmm_context_render_svg(ctx, (size_t)sz, src, nullptr, &svg, &outlen, &e);
+        t[i] = now_us() - t0;
+        if (st) { fprintf(stderr, "error: %s\n", e.message); cmm_context_free(ctx); free(src); free(t); return 1; }
+    }
+    cmm_context_free(ctx);
+    for (int i = 0; !use_ctx && i < iters; i++) {
         cmm_buffer b;
         cmm_error e;
         double t0 = now_us();

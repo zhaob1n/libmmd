@@ -74,6 +74,25 @@ void arena_free(Arena *a) {
     *a = (Arena){};
 }
 
+void arena_reset(Arena *a) {
+    ArenaBlock *b = a->head;
+    if (!b) return;
+    size_t total = 0;
+    unsigned nb = 0;
+    for (ArenaBlock *c = b; c; c = c->next) total += c->cap, nb++;
+    if (nb > 1) {
+        arena_free(a);
+        ArenaBlock *n = malloc(sizeof(ArenaBlock) + total);
+        if (!n) return; /* fall back to lazy allocation */
+        *n = (ArenaBlock){.cap = total};
+        a->head = n;
+    } else {
+        b->used = 0;
+    }
+    a->last = nullptr;
+    a->last_size = 0;
+}
+
 Str arena_strdup(Arena *a, Str s) {
     char *p = arena_alloc(a, s.n + 1, 1);
     if (!p) return (Str){};
