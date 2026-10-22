@@ -117,12 +117,49 @@ static uint32_t flow(Blk *B, const Blk *g, uint32_t cols, uint32_t *rc, uint32_t
     return g->first == UINT32_MAX ? 0 : r + 1;
 }
 
+/* outline polygon of b (arcs approximated); returns vertex count */
+static size_t outline(const Blk *b, double P[static 80]) {
+    double x = b->x, y = b->y, w = b->w, h = b->h, cx = x + w / 2, cy = y + h / 2;
+    size_t k = 0;
+    #define V(px, py) (P[2 * k] = (px), P[2 * k + 1] = (py), k++)
+    switch (b->shape) {
+    case BS_CIRCLE: {
+        double r = fmin(w, h) / 2;
+        for (int i = 0; i < 32; i++) V(cx + r * cos(i * M_PI / 16), cy + r * sin(i * M_PI / 16));
+        break;
+    }
+    case BS_STADIUM: case BS_ROUND: {
+        double r = b->shape == BS_STADIUM ? fmin(h / 2, w / 2) : fmin(8, fmin(w, h) / 2);
+        double C[4][2] = {{x + w - r, y + r}, {x + w - r, y + h - r}, {x + r, y + h - r}, {x + r, y + r}};
+        for (int c = 0; c < 4; c++)
+            for (int i = 0; i <= 4; i++) {
+                double t = (c * 4 + i - 4) * M_PI / 8; /* quarter arcs: -90..0, 0..90, ... */
+                V(C[c][0] + r * cos(t), C[c][1] + r * sin(t));
+            }
+        break;
+    }
+    case BS_DIAMOND: V(cx, y); V(x + w, cy); V(cx, y + h); V(x, cy); break;
+    case BS_HEX: { double e = fmin(h / 2, w / 4); V(x + e, y); V(x + w - e, y); V(x + w, cy); V(x + w - e, y + h); V(x + e, y + h); V(x, cy); break; }
+    case BS_ASYM: { double e = h / 3; V(x, y); V(x + w, y); V(x + w, y + h); V(x, y + h); V(x + e, cy); break; }
+    case BS_PARA: { double e = h / 3; V(x + e, y); V(x + w, y); V(x + w - e, y + h); V(x, y + h); break; }
+    default: V(x, y); V(x + w, y); V(x + w, y + h); V(x, y + h);
+    }
+    #undef V
+    return k;
+}
+
 static void clip(const Blk *b, double ox, double oy, double *x, double *y) {
-    /* move (x,y)=centre of b towards (ox,oy) until it leaves b's rect */
-    double cx = b->x + b->w / 2, cy = b->y + b->h / 2, dx = ox - cx, dy = oy - cy;
-    double tx = dx != 0 ? (b->w / 2) / fabs(dx) : INFINITY, ty = dy != 0 ? (b->h / 2) / fabs(dy) : INFINITY;
-    double t = fmin(fmin(tx, ty), 1);
-    *x = cx + dx * t, *y = cy + dy * t;
+    /* first crossing of the ray centre->(ox,oy) with b's outline */
+    double P[80], cx = b->x + b->w / 2, cy = b->y + b->h / 2, dx = ox - cx, dy = oy - cy, best = 1;
+    size_t k = outline(b, P);
+    for (size_t i = 0; i < k; i++) {
+        double ax = P[2 * i], ay = P[2 * i + 1], bx = P[2 * ((i + 1) % k)], by = P[2 * ((i + 1) % k) + 1];
+        double ex = bx - ax, ey = by - ay, den = dx * ey - dy * ex;
+        if (fabs(den) < 1e-12) continue;
+        double t = ((ax - cx) * ey - (ay - cy) * ex) / den, u = ((ax - cx) * dy - (ay - cy) * dx) / den;
+        if (t > 0 && t < best && u >= -1e-9 && u <= 1 + 1e-9) best = t;
+    }
+    *x = cx + dx * best, *y = cy + dy * best;
 }
 
 DIAG_FN(block_render) {
