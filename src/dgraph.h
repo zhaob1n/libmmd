@@ -51,3 +51,12 @@ unsigned dg_indent(const LineIt *it, size_t off);
 Str dg_word(Str *s);
 bool dg_parse_num(Str s, double *out);
 #endif
+
+/* opening <text> tag (caller writes the content and "</text>") */
+void dg_text_open(Buf *b, double x, double cy, const char *anchor, const char *cls);
+/* rect with explicit fill (nullptr = class only) */
+void dg_rect_fill(Buf *b, double x, double y, double w, double h, double rx, const char *cls, const char *fill);
+/* palette of mermaid default theme accents, cycling */
+[[nodiscard]] const char *dg_palette(size_t i);
+/* normalise (<br>, quotes) then greedily word-wrap to maxw; nullptr-safe: returns {} on OOM */
+[[nodiscard]] Str dg_wrap(Arena *a, Str raw, double fs, double maxw);

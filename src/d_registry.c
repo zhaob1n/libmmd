@@ -16,6 +16,8 @@ static const DiagEnt DIAGS[] = {
     {S("classDiagram-v2"), class_render},
     {S("erDiagram"), er_render},
     {S("pie"), pie_render},
+    {S("gantt"), gantt_render},
+    {S("journey"), journey_render},
 };
 
 DiagFn diag_lookup(Str kw) {

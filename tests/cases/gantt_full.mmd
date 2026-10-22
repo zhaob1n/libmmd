@@ -1,0 +1,18 @@
+gantt
+    title A Gantt Diagram with exclusions
+    dateFormat YYYY-MM-DD
+    axisFormat %b %d
+    excludes weekends, 2026-01-12
+    section Design
+    Research          :done, des1, 2026-01-05, 2026-01-08
+    Wireframes        :active, des2, after des1, 4d
+    Review            :milestone, m1, after des2, 0d
+    section Build
+    Backend API       :crit, b1, after des2, 6d
+    Frontend          :b2, after des2, 1w
+    Integration       :crit, active, b3, after b1 b2, 3d
+    section Ship
+    Freeze            :vert, v1, after b3, 0d
+    Release notes     :2d
+    Launch            :milestone, after b3, 0d
+    Retrospective with the whole team :r1, 2026-01-20, until b3
