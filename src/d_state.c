@@ -301,7 +301,7 @@ static constexpr char CSS[] =
     "#mermaid .choice{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .comp{fill:#fff;stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .comp-t{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
-    "#mermaid .region{fill:none;stroke:#9370DB;stroke-width:1px;stroke-dasharray:6,4;}"
+    "#mermaid .region{fill:none;stroke:#888;stroke-width:1px;stroke-dasharray:5,4;}"
     "#mermaid .div{stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .tr{fill:none;stroke:#333;stroke-width:1.3px;}"
     "#mermaid .lbl{fill:#e8e8e8;opacity:0.85;}"
@@ -624,7 +624,7 @@ DIAG_FN(state_render) {
             if (sdep[r] != d || c.cw[r] <= 0) continue;
             double x = c.cx[r], y = c.cy[r], w = c.cw[r], h = c.ch[r];
             if (g->sclass[r].n) {
-                if (c.relx[r] > 0) dg_line(out, x, y + 4, x, y + h - 4, "region");
+                dg_rect(out, x + 2, y + 2, w - 4, h - 4, 0, "region"); /* concurrent region: dashed box */
                 continue;
             }
             dg_rect(out, x, y, w, h, 5, "comp");

@@ -7,6 +7,7 @@
 #include <time.h>
 
 #include "dgraph.h"
+#include "dcfg.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -242,8 +243,8 @@ static size_t fmt_time(Str f, double t, size_t cap, char out[static cap]) {
 
 static constexpr char CSS[] =
     "#mermaid .sec0,#mermaid .sec2{fill:#6666ff;opacity:0.2;}#mermaid .sec1,#mermaid .sec3{fill:#fff400;opacity:0.2;}"
-    "#mermaid .stitle{font-size:11px;fill:#333;}#mermaid .grid{stroke:#ddd;stroke-width:1px;}"
-    "#mermaid .tick{font-size:10px;fill:#000;}"
+    "#mermaid .stitle{font-size:11px;fill:#333;}#mermaid .grid{stroke:lightgrey;opacity:.8;stroke-width:1px;}"
+    "#mermaid .tick{font-size:10px;fill:#000;}#mermaid .exr{fill:#eee;stroke:none;}"
     "#mermaid .task{fill:#8a90dd;stroke:#534fbc;}#mermaid .done{fill:#d3d3d3;stroke:grey;}"
     "#mermaid .active{fill:#bfc7ff;stroke:#534fbc;}#mermaid .crit{fill:#ff8888;stroke:#ff0000;}"
     "#mermaid .crit.done{fill:#d3d3d3;stroke:#ff0000;}#mermaid .crit.active{fill:#ff8888;stroke:#ff0000;}"
@@ -348,10 +349,10 @@ DIAG_FN(gantt_render) {
     if (hi_t <= lo_t) hi_t = lo_t + DAY;
 
     /* geometry (mermaid defaults: barHeight 20, barGap 4, topPadding 50, leftPadding 75) */
-    constexpr double BH = 20;
-    constexpr double GAP = 4;
-    constexpr double TOP = 50;
-    constexpr double LEFT = 75;
+    const double BH = fmin(fmax(dcfg_num("gantt.barHeight", 20), 4), 200);
+    const double GAP = fmin(fmax(dcfg_num("gantt.barGap", 4), 0), 100);
+    const double TOP = fmin(fmax(dcfg_num("gantt.topPadding", 50), 0), 500);
+    const double LEFT = fmin(fmax(dcfg_num("gantt.leftPadding", 75), 0), 1000);
     double left = LEFT;
     for (size_t i = 0; i < secs.n; i++) {
         double tw = text_width(secs.v[i], 11) + 20;
@@ -359,9 +360,10 @@ DIAG_FN(gantt_render) {
     }
     double H = TOP + tv.n * (BH + GAP) + 40;
     /* ticks */
-    static const double STEPS[] = {1000, 5000, 15000, 60000, 300000, 900000, 3600000, 6 * 3600000.0, 12 * 3600000.0,
-                                   DAY, 2 * DAY, 7 * DAY, 14 * DAY, 30 * DAY, 91 * DAY, 365 * DAY, 3650 * DAY};
-    double step = STEPS[countof(STEPS) - 1];
+    /* d3 time-scale intervals (scale.ticks(10)): mermaid's default axis density */
+    static const double STEPS[] = {1000, 5000, 15000, 30000, 60000, 300000, 900000, 1800000, 3600000,
+                                   3 * 3600000.0, 6 * 3600000.0, 12 * 3600000.0, DAY, 2 * DAY, 7 * DAY};
+    double step = 7 * DAY;
     bool months = false;
     if (tick.n) {
         Str tk = tick;
@@ -380,8 +382,24 @@ DIAG_FN(gantt_render) {
         }
         if (!months && (hi_t - lo_t) / step > 500) step = (hi_t - lo_t) / 500;
     } else {
-        for (size_t i = 0; i < countof(STEPS); i++)
-            if ((hi_t - lo_t) / STEPS[i] <= 12) { step = STEPS[i]; break; }
+        /* d3 tickInterval: target span/10, take the neighbouring interval with the closer ratio */
+        double target = (hi_t - lo_t) / 10;
+        static const double LONG[] = {30 * DAY, 91 * DAY, 365 * DAY};
+        size_t n = countof(STEPS), i = 0;
+        while (i < n && STEPS[i] <= target) i++;
+        if (i == 0) step = STEPS[0];
+        else if (i < n) step = target / STEPS[i - 1] < STEPS[i] / target ? STEPS[i - 1] : STEPS[i];
+        else {
+            size_t j = 0;
+            while (j < countof(LONG) && LONG[j] <= target) j++;
+            double prev = j ? LONG[j - 1] : STEPS[n - 1], next = j < countof(LONG) ? LONG[j] : 0;
+            double pick = next && target / prev >= next / target ? next : prev;
+            if (j == countof(LONG)) { /* years: d3 picks a nice multiple */
+                double yrs = target / (365 * DAY), m = pow(10, floor(log10(yrs))), f = yrs / m;
+                step = 12 * m * (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10), months = true;
+            } else if (pick >= 30 * DAY) step = pick == 30 * DAY ? 1 : pick == 91 * DAY ? 3 : 12, months = true;
+            else step = pick;
+        }
     }
     /* week ticks start on the configured weekday (mermaid `weekday`, default sunday) */
     double t_first = lo_t;
@@ -389,14 +407,40 @@ DIAG_FN(gantt_render) {
         double day = floor(lo_t / DAY);
         int64_t wd = ((int64_t)day % 7 + 7 + 4) % 7;
         t_first = (day - (double)((wd - week_start + 7) % 7)) * DAY;
+    } else if (!months && !tick.n && step >= DAY) t_first = ceil(lo_t / DAY - 1e-9) * DAY;
+    else if (!months && !tick.n) t_first = ceil(lo_t / step - 1e-9) * step;
+    double mbase = lo_t;
+    if (months && !tick.n) { /* d3 month/year intervals: first month start >= lo with month % k == 0 */
+        int64_t y; unsigned mo, d;
+        civil_from_days((int64_t)floor(lo_t / DAY), &y, &mo, &d);
+        int64_t mm = y * 12 + (mo - 1) + ((d > 1 || fmod(lo_t, DAY) > 0) ? 1 : 0);
+        int64_t k = (int64_t)step;
+        while (((mm % k) + k) % k) mm++;
+        int64_t yy = mm >= 0 ? mm / 12 : (mm - 11) / 12;
+        mbase = (double)days_from_civil(yy, (unsigned)(mm - yy * 12) + 1, 1) * DAY;
     }
     /* width: mermaid's default 1000px unless the axis labels need more room */
     char lab[96];
     double W = 1000, maxlab = 0;
-    size_t nticks = 0;
-    for (int k = 0; k < 600; k++, nticks++) {
-        double t = months ? add_months(lo_t, step * k) : t_first + step * k;
+    /* tick times; d3 day intervals restart at each month (... Jan 29, Jan 31, Feb 01) */
+    double TK[600];
+    size_t ntk = 0;
+    bool dom = !months && !tick.n && step >= DAY && step < 7 * DAY;
+    for (int k = 0; ntk < countof(TK) && k < 6000; k++) {
+        double t;
+        if (dom) {
+            t = t_first + DAY * k;
+            int64_t y; unsigned mo, d;
+            civil_from_days((int64_t)floor(t / DAY), &y, &mo, &d);
+            if (t > hi_t + 1e-6) break;
+            if ((d - 1) % (unsigned)(step / DAY)) continue;
+        } else t = months ? add_months(mbase, step * k) : t_first + step * k;
         if (t > hi_t + 1e-6) break;
+        TK[ntk++] = t;
+    }
+    size_t nticks = 0;
+    for (size_t k = 0; k < ntk; k++, nticks++) {
+        double t = TK[k];
         double lw = text_width((Str){.p = lab, .n = fmt_time(axis, t, sizeof lab, lab)}, 10);
         if (lw > maxlab) maxlab = lw;
     }
@@ -415,11 +459,22 @@ DIAG_FN(gantt_render) {
         if (secs.n) dg_text(out, secs.v[tv.v[i].sec], 11, 10, TOP + (i + j) * (BH + GAP) / 2.0 - 2, "start", "stitle");
         i = j;
     }
+    /* excluded days (mermaid shades runs of excluded days in #eee) */
+    if (c.ex_weekends || c.exdays.n) {
+        double d0 = floor(lo_t / DAY), d1 = ceil(hi_t / DAY), gb = TOP + tv.n * (BH + GAP) - 2;
+        for (double d = d0; d < d1 && d - d0 < 4000;) {
+            if (!excluded(&c, d)) { d++; continue; }
+            double e = d;
+            while (e < d1 && excluded(&c, e)) e++;
+            double xa = left + (fmax(d * DAY, lo_t) - lo_t) * sc, xb = left + (fmin(e * DAY, hi_t) - lo_t) * sc;
+            if (xb > xa) dg_rect(out, xa, TOP - 2, xb - xa, gb - TOP + 2, 0, "exr");
+            d = e;
+        }
+    }
     /* grid + axis labels */
     double gy0 = TOP - 2, gy1 = TOP + tv.n * (BH + GAP) - 2;
-    for (int k = 0; k < 600; k++) {
-        double t = months ? add_months(lo_t, step * k) : t_first + step * k;
-        if (t > hi_t + 1e-6) break;
+    for (size_t k = 0; k < ntk; k++) {
+        double t = TK[k];
         if (t < lo_t - 1e-6) continue;
         double x = left + (t - lo_t) * sc;
         dg_line(out, x, gy0, x, gy1, "grid");

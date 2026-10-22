@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #include "dgraph.h"
+#include "dcfg.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -96,8 +97,8 @@ DIAG_FN(sankey_render) {
         N[i].v = fmax(N[i].in, N[i].out);
         if (N[i].out == 0 && N[i].in > 0) N[i].col = maxc;
     }
-    constexpr double W = 600;
-    constexpr double H = 400;
+    const double W = fmin(fmax(dcfg_num("sankey.width", 600), 100), 4000);
+    const double H = fmin(fmax(dcfg_num("sankey.height", 400), 100), 4000);
     constexpr double NW = 10;
     constexpr double PAD = 25;
     double ky = INFINITY;
@@ -105,6 +106,7 @@ DIAG_FN(sankey_render) {
     uint32_t *colcnt = ANEW(a, uint32_t, maxc + 1);
     uint32_t *lord = ANEW(a, uint32_t, nn);
     if (!colsum || !colcnt || !lord) return CMM_ERR_NOMEM;
+    for (uint32_t c = 0; c <= maxc; c++) colsum[c] = 0, colcnt[c] = 0; /* arena memory is not zeroed */
     for (size_t i = 0; i < nn; i++) colsum[N[i].col] += N[i].v, colcnt[N[i].col]++;
     for (uint32_t c = 0; c <= maxc; c++)
         if (colsum[c] > 0) ky = fmin(ky, (H - (colcnt[c] - 1.0) * PAD) / colsum[c]);

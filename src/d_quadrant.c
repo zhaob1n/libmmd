@@ -1,7 +1,9 @@
 /* quadrantChart: title, x-axis/y-axis "low --> high", quadrant-1..4 labels, points
  * "Name: [x, y]" with optional "radius: r, color: #hex, stroke-color: .., stroke-width: Npx"
  * and ":::class" (classDef supports the same keys). */
+#include <math.h>
 #include "dgraph.h"
+#include "dcfg.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -124,7 +126,7 @@ DIAG_FN(quadrant_render) {
     }
     constexpr double X0 = 40;
     constexpr double Y0 = 50;
-    constexpr double SZ = 420;
+    const double SZ = fmin(fmax(dcfg_num("quadrantChart.chartWidth", 500), 100), 4000) - 80;
     bool yax = yl.n || yh.n, xax = xl.n || xh.n;
     double ox = X0 + (yax ? 30 : 0), oy = Y0 + (title.n ? 20 : 0);
     BBox bb = {0, 0, ox + SZ + 30, oy + SZ + (xax ? 40 : 10)};

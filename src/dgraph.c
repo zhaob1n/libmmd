@@ -1,4 +1,5 @@
 #include "dgraph.h"
+#include "dcfg.h"
 
 #include <math.h>
 
@@ -216,10 +217,15 @@ void dg_head(Buf *b, BBox bb, double m, const char *kind, size_t ncss, const cha
     buf_lit(b, "\" viewBox=\""); buf_num(b, x); buf_ch(b, ' '); buf_num(b, y); buf_ch(b, ' ');
     buf_num(b, w); buf_ch(b, ' '); buf_num(b, h);
     buf_lit(b, "\" role=\"graphics-document document\" aria-roledescription=\""); buf_put(b, kl, kind);
-    buf_lit(b, "\"><style>#mermaid{font-family:\"trebuchet ms\",verdana,arial,sans-serif;font-size:16px;fill:#333;}");
+    dcfg_svg_aria(b);
+    buf_lit(b, "<style>#mermaid{font-family:\"trebuchet ms\",verdana,arial,sans-serif;font-size:16px;fill:#333;}");
     buf_put(b, ncss, css);
+    dcfg_theme_css(b, kind);
     buf_lit(b, "</style><rect x=\""); buf_num(b, x); buf_lit(b, "\" y=\""); buf_num(b, y);
-    buf_lit(b, "\" width=\""); buf_num(b, w); buf_lit(b, "\" height=\""); buf_num(b, h); buf_lit(b, "\" fill=\"white\"/>");
+    buf_lit(b, "\" width=\""); buf_num(b, w); buf_lit(b, "\" height=\""); buf_num(b, h); buf_lit(b, "\" fill=\"");
+    Str bg = dcfg_background();
+    if (bg.n) buf_str(b, bg); else buf_lit(b, "white");
+    buf_lit(b, "\"/>");
 }
 
 void dg_rect(Buf *b, double x, double y, double w, double h, double rx, const char *cls) {
@@ -248,6 +254,15 @@ bool dg_next_line(LineIt *it, Str *line, size_t *off) {
         Str t = str_trim(raw);
         while (t.n && t.p[t.n - 1] == ';') t.n--;
         if (!t.n || str_starts(t, S("%%"))) continue;
+        bool blk;
+        if (dcfg_is_acc(t, &blk)) { /* handled by dcfg (emitted as <title>/<desc>) */
+            if (blk && !memchr(t.p, '}', t.n)) {
+                const char *cb = memchr(it->s + it->i, '}', it->n - it->i);
+                const char *n2 = cb ? memchr(cb, '\n', it->n - (size_t)(cb - it->s)) : nullptr;
+                it->i = n2 ? (size_t)(n2 - it->s) + 1 : it->n;
+            }
+            continue;
+        }
         *line = t;
         *off = (size_t)(t.p - it->s);
         return true;

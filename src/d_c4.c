@@ -27,7 +27,7 @@ static constexpr char CSS[] =
     "#mermaid .cd{font-size:14px;}#mermaid .cb{fill:none;stroke:#444;stroke-width:1px;stroke-dasharray:7,7;}"
     "#mermaid .cbt{font-weight:bold;font-size:14px;fill:#444;}#mermaid .cbs{font-size:12px;fill:#444;}"
     "#mermaid .cr{fill:none;stroke:#444;stroke-width:1px;}#mermaid .crh{fill:#444;}#mermaid .crl{font-size:13px;fill:#444;}"
-    "#mermaid .crt{font-size:12px;font-style:italic;fill:#444;}#mermaid .crx{fill:inherit;}";
+    "#mermaid .crt{font-size:12px;font-style:italic;fill:#444;}#mermaid .crx{fill:inherit;}#mermaid .crc .cr{stroke:inherit;}#mermaid .crc .crh{fill:inherit;}";
 static const char *const FILL[2][4] = {{"#08427B", "#1168BD", "#438DD5", "#85BBF0"}, {"#686868", "#999999", "#B3B3B3", "#E6E6E6"}};
 static const char *const STROKE[2][4] = {{"#073B6F", "#3C7FC0", "#3C7FC0", "#78A8D8"}, {"#8A8A8A", "#8A8A8A", "#A6A6A6", "#D0D0D0"}};
 
@@ -70,16 +70,24 @@ static Str named(Str in, const char *key) {
     return (Str){};
 }
 
-static bool color_ok(Str c) { /* conservative: only chars legal in a CSS colour, so the attribute can't break out */
-    if (!c.n || c.n > 40) return false;
-    for (size_t i = 0; i < c.n; i++) {
-        char ch = c.p[i];
-        if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '#' || ch == '(' || ch == ')' || ch == ',' || ch == '.' || ch == '%' || ch == ' ')) return false;
+/* style values are arbitrary user strings (mermaid passes them through); they are only ever written as
+ * presentation-attribute values via put_attr, which escapes everything that could end the attribute. */
+static bool color_ok(Str c) { return c.n > 0 && c.n <= 256; }
+
+static void put_attr(Buf *b, Str s) {
+    for (size_t i = 0; i < s.n; i++) {
+        unsigned char ch = (unsigned char)s.p[i];
+        switch (ch) {
+        case '&': buf_lit(b, "&amp;"); break;
+        case '<': buf_lit(b, "&lt;"); break;
+        case '>': buf_lit(b, "&gt;"); break;
+        case '"': buf_lit(b, "&quot;"); break;
+        case '\'': buf_lit(b, "&#39;"); break;
+        default: if (ch >= 0x20 && ch != 0x7f) buf_ch(b, (char)ch); /* drop control bytes (invalid in XML) */
+        }
     }
-    return true;
 }
 
-static void put_s(Buf *b, Str s) { buf_put(b, s.n, s.p); }
 
 /* first crossing of the segment centre->(ox,oy) with the w*h box around (cx,cy) */
 static void rclip(double cx, double cy, double w, double h, double ox, double oy, double *x, double *y) {
@@ -94,6 +102,7 @@ typedef struct Lay {
     const Item *items;
     size_t nitems;
     unsigned shape_row, box_row;
+    double gapx; /* widened so relation labels fit between neighbours */
     double *nx, *ny, *sx, *sy, *sw, *sh;
 } Lay;
 
@@ -112,7 +121,7 @@ static void lay(Lay *L, int32_t parent, double x, double y, double *ow, double *
         if (it.box || g->nparent[it.idx] != parent) continue;
         if (col == L->shape_row) cy += rowh + C4_GAPY, rowx = x, rowh = 0, col = 0;
         L->nx[it.idx] = rowx + g->nw[it.idx] / 2, L->ny[it.idx] = cy + g->nh[it.idx] / 2;
-        rowx += g->nw[it.idx] + C4_GAPX, rowh = fmax(rowh, g->nh[it.idx]), maxw = fmax(maxw, rowx - C4_GAPX - x);
+        rowx += g->nw[it.idx] + L->gapx, rowh = fmax(rowh, g->nh[it.idx]), maxw = fmax(maxw, rowx - L->gapx - x);
         col++;
     }
     if (col) cy += rowh + C4_GAPY;
@@ -307,6 +316,7 @@ DIAG_FN(c4_render) {
     {
         bool *seen = ANEW(a, bool, g.nn);
         if (!seen) return CMM_ERR_NOMEM;
+        for (size_t v = 0; v < g.nn; v++) seen[v] = false; /* arena memory is not zeroed */
         size_t k = 0;
         for (size_t i = 0; i < items.n; i++) { /* keep the first declaration of each element */
             Item it = items.v[i];
@@ -323,7 +333,14 @@ DIAG_FN(c4_render) {
     g.sx = ANEW(a, double, g.ns + 1), g.sy = ANEW(a, double, g.ns + 1), g.sw = ANEW(a, double, g.ns + 1), g.sh = ANEW(a, double, g.ns + 1);
     g.elx = ANEW(a, double, g.ne + 1), g.ely = ANEW(a, double, g.ne + 1);
     if (!g.nx || !g.ny || !g.sx || !g.sy || !g.sw || !g.sh || !g.elx || !g.ely) return CMM_ERR_NOMEM;
-    Lay L = {.g = &g, .items = items.v, .nitems = items.n, .shape_row = shape_row, .box_row = box_row,
+    double gapx = C4_GAPX;
+    for (size_t e = 0; e < g.ne; e++) {
+        double lw;
+        unsigned ln;
+        label_measure(g.elabel[e], 13, &lw, &ln);
+        gapx = fmax(gapx, fmin(lw + 30, 260));
+    }
+    Lay L = {.g = &g, .items = items.v, .nitems = items.n, .shape_row = shape_row, .box_row = box_row, .gapx = gapx,
              .nx = g.nx, .ny = g.ny, .sx = g.sx, .sy = g.sy, .sw = g.sw, .sh = g.sh};
     double tw_ = 0, th_ = 0;
     lay(&L, NONE, 0, 0, &tw_, &th_, 0);
@@ -333,12 +350,16 @@ DIAG_FN(c4_render) {
     const EStyle **nst = ANEW(a, const EStyle *, g.nn);
     const RStyle **rst = ANEW(a, const RStyle *, g.ne + 1);
     if (!nst || !rst) return CMM_ERR_NOMEM;
+    for (size_t v = 0; v < g.nn; v++) nst[v] = nullptr;
+    for (size_t e = 0; e <= g.ne; e++) rst[e] = nullptr;
     for (size_t i = 0; i < es.n; i++) { int32_t v = dg_find(&g, es.v[i].alias); if (v != NONE) nst[v] = &es.v[i]; }
     for (size_t i = 0; i < rs.n; i++) {
         int32_t f = dg_find(&g, rs.v[i].from), t = dg_find(&g, rs.v[i].to);
         for (size_t e = 0; e < g.ne; e++)
             if (f != NONE && ((g.efrom[e] == f && g.eto[e] == t) || (g.efrom[e] == t && g.eto[e] == f))) rst[e] = &rs.v[i];
         }
+    double *lbw = ANEW(a, double, g.ne + 1), *lbh = ANEW(a, double, g.ne + 1);
+    if (!lbw || !lbh) return CMM_ERR_NOMEM;
     for (size_t e = 0; e < g.ne; e++) {
         int32_t f = g.efrom[e], t = g.eto[e];
         double x0, y0, x1, y1;
@@ -348,7 +369,35 @@ DIAG_FN(c4_render) {
         double lw;
         unsigned ln;
         label_measure(g.elabel[e], 13, &lw, &ln);
-        g.elx[e] = (x0 + x1) / 2 + (rst[e] ? rst[e]->ox : 0), g.ely[e] = (y0 + y1) / 2 + (rst[e] ? rst[e]->oy : 0);
+        /* label placement: slide along the edge / step off it to dodge element boxes and earlier labels */
+        {
+            const char *nl2 = memchr(g.elabel[e].p, '\n', g.elabel[e].n);
+            double lh = nl2 ? 34 : 18, best = HUGE_VAL, bx = (x0 + x1) / 2, by = (y0 + y1) / 2;
+            double len = hypot(x1 - x0, y1 - y0), nx = len > 0 ? -(y1 - y0) / len : 0, ny = len > 0 ? (x1 - x0) / len : 1;
+            static constexpr double TS[] = {.5, .42, .58, .34, .66, .26, .74};
+            static constexpr double OS[] = {0, -1, 1};
+            for (size_t oi = 0; oi < countof(OS); oi++)
+                for (size_t ti = 0; ti < countof(TS); ti++) {
+                    double off = OS[oi] * (fabs(nx) > fabs(ny) ? lw / 2 + 6 : lh / 2 + 4);
+                    double cx = x0 + (x1 - x0) * TS[ti] + nx * off, cy = y0 + (y1 - y0) * TS[ti] + ny * off;
+                    double ax0 = cx - lw / 2 - 3, ax1 = cx + lw / 2 + 3, ay0 = cy - lh / 2, ay1 = cy + lh / 2, sc = 0;
+                    for (size_t v = 0; v < g.nn; v++) {
+                        double ox = fmin(ax1, g.nx[v] + g.nw[v] / 2) - fmax(ax0, g.nx[v] - g.nw[v] / 2);
+                        double oy = fmin(ay1, g.ny[v] + g.nh[v] / 2) - fmax(ay0, g.ny[v] - g.nh[v] / 2);
+                        if (ox > 0 && oy > 0) sc += ox * oy;
+                    }
+                    for (size_t q = 0; q < e; q++) {
+                        double qw = lbw[q] / 2 + 3, qh = lbh[q] / 2;
+                        double ox = fmin(ax1, g.elx[q] + qw) - fmax(ax0, g.elx[q] - qw);
+                        double oy = fmin(ay1, g.ely[q] + qh) - fmax(ay0, g.ely[q] - qh);
+                        if (ox > 0 && oy > 0) sc += 2 * ox * oy;
+                    }
+                    sc += (fabs(TS[ti] - .5) * 40 + fabs(OS[oi]) * 60); /* prefer the middle, on the line */
+                    if (sc < best) best = sc, bx = cx, by = cy;
+                }
+            lbw[e] = lw, lbh[e] = lh;
+            g.elx[e] = bx + (rst[e] ? rst[e]->ox : 0), g.ely[e] = by + (rst[e] ? rst[e]->oy : 0);
+        }
         bb_add(&bb, g.elx[e] - lw / 2, g.ely[e] - 20, g.elx[e] + lw / 2, g.ely[e] + 20);
     }
     if (!buf_reserve(out, 2048 + g.nn * 900 + g.ne * 500 + g.ns * 300)) return CMM_ERR_NOMEM;
@@ -359,8 +408,8 @@ DIAG_FN(c4_render) {
         Str t = g.stitle[s];
         const char *nl = memchr(t.p, '\n', t.n);
         Str t1 = nl ? (Str){.p = t.p, .n = (size_t)(nl - t.p)} : t;
-        dg_text(out, t1, 14, g.sx[s] + 10, g.sy[s] + 14, "start", "cbt");
-        if (nl) dg_text(out, (Str){.p = nl + 1, .n = t.n - (size_t)(nl + 1 - t.p)}, 12, g.sx[s] + 10, g.sy[s] + 30, "start", "cbs");
+        dg_text(out, t1, 14, g.sx[s] + g.sw[s] / 2, g.sy[s] + 14, "middle", "cbt"); /* mermaid centres boundary titles */
+        if (nl) dg_text(out, (Str){.p = nl + 1, .n = t.n - (size_t)(nl + 1 - t.p)}, 12, g.sx[s] + g.sw[s] / 2, g.sy[s] + 30, "middle", "cbs");
     }
     for (size_t e = 0; e < g.ne; e++) {
         int32_t f = g.efrom[e], t = g.eto[e];
@@ -368,15 +417,13 @@ DIAG_FN(c4_render) {
         rclip(g.nx[f], g.ny[f], g.nw[f], g.nh[f], g.nx[t], g.ny[t], &P[0], &P[1]);
         rclip(g.nx[t], g.ny[t], g.nw[t], g.nh[t], g.nx[f], g.ny[f], &P[2], &P[3]);
         bool lc = rst[e] && color_ok(rst[e]->line), tc = rst[e] && color_ok(rst[e]->text);
-        if (lc) { buf_lit(out, "<g stroke=\""); put_s(out, rst[e]->line); buf_lit(out, "\" fill=\""); put_s(out, rst[e]->line); buf_lit(out, "\">"); }
+        if (lc) { buf_lit(out, "<g class=\"crc\" stroke=\""); put_attr(out, rst[e]->line); buf_lit(out, "\" fill=\""); put_attr(out, rst[e]->line); buf_lit(out, "\">"); }
         buf_lit(out, "<path class=\"cr\"");
-        if (lc) { buf_lit(out, " style=\"stroke:"); put_s(out, rst[e]->line); buf_lit(out, "\""); }
         buf_lit(out, " d=\"M"); dg_pt(out, P[0], P[1]); buf_ch(out, 'L'); dg_pt(out, P[2], P[3]); buf_lit(out, "\"/>");
-        if (lc) { buf_lit(out, "<g style=\"fill:"); put_s(out, rst[e]->line); buf_lit(out, "\">"); }
         arrowhead(out, P + 2, P);
         if (cr.v[e].bi) arrowhead(out, P, P + 2);
-        if (lc) buf_lit(out, "</g></g>");
-        if (tc) { buf_lit(out, "<g style=\"fill:"); put_s(out, rst[e]->text); buf_lit(out, "\">"); }
+        if (lc) buf_lit(out, "</g>");
+        if (tc) { buf_lit(out, "<g fill=\""); put_attr(out, rst[e]->text); buf_lit(out, "\">"); }
         Str l = g.elabel[e];
         const char *nl = memchr(l.p, '\n', l.n);
         Str l1 = nl ? (Str){.p = l.p, .n = (size_t)(nl - l.p)} : l;
@@ -391,16 +438,15 @@ DIAG_FN(c4_render) {
         const char *fill = FILL[c->ext][c->kind], *stroke = STROKE[c->ext][c->kind];
         bool dark = !(c->kind == K_COMPONENT);
         const EStyle *u = nst[v];
-        char fb[48], sb[48];
-        if (u && color_ok(u->bg)) snprintf(fb, sizeof fb, "%.*s", (int)u->bg.n, u->bg.p), fill = fb;
-        if (u && color_ok(u->border)) snprintf(sb, sizeof sb, "%.*s", (int)u->border.n, u->border.p), stroke = sb;
+        Str fill_s = u && color_ok(u->bg) ? u->bg : (Str){.p = fill, .n = strlen(fill)};
+        Str stroke_s = u && color_ok(u->border) ? u->border : (Str){.p = stroke, .n = strlen(stroke)};
         buf_lit(out, "<g class=\"c4-element\" fill=\"");
-        if (u && color_ok(u->font)) put_s(out, u->font);
+        if (u && color_ok(u->font)) put_attr(out, u->font);
         else buf_put(out, strlen(dark ? "#fff" : "#000"), dark ? "#fff" : "#000");
         buf_lit(out, "\">");
         if (c->form == F_DB) {
             double ry = 10;
-            buf_lit(out, "<path fill=\""); buf_put(out, strlen(fill), fill); buf_lit(out, "\" stroke=\""); buf_put(out, strlen(stroke), stroke);
+            buf_lit(out, "<path fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
             buf_lit(out, "\" d=\"M"); dg_pt(out, x0, y0 + ry);
             buf_lit(out, "a"); buf_num(out, w / 2); buf_ch(out, ','); buf_num(out, ry); buf_lit(out, " 0 0 1 "); buf_num(out, w); buf_lit(out, ",0");
             buf_lit(out, "v"); buf_num(out, h - 2 * ry);
@@ -410,7 +456,7 @@ DIAG_FN(c4_render) {
             y0 += 2 * ry - 4;
         } else if (c->form == F_QUEUE) {
             double rx = 10;
-            buf_lit(out, "<path fill=\""); buf_put(out, strlen(fill), fill); buf_lit(out, "\" stroke=\""); buf_put(out, strlen(stroke), stroke);
+            buf_lit(out, "<path fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
             buf_lit(out, "\" d=\"M"); dg_pt(out, x0 + rx, y0);
             buf_lit(out, "h"); buf_num(out, w - 2 * rx);
             buf_lit(out, "a"); buf_num(out, rx); buf_ch(out, ','); buf_num(out, h / 2); buf_lit(out, " 0 0 1 0,"); buf_num(out, h);
@@ -420,14 +466,14 @@ DIAG_FN(c4_render) {
             buf_lit(out, "a"); buf_num(out, rx); buf_ch(out, ','); buf_num(out, h / 2); buf_lit(out, " 0 0 0 0,"); buf_num(out, h); buf_lit(out, "\"/>");
         } else if (c->kind == K_PERSON) { /* mermaid 11: rounded body with a large head circle above it */
             double r = fmin(36, w / 4), by = y0 + r * 1.4, bh = h - r * 1.4;
-            buf_lit(out, "<rect fill=\""); buf_put(out, strlen(fill), fill); buf_lit(out, "\" stroke=\""); buf_put(out, strlen(stroke), stroke);
+            buf_lit(out, "<rect fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
             buf_lit(out, "\" rx=\""); buf_num(out, fmin(30, bh / 3)); buf_lit(out, "\" x=\""); buf_num(out, x0); buf_lit(out, "\" y=\""); buf_num(out, by);
             buf_lit(out, "\" width=\""); buf_num(out, w); buf_lit(out, "\" height=\""); buf_num(out, bh); buf_lit(out, "\"/>");
-            buf_lit(out, "<circle fill=\""); buf_put(out, strlen(fill), fill); buf_lit(out, "\" stroke=\""); buf_put(out, strlen(stroke), stroke);
+            buf_lit(out, "<circle fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
             buf_lit(out, "\" cx=\""); buf_num(out, cx); buf_lit(out, "\" cy=\""); buf_num(out, y0 + r); buf_lit(out, "\" r=\""); buf_num(out, r); buf_lit(out, "\"/>");
             y0 = by;
         } else {
-            buf_lit(out, "<rect rx=\"2.5\" fill=\""); buf_put(out, strlen(fill), fill); buf_lit(out, "\" stroke=\""); buf_put(out, strlen(stroke), stroke);
+            buf_lit(out, "<rect rx=\"2.5\" fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
             buf_lit(out, "\" x=\""); buf_num(out, x0); buf_lit(out, "\" y=\""); buf_num(out, y0);
             buf_lit(out, "\" width=\""); buf_num(out, w); buf_lit(out, "\" height=\""); buf_num(out, h); buf_lit(out, "\"/>");
         }

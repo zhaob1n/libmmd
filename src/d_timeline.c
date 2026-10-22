@@ -10,7 +10,9 @@ static constexpr char CSS[] =
     "#mermaid .box{stroke:#666;stroke-width:1px;}#mermaid .ev{fill:#fff;stroke:#999;stroke-width:1px;}"
     "#mermaid .ln{stroke:#666;stroke-width:2px;stroke-dasharray:5 5;}#mermaid .axis{stroke:#333;stroke-width:4px;}"
     "#mermaid .ttl{font-size:20px;font-weight:bold;}#mermaid .tx{font-size:14px;}";
-static const char *const COL[] = {"#ECECFF", "#ffffde", "#e8ffd8", "#ffe0e0", "#e0f0ff", "#f0e0ff", "#e0fff8", "#fff0d8"};
+static const char *const COL[] = {"#8686ff", "#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2",
+                                  "#ff8686", "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"}; /* mermaid cScale */
+#define TXG(out, k) do { if ((k) % countof(COL) == 0) buf_lit(out, "<g fill=\"#fff\">"); else buf_lit(out, "<g fill=\"#000\">"); } while (0)
 
 static void push_events(Arena *a, Str s, void *evp, bool *oom) {
     typedef VEC(Str) EV;
@@ -92,7 +94,9 @@ DIAG_FN(timeline_render) {
             while (j < per.n && per.v[j].sec == per.v[i].sec) j++;
             double x = GAP + i * (PW + GAP), w = (j - i) * (PW + GAP) - GAP;
             dg_rect_fill(out, x, TOPY, w, SH, 6, "box", COL[per.v[i].sec % countof(COL)]);
+            TXG(out, per.v[i].sec);
             dg_text(out, dg_wrap(a, secs.v[per.v[i].sec], 14, w - 10), 14, x + w / 2, TOPY + SH / 2, "middle", "tx");
+            buf_lit(out, "</g>");
             i = j;
         }
     buf_lit(out, "<defs><marker id=\"tarrow\" markerWidth=\"6\" markerHeight=\"6\" refX=\"5\" refY=\"3\" orient=\"auto\">"
@@ -103,6 +107,8 @@ DIAG_FN(timeline_render) {
         double y = py + PH + 40, last = y;
         for (uint32_t k = 0; k < per.v[i].ne; k++) last = y, y += eh[per.v[i].e0 + k] + EG;
         if (per.v[i].ne) dg_line(out, cx, py + PH, cx, last, "ln");
+        size_t ci = secs.n ? per.v[i].sec : i;
+        TXG(out, ci);
         dg_rect_fill(out, x, py, PW, PH, 6, "box", col);
         dg_text(out, dg_wrap(a, per.v[i].name, 14, PW - 12), 14, cx, py + PH / 2, "middle", "tx");
         y = py + PH + 40;
@@ -112,6 +118,7 @@ DIAG_FN(timeline_render) {
             dg_text(out, wev[e], 14, cx, y + eh[e] / 2, "middle", "tx");
             y += eh[e] + EG;
         }
+        buf_lit(out, "</g>");
     }
     buf_lit(out, "<line class=\"axis\" marker-end=\"url(#tarrow)\" x1=\"4\" y1=\""); buf_num(out, axy);
     buf_lit(out, "\" x2=\""); buf_num(out, W - 4); buf_lit(out, "\" y2=\""); buf_num(out, axy); buf_lit(out, "\"/>");
