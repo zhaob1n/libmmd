@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include "dcfg.h"
 
 #include <math.h>
@@ -193,7 +194,8 @@ void dcfg_begin(Arena *a, size_t n, const char src[static n], size_t off) {
         }
         i = nxt > i ? nxt : i + 1;
     }
-    /* body: acc lines */
+    /* body: acc lines (one memmem pass first: most diagrams have none) */
+    if (n <= off || !memmem(src + off, n - off, "acc", 3)) return;
     i = off;
     while (i < n) {
         const char *nl = memchr(src + i, '\n', n - i);
