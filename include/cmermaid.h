@@ -9,6 +9,12 @@
 extern "C" {
 #endif
 
+#if defined(__GNUC__) || defined(__clang__)
+#define CMM_API __attribute__((visibility("default")))
+#else
+#define CMM_API
+#endif
+
 typedef enum cmm_status {
     CMM_OK = 0,
     CMM_ERR_SYNTAX,      /* parse error, see cmm_error line/col */
@@ -36,7 +42,8 @@ typedef enum cmm_theme {
 } cmm_theme;
 
 enum {
-    CMM_F_ROUTE_AVOID = 1u, /* flowchart: detour edges around non-incident nodes */
+    CMM_F_ROUTE_AVOID = 1u, /* (default since v3; kept for compatibility) */
+    CMM_F_NO_AVOID = 2u,    /* flowchart: disable re-routing edges around non-incident nodes */
 };
 
 typedef struct cmm_options {
@@ -49,13 +56,25 @@ typedef struct cmm_options {
 
 /* Render Mermaid source (n bytes, need not be NUL-terminated) to SVG.
  * opt may be nullptr. err may be nullptr. On success *out owns a buffer. */
-[[nodiscard]] cmm_status cmm_render_svg(size_t n, const char src[static n],
+[[nodiscard]] CMM_API cmm_status cmm_render_svg(size_t n, const char src[static n],
                                         const cmm_options *opt,
                                         cmm_buffer *out, cmm_error *err);
 
-void cmm_buffer_free(cmm_buffer *buf);
+CMM_API void cmm_buffer_free(cmm_buffer *buf);
 
-[[nodiscard]] const char *cmm_status_str(cmm_status s);
+/* Reusable render context for batch rendering: keeps its arena and output
+ * buffer between calls so steady-state renders do (almost) no malloc. */
+typedef struct cmm_context cmm_context;
+[[nodiscard]] CMM_API cmm_context *cmm_context_new(void);
+CMM_API void cmm_context_free(cmm_context *ctx);
+/* On success *svg (NUL-terminated, *len bytes) is owned by ctx and stays
+ * valid until the next call on ctx or cmm_context_free. Not thread-safe per
+ * ctx; use one context per thread. */
+[[nodiscard]] CMM_API cmm_status cmm_context_render_svg(cmm_context *ctx, size_t n, const char src[static n],
+                                                const cmm_options *opt, const char **svg, size_t *len,
+                                                cmm_error *err);
+
+[[nodiscard]] CMM_API const char *cmm_status_str(cmm_status s);
 
 #ifdef __cplusplus
 }

@@ -1,0 +1,10 @@
+prefix=@PREFIX@
+libdir=@LIBDIR@
+includedir=@INCDIR@
+
+Name: cmermaid
+Description: Fast Mermaid diagram to SVG renderer
+Version: @VERSION@
+Libs: -L${libdir} -lcmermaid
+Libs.private: -lm
+Cflags: -I${includedir}

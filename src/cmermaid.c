@@ -141,10 +141,8 @@ static void set_err(cmm_error *err, cmm_status st, size_t n, const char src[stat
     snprintf(err->message, sizeof err->message, "%s", msg && *msg ? msg : cmm_status_str(st));
 }
 
-cmm_status cmm_render_svg(size_t n, const char src[static n], const cmm_options *opt, cmm_buffer *out,
-                          cmm_error *err) {
-    if (out) *out = (cmm_buffer){};
-    if (!out) return CMM_ERR_EMPTY;
+static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n], const cmm_options *opt,
+                         cmm_error *err) {
     if (n > (size_t)1 << 30) { set_err(err, CMM_ERR_LIMIT, n, src, 0, nullptr); return CMM_ERR_LIMIT; }
     Config cfg = {.node_sep = 50, .rank_sep = 50};
     Str s = {.p = src, .n = n};
@@ -157,8 +155,10 @@ cmm_status cmm_render_svg(size_t n, const char src[static n], const cmm_options 
     while (k < n && !is_sp(src[k]) && src[k] != '\n' && src[k] != ';') k++;
     Str kw = {.p = src + off, .n = k - off};
 
-    Arena arena = {};
-    Buf b = {};
+    Arena arena = *ap;
+    Buf b = *bp;
+    b.n = 0;
+    b.oom = false;
     char msg[160] = {};
     size_t eoff = 0;
     cmm_status st = CMM_OK;
@@ -182,15 +182,55 @@ cmm_status cmm_render_svg(size_t n, const char src[static n], const cmm_options 
         goto fail;
     }
     if (b.oom) { st = CMM_ERR_NOMEM; goto fail; }
-    arena_free(&arena);
     b.p[b.n] = 0;
+    if (err) *err = (cmm_error){};
+fail:
+    *ap = arena;
+    *bp = b;
+    if (st) set_err(err, st, n, src, eoff, msg);
+    return st;
+}
+
+cmm_status cmm_render_svg(size_t n, const char src[static n], const cmm_options *opt, cmm_buffer *out,
+                          cmm_error *err) {
+    if (out) *out = (cmm_buffer){};
+    if (!out) return CMM_ERR_EMPTY;
+    Arena a = {};
+    Buf b = {};
+    cmm_status st = render(&a, &b, n, src, opt, err);
+    arena_free(&a);
+    if (st) { free(b.p); return st; }
     out->data = b.p;
     out->len = b.n;
-    if (err) *err = (cmm_error){};
     return CMM_OK;
-fail:
-    arena_free(&arena);
-    free(b.p);
-    set_err(err, st, n, src, eoff, msg);
-    return st;
+}
+
+struct cmm_context {
+    Arena arena;
+    Buf out;
+};
+
+cmm_context *cmm_context_new(void) {
+    cmm_context *c = calloc(1, sizeof *c);
+    return c;
+}
+
+void cmm_context_free(cmm_context *c) {
+    if (!c) return;
+    arena_free(&c->arena);
+    free(c->out.p);
+    free(c);
+}
+
+cmm_status cmm_context_render_svg(cmm_context *c, size_t n, const char src[static n], const cmm_options *opt,
+                                  const char **svg, size_t *len, cmm_error *err) {
+    if (svg) *svg = nullptr;
+    if (len) *len = 0;
+    if (!c || !svg) return CMM_ERR_EMPTY;
+    arena_reset(&c->arena);
+    cmm_status st = render(&c->arena, &c->out, n, src, opt, err);
+    if (st) return st;
+    *svg = c->out.p;
+    if (len) *len = c->out.n;
+    return CMM_OK;
 }

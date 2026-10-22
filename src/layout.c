@@ -272,16 +272,22 @@ static uint64_t pair_cost(const Lay *L, int32_t u, int32_t v) {
 }
 
 /* returns crossings removed; *budget bounds the pair-cost work (early stop on huge graphs) */
-static uint64_t transpose(Lay *L, int64_t *budget) {
+static uint64_t transpose(Lay *L, int64_t *budget, uint8_t dirty[static L->R + 2]) {
+    /* dirty[r+1]: layer r changed in the last pass (dirty[0], dirty[R+1] are sentinels) */
     uint64_t gain = 0;
+    memset(dirty, 1, L->R + 2);
+    dirty[0] = dirty[L->R + 1] = 0;
     for (unsigned pass = 0; pass < 6; pass++) {
         bool improved = false;
         for (size_t r = 0; r < L->R; r++) {
+            if (!(dirty[r] | dirty[r + 1] | dirty[r + 2])) continue; /* neighbourhood unchanged: same verdicts */
+            bool ch = false;
             for (size_t i = L->loff[r]; i + 1 < L->loff[r + 1]; i++) {
                 int32_t u = L->lay[i], v = L->lay[i + 1];
                 if (L->border[u] || L->border[v] || L->cl[u] != L->cl[v]) continue;
                 uint32_t du = (L->poff[u + 1] - L->poff[u]) + (L->soff[u + 1] - L->soff[u]);
                 uint32_t dv = (L->poff[v + 1] - L->poff[v]) + (L->soff[v + 1] - L->soff[v]);
+                if (!du || !dv) continue; /* isolated in both directions: swap never matters */
                 *budget -= (int64_t)du * dv + 1;
                 if (*budget < 0) return gain;
                 uint64_t cuv = pair_cost(L, u, v), cvu = pair_cost(L, v, u);
@@ -289,11 +295,15 @@ static uint64_t transpose(Lay *L, int64_t *budget) {
                     L->lay[i] = v, L->lay[i + 1] = u;
                     L->pos[v]--, L->pos[u]++;
                     gain += cuv - cvu;
-                    improved = true;
+                    ch = true;
                 }
             }
+            dirty[r + 1] = (uint8_t)(ch ? 2 : (dirty[r + 1] == 2 ? 1 : 0));
+            improved |= ch;
         }
         if (!improved) break;
+        /* only layers changed this pass (value 2) stay dirty */
+        for (size_t r = 1; r <= L->R; r++) dirty[r] = dirty[r] == 2;
     }
     return gain;
 }
@@ -900,18 +910,16 @@ static cmm_status layout_core(Graph *g) {
     uint64_t bestc = cross_all(&L, cbuf, fen);
     memcpy(best, L.lay, placed * sizeof *best);
     unsigned since = 0;
-    /* transpose budget: generous for small graphs, bounded (~linear) for big ones */
+    /* transpose (final polish only; per-sweep transpose measured no gain on bench inputs)
+     * budget: generous for small graphs, bounded (~linear) for big ones */
     int64_t tbudget = 2000000 + 40 * (int64_t)nseg;
-    bool per_iter_tr = V <= 4000;
+    uint8_t *tdirty = ANEW(A, uint8_t, R + 2);
+    if (!tdirty) return CMM_ERR_NOMEM;
     for (unsigned iter = 0; iter < 24 && since < 4 && bestc > 0; iter++) {
         bool down = (iter & 1u) == 0;
         if (down) for (size_t r = 1; r < R; r++) sweep_layer(&L, r, true, false, keys, idx, tmp, csum, ccnt, clusters);
         else for (size_t r = R - 1; r-- > 0;) sweep_layer(&L, r, false, false, keys, idx, tmp, csum, ccnt, clusters);
         uint64_t c = cross_all(&L, cbuf, fen);
-        if (per_iter_tr && c > 0 && tbudget > 0) {
-            uint64_t gn = transpose(&L, &tbudget);
-            c = gn <= c ? c - gn : 0;
-        }
         if (c < bestc) { bestc = c; memcpy(best, L.lay, placed * sizeof *best); since = 0; }
         else since++;
     }
@@ -919,10 +927,16 @@ static cmm_status layout_core(Graph *g) {
     for (size_t r = 0; r < R; r++)
         for (size_t i = L.loff[r]; i < L.loff[r + 1]; i++) L.pos[L.lay[i]] = (int32_t)(i - L.loff[r]);
     if (bestc > 0 && tbudget > 0) { /* final polish on the kept-best order */
-        uint64_t gn = transpose(&L, &tbudget);
+        uint64_t gn = transpose(&L, &tbudget, tdirty);
+#ifdef CMM_PROFILE
+        fprintf(stderr, "  transpose gain=%llu\n", (unsigned long long)gn);
+#endif
         bestc = gn <= bestc ? bestc - gn : 0;
     }
 
+#ifdef CMM_PROFILE
+    fprintf(stderr, "  crossings=%llu tbudget_left=%lld\n", (unsigned long long)bestc, (long long)tbudget);
+#endif
     PROF("order");
     /* ---- x via Brandes-Köpf ---- */
     if (!bk(&L)) return CMM_ERR_NOMEM;
@@ -1357,64 +1371,266 @@ static double seg_box(double px, double py, double qx, double qy, const Box *b) 
     return t0;
 }
 
-/* optional: detour polyline segments around nodes they pass through (CMM_F_ROUTE_AVOID) */
+/* ---- obstacle-avoiding re-route (default on; CMM_F_NO_AVOID disables) ----
+ * Edges whose polyline passes through a non-incident node get the offending stretch replaced by a
+ * shortest path in a local visibility graph over inflated node corners. A uniform grid indexes the
+ * boxes; total work is budgeted so huge graphs degrade to the plain layout route. */
+typedef struct Grid { double x0, y0, cs; size_t gw, gh; uint32_t *off, *idx; } Grid;
+
+[[nodiscard]] static bool grid_build(Arena *A, Grid *G, size_t N, const Box nb[static N + 1], const bool *use) {
+    double x0 = INFINITY, y0 = INFINITY, x1 = -INFINITY, y1 = -INFINITY, area = 0;
+    size_t k = 0;
+    for (size_t v = 0; v < N; v++) {
+        if (!use[v]) continue;
+        x0 = fmin(x0, nb[v].x0), y0 = fmin(y0, nb[v].y0), x1 = fmax(x1, nb[v].x1), y1 = fmax(y1, nb[v].y1);
+        area += (nb[v].x1 - nb[v].x0) * (nb[v].y1 - nb[v].y0), k++;
+    }
+    if (!k) { G->gw = G->gh = 0; return true; }
+    double cs = fmax(sqrt(area / (double)k) * 2, 32);
+    size_t gw = (size_t)((x1 - x0) / cs) + 1, gh = (size_t)((y1 - y0) / cs) + 1;
+    while (gw * gh > 4 * k + 64) cs *= 1.5, gw = (size_t)((x1 - x0) / cs) + 1, gh = (size_t)((y1 - y0) / cs) + 1;
+    *G = (Grid){x0, y0, cs, gw, gh, ANEW(A, uint32_t, gw * gh + 1), nullptr};
+    if (!G->off) return false;
+    memset(G->off, 0, (gw * gh + 1) * sizeof *G->off);
+    size_t tot = 0;
+    for (unsigned pass = 0; pass < 2; pass++) {
+        for (size_t v = 0; v < N; v++) {
+            if (!use[v]) continue;
+            size_t cx0 = (size_t)((nb[v].x0 - x0) / cs), cx1 = (size_t)((nb[v].x1 - x0) / cs);
+            size_t cy0 = (size_t)((nb[v].y0 - y0) / cs), cy1 = (size_t)((nb[v].y1 - y0) / cs);
+            for (size_t cy = cy0; cy <= cy1 && cy < gh; cy++)
+                for (size_t cx = cx0; cx <= cx1 && cx < gw; cx++) {
+                    if (!pass) { G->off[cy * gw + cx + 1]++, tot++; }
+                    else G->idx[G->off[cy * gw + cx]++] = (uint32_t)v;
+                }
+        }
+        if (!pass) {
+            for (size_t c = 0; c < gw * gh; c++) G->off[c + 1] += G->off[c];
+            G->idx = ANEW(A, uint32_t, tot + 1);
+            if (!G->idx) return false;
+        } else {
+            for (size_t c = gw * gh; c > 0; c--) G->off[c] = G->off[c - 1];
+            G->off[0] = 0;
+        }
+    }
+    return true;
+}
+
+typedef struct Router {
+    const Graph *g;
+    const Box *nb;
+    Grid G;
+    uint32_t *stamp; /* per-node visit stamp for de-duplicating grid hits */
+    uint32_t cur;
+    int64_t budget;
+} Router;
+
+/* first obstacle (other than skip1/skip2) whose interior the segment p->q enters; NONE if clear */
+static int32_t seg_hit(Router *R, double px, double py, double qx, double qy, int32_t s1, int32_t s2) {
+    const Grid *G = &R->G;
+    if (!G->gw) return NONE;
+    double lx = fmin(px, qx), hx = fmax(px, qx), ly = fmin(py, qy), hy = fmax(py, qy);
+    if (hx < G->x0 || hy < G->y0) return NONE;
+    size_t cx0 = lx < G->x0 ? 0 : (size_t)((lx - G->x0) / G->cs), cy0 = ly < G->y0 ? 0 : (size_t)((ly - G->y0) / G->cs);
+    size_t cx1 = (size_t)((hx - G->x0) / G->cs), cy1 = (size_t)((hy - G->y0) / G->cs);
+    if (cx1 >= G->gw) cx1 = G->gw - 1;
+    if (cy1 >= G->gh) cy1 = G->gh - 1;
+    if (++R->cur == 0) { memset(R->stamp, 0, R->g->nn * sizeof *R->stamp); R->cur = 1; }
+    int32_t hit = NONE;
+    double bt = 2;
+    for (size_t cy = cy0; cy <= cy1; cy++)
+        for (size_t cx = cx0; cx <= cx1; cx++)
+            for (uint32_t k = G->off[cy * G->gw + cx]; k < G->off[cy * G->gw + cx + 1]; k++) {
+                uint32_t v = G->idx[k];
+                if (R->stamp[v] == R->cur || (int32_t)v == s1 || (int32_t)v == s2) continue;
+                R->stamp[v] = R->cur;
+                R->budget--;
+                Box b = R->nb[v];
+                b.x0 += 0.5, b.y0 += 0.5, b.x1 -= 0.5, b.y1 -= 0.5; /* grazing along a side is fine */
+                if (hx < b.x0 || lx > b.x1 || hy < b.y0 || ly > b.y1) continue;
+                double t = seg_box(px, py, qx, qy, &b);
+                if (t >= 0 && t < bt) bt = t, hit = (int32_t)v;
+            }
+    return hit;
+}
+
+static bool pt_in(const Box *b, double x, double y) { return x > b->x0 && x < b->x1 && y > b->y0 && y < b->y1; }
+
+/* shortest visibility path S->T; writes interior corners to out (max cap pts). Returns count or -1. */
+static int vis_path(Router *R, Arena *A, double sx, double sy, double tx, double ty, int32_t s1, int32_t s2,
+                    size_t cap, double out[static 2 * cap]) {
+    const Graph *g = R->g;
+    double pad = 0;
+    for (unsigned attempt = 0; attempt < 3; attempt++) {
+        pad = attempt == 0 ? 60 : pad * 3;
+        double lx = fmin(sx, tx) - pad, hx = fmax(sx, tx) + pad, ly = fmin(sy, ty) - pad, hy = fmax(sy, ty) + pad;
+        /* candidate corners */
+        constexpr size_t MAXC = 160;
+        double cx[MAXC + 2], cy[MAXC + 2];
+        size_t nc = 0;
+        cx[nc] = sx, cy[nc] = sy, nc++;
+        cx[nc] = tx, cy[nc] = ty, nc++;
+        const Grid *G = &R->G;
+        size_t gx0 = lx < G->x0 ? 0 : (size_t)((lx - G->x0) / G->cs), gy0 = ly < G->y0 ? 0 : (size_t)((ly - G->y0) / G->cs);
+        size_t gx1 = hx < G->x0 ? 0 : (size_t)((hx - G->x0) / G->cs), gy1 = hy < G->y0 ? 0 : (size_t)((hy - G->y0) / G->cs);
+        if (gx1 >= G->gw) gx1 = G->gw - 1;
+        if (gy1 >= G->gh) gy1 = G->gh - 1;
+        if (++R->cur == 0) { memset(R->stamp, 0, g->nn * sizeof *R->stamp); R->cur = 1; }
+        bool full = false;
+        for (size_t yy = gy0; yy <= gy1 && !full; yy++)
+            for (size_t xx = gx0; xx <= gx1 && !full; xx++)
+                for (uint32_t k = G->off[yy * G->gw + xx]; k < G->off[yy * G->gw + xx + 1]; k++) {
+                    uint32_t v = G->idx[k];
+                    if (R->stamp[v] == R->cur || (int32_t)v == s1 || (int32_t)v == s2) continue;
+                    R->stamp[v] = R->cur;
+                    const Box *b = &R->nb[v];
+                    if (b->x1 < lx || b->x0 > hx || b->y1 < ly || b->y0 > hy) continue;
+                    if (nc + 4 > MAXC + 2) { full = true; break; }
+                    double xs[2] = {b->x0, b->x1}, ys[2] = {b->y0, b->y1};
+                    for (unsigned c = 0; c < 4; c++) cx[nc] = xs[c & 1], cy[nc] = ys[c >> 1], nc++;
+                }
+        /* drop corners buried in another obstacle */
+        size_t m = 2;
+        for (size_t i = 2; i < nc; i++) {
+            bool bad = false;
+            int32_t h = seg_hit(R, cx[i], cy[i], cx[i], cy[i], s1, s2);
+            if (h != NONE && pt_in(&R->nb[h], cx[i], cy[i])) bad = true;
+            if (!bad) cx[m] = cx[i], cy[m] = cy[i], m++;
+        }
+        nc = m;
+        /* Dijkstra (dense, O(V^2) with lazy visibility) */
+        double *dist = ANEW(A, double, nc);
+        int32_t *prev = ANEW(A, int32_t, nc);
+        uint8_t *done = ANEW(A, uint8_t, nc);
+        if (!dist || !prev || !done) return -1;
+        for (size_t i = 0; i < nc; i++) dist[i] = INFINITY, prev[i] = -1, done[i] = 0;
+        dist[0] = 0;
+        for (;;) {
+            size_t u = SIZE_MAX;
+            double bd = INFINITY;
+            for (size_t i = 0; i < nc; i++) if (!done[i] && dist[i] < bd) bd = dist[i], u = i;
+            if (u == SIZE_MAX || u == 1) break;
+            done[u] = 1;
+            for (size_t w = 1; w < nc; w++) {
+                if (done[w]) continue;
+                double d = bd + hypot(cx[w] - cx[u], cy[w] - cy[u]);
+                if (d >= dist[w]) continue;
+                if (R->budget < 0) return -1;
+                if (seg_hit(R, cx[u], cy[u], cx[w], cy[w], s1, s2) != NONE) continue;
+                dist[w] = d, prev[w] = (int32_t)u;
+            }
+        }
+        if (dist[1] == INFINITY) { if (full) break; continue; }
+        size_t k = 0;
+        for (int32_t v = prev[1]; v > 0; v = prev[v]) k++;
+        if (k > cap) return -1;
+        size_t j = k;
+        for (int32_t v = prev[1]; v > 0; v = prev[v]) { j--; out[2 * j] = cx[v], out[2 * j + 1] = cy[v]; }
+        return (int)k;
+    }
+    return -1;
+}
+
 [[nodiscard]] static bool route_avoid(Graph *g) {
     Arena *A = g->arena;
     size_t N = g->nn, E = g->ne;
-    constexpr double M = 12;
-    size_t segs = 0;
-    for (size_t e = 0; e < E; e++) segs += g->eptn[e];
-    if ((double)segs * (double)N > 4e8) return true; /* too big: skip (bounded cost) */
+    constexpr double M = 10;
     Box *nb = ANEW(A, Box, N + 1);
-    if (!nb) return false;
-    for (size_t v = 0; v < N; v++)
+    bool *use = ANEW(A, bool, N + 1);
+    uint32_t *stamp = ANEW(A, uint32_t, N + 1);
+    if (!nb || !use || !stamp) return false;
+    memset(stamp, 0, (N + 1) * sizeof *stamp);
+    for (size_t v = 0; v < N; v++) {
+        use[v] = !(g->nflags[v] & NF_HIDDEN) && g->nw[v] > 0 && g->nh[v] > 0;
         nb[v] = (Box){g->nx[v] - g->nw[v] / 2 - M, g->ny[v] - g->nh[v] / 2 - M, g->nx[v] + g->nw[v] / 2 + M, g->ny[v] + g->nh[v] / 2 + M};
+    }
+    Router R = {.g = g, .nb = nb, .stamp = stamp, .budget = 4000000 + 200 * (int64_t)(N + E)};
+    if (!grid_build(A, &R.G, N, nb, use)) return false;
+    if (!R.G.gw) return true;
     VEC(double) out = {};
-    VEC(double) cur = {};
     for (size_t e = 0; e < E; e++) {
         uint32_t np = g->eptn[e];
         const double *P = g->pts.v + g->eptoff[e];
         size_t base = out.n;
-        if (np < 2) { g->eptoff[e] = (uint32_t)base; continue; }
-        cur.n = 0;
-        for (uint32_t i = 0; i < 2 * np; i++) if (!VEC_PUSH(A, &cur, P[i])) return false;
         int32_t a = g->efrom[e], b = g->eto[e];
-        unsigned inserted = 0;
-        for (size_t i = 0; i + 1 < cur.n / 2 && inserted < 24; i++) {
-            double px = cur.v[2 * i], py = cur.v[2 * i + 1], qx = cur.v[2 * i + 2], qy = cur.v[2 * i + 3];
-            double bt = 2;
-            int32_t hit = NONE;
-            for (size_t v = 0; v < N; v++) {
-                if ((int32_t)v == a || (int32_t)v == b || (g->nflags[v] & NF_HIDDEN) || g->nw[v] <= 0) continue;
-                const Box *bx = &nb[v];
-                if (fmax(px, qx) < bx->x0 || fmin(px, qx) > bx->x1 || fmax(py, qy) < bx->y0 || fmin(py, qy) > bx->y1) continue;
-                double t = seg_box(px, py, qx, qy, bx);
-                if (t >= 0 && t < bt) { bt = t; hit = (int32_t)v; }
+        /* find first / last offending segment */
+        size_t fi = SIZE_MAX, li = 0;
+        for (uint32_t i = 0; i + 1 < np && R.budget > 0; i++)
+            if (seg_hit(&R, P[2 * i], P[2 * i + 1], P[2 * i + 2], P[2 * i + 3], a, b) != NONE) {
+                if (fi == SIZE_MAX) fi = i;
+                li = i;
             }
-            if (hit == NONE) continue;
-            const Box *bx = &nb[hit];
-            double c[4];
-            if (fabs(qy - py) >= fabs(qx - px)) { /* mostly vertical: pass left or right */
-                double xm = px + (qx - px) * 0.5, sx = (xm - bx->x0 < bx->x1 - xm) ? bx->x0 : bx->x1;
-                bool down = qy > py;
-                c[0] = sx, c[1] = down ? bx->y0 : bx->y1, c[2] = sx, c[3] = fmin(fmax(qy, bx->y0), bx->y1); /* stop at the far side or the target level */
-            } else {
-                double ym = py + (qy - py) * 0.5, sy = (ym - bx->y0 < bx->y1 - ym) ? bx->y0 : bx->y1;
-                bool right = qx > px;
-                c[0] = right ? bx->x0 : bx->x1, c[1] = sy, c[2] = fmin(fmax(qx, bx->x0), bx->x1), c[3] = sy;
-            }
-            /* insert c after point i */
-            for (unsigned k = 0; k < 4; k++) if (!VEC_PUSH(A, &cur, 0.0)) return false;
-            memmove(cur.v + 2 * i + 6, cur.v + 2 * i + 2, (cur.n - 4 - (2 * i + 2)) * sizeof *cur.v);
-            memcpy(cur.v + 2 * i + 2, c, sizeof c);
-            inserted++;
+        double tmp[2 * 64];
+        int k = -1;
+        if (fi != SIZE_MAX) {
+            /* endpoints of the detour: step back to points that are themselves outside obstacles */
+            k = vis_path(&R, A, P[2 * fi], P[2 * fi + 1], P[2 * li + 2], P[2 * li + 3], a, b, 64, tmp);
         }
-        for (size_t i = 0; i < cur.n; i++) if (!VEC_PUSH(A, &out, cur.v[i])) return false;
+        if (k < 0) {
+            for (uint32_t i = 0; i < 2 * np; i++) if (!VEC_PUSH(A, &out, P[i])) return false;
+        } else {
+            for (size_t i = 0; i <= fi; i++)
+                if (!VEC_PUSH(A, &out, P[2 * i]) || !VEC_PUSH(A, &out, P[2 * i + 1])) return false;
+            for (int i = 0; i < k; i++)
+                if (!VEC_PUSH(A, &out, tmp[2 * i]) || !VEC_PUSH(A, &out, tmp[2 * i + 1])) return false;
+            for (size_t i = li + 1; i < np; i++)
+                if (!VEC_PUSH(A, &out, P[2 * i]) || !VEC_PUSH(A, &out, P[2 * i + 1])) return false;
+        }
         g->eptoff[e] = (uint32_t)base;
-        g->eptn[e] = (uint32_t)(cur.n / 2);
+        g->eptn[e] = (uint32_t)((out.n - base) / 2);
     }
     g->pts.v = out.v, g->pts.n = out.n, g->pts.cap = out.cap;
     return true;
+}
+
+/* drop interior polyline points collinear with their neighbours (dummy-node runs) */
+static void simplify_pts(Graph *g) {
+    size_t w = 0;
+    double *V = g->pts.v;
+    for (size_t e = 0; e < g->ne; e++) {
+        uint32_t np = g->eptn[e], off = g->eptoff[e];
+        size_t base = w;
+        for (uint32_t i = 0; i < np; i++) {
+            double x = V[off + 2 * i], y = V[off + 2 * i + 1];
+            size_t k = (w - base) / 2;
+            if (k >= 1 && fabs(x - V[w - 2]) < 1e-6 && fabs(y - V[w - 1]) < 1e-6) continue; /* duplicate */
+            if (k >= 2) {
+                double ax = V[w - 4], ay = V[w - 3], bx = V[w - 2], by = V[w - 1];
+                double cr = (bx - ax) * (y - by) - (by - ay) * (x - bx);
+                double dt = (bx - ax) * (x - bx) + (by - ay) * (y - by);
+                double l2 = hypot(bx - ax, by - ay) * hypot(x - bx, y - by);
+                if (dt > 0 && fabs(cr) <= 1e-3 * l2) { V[w - 2] = x, V[w - 1] = y; continue; } /* extend run */
+            }
+            V[w++] = x, V[w++] = y;
+        }
+        g->eptoff[e] = (uint32_t)base;
+        g->eptn[e] = (uint32_t)((w - base) / 2);
+    }
+    g->pts.n = w;
+}
+
+/* move edge labels onto the drawn curve (B-spline of the polyline), nearest point to the reserved slot */
+static void labels_on_curve(Graph *g) {
+    for (size_t e = 0; e < g->ne; e++) {
+        uint32_t np = g->eptn[e];
+        if (!g->elabel[e].n || np < 3) continue;
+        const double *P = g->pts.v + g->eptoff[e];
+        double lx = g->elx[e], ly = g->ely[e], bx = lx, by = ly, bd = INFINITY;
+        /* curveBasis: segment i (1..np-2 interior) uses points i-1,i,i+1 with endpoints clamped */
+        for (uint32_t i = 0; i + 2 < np; i++) {
+            const double *p0 = P + 2 * i, *p1 = p0 + 2, *p2 = p0 + 4;
+            /* quadratic B-spline piece between midpoints (start/end pieces anchored at the ends) */
+            double sx = i == 0 ? p0[0] : (p0[0] + p1[0]) / 2, sy = i == 0 ? p0[1] : (p0[1] + p1[1]) / 2;
+            double ex = i + 3 == np ? p2[0] : (p1[0] + p2[0]) / 2, ey = i + 3 == np ? p2[1] : (p1[1] + p2[1]) / 2;
+            for (unsigned s = 0; s <= 8; s++) {
+                double t = s / 8.0, u = 1 - t;
+                double x = u * u * sx + 2 * u * t * p1[0] + t * t * ex, y = u * u * sy + 2 * u * t * p1[1] + t * t * ey;
+                double d = (x - lx) * (x - lx) + (y - ly) * (y - ly);
+                if (d < bd) bd = d, bx = x, by = y;
+            }
+        }
+        g->elx[e] = bx, g->ely[e] = by;
+    }
 }
 
 /* place each cluster title where no edge crosses the title band (prefer centred) */
@@ -1471,7 +1687,9 @@ static double seg_box(double px, double py, double qx, double qy, const Box *b) 
 cmm_status flow_layout(Graph *g) {
     cmm_status st = layout_rec(g, 0);
     if (st) return st;
-    if ((g->flags & CMM_F_ROUTE_AVOID) && !route_avoid(g)) return CMM_ERR_NOMEM;
+    if (!(g->flags & CMM_F_NO_AVOID) && !route_avoid(g)) return CMM_ERR_NOMEM;
+    simplify_pts(g);
+    labels_on_curve(g);
     if (!place_titles(g)) return CMM_ERR_NOMEM;
     return CMM_OK;
 }

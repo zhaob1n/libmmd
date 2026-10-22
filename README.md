@@ -40,3 +40,16 @@ API (`include/cmermaid.h`): `cmm_render_svg(n, src, opts, &buf, &err)`, `cmm_buf
 | xychart(-beta) | `src/d_xychart.c` | vertical/horizontal, categories or numeric range, bar + line series, nice ticks |
 | gitGraph | `src/d_gitgraph.c` | LR/TB/BT, branch order, merge, cherry-pick, tags, NORMAL/REVERSE/HIGHLIGHT |
 | text metrics | `src/text.c` | embedded Helvetica-compatible advance table, CJK/emoji wide, 8-byte ASCII fast path |
+
+## Flowchart features (v2)
+- `direction` inside subgraphs: clusters with their own direction are laid out recursively and placed as
+  fixed-size proxy nodes; edges to a subgraph id attach to the cluster box; cluster titles are moved
+  sideways to avoid edges crossing the title band.
+- Crossing reduction: barycenter sweeps + keep-best + budgeted transpose polish (dirty-layer skipping).
+- Port ordering for fan-in/fan-out and parallel edges; nested multiple self-loops.
+- `mmdc-c --avoid` (`CMM_F_ROUTE_AVOID`): detours polyline segments around nodes they pass through.
+- Themes: `default`, `dark`, `forest`, `neutral` via `%%{init: {"theme": ...}}%%`, frontmatter, or `-t`.
+- Markdown strings (`"`**bold** *italic*`"`) with auto-wrap at 200px, `fa:fa-name` icons
+  (Font Awesome glyphs; needs the font installed to render), edge ids `A e1@--> B`, `e1@{ animate: true }`.
+- Golden tests in `tests/golden` (`UPDATE_GOLDEN=1 bash tests/run_tests.sh` to refresh).
+- Benchmarks: `bench/results_v2.txt`.

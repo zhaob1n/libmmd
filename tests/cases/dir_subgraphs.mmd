@@ -1,0 +1,13 @@
+flowchart LR
+  start --> S1
+  subgraph S1[Pipeline TB]
+    direction TB
+    p1 --> p2 --> p3
+  end
+  subgraph S2[Side RL]
+    direction RL
+    q1 --> q2
+  end
+  S1 --> S2
+  p3 --> fin
+  q2 --> fin

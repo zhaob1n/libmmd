@@ -29,6 +29,64 @@ static inline bool str_ieq(Str a, Str b) {
     }
     return true;
 }
+/* ---- 16-bytes-at-a-time scanners (SSE2; scalar tail / fallback) ----
+ * Each returns the first index >= i (and < n) whose byte is NOT in the class, or n. */
+#if defined(__SSE2__)
+#include <emmintrin.h>
+#define SCAN16(cond_vec, cond_scalar)                                                       \
+    for (; i + 16 <= n; i += 16) {                                                          \
+        __m128i v = _mm_loadu_si128((const __m128i *)(const void *)(s + i));                \
+        unsigned m = (unsigned)_mm_movemask_epi8(cond_vec) ^ 0xFFFFu;                       \
+        if (m) return i + (size_t)__builtin_ctz(m);                                          \
+    }                                                                                        \
+    for (; i < n && (cond_scalar); i++) {}                                                   \
+    return i;
+/* identifier bytes: [0-9A-Za-z_] and >= 0x80 */
+static inline size_t scan_id(size_t n, const char s[static n], size_t i) {
+    #define C_ (unsigned char)s[i]
+    SCAN16(_mm_or_si128(
+               _mm_or_si128(_mm_cmplt_epi8(v, _mm_setzero_si128()), /* >= 0x80 */
+                            _mm_cmpeq_epi8(v, _mm_set1_epi8('_'))),
+               _mm_or_si128(
+                   _mm_and_si128(_mm_cmpgt_epi8(v, _mm_set1_epi8('0' - 1)), _mm_cmplt_epi8(v, _mm_set1_epi8('9' + 1))),
+                   _mm_and_si128(_mm_cmpgt_epi8(_mm_or_si128(v, _mm_set1_epi8(32)), _mm_set1_epi8('a' - 1)),
+                                 _mm_cmplt_epi8(_mm_or_si128(v, _mm_set1_epi8(32)), _mm_set1_epi8('z' + 1))))),
+           (C_ >= 0x80 || C_ == '_' || (unsigned)(C_ - '0') < 10u || (unsigned)((C_ | 32) - 'a') < 26u))
+    #undef C_
+}
+/* blanks: ' ' '\t' '\r' */
+static inline size_t scan_sp(size_t n, const char s[static n], size_t i) {
+    if (i < n && s[i] != ' ' && s[i] != '\t' && s[i] != '\r') return i; /* common: no blank at all */
+    SCAN16(_mm_or_si128(_mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8(' ')), _mm_cmpeq_epi8(v, _mm_set1_epi8('\t'))),
+                        _mm_cmpeq_epi8(v, _mm_set1_epi8('\r'))),
+           (s[i] == ' ' || s[i] == '\t' || s[i] == '\r'))
+}
+/* XML-plain bytes: not < > & " # and not a control char other than \t \n */
+static inline size_t scan_xml_plain(size_t n, const char s[static n], size_t i) {
+    SCAN16(_mm_andnot_si128(
+               _mm_or_si128(_mm_or_si128(_mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8('<')), _mm_cmpeq_epi8(v, _mm_set1_epi8('>'))),
+                                         _mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8('&')), _mm_cmpeq_epi8(v, _mm_set1_epi8('"')))),
+                            _mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8('#')),
+                                         _mm_and_si128(_mm_cmpgt_epi8(v, _mm_set1_epi8(-1)), _mm_cmplt_epi8(v, _mm_set1_epi8(0x20))))),
+               _mm_set1_epi8(-1)),
+           !(s[i] == '<' || s[i] == '>' || s[i] == '&' || s[i] == '"' || s[i] == '#' || (unsigned char)s[i] < 0x20))
+}
+#undef SCAN16
+#else
+static inline size_t scan_id(size_t n, const char s[static n], size_t i) {
+    for (; i < n; i++) { unsigned char c = (unsigned char)s[i]; if (!(c >= 0x80 || c == '_' || (unsigned)(c - '0') < 10u || (unsigned)((c | 32) - 'a') < 26u)) break; }
+    return i;
+}
+static inline size_t scan_sp(size_t n, const char s[static n], size_t i) {
+    while (i < n && (s[i] == ' ' || s[i] == '\t' || s[i] == '\r')) i++;
+    return i;
+}
+static inline size_t scan_xml_plain(size_t n, const char s[static n], size_t i) {
+    for (; i < n; i++) { char c = s[i]; if (c == '<' || c == '>' || c == '&' || c == '"' || c == '#' || (unsigned char)c < 0x20) break; }
+    return i;
+}
+#endif
+
 static inline bool is_sp(char c) { return c == ' ' || c == '\t' || c == '\r'; }
 static inline Str str_trim(Str s) {
     while (s.n && (is_sp(s.p[0]) || s.p[0] == '\n')) s.p++, s.n--;
@@ -55,6 +113,8 @@ typedef struct Arena {
 /* grow an array previously allocated from the arena (or nullptr). */
 [[nodiscard]] void *arena_grow(Arena *a, void *old, size_t *cap, size_t elem, size_t align);
 void arena_free(Arena *a);
+/* Drop all allocations but keep (coalesced) memory for reuse. */
+void arena_reset(Arena *a);
 [[nodiscard]] Str arena_strdup(Arena *a, Str s);
 
 #define ANEW(a, T, n) arena_alloc_array((a), (n), sizeof(T), alignof(T))
