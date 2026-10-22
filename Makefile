@@ -99,6 +99,7 @@ pgo:
 test: all $(BUILD)/test-shared
 	./tests/run_tests.sh $(BUILD)/mmdc-c
 	$(BUILD)/test-shared
+	python3 tools/docs_audit.py -q -v $(BUILD)/mmdc-c
 
 both:
 	$(MAKE) CC=$(HOME)/.local/bin/clang BUILD=build

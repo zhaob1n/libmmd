@@ -27,12 +27,74 @@ static void push_events(Arena *a, Str s, void *evp, bool *oom) {
     }
 }
 
+/* "timeline TD": sections as full-width bands, periods in a left column, a vertical axis, events to the right. */
+static cmm_status timeline_td(Arena *a, Buf *out, Str title, size_t ns, const Str *secs, size_t np,
+                             const Period per[static np], Str wev[static 1], double eh[static 1], bool multi) {
+    constexpr double GAP = 20;
+    constexpr double PW = 150;
+    constexpr double EW = 220;
+    constexpr double PH = 40;
+    constexpr double SH = 50;
+    constexpr double EG = 10;
+    const double ax = GAP + PW + 30, ex = ax + 30, W = ex + EW + GAP;
+    const double top = title.n ? 50 : 20;
+    double y = top;
+    for (size_t i = 0; i < np; i++) {
+        if (ns && (i == 0 || per[i].sec != per[i - 1].sec)) y += SH + 20;
+        double h = 0;
+        for (uint32_t k = 0; k < per[i].ne; k++) h += eh[per[i].e0 + k] + (k ? EG : 0);
+        y += (h > PH ? h : PH) + 20;
+    }
+    BBox bb = {0, 0, W, y + 10};
+    if (!buf_reserve(out, 4096 + (np + 4) * 600)) return CMM_ERR_NOMEM;
+    DG_HEAD(out, bb, 4, "timeline", CSS);
+    if (title.n) dg_text(out, title, 20, W / 2, 22, "middle", "ttl");
+    buf_lit(out, "<defs><marker id=\"tarrow\" markerWidth=\"6\" markerHeight=\"6\" refX=\"5\" refY=\"3\" orient=\"auto\">"
+                 "<path d=\"M0,0L6,3L0,6Z\"/></marker></defs>");
+    buf_lit(out, "<line class=\"axis\" marker-end=\"url(#tarrow)\" x1=\""); buf_num(out, ax);
+    buf_lit(out, "\" y1=\""); buf_num(out, top - 6); buf_lit(out, "\" x2=\""); buf_num(out, ax);
+    buf_lit(out, "\" y2=\""); buf_num(out, y); buf_lit(out, "\"/>");
+    y = top;
+    for (size_t i = 0; i < np; i++) {
+        if (ns && (i == 0 || per[i].sec != per[i - 1].sec)) {
+            size_t ci = multi ? per[i].sec % countof(COL) : 0;
+            dg_rect_fill(out, GAP, y, W - 2 * GAP, SH, 6, "box", dcfg_pal("cScale", ci, COL[ci]));
+            TXG(out, ci);
+            dg_text(out, dg_wrap(a, secs[per[i].sec], 14, W - 2 * GAP - 10), 14, W / 2, y + SH / 2, "middle", "tx");
+            buf_lit(out, "</g>");
+            y += SH + 20;
+        }
+        size_t ci = !multi ? 0 : ns ? per[i].sec : i;
+        const char *col = dcfg_pal("cScale", ci % countof(COL), COL[ci % countof(COL)]);
+        TXG(out, ci);
+        dg_line(out, GAP + PW, y + PH / 2, ax, y + PH / 2, "ln");
+        dg_rect_fill(out, GAP, y, PW, PH, 6, "box", col);
+        dg_text(out, dg_wrap(a, per[i].name, 14, PW - 12), 14, GAP + PW / 2, y + PH / 2, "middle", "tx");
+        double ey = y, h = 0;
+        for (uint32_t k = 0; k < per[i].ne; k++) {
+            size_t e = per[i].e0 + k;
+            dg_line(out, ax, ey + eh[e] / 2, ex, ey + eh[e] / 2, "ln");
+            dg_rect_fill(out, ex, ey, EW, eh[e], 6, "box", col);
+            dg_text(out, wev[e], 14, ex + EW / 2, ey + eh[e] / 2, "middle", "tx");
+            h += eh[e] + (k ? EG : 0);
+            ey += eh[e] + EG;
+        }
+        buf_lit(out, "</g>");
+        y += (h > PH ? h : PH) + 20;
+    }
+    buf_lit(out, "</svg>\n");
+    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+}
+
 DIAG_FN(timeline_render) {
     (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;
     if (!dg_next_line(&it, &line, &lo)) return diag_fail(err_off, msg, off, "empty timeline");
+    Str hrest = line;
+    (void)dg_word(&hrest);
+    const bool TD = str_eq(str_trim(hrest), S("TD"));
     VEC(Str) secs = {};
     VEC(Str) ev = {};
     VEC(Period) per = {};
@@ -85,6 +147,7 @@ DIAG_FN(timeline_render) {
         }
         if (y > maxbot) maxbot = y;
     }
+    if (TD) return timeline_td(a, out, title, secs.n, secs.v, per.n, per.v, wev, eh, MULTI);
     double W = per.n * (PW + GAP) + GAP, axy = py + PH + 20;
     BBox bb = {0, 0, W, maxbot + 10};
     if (!buf_reserve(out, 4096 + (per.n + ev.n) * 400)) return CMM_ERR_NOMEM;

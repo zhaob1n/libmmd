@@ -249,7 +249,7 @@ static constexpr char CSS[] =
     "#mermaid .active{fill:#bfc7ff;stroke:#534fbc;}#mermaid .crit{fill:#ff8888;stroke:#ff0000;}"
     "#mermaid .crit.done{fill:#d3d3d3;stroke:#ff0000;}#mermaid .crit.active{fill:#ff8888;stroke:#ff0000;}"
     "#mermaid .tin{fill:#fff;font-size:11px;}#mermaid .tout{fill:#000;font-size:11px;}"
-    "#mermaid .done+.tin,#mermaid .tin.dk{fill:#000;}#mermaid .today{stroke:red;stroke-width:2px;fill:none;}#mermaid .vert{stroke:#ff8888;stroke-width:2px;stroke-dasharray:4 2;}"
+    "#mermaid .done+.tin,#mermaid .tin.dk{fill:#000;}#mermaid .today{stroke:red;stroke-width:2px;fill:none;}#mermaid .vert{stroke:navy;stroke-width:4px;}#mermaid .vtx{fill:navy;font-size:11px;}"
     "#mermaid .today{stroke:red;stroke-width:2px;}#mermaid .ttl{font-size:18px;}";
 
 DIAG_FN(gantt_render) {
@@ -259,6 +259,7 @@ DIAG_FN(gantt_render) {
     if (!dg_next_line(&it, &line, &lo)) return diag_fail(err_off, msg, off, "empty gantt");
     GCtx c = {.a = a, .fmt = S("YYYY-MM-DD")};
     Str axis = S("%Y-%m-%d"), tick = {}, today_style = {};
+    bool compact = str_starts(dcfg_get("gantt.displayMode"), S("compact")) || str_starts(dcfg_get("displayMode"), S("compact"));
     { /* config defaults; in-diagram axisFormat/tickInterval lines override */
         Str ca = dcfg_get("gantt.axisFormat"), ct = dcfg_get("gantt.tickInterval");
         if (ca.n && ca.n <= 64) axis = ca;
@@ -306,9 +307,14 @@ DIAG_FN(gantt_render) {
             for (int k = 0; k < 7; k++) if (str_eq(d, (Str){.p = WD[k], .n = strlen(WD[k])})) week_start = k;
             continue;
         }
-        if (
-            str_eq(w, S("click")) || str_eq(w, S("displayMode")) || str_starts(w, S("acc")))
+        if (str_starts(w, S("displayMode"))) { /* "displayMode: compact" / "displayMode compact" */
+            Str v = str_trim(w.n > 11 ? (Str){.p = w.p + 11, .n = w.n - 11} : rest);
+            if (v.n && v.p[0] == ':') v = str_trim((Str){.p = v.p + 1, .n = v.n - 1});
+            if (!v.n) v = rest;
+            compact = str_starts(v, S("compact"));
             continue;
+        }
+        if (str_eq(w, S("click")) || str_starts(w, S("acc"))) continue;
         if (str_eq(w, S("section"))) { if (!VEC_PUSH(a, &secs, rest)) return CMM_ERR_NOMEM; continue; }
         const char *col = memchr(line.p, ':', line.n);
         if (!col) return diag_fail(err_off, msg, lo, "expected 'task name : spec'");
@@ -369,7 +375,27 @@ DIAG_FN(gantt_render) {
         double tw = text_width(secs.v[i], 11) + 20;
         if (tw > left) left = tw;
     }
-    double H = TOP + tv.n * (BH + GAP) + 40;
+    /* rows: vert markers take none; compact mode packs a section's tasks into the first free row */
+    uint32_t *row = ANEW(a, uint32_t, tv.n + 1);
+    double *rend = ANEW(a, double, tv.n + 1);
+    if (!row || !rend) return CMM_ERR_NOMEM;
+    size_t nrows = 0;
+    for (size_t i = 0; i < tv.n;) {
+        size_t j = i, base = nrows, used = 0;
+        while (j < tv.n && tv.v[j].sec == tv.v[i].sec) j++;
+        for (size_t k = i; k < j; k++) {
+            if (tv.v[k].tags & T_VERT) { row[k] = (uint32_t)base; continue; }
+            size_t r = used;
+            if (compact)
+                for (r = 0; r < used; r++) if (rend[r] <= tv.v[k].t0 + 1e-6) break;
+            if (r == used) used++;
+            rend[r] = tv.v[k].t1 > tv.v[k].t0 ? tv.v[k].t1 : tv.v[k].t0 + 1e-3;
+            row[k] = (uint32_t)(base + r);
+        }
+        nrows = base + (used ? used : 1);
+        i = j;
+    }
+    double H = TOP + nrows * (BH + GAP) + 40;
     /* ticks */
     /* d3 time-scale intervals (scale.ticks(10)): mermaid's default axis density */
     static const double STEPS[] = {1000, 5000, 15000, 30000, 60000, 300000, 900000, 1800000, 3600000,
@@ -477,13 +503,15 @@ DIAG_FN(gantt_render) {
         while (j < tv.n && tv.v[j].sec == tv.v[i].sec) j++;
         char cls[8];
         snprintf(cls, sizeof cls, "sec%u", tv.v[i].sec % 4);
-        dg_rect(out, 0, TOP + i * (BH + GAP) - 2, W, (j - i) * (BH + GAP), 0, cls);
-        if (secs.n) dg_text(out, secs.v[tv.v[i].sec], 11, 10, TOP + (i + j) * (BH + GAP) / 2.0 - 2, "start", "stitle");
+        size_t r0 = row[i], r1 = r0 + 1;
+        for (size_t k = i; k < j; k++) if (row[k] + 1u > r1) r1 = row[k] + 1u;
+        dg_rect(out, 0, TOP + r0 * (BH + GAP) - 2, W, (r1 - r0) * (BH + GAP), 0, cls);
+        if (secs.n) dg_text(out, secs.v[tv.v[i].sec], 11, 10, TOP + (r0 + r1) * (BH + GAP) / 2.0 - 2, "start", "stitle");
         i = j;
     }
     /* excluded days (mermaid shades runs of excluded days in #eee) */
     if (c.ex_weekends || c.exdays.n) {
-        double d0 = floor(lo_t / DAY), d1 = ceil(hi_t / DAY), gb = TOP + tv.n * (BH + GAP) - 2;
+        double d0 = floor(lo_t / DAY), d1 = ceil(hi_t / DAY), gb = TOP + nrows * (BH + GAP) - 2;
         for (double d = d0; d < d1 && d - d0 < 4000;) {
             if (!excluded(&c, d)) { d++; continue; }
             double e = d;
@@ -494,7 +522,8 @@ DIAG_FN(gantt_render) {
         }
     }
     /* grid + axis labels */
-    double gy0 = TOP - 2, gy1 = TOP + tv.n * (BH + GAP) - 2;
+    double gy0 = TOP - 2, gy1 = TOP + nrows * (BH + GAP) - 2;
+    const bool top_axis = dcfg_bool("gantt.topAxis", false);
     for (size_t k = 0; k < ntk; k++) {
         double t = TK[k];
         if (t < lo_t - 1e-6) continue;
@@ -502,17 +531,18 @@ DIAG_FN(gantt_render) {
         dg_line(out, x, gy0, x, gy1, "grid");
         size_t len = fmt_time(axis, t, sizeof lab, lab);
         dg_text(out, (Str){.p = lab, .n = len}, 10, x, gy1 + 14, "middle", "tick");
+        if (top_axis) dg_text(out, (Str){.p = lab, .n = len}, 10, x, gy0 - 10, "middle", "tick");
     }
     /* tasks */
     for (size_t i = 0; i < tv.n; i++) {
         const Task *t = &tv.v[i];
-        double y = TOP + i * (BH + GAP), x0 = left + (t->t0 - lo_t) * sc, x1 = left + (t->t1 - lo_t) * sc;
+        double y = TOP + row[i] * (BH + GAP), x0 = left + (t->t0 - lo_t) * sc, x1 = left + (t->t1 - lo_t) * sc;
         char cls[40];
         snprintf(cls, sizeof cls, "task%s%s%s", t->tags & T_CRIT ? " crit" : "", t->tags & T_DONE ? " done" : "",
                  t->tags & T_ACTIVE ? " active" : "");
         if (t->tags & T_VERT) {
             dg_line(out, x0, gy0, x0, gy1, "vert");
-            dg_text(out, t->name, 11, x0, gy1 + 28, "middle", "tout");
+            dg_text(out, t->name, 11, x0, gy1 + 28, "middle", "vtx");
             continue;
         }
         if (t->tags & T_MILE) {
