@@ -137,6 +137,12 @@ mermaid itself fails to render `block_full` and `radar_full` (partial named curv
 - Compound ordering seeded with dagre's tie order; same-rank order agreement with mermaid 0.175 → 0.936.
 - Numbers: bench/results_v8.txt.
 
+## v10
+
+- Faithful dagre compound ranking in dagre mode (`src/drank.c`): nesting graph (border top/bottom nodes, nodeSep weights), network simplex (graphlib iteration order), label proxies, removeEmptyRanks, cleanup, border segments.
+- Ordering agreement with mermaid: 1051/1051. Rank-axis position ordering vs mermaid SVGs: 100%. Cross-axis: 99.1% (`bench/posagree.py`).
+- Small graphs use arena scratch in `dagre_order`. Small takes 16.9 µs in dagre mode, or 12.8 µs in fast mode. See `bench/results_v10.txt`.
+
 ## v9
 - Faithful port of dagre's order step (`src/dorder.c`: initOrder DFS, layer graphs with cluster borders,
   barycenter/sortSubgraph/resolveConflicts with subgraph constraints, biased down/up sweeps, keep best by

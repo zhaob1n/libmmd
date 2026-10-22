@@ -1,0 +1,10 @@
+v10 (master, cfd1ff2) — faithful dagre compound ranking (nestingGraph + network simplex + removeEmptyRanks + cleanup + border segments)
+bench min us (taskset -c 2, best of 3)   v1        v10
+small                                    11.7      16.9   (fast mode 12.8)
+medium                                   406.1     400.9
+large                                    9099.7    8542.2
+xlarge                                   56602.5   54801.3
+ordagree vs mermaid dagre dumps: TOTAL 1051/1051 = 1.000, macro 1.000
+ranks: exact on all fixtures except flowchart_large (N>96, fast path) and selfloop_bidi (mermaid self-loop helper nodes not modeled)
+node-position agreement vs refsvg (bench/posagree.py, pairwise ordering of node centres, 1px tolerance):
+  cross-axis 0.9910 (23552 pairs; 0.9888 excl. large), rank-axis 1.0000
