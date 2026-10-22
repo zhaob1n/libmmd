@@ -79,7 +79,14 @@ static void t_neighbors(RG *g) {
     }
     for (size_t v = 0; v < M; v++) {
         uint32_t a = g->nboff[v], n = g->nboff[v + 1] - a;
-        if (n > 1) qsort(g->nbk + 2 * a, n, 2 * sizeof(uint64_t), cmp_u64pair);
+        if (n > 16) { qsort(g->nbk + 2 * a, n, 2 * sizeof(uint64_t), cmp_u64pair); continue; }
+        uint64_t *q = g->nbk + 2 * a; /* stable insertion sort on the first word (glibc's qsort is a stable merge) */
+        for (uint32_t i = 1; i < n; i++) {
+            uint64_t k0 = q[2 * i], k1 = q[2 * i + 1];
+            uint32_t j = i;
+            for (; j && q[2 * j - 2] > k0; j--) q[2 * j] = q[2 * j - 2], q[2 * j + 1] = q[2 * j - 1];
+            q[2 * j] = k0, q[2 * j + 1] = k1;
+        }
     }
 }
 
@@ -418,8 +425,9 @@ bool dagre_rank(Arena *A, const DRankIn *in, int32_t rank[], int32_t top[], int3
         size_t j = i;
         while (j > 0) {
             Str a = nm[ordv[j - 1]], bs = nm[x];
-            size_t n = a.n < bs.n ? a.n : bs.n;
-            int r = memcmp(a.p, bs.p, n);
+            size_t n = a.n < bs.n ? a.n : bs.n, c = 0;
+            while (c < n && a.p[c] == bs.p[c]) c++;
+            int r = c == n ? 0 : (unsigned char)a.p[c] < (unsigned char)bs.p[c] ? -1 : 1;
             if (r < 0 || (r == 0 && a.n <= bs.n)) break;
             ordv[j] = ordv[j - 1];
             j--;
