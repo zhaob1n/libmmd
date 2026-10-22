@@ -2520,8 +2520,172 @@ static void labels_on_curve(Graph *g) {
     return true;
 }
 
+/* ---------- mermaid self-loop helpers ----------
+ * mermaid's dagre adapter replaces a self-loop v->v by two 10x10 helper nodes v---v---1/2 (same
+ * parent) and the chain v->h1 (no label), h1->h2 (the label), h2->v, laid out like ordinary edges.
+ * Afterwards the three segments are merged back: the loop is drawn on the side of v facing the
+ * helpers' centroid with getSelfLoopPoints' 4-point box and the label just outside it. */
+typedef struct LoopSave {
+    size_t N, E, K;
+    int32_t *map; /* original edge -> first expanded edge */
+    int32_t *efrom, *eto;
+    Str *elabel, *eid, *nid, *nlabel, *nclass, *nstyle;
+    Stroke *estroke;
+    Arrow *estart, *eend;
+    uint16_t *elen;
+    uint8_t *eflags, *nflags;
+    Shape *nshape;
+    int32_t *nparent;
+} LoopSave;
+
+static bool loop_dagre(const Graph *g) {
+    return g->order_mode != CMM_ORDER_FAST && g->ns <= DAGRE_ORDER_MAX_S &&
+           (g->order_mode == CMM_ORDER_DAGRE || g->nn <= DAGRE_RANK_MAX_N);
+}
+
+static bool is_loop(const Graph *g, size_t e) {
+    int32_t a = g->efrom[e];
+    return a != NONE && a == g->eto[e] && !(g->nflags[a] & (NF_HIDDEN | NF_SUBREF));
+}
+
+#define LGROW(T, f, n) do { T *t_ = ANEW(A, T, (n) + 1); if (!t_) return CMM_ERR_NOMEM; memcpy(t_, sv->f, N * sizeof *t_); g->f = t_; } while (0)
+static cmm_status loops_expand(Graph *g, LoopSave *sv) {
+    *sv = (LoopSave){};
+    if (!loop_dagre(g)) return CMM_OK;
+    size_t K = 0, N = g->nn, E = g->ne;
+    for (size_t e = 0; e < E; e++) K += is_loop(g, e);
+    if (!K) return CMM_OK;
+    Arena *A = g->arena;
+    *sv = (LoopSave){.N = N, .E = E, .K = K, .efrom = g->efrom, .eto = g->eto, .elabel = g->elabel, .eid = g->eid,
+                     .nid = g->nid, .nlabel = g->nlabel, .nclass = g->nclass, .nstyle = g->nstyle, .estroke = g->estroke,
+                     .estart = g->estart, .eend = g->eend, .elen = g->elen, .eflags = g->eflags, .nflags = g->nflags,
+                     .nshape = g->nshape, .nparent = g->nparent};
+    sv->map = ANEW(A, int32_t, E + 1);
+    if (!sv->map) return CMM_ERR_NOMEM;
+    size_t N2 = N + 2 * K, E2 = E + 2 * K;
+    LGROW(Str, nid, N2); LGROW(Str, nlabel, N2); LGROW(Str, nclass, N2); LGROW(Str, nstyle, N2);
+    LGROW(Shape, nshape, N2); LGROW(int32_t, nparent, N2); LGROW(uint8_t, nflags, N2);
+    double *nw = ANEW(A, double, N2 + 1), *nh = ANEW(A, double, N2 + 1);
+    int32_t *ef = ANEW(A, int32_t, E2 + 1), *et = ANEW(A, int32_t, E2 + 1);
+    Str *el = ANEW(A, Str, E2 + 1), *ei = ANEW(A, Str, E2 + 1);
+    Stroke *es = ANEW(A, Stroke, E2 + 1);
+    Arrow *ea = ANEW(A, Arrow, E2 + 1), *eb = ANEW(A, Arrow, E2 + 1);
+    uint16_t *eln = ANEW(A, uint16_t, E2 + 1);
+    uint8_t *efl = ANEW(A, uint8_t, E2 + 1);
+    if (!nw || !nh || !ef || !et || !el || !ei || !es || !ea || !eb || !eln || !efl) return CMM_ERR_NOMEM;
+    size_t v2 = N, k2 = 0;
+    for (size_t e = 0; e < E; e++) {
+        sv->map[e] = (int32_t)k2;
+        size_t cnt = 1;
+        int32_t a = sv->efrom[e];
+        if (is_loop(g, e)) {
+            for (unsigned h = 0; h < 2; h++) {
+                g->nid[v2 + h] = h ? (Str){.p = "---2", .n = 4} : (Str){.p = "---1", .n = 4};
+                g->nlabel[v2 + h] = (Str){};
+                g->nclass[v2 + h] = (Str){};
+                g->nstyle[v2 + h] = (Str){};
+                g->nshape[v2 + h] = SH_RECT;
+                g->nparent[v2 + h] = sv->nparent[a];
+                g->nflags[v2 + h] = NF_DEFINED | NF_FIXED;
+                nw[v2 + h] = nh[v2 + h] = 10;
+            }
+            int32_t h1 = (int32_t)v2, h2 = (int32_t)v2 + 1;
+            const int32_t F[3] = {a, h1, h2}, T[3] = {h1, h2, a};
+            for (unsigned i = 0; i < 3; i++) {
+                ef[k2 + i] = F[i], et[k2 + i] = T[i];
+                el[k2 + i] = i == 1 ? sv->elabel[e] : (Str){};
+                ei[k2 + i] = (Str){};
+                es[k2 + i] = sv->estroke[e];
+                ea[k2 + i] = AH_NONE, eb[k2 + i] = AH_NONE;
+                eln[k2 + i] = sv->elen[e];
+                efl[k2 + i] = 0;
+            }
+            v2 += 2;
+            cnt = 3;
+        } else {
+            ef[k2] = a, et[k2] = sv->eto[e], el[k2] = sv->elabel[e], ei[k2] = sv->eid ? sv->eid[e] : (Str){};
+            es[k2] = sv->estroke[e], ea[k2] = sv->estart[e], eb[k2] = sv->eend[e], eln[k2] = sv->elen[e];
+            efl[k2] = sv->eflags ? sv->eflags[e] : 0;
+        }
+        k2 += cnt;
+    }
+    g->nw = nw, g->nh = nh;
+    g->nn = N2, g->ne = E2;
+    g->efrom = ef, g->eto = et, g->elabel = el, g->eid = ei, g->estroke = es, g->estart = ea, g->eend = eb;
+    g->elen = eln, g->eflags = efl;
+    return CMM_OK;
+}
+#undef LGROW
+
+static cmm_status loops_collapse(Graph *g, const LoopSave *sv) {
+    if (!sv->K) return CMM_OK;
+    Arena *A = g->arena;
+    size_t E = sv->E;
+    uint32_t *po = ANEW(A, uint32_t, E + 1), *pn = ANEW(A, uint32_t, E + 1);
+    double *lx = ANEW(A, double, E + 1), *ly = ANEW(A, double, E + 1), *lw = ANEW(A, double, E + 1), *lh = ANEW(A, double, E + 1);
+    uint8_t *efl = ANEW(A, uint8_t, E + 1);
+    if (!po || !pn || !lx || !ly || !lw || !lh || !efl) return CMM_ERR_NOMEM;
+    bool horiz = g->dir == DIR_LR || g->dir == DIR_RL;
+    for (size_t e = 0; e < E; e++) {
+        size_t k = (size_t)sv->map[e];
+        efl[e] = sv->eflags ? sv->eflags[e] : 0;
+        int32_t a = sv->efrom[e];
+        bool loop = a != NONE && a == sv->eto[e] && k + 2 < g->ne && g->efrom[k] == a && g->eto[k + 2] == a &&
+                    g->eto[k] >= (int32_t)sv->N;
+        if (!loop) {
+            po[e] = g->eptoff[k], pn[e] = g->eptn[k];
+            lx[e] = g->elx[k], ly[e] = g->ely[k], lw[e] = g->elw[k], lh[e] = g->elh[k];
+            continue;
+        }
+        int32_t h1 = g->eto[k], h2 = g->eto[k + 1];
+        double x = g->nx[a], y = g->ny[a], hw = g->nw[a] / 2, hh = g->nh[a] / 2;
+        double dx = (g->nx[h1] + g->nx[h2]) / 2 - x, dy = (g->ny[h1] + g->ny[h2]) / 2 - y;
+        int side; /* 0 top, 1 bottom, 2 left, 3 right */
+        if (fabs(dx) > fabs(dy)) side = dx > 0 ? 3 : 2;
+        else if (fabs(dy) > 0) side = dy > 0 ? 1 : 0;
+        else side = g->dir == DIR_BT ? 1 : g->dir == DIR_LR ? 3 : g->dir == DIR_RL ? 2 : 0;
+        (void)horiz;
+        double labw = g->elw[k + 1], labh = g->elh[k + 1];
+        double maxspan = fmax(36, fmin(100, g->nw[a] * 0.8));
+        double span = fmin(fmax(fmax(labw, g->nw[a] * 0.35), 36), maxspan);
+        double depth = fmin(fmax(fmin(g->nw[a], g->nh[a]) * 0.45, 24), 48);
+        double P[8];
+        switch (side) {
+        case 1: P[0] = x - span / 2, P[1] = y + hh, P[2] = x - span / 2, P[3] = y + hh + depth,
+                P[4] = x + span / 2, P[5] = y + hh + depth, P[6] = x + span / 2, P[7] = y + hh; break;
+        case 3: P[0] = x + hw, P[1] = y - span / 2, P[2] = x + hw + depth, P[3] = y - span / 2,
+                P[4] = x + hw + depth, P[5] = y + span / 2, P[6] = x + hw, P[7] = y + span / 2; break;
+        case 2: P[0] = x - hw, P[1] = y - span / 2, P[2] = x - hw - depth, P[3] = y - span / 2,
+                P[4] = x - hw - depth, P[5] = y + span / 2, P[6] = x - hw, P[7] = y + span / 2; break;
+        default: P[0] = x - span / 2, P[1] = y - hh, P[2] = x - span / 2, P[3] = y - hh - depth,
+                 P[4] = x + span / 2, P[5] = y - hh - depth, P[6] = x + span / 2, P[7] = y - hh; break;
+        }
+        po[e] = (uint32_t)g->pts.n, pn[e] = 4;
+        for (unsigned i = 0; i < 8; i++) if (!VEC_PUSH(A, &g->pts, P[i])) return CMM_ERR_NOMEM;
+        constexpr double GAP = 4;
+        lw[e] = labw, lh[e] = labh;
+        switch (side) {
+        case 1: lx[e] = x, ly[e] = y + hh + depth + labh / 2 + GAP; break;
+        case 3: lx[e] = x + hw + depth + labw / 2 + GAP, ly[e] = y; break;
+        case 2: lx[e] = x - hw - depth - labw / 2 - GAP, ly[e] = y; break;
+        default: lx[e] = x, ly[e] = y - hh - depth - labh / 2 - GAP; break;
+        }
+        efl[e] |= EF_LOOPPTS;
+    }
+    g->nn = sv->N, g->ne = E;
+    g->nid = sv->nid, g->nlabel = sv->nlabel, g->nclass = sv->nclass, g->nstyle = sv->nstyle;
+    g->nshape = sv->nshape, g->nparent = sv->nparent, g->nflags = sv->nflags;
+    g->efrom = sv->efrom, g->eto = sv->eto, g->elabel = sv->elabel, g->eid = sv->eid, g->estroke = sv->estroke;
+    g->estart = sv->estart, g->eend = sv->eend, g->elen = sv->elen, g->eflags = efl;
+    g->eptoff = po, g->eptn = pn, g->elx = lx, g->ely = ly, g->elw = lw, g->elh = lh;
+    return CMM_OK;
+}
+
 cmm_status flow_layout(Graph *g) {
-    cmm_status st = layout_rec(g, 0);
+    LoopSave sv;
+    cmm_status st = loops_expand(g, &sv);
+    if (st) return st;
+    st = layout_rec(g, 0);
     if (st) return st;
     PROF("");
     simplify_pts(g); /* fewer segments for the obstacle test */
@@ -2532,6 +2696,7 @@ cmm_status flow_layout(Graph *g) {
     }
     labels_on_curve(g);
     if (!place_titles(g)) return CMM_ERR_NOMEM;
+    st = loops_collapse(g, &sv);
     PROF("post");
-    return CMM_OK;
+    return st;
 }

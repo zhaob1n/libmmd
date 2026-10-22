@@ -301,7 +301,7 @@ cmm_status flow_svg(const Graph *g, Buf *b) {
         for (uint32_t i = 0; i < g->eptn[e]; i++) bb_add(&bb, P[2 * i], P[2 * i + 1], P[2 * i], P[2 * i + 1]);
         if (g->elw[e] > 0 && (g->eptn[e] || g->efrom[e] == g->eto[e]))
             bb_add(&bb, g->elx[e] - g->elw[e] / 2, g->ely[e] - g->elh[e] / 2, g->elx[e] + g->elw[e] / 2, g->ely[e] + g->elh[e] / 2);
-        if (g->efrom[e] == g->eto[e] && !(g->nflags[g->efrom[e]] & NF_HIDDEN)) {
+        if (g->efrom[e] == g->eto[e] && !(g->nflags[g->efrom[e]] & NF_HIDDEN) && !(g->eflags && (g->eflags[e] & EF_LOOPPTS))) {
             int32_t v = g->efrom[e];
             unsigned k = 0; /* same nesting index as the drawn loop; include its control polygon */
             for (size_t f = 0; f < e; f++) k += g->efrom[f] == v && g->eto[f] == v;
@@ -351,7 +351,7 @@ cmm_status flow_svg(const Graph *g, Buf *b) {
     for (size_t i = 0; i < g->linkstyles.n; i++) if (g->linkstyles.v[i].idx < 0) lsdef = g->linkstyles.v[i].css;
     for (size_t e = 0; e < g->ne; e++) {
         if (g->estroke[e] == ST_INVISIBLE) continue;
-        bool self = g->efrom[e] == g->eto[e];
+        bool self = g->efrom[e] == g->eto[e] && !(g->eflags && (g->eflags[e] & EF_LOOPPTS));
         if (!g->eptn[e] && !self) continue;
         buf_lit(b, "<path id=\"");
         if (g->eid && g->eid[e].n) buf_xml(b, g->eid[e]);

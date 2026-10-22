@@ -73,7 +73,7 @@ typedef struct Graph {
 
 enum { NF_DEFINED = 1u, NF_HIDDEN = 2u, NF_SUBREF = 4u, NF_FIXED = 8u /* size preset (cluster proxy) */ };
 enum { SF_DIRSET = 1u };
-enum { EF_ANIM = 1u, EF_ANIM_SLOW = 2u };
+enum { EF_ANIM = 1u, EF_ANIM_SLOW = 2u, EF_LOOPPTS = 4u /* self-loop routed as a polyline (mermaid helpers) */ };
 
 /* parse flowchart body starting at offset `off` within src */
 [[nodiscard]] cmm_status flow_parse(Graph *g, size_t n, const char src[static n], size_t off,
