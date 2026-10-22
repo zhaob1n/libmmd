@@ -1101,4 +1101,249 @@ static cmm_status layout_core(Graph *g) {
     return CMM_OK;
 }
 
-cmm_status flow_layout(Graph *g) { return layout_core(g); }
+/* ---------- recursive cluster layout: subgraphs with their own `direction` ----------
+ * A cluster whose direction differs from its context is laid out on its own (recursively),
+ * then stands in the parent layout as one fixed-size proxy node. Edges to the cluster id
+ * attach to the proxy box; edges to member nodes are extended from the box to the member. */
+typedef struct Box { double x0, y0, x1, y1; } Box;
+static inline void box_add(Box *b, double x0, double y0, double x1, double y1) {
+    if (x0 < b->x0) b->x0 = x0;
+    if (y0 < b->y0) b->y0 = y0;
+    if (x1 > b->x1) b->x1 = x1;
+    if (y1 > b->y1) b->y1 = y1;
+}
+static Box content_box(const Graph *g) {
+    Box b = {INFINITY, INFINITY, -INFINITY, -INFINITY};
+    for (size_t v = 0; v < g->nn; v++)
+        if (!(g->nflags[v] & NF_HIDDEN))
+            box_add(&b, g->nx[v] - g->nw[v] / 2, g->ny[v] - g->nh[v] / 2, g->nx[v] + g->nw[v] / 2, g->ny[v] + g->nh[v] / 2);
+    for (size_t s = 0; s < g->ns; s++)
+        if (g->sw[s] > 0) box_add(&b, g->sx[s], g->sy[s], g->sx[s] + g->sw[s], g->sy[s] + g->sh[s]);
+    for (size_t e = 0; e < g->ne; e++) {
+        const double *P = g->pts.v + g->eptoff[e];
+        for (uint32_t i = 0; i < g->eptn[e]; i++) box_add(&b, P[2 * i], P[2 * i + 1], P[2 * i], P[2 * i + 1]);
+        if (g->elw[e] > 0 && g->eptn[e])
+            box_add(&b, g->elx[e] - g->elw[e] / 2, g->ely[e] - g->elh[e] / 2, g->elx[e] + g->elw[e] / 2, g->ely[e] + g->elh[e] / 2);
+        if (g->efrom[e] == g->eto[e] && g->efrom[e] != NONE) {
+            int32_t v = g->efrom[e];
+            box_add(&b, g->nx[v], g->ny[v] - g->nh[v] / 2, g->nx[v] + g->nw[v] / 2 + 40 + g->elw[e], g->ny[v] + g->nh[v] / 2);
+        }
+    }
+    return b;
+}
+
+[[nodiscard]] static bool gsub_alloc(Graph *d, const Graph *g, Dir dir, size_t nn, size_t ne, size_t ns) {
+    Arena *A = g->arena;
+    *d = (Graph){.arena = g->arena, .dir = dir, .theme = g->theme, .flags = g->flags, .node_sep = g->node_sep,
+                 .rank_sep = g->rank_sep, .font_size = g->font_size, .nn = nn, .ne = ne, .ns = ns,
+                 .ncap = nn, .ecap = ne, .scap = ns};
+    d->nid = ANEW(A, Str, nn + 1); d->nlabel = ANEW(A, Str, nn + 1); d->nclass = ANEW(A, Str, nn + 1);
+    d->nstyle = ANEW(A, Str, nn + 1); d->nshape = ANEW(A, Shape, nn + 1); d->nparent = ANEW(A, int32_t, nn + 1);
+    d->nflags = ANEW(A, uint8_t, nn + 1); d->nw = ANEW(A, double, nn + 1); d->nh = ANEW(A, double, nn + 1);
+    d->efrom = ANEW(A, int32_t, ne + 1); d->eto = ANEW(A, int32_t, ne + 1); d->elabel = ANEW(A, Str, ne + 1);
+    d->estroke = ANEW(A, Stroke, ne + 1); d->estart = ANEW(A, Arrow, ne + 1); d->eend = ANEW(A, Arrow, ne + 1);
+    d->elen = ANEW(A, uint16_t, ne + 1); d->eid = ANEW(A, Str, ne + 1); d->eflags = ANEW(A, uint8_t, ne + 1);
+    d->sid = ANEW(A, Str, ns + 1); d->stitle = ANEW(A, Str, ns + 1); d->sclass = ANEW(A, Str, ns + 1);
+    d->sstyle = ANEW(A, Str, ns + 1); d->sparent = ANEW(A, int32_t, ns + 1); d->sdir = ANEW(A, Dir, ns + 1);
+    d->sflags = ANEW(A, uint8_t, ns + 1);
+    return d->nid && d->nlabel && d->nclass && d->nstyle && d->nshape && d->nparent && d->nflags && d->nw &&
+           d->nh && d->efrom && d->eto && d->elabel && d->estroke && d->estart && d->eend && d->elen && d->eid &&
+           d->eflags && d->sid && d->stitle && d->sclass && d->sstyle && d->sparent && d->sdir && d->sflags;
+}
+
+[[nodiscard]] static bool alloc_outputs(Graph *g) {
+    Arena *A = g->arena;
+    size_t N = g->nn, E = g->ne, S = g->ns;
+    g->nw = ANEW(A, double, N + 1); g->nh = ANEW(A, double, N + 1);
+    g->nx = ANEW(A, double, N + 1); g->ny = ANEW(A, double, N + 1);
+    g->eptoff = ANEW(A, uint32_t, E + 1); g->eptn = ANEW(A, uint32_t, E + 1);
+    g->elx = ANEW(A, double, E + 1); g->ely = ANEW(A, double, E + 1);
+    g->elw = ANEW(A, double, E + 1); g->elh = ANEW(A, double, E + 1);
+    g->sx = ANEW(A, double, S + 1); g->sy = ANEW(A, double, S + 1);
+    g->sw = ANEW(A, double, S + 1); g->sh = ANEW(A, double, S + 1);
+    return g->nw && g->nh && g->nx && g->ny && g->eptoff && g->eptn && g->elx && g->ely && g->elw && g->elh &&
+           g->sx && g->sy && g->sw && g->sh;
+}
+
+static cmm_status layout_rec(Graph *g, unsigned depth) {
+    size_t N = g->nn, E = g->ne, S = g->ns;
+    if (!S || depth > 16) return layout_core(g);
+    Arena *A = g->arena;
+    int32_t *cand = ANEW(A, int32_t, S + 1), *gix = ANEW(A, int32_t, S + 1);
+    if (!cand || !gix) return CMM_ERR_NOMEM;
+    size_t K = 0;
+    for (size_t s = 0; s < S; s++) { /* parents precede children */
+        int32_t p = g->sparent[s], pc = p == NONE ? NONE : cand[p];
+        gix[s] = NONE;
+        if (pc != NONE) cand[s] = pc;
+        else if ((g->sflags[s] & SF_DIRSET) && g->sdir[s] != g->dir) { cand[s] = (int32_t)s; gix[s] = (int32_t)++K; }
+        else cand[s] = NONE;
+    }
+    if (!K) return layout_core(g);
+
+    /* classify nodes: owner graph (0 = outer, k = candidate k), cluster-id endpoints */
+    int32_t *owner = ANEW(A, int32_t, N + 1), *sref = ANEW(A, int32_t, N + 1), *nmap = ANEW(A, int32_t, N + 1);
+    int32_t *smap = ANEW(A, int32_t, S + 1), *eown = ANEW(A, int32_t, E + 1), *emap = ANEW(A, int32_t, E + 1);
+    int32_t *cands = ANEW(A, int32_t, K + 1);
+    size_t *cn = ANEW(A, size_t, K + 1), *ce = ANEW(A, size_t, K + 1), *cs = ANEW(A, size_t, K + 1);
+    Graph *G = ANEW(A, Graph, K + 1);
+    if (!owner || !sref || !nmap || !smap || !eown || !emap || !cands || !cn || !ce || !cs || !G) return CMM_ERR_NOMEM;
+    for (size_t k = 0; k <= K; k++) cn[k] = ce[k] = cs[k] = 0;
+    for (size_t s = 0; s < S; s++) if (gix[s] != NONE) cands[gix[s]] = (int32_t)s;
+    for (size_t v = 0; v < N; v++) {
+        sref[v] = NONE;
+        int32_t loc = g->nparent[v];
+        if (g->nflags[v] & NF_SUBREF) {
+            for (size_t s = 0; s < S; s++) if (str_eq(g->sid[s], g->nid[v])) { sref[v] = (int32_t)s; break; }
+            loc = sref[v];
+        }
+        int32_t c = loc == NONE ? NONE : cand[loc];
+        if (c == NONE) owner[v] = 0;
+        else if (sref[v] == c) owner[v] = -gix[c]; /* the cluster box itself */
+        else owner[v] = gix[c];
+        if (owner[v] >= 0) nmap[v] = (int32_t)cn[owner[v]]++;
+    }
+    for (size_t k = 1; k <= K; k++) cn[0]++; /* proxies */
+    for (size_t s = 0; s < S; s++) {
+        int32_t k = cand[s] == NONE ? 0 : gix[cand[s]];
+        smap[s] = cand[s] == (int32_t)s ? NONE : (int32_t)cs[k]++;
+    }
+    #define GOF(v) (owner[v] >= 0 ? owner[v] : -owner[v])
+    #define INNER(v) (owner[v] > 0)
+    for (size_t e = 0; e < E; e++) {
+        int32_t a = g->efrom[e], b = g->eto[e];
+        int32_t ga = GOF(a), gb = GOF(b);
+        if (ga == gb && INNER(a) && INNER(b)) eown[e] = ga;
+        else if (ga == gb && ga != 0) eown[e] = NONE; /* member <-> own cluster: no geometry */
+        else eown[e] = 0;
+        if (eown[e] != NONE) emap[e] = (int32_t)ce[eown[e]]++;
+    }
+    for (size_t k = 0; k <= K; k++)
+        if (!gsub_alloc(&G[k], g, k ? g->sdir[cands[k]] : g->dir, cn[k], ce[k], cs[k])) return CMM_ERR_NOMEM;
+    for (size_t v = 0; v < N; v++) {
+        if (owner[v] < 0) continue;
+        Graph *d = &G[owner[v]];
+        int32_t i = nmap[v], p = g->nparent[v];
+        d->nid[i] = g->nid[v]; d->nlabel[i] = g->nlabel[v]; d->nclass[i] = g->nclass[v];
+        d->nstyle[i] = g->nstyle[v]; d->nshape[i] = g->nshape[v]; d->nflags[i] = g->nflags[v];
+        d->nparent[i] = p == NONE || cand[p] == p ? NONE : smap[p];
+    }
+    size_t *pfill = cn; /* proxies go after the outer graph's real nodes */
+    pfill[0] -= K;
+    int32_t *proxy = ANEW(A, int32_t, K + 1);
+    if (!proxy) return CMM_ERR_NOMEM;
+    for (size_t k = 1; k <= K; k++) {
+        int32_t s = cands[k], i = (int32_t)pfill[0]++, p = g->sparent[s];
+        Graph *d = &G[0];
+        proxy[k] = i;
+        d->nid[i] = g->sid[s]; d->nlabel[i] = (Str){}; d->nclass[i] = d->nstyle[i] = (Str){};
+        d->nshape[i] = SH_RECT; d->nflags[i] = NF_DEFINED | NF_FIXED;
+        d->nparent[i] = p == NONE ? NONE : smap[p];
+    }
+    for (size_t s = 0; s < S; s++) {
+        if (smap[s] == NONE) continue;
+        Graph *d = &G[cand[s] == NONE ? 0 : gix[cand[s]]];
+        int32_t i = smap[s], p = g->sparent[s];
+        d->sid[i] = g->sid[s]; d->stitle[i] = g->stitle[s]; d->sclass[i] = g->sclass[s];
+        d->sstyle[i] = g->sstyle[s]; d->sdir[i] = g->sdir[s]; d->sflags[i] = g->sflags[s];
+        d->sparent[i] = p == NONE || cand[p] == p ? NONE : smap[p];
+    }
+    for (size_t e = 0; e < E; e++) {
+        if (eown[e] == NONE) continue;
+        Graph *d = &G[eown[e]];
+        int32_t i = emap[e], a = g->efrom[e], b = g->eto[e];
+        d->efrom[i] = owner[a] == eown[e] ? nmap[a] : proxy[GOF(a)];
+        d->eto[i] = owner[b] == eown[e] ? nmap[b] : proxy[GOF(b)];
+        d->elabel[i] = g->elabel[e]; d->estroke[i] = g->estroke[e]; d->estart[i] = g->estart[e];
+        d->eend[i] = g->eend[e]; d->elen[i] = g->elen[e]; d->eid[i] = g->eid[e]; d->eflags[i] = g->eflags[e];
+    }
+    /* inner layouts first: they size the proxies */
+    Box *cb = ANEW(A, Box, K + 1);
+    if (!cb) return CMM_ERR_NOMEM;
+    for (size_t k = 1; k <= K; k++) {
+        cmm_status st = layout_rec(&G[k], depth + 1);
+        if (st) return st;
+        int32_t s = cands[k];
+        Box b = content_box(&G[k]);
+        double tw;
+        unsigned tl;
+        measure(g, &g->stitle[s], &tw, &tl);
+        if (b.x0 == INFINITY) b = (Box){0, 0, fmax(tw, 40), 20};
+        cb[k] = b;
+        double w = fmax(b.x1 - b.x0, tw) + 2 * CLUSTER_PAD, h = b.y1 - b.y0 + 2 * CLUSTER_PAD + CLUSTER_TITLE;
+        G[0].nw[proxy[k]] = w;
+        G[0].nh[proxy[k]] = h;
+    }
+    cmm_status st = layout_core(&G[0]);
+    if (st) return st;
+
+    /* merge back */
+    if (!alloc_outputs(g)) return CMM_ERR_NOMEM;
+    double *ox = ANEW(A, double, K + 1), *oy = ANEW(A, double, K + 1);
+    if (!ox || !oy) return CMM_ERR_NOMEM;
+    ox[0] = oy[0] = 0;
+    for (size_t k = 1; k <= K; k++) {
+        int32_t s = cands[k], p = proxy[k];
+        double w = G[0].nw[p], h = G[0].nh[p], x0 = G[0].nx[p] - w / 2, y0 = G[0].ny[p] - h / 2;
+        g->sx[s] = x0, g->sy[s] = y0, g->sw[s] = w, g->sh[s] = h;
+        ox[k] = G[0].nx[p] - (cb[k].x0 + cb[k].x1) / 2;
+        oy[k] = y0 + CLUSTER_TITLE + CLUSTER_PAD - cb[k].y0;
+    }
+    for (size_t v = 0; v < N; v++) {
+        if (owner[v] < 0) { g->nw[v] = g->nh[v] = g->nx[v] = g->ny[v] = 0; continue; }
+        const Graph *d = &G[owner[v]];
+        int32_t i = nmap[v];
+        g->nlabel[v] = d->nlabel[i]; /* may have been wrapped */
+        g->nw[v] = d->nw[i]; g->nh[v] = d->nh[i];
+        g->nx[v] = d->nx[i] + ox[owner[v]]; g->ny[v] = d->ny[i] + oy[owner[v]];
+    }
+    for (size_t s = 0; s < S; s++) {
+        if (smap[s] == NONE) continue;
+        int32_t k = cand[s] == NONE ? 0 : gix[cand[s]];
+        const Graph *d = &G[k];
+        int32_t i = smap[s];
+        g->stitle[s] = d->stitle[i];
+        g->sx[s] = d->sx[i] + ox[k]; g->sy[s] = d->sy[i] + oy[k]; g->sw[s] = d->sw[i]; g->sh[s] = d->sh[i];
+    }
+    g->pts.n = 0;
+    for (size_t e = 0; e < E; e++) {
+        g->eptoff[e] = (uint32_t)g->pts.n;
+        g->eptn[e] = 0;
+        g->elx[e] = g->ely[e] = g->elw[e] = g->elh[e] = 0;
+        int32_t k = eown[e];
+        if (k == NONE) continue;
+        const Graph *d = &G[k];
+        int32_t i = emap[e];
+        g->elabel[e] = d->elabel[i];
+        g->elx[e] = d->elx[i] + ox[k]; g->ely[e] = d->ely[i] + oy[k];
+        g->elw[e] = d->elw[i]; g->elh[e] = d->elh[i];
+        uint32_t np = d->eptn[i];
+        if (!np) continue;
+        const double *P = d->pts.v + d->eptoff[i];
+        int32_t a = g->efrom[e], b = g->eto[e];
+        bool exta = k == 0 && INNER(a) && !(g->nflags[a] & NF_SUBREF);
+        bool extb = k == 0 && INNER(b) && !(g->nflags[b] & NF_SUBREF);
+        if (exta) {
+            double px, py;
+            clip_to_node(g, a, P[0], P[1], &px, &py);
+            if (!VEC_PUSH(A, &g->pts, px) || !VEC_PUSH(A, &g->pts, py)) return CMM_ERR_NOMEM;
+        }
+        for (uint32_t j = 0; j < np; j++)
+            if (!VEC_PUSH(A, &g->pts, P[2 * j] + ox[k]) || !VEC_PUSH(A, &g->pts, P[2 * j + 1] + oy[k])) return CMM_ERR_NOMEM;
+        if (extb) {
+            double px, py;
+            clip_to_node(g, b, P[2 * np - 2], P[2 * np - 1], &px, &py);
+            if (!VEC_PUSH(A, &g->pts, px) || !VEC_PUSH(A, &g->pts, py)) return CMM_ERR_NOMEM;
+        }
+        g->eptn[e] = (uint32_t)((g->pts.n - g->eptoff[e]) / 2);
+    }
+    #undef GOF
+    #undef INNER
+    return CMM_OK;
+}
+
+cmm_status flow_layout(Graph *g) {
+    cmm_status st = layout_rec(g, 0);
+    if (st) return st;
+    return CMM_OK;
+}
