@@ -36,8 +36,8 @@ static int idx_cmp(const void *x, const void *y) {
     int c = key_cmp(sort_keys[i], sort_keys[j]);
     return c ? c : i - j;
 }
-static void sort_idx(size_t n, int32_t v[static n], const Str *keys) {
-    if (n < 2) return;
+static void sort_idx(size_t n, int32_t v[static n], const Str *keys) { /* n >= 1 */
+    if (n == 1) return;
     sort_keys = keys;
     qsort(v, n, sizeof *v, idx_cmp);
 }
@@ -93,7 +93,7 @@ cmm_status swim_layout(Graph *g, Str **keep) {
     uint8_t *col = ANEW(a, uint8_t, m + 1);
     if (!off || !adj || !aed || !perm || !pos || !stk || !it || !col) return CMM_ERR_NOMEM;
     for (size_t i = 0; i < m; i++) perm[i] = (int32_t)i;
-    sort_idx(m, perm, ikey);
+    if (m) sort_idx(m, perm, ikey);
     for (size_t i = 0; i < m; i++) pos[perm[i]] = (int32_t)i;
     memset(off, 0, (m + 2) * sizeof *off);
     for (size_t k = 0; k < me; k++) off[es[k] + 1]++;
@@ -157,7 +157,7 @@ cmm_status swim_layout(Graph *g, Str **keep) {
                 }
             }
         }
-        if (horiz) sort_idx(no - gen_start, order + gen_start, ikey);
+        if (horiz && no > gen_start) sort_idx(no - gen_start, order + gen_start, ikey);
     }
     for (size_t i = no; i < m; i++) rank[i] = 0; /* unreachable (cannot happen once acyclic) */
     int32_t nr = 1;
