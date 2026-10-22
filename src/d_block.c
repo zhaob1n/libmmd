@@ -363,7 +363,7 @@ DIAG_FN(block_render) {
             label_measure(b->label, fs, &tw, &nl);
             b->w = fmax(tw + 32, 50), b->h = fmax(nl * fs * 1.5 + 16, 40);
             if (b->shape == BS_CIRCLE) b->w = b->h = fmax(b->w, b->h);
-            if (b->shape == BS_DIAMOND) b->w *= 1.5, b->h *= 1.5;
+            if (b->shape == BS_DIAMOND) b->w = b->h = tw + nl * fs * 1.5 + 8; /* mermaid: square, side = w + h */
             continue;
         }
         uint32_t cols = group_cols(B, b);
