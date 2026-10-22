@@ -373,13 +373,14 @@ static uint64_t transpose(Lay *L, int64_t *budget, uint8_t dirty[static L->R + 2
 }
 
 /* ---------- Brandes-Köpf ---------- */
-typedef struct PairSet { uint64_t *t; size_t cap, n; } PairSet;
+typedef struct PairSet { uint64_t *t; size_t cap, n; uint64_t bloom[64]; /* 4096-bit prefilter for pset_has */ } PairSet;
 static inline uint64_t pkey(int32_t a, int32_t b) {
     if (a > b) { int32_t t = a; a = b; b = t; }
     return ((uint64_t)(uint32_t)a << 32 | (uint32_t)b) + 1;
 }
 static inline size_t phash(uint64_t k, size_t cap) { return (size_t)((k * 0x9E3779B97F4A7C15ull) >> 17) & (cap - 1); }
 [[nodiscard]] static bool pset_add(Arena *A, PairSet *s, int32_t a, int32_t b) {
+    { uint64_t bk = pkey(a, b) * 0x9E3779B97F4A7C15ull >> 52; s->bloom[bk >> 6] |= 1ull << (bk & 63); }
     if ((s->n + 1) * 2 > s->cap) {
         size_t nc = s->cap ? s->cap * 2 : 64;
         uint64_t *nt = ANEW(A, uint64_t, nc);
@@ -406,7 +407,8 @@ static inline size_t phash(uint64_t k, size_t cap) { return (size_t)((k * 0x9E37
 }
 static inline bool pset_has(const PairSet *s, int32_t a, int32_t b) {
     if (!s->cap) return false;
-    uint64_t k = pkey(a, b);
+    uint64_t k = pkey(a, b), bk = k * 0x9E3779B97F4A7C15ull >> 52;
+    if (!(s->bloom[bk >> 6] >> (bk & 63) & 1)) return false;
     size_t h = phash(k, s->cap);
     while (s->t[h]) {
         if (s->t[h] == k) return true;
@@ -1059,6 +1061,9 @@ static cmm_status layout_core(Graph *g) {
         uint64_t c = cross_all(&L, cbuf, fen);
         if (c < bestc) { bestc = c; memcpy(best, L.lay, placed * sizeof *best); since = 0; }
         else since++;
+#ifdef CMM_PROFILE
+        fprintf(stderr, "  iter %u c=%llu\n", iter, (unsigned long long)c);
+#endif
     }
     memcpy(L.lay, best, placed * sizeof *best);
     for (size_t r = 0; r < R; r++)
