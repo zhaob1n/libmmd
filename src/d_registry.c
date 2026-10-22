@@ -48,6 +48,8 @@ static const DiagEnt DIAGS[] = {
     {S("ishikawa"), ishikawa_render},
     {S("cynefin-beta"), cynefin_render},
     {S("cynefin"), cynefin_render},
+    {S("venn-beta"), venn_render},
+    {S("venn"), venn_render},
 };
 
 DiagFn diag_lookup(Str kw) {
