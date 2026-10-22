@@ -945,6 +945,25 @@ static cmm_status layout_core(Graph *g) {
     PROF("order");
     /* ---- x via Brandes-Köpf ---- */
     if (!bk(&L)) return CMM_ERR_NOMEM;
+    /* pull long-edge dummy chains (as a rigid block) toward the endpoints' mean x, order-preserving */
+    for (size_t e = 0; e < E; e++) {
+        if (!EVALID(e)) continue;
+        int32_t u = EU(e), v = EV(e), span = rank[v] - rank[u];
+        if (span < 2) continue;
+        double lo = -INFINITY, hi = INFINITY, x0 = L.x[N + choff[e]];
+        bool rigid = true;
+        for (int32_t k = 1; k < span && rigid; k++) {
+            int32_t d = (int32_t)(N + choff[e] + (size_t)(k - 1));
+            if (fabs(L.x[d] - x0) > 0.5 || L.w[d] > 0) { rigid = false; break; }
+            int32_t r = L.rank[d], i = L.pos[d];
+            size_t a = L.loff[r], n = L.loff[r + 1] - a;
+            if (i > 0) { int32_t q = L.lay[a + (size_t)i - 1]; lo = dmax(lo, L.x[q] + sep(&L, q, d)); }
+            if ((size_t)i + 1 < n) { int32_t q = L.lay[a + (size_t)i + 1]; hi = dmin(hi, L.x[q] - sep(&L, d, q)); }
+        }
+        if (!rigid || lo > hi) continue;
+        double t = dmax(lo, dmin(hi, (L.x[u] + L.x[v]) / 2));
+        for (int32_t k = 1; k < span; k++) L.x[N + choff[e] + (size_t)(k - 1)] = t;
+    }
 
     PROF("bk");
     /* ---- rank axis ---- */
