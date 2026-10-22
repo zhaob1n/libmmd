@@ -1531,7 +1531,7 @@ static double seg_box(double px, double py, double qx, double qy, const Box *b) 
  * Edges whose polyline passes through a non-incident node get the offending stretch replaced by a
  * shortest path in a local visibility graph over inflated node corners. A uniform grid indexes the
  * boxes; total work is budgeted so huge graphs degrade to the plain layout route. */
-typedef struct Grid { double x0, y0, cs; size_t gw, gh; uint32_t *off, *idx; } Grid;
+typedef struct Grid { double x0, y0, cs, ics; size_t gw, gh; uint32_t *off, *idx; } Grid;
 
 [[nodiscard]] static bool grid_build(Arena *A, Grid *G, size_t N, const Box nb[static N + 1], const bool *use) {
     double x0 = INFINITY, y0 = INFINITY, x1 = -INFINITY, y1 = -INFINITY, area = 0;
@@ -1545,7 +1545,7 @@ typedef struct Grid { double x0, y0, cs; size_t gw, gh; uint32_t *off, *idx; } G
     double cs = dmax(sqrt(area / (double)k) * 2, 32);
     size_t gw = (size_t)((x1 - x0) / cs) + 1, gh = (size_t)((y1 - y0) / cs) + 1;
     while (gw * gh > 4 * k + 64) cs *= 1.5, gw = (size_t)((x1 - x0) / cs) + 1, gh = (size_t)((y1 - y0) / cs) + 1;
-    *G = (Grid){x0, y0, cs, gw, gh, ANEW(A, uint32_t, gw * gh + 1), nullptr};
+    *G = (Grid){x0, y0, cs, 1 / cs, gw, gh, ANEW(A, uint32_t, gw * gh + 1), nullptr};
     if (!G->off) return false;
     memset(G->off, 0, (gw * gh + 1) * sizeof *G->off);
     size_t tot = 0;
@@ -1587,8 +1587,8 @@ static int32_t seg_hit_m(Router *R, double px, double py, double qx, double qy, 
     if (!G->gw) return NONE;
     double lx = dmin(px, qx), hx = dmax(px, qx), ly = dmin(py, qy), hy = dmax(py, qy);
     if (hx < G->x0 || hy < G->y0) return NONE;
-    size_t cx0 = lx < G->x0 ? 0 : (size_t)((lx - G->x0) / G->cs), cy0 = ly < G->y0 ? 0 : (size_t)((ly - G->y0) / G->cs);
-    size_t cx1 = (size_t)((hx - G->x0) / G->cs), cy1 = (size_t)((hy - G->y0) / G->cs);
+    size_t cx0 = lx < G->x0 ? 0 : (size_t)((lx - G->x0) * G->ics), cy0 = ly < G->y0 ? 0 : (size_t)((ly - G->y0) * G->ics);
+    size_t cx1 = (size_t)((hx - G->x0) * G->ics), cy1 = (size_t)((hy - G->y0) * G->ics);
     if (cx1 >= G->gw) cx1 = G->gw - 1;
     if (cy1 >= G->gh) cy1 = G->gh - 1;
     if (++R->cur == 0) { memset(R->stamp, 0, R->g->nn * sizeof *R->stamp); R->cur = 1; }
@@ -1605,8 +1605,8 @@ static int32_t seg_hit_m(Router *R, double px, double py, double qx, double qy, 
             t0 = dmax(t0, 0), t1 = dmin(t1, 1);
             double xa = px + (qx - px) * t0, xb = px + (qx - px) * t1;
             double la = dmin(xa, xb) - 1, lb = dmax(xa, xb) + 1;
-            size_t na = la < G->x0 ? 0 : (size_t)((la - G->x0) / G->cs);
-            size_t nb2 = lb < G->x0 ? 0 : (size_t)((lb - G->x0) / G->cs);
+            size_t na = la < G->x0 ? 0 : (size_t)((la - G->x0) * G->ics);
+            size_t nb2 = lb < G->x0 ? 0 : (size_t)((lb - G->x0) * G->ics);
             if (na > ax) ax = na;
             if (nb2 < bx) bx = nb2;
         }

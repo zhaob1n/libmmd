@@ -19,7 +19,7 @@ PREFIX ?= /usr/local
 LIBDIR ?= $(PREFIX)/lib
 INCDIR ?= $(PREFIX)/include
 BINDIR ?= $(PREFIX)/bin
-CFLAGS ?= $(OPT) -g
+CFLAGS ?= $(OPT) -g -fno-math-errno
 ifneq ($(MARCH),)
 CFLAGS += -march=$(MARCH)
 endif
