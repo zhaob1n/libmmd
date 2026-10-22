@@ -153,7 +153,8 @@ DIAG_FN(xychart_render) {
     /* categories: explicit, numeric range or 1..n */
     size_t nc = cats.n ? cats.n : np;
     char nb[48];
-    constexpr double PW = 700, PH = 400;
+    constexpr double PW = 700;
+    constexpr double PH = 400;
     double tl = 0;
     for (double v = ymin; v <= ymax + step * 1e-6; v += step) {
         double w = text_width((Str){.p = nb, .n = fmt_num(v, sizeof nb, nb)}, 14);

@@ -145,7 +145,9 @@ DIAG_FN(gitgraph_render) {
         ord[k] = (uint32_t)i;
     }
     for (size_t i = 0; i < br.n; i++) lane[ord[i]] = (uint32_t)i;
-    constexpr double STEP = 50, LANE = 60, R = 10;
+    constexpr double STEP = 50;
+    constexpr double LANE = 60;
+    constexpr double R = 10;
     double bnw = 0;
     for (size_t i = 0; i < br.n; i++) { double w = text_width(br.v[i].name, 14); if (w > bnw) bnw = w; }
     double p0 = dir == 0 ? bnw + 40 : 70; /* main-axis origin */

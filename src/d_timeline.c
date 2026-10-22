@@ -57,7 +57,12 @@ DIAG_FN(timeline_render) {
         if (!VEC_PUSH(a, &per, p)) return CMM_ERR_NOMEM;
     }
     if (!per.n) return diag_fail(err_off, msg, off, "timeline has no periods");
-    constexpr double PW = 150, GAP = 20, PH = 60, SH = 50, EG = 10, TOPY = 50;
+    constexpr double PW = 150;
+    constexpr double GAP = 20;
+    constexpr double PH = 60;
+    constexpr double SH = 50;
+    constexpr double EG = 10;
+    constexpr double TOPY = 50;
     double py = TOPY + (secs.n ? SH + 20 : 0);
     Str *wev = ANEW(a, Str, ev.n + 1);
     double *eh = ANEW(a, double, ev.n + 1);

@@ -78,7 +78,13 @@ DIAG_FN(journey_render) {
         double w = text_width(actors.v[i], 14);
         if (w > lw) lw = w;
     }
-    constexpr double TW = 150, TM = 50, SY = 60, TY = 120, BOX = 50, FACE0 = 200, AX = 340;
+    constexpr double TW = 150;
+    constexpr double TM = 50;
+    constexpr double SY = 60;
+    constexpr double TY = 120;
+    constexpr double BOX = 50;
+    constexpr double FACE0 = 200;
+    constexpr double AX = 340;
     double left = actors.n ? lw + 60 : 20, W = left + tk.n * (TW + TM);
     BBox bb = {0, 0, W, AX + 30};
     if (!buf_reserve(out, 4096 + tk.n * 1500)) return CMM_ERR_NOMEM;

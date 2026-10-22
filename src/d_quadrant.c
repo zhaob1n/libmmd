@@ -122,7 +122,9 @@ DIAG_FN(quadrant_render) {
         if (s->r <= 0) s->r = 5;
         if (s->sw < 0) s->sw = 0;
     }
-    constexpr double X0 = 40, Y0 = 50, SZ = 420;
+    constexpr double X0 = 40;
+    constexpr double Y0 = 50;
+    constexpr double SZ = 420;
     bool yax = yl.n || yh.n, xax = xl.n || xh.n;
     double ox = X0 + (yax ? 30 : 0), oy = Y0 + (title.n ? 20 : 0);
     BBox bb = {0, 0, ox + SZ + 30, oy + SZ + (xax ? 40 : 10)};
