@@ -46,3 +46,12 @@ API (`include/cmermaid.h`): `cmm_render_svg(n, src, opts, &buf, &err)`, `cmm_buf
   (Font Awesome glyphs; needs the font installed to render), edge ids `A e1@--> B`, `e1@{ animate: true }`.
 - Golden tests in `tests/golden` (`UPDATE_GOLDEN=1 bash tests/run_tests.sh` to refresh).
 - Benchmarks: `bench/results_v2.txt`.
+
+## v3: build options, batch API, routing
+
+- Build: `make` (portable `-O2`), opt-in `make MARCH=native`, `make LTO=1`, `make pgo [LTO=1 MARCH=native]` (output in `build-pgo/`).
+- Shared library: `build/libcmermaid.so.0.3.0` (soname `libcmermaid.so.0`, only `cmm_*` exported) plus `build/cmermaid.pc`; `make install PREFIX=/usr DESTDIR=...`.
+- Batch rendering: `cmm_context_new()` / `cmm_context_render_svg()` / `cmm_context_free()` reuse the arena and output buffer between calls.
+- Obstacle routing is on by default: edges that cross a non-endpoint node get a local visibility-graph (A*) detour. Use `--no-avoid` / `CMM_F_NO_AVOID` for the fastest layout. Edge labels sit on the rendered curve.
+- SVG: stroke widths and text anchoring are now CSS classes, and collinear points are dropped (about 20% smaller on medium, about 50% on large vs v1).
+- Numbers: `bench/results_v3.txt`.
