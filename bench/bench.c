@@ -30,6 +30,7 @@ int main(int argc, char **argv) {
     if (!src || !t || fread(src, 1, (size_t)sz, f) != (size_t)sz) { fclose(f); free(src); free(t); return 1; }
     fclose(f);
     size_t outlen = 0;
+    cmm_options o = {.flags = getenv("CMM_NO_AVOID") ? CMM_F_NO_AVOID : 0};
     bool use_ctx = argc > 3 && strcmp(argv[3], "ctx") == 0;
     cmm_context *ctx = use_ctx ? cmm_context_new() : nullptr;
     if (use_ctx && !ctx) { free(src); free(t); return 1; }
@@ -37,7 +38,7 @@ int main(int argc, char **argv) {
         const char *svg;
         cmm_error e;
         double t0 = now_us();
-        cmm_status st = cmm_context_render_svg(ctx, (size_t)sz, src, nullptr, &svg, &outlen, &e);
+        cmm_status st = cmm_context_render_svg(ctx, (size_t)sz, src, &o, &svg, &outlen, &e);
         t[i] = now_us() - t0;
         if (st) { fprintf(stderr, "error: %s\n", e.message); cmm_context_free(ctx); free(src); free(t); return 1; }
     }
@@ -46,7 +47,7 @@ int main(int argc, char **argv) {
         cmm_buffer b;
         cmm_error e;
         double t0 = now_us();
-        cmm_status st = cmm_render_svg((size_t)sz, src, nullptr, &b, &e);
+        cmm_status st = cmm_render_svg((size_t)sz, src, &o, &b, &e);
         t[i] = now_us() - t0;
         if (st) { fprintf(stderr, "error: %s\n", e.message); free(src); free(t); return 1; }
         outlen = b.len;

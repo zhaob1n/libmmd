@@ -1457,15 +1457,17 @@ static int32_t seg_hit(Router *R, double px, double py, double qx, double qy, in
 static bool pt_in(const Box *b, double x, double y) { return x > b->x0 && x < b->x1 && y > b->y0 && y < b->y1; }
 
 /* shortest visibility path S->T; writes interior corners to out (max cap pts). Returns count or -1. */
+static inline double edist(double dx, double dy) { return sqrt(dx * dx + dy * dy); }
+
 static int vis_path(Router *R, Arena *A, double sx, double sy, double tx, double ty, int32_t s1, int32_t s2,
                     size_t cap, double out[static 2 * cap]) {
     const Graph *g = R->g;
     double pad = 0;
     for (unsigned attempt = 0; attempt < 3; attempt++) {
-        pad = attempt == 0 ? 60 : pad * 3;
+        pad = attempt == 0 ? 24 : pad * 3;
         double lx = fmin(sx, tx) - pad, hx = fmax(sx, tx) + pad, ly = fmin(sy, ty) - pad, hy = fmax(sy, ty) + pad;
         /* candidate corners */
-        constexpr size_t MAXC = 160;
+        constexpr size_t MAXC = 96;
         double cx[MAXC + 2], cy[MAXC + 2];
         size_t nc = 0;
         cx[nc] = sx, cy[nc] = sy, nc++;
@@ -1505,16 +1507,22 @@ static int vis_path(Router *R, Arena *A, double sx, double sy, double tx, double
         if (!dist || !prev || !done) return -1;
         for (size_t i = 0; i < nc; i++) dist[i] = INFINITY, prev[i] = -1, done[i] = 0;
         dist[0] = 0;
+        /* A*: Euclidean distance to T is consistent on a visibility graph */
+        double *hh = ANEW(A, double, nc);
+        if (!hh) return -1;
+        for (size_t i = 0; i < nc; i++) hh[i] = edist(cx[i] - tx, cy[i] - ty);
         for (;;) {
             size_t u = SIZE_MAX;
             double bd = INFINITY;
-            for (size_t i = 0; i < nc; i++) if (!done[i] && dist[i] < bd) bd = dist[i], u = i;
+            for (size_t i = 0; i < nc; i++) if (!done[i] && dist[i] + hh[i] < bd) bd = dist[i] + hh[i], u = i;
             if (u == SIZE_MAX || u == 1) break;
             done[u] = 1;
+            double du = dist[u];
+            /* try the goal first: if visible, other relaxations rarely matter */
             for (size_t w = 1; w < nc; w++) {
                 if (done[w]) continue;
-                double d = bd + hypot(cx[w] - cx[u], cy[w] - cy[u]);
-                if (d >= dist[w]) continue;
+                double d = du + edist(cx[w] - cx[u], cy[w] - cy[u]);
+                if (d >= dist[w] || d + hh[w] >= dist[1]) continue;
                 if (R->budget < 0) return -1;
                 if (seg_hit(R, cx[u], cy[u], cx[w], cy[w], s1, s2) != NONE) continue;
                 dist[w] = d, prev[w] = (int32_t)u;
@@ -1598,7 +1606,7 @@ static void simplify_pts(Graph *g) {
                 double ax = V[w - 4], ay = V[w - 3], bx = V[w - 2], by = V[w - 1];
                 double cr = (bx - ax) * (y - by) - (by - ay) * (x - bx);
                 double dt = (bx - ax) * (x - bx) + (by - ay) * (y - by);
-                double l2 = hypot(bx - ax, by - ay) * hypot(x - bx, y - by);
+                double l2 = edist(bx - ax, by - ay) * edist(x - bx, y - by);
                 if (dt > 0 && fabs(cr) <= 1e-3 * l2) { V[w - 2] = x, V[w - 1] = y; continue; } /* extend run */
             }
             V[w++] = x, V[w++] = y;
@@ -1687,8 +1695,11 @@ static void labels_on_curve(Graph *g) {
 cmm_status flow_layout(Graph *g) {
     cmm_status st = layout_rec(g, 0);
     if (st) return st;
-    if (!(g->flags & CMM_F_NO_AVOID) && !route_avoid(g)) return CMM_ERR_NOMEM;
-    simplify_pts(g);
+    simplify_pts(g); /* fewer segments for the obstacle test */
+    if (!(g->flags & CMM_F_NO_AVOID)) {
+        if (!route_avoid(g)) return CMM_ERR_NOMEM;
+        simplify_pts(g);
+    }
     labels_on_curve(g);
     if (!place_titles(g)) return CMM_ERR_NOMEM;
     return CMM_OK;
