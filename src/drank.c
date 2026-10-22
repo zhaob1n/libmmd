@@ -421,10 +421,18 @@ bool dagre_rank(Arena *A, const DRankIn *in, int32_t rank[], int32_t top[], int3
         if (!occ[i] && (int64_t)i % c.nodesep != 0) --delta;
         dl[i] = delta;
     }
+    if (in->lrank)
+        for (size_t e = 0; e < in->E; e++) {
+            int64_t ru = g.r[c.rn[in->eu[e]]], rw = g.r[c.rn[in->ev[e]]];
+            /* a fractional proxy rank never matches a dummy rank in normalize.run: the label gets no node */
+            in->lrank[e] = in->lab[e] && (rw - ru) % 2 == 0 ? (int32_t)((rw - ru) / 2 + ru + dl[(rw - ru) / 2 + ru - mn]) : INT32_MIN;
+        }
     for (size_t v = 0; v < M; v++) g.r[v] += dl[g.r[v] - mn];
     /* cleanup (drop root) + normalizeRanks */
     int64_t m2 = INT64_MAX;
     for (size_t v = 0; v < M; v++) if (v != NR && g.r[v] < m2) m2 = g.r[v];
+    if (in->lrank)
+        for (size_t e = 0; e < in->E; e++) in->lrank[e] = in->lrank[e] == INT32_MIN ? -1 : (int32_t)(in->lrank[e] - m2);
     for (size_t i = 0; i < NR; i++) rank[in->real[i]] = (int32_t)(g.r[i] - m2);
     for (size_t s = 0; s < S; s++) {
         top[s] = c.bt[s] >= 0 ? (int32_t)(g.r[c.bt[s]] - m2) : INT32_MAX;

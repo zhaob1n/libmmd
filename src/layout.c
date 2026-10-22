@@ -727,7 +727,7 @@ static void port_sort(size_t n, PortKey a[static n]) {
 /* hybrid cycle removal thresholds (see results_v7): greedy only for big graphs with many back edges */
 constexpr size_t ACYC_GREEDY_MIN_N = 1500;
 constexpr size_t ORDER_ONE_SWEEP_MIN = 512;
-constexpr size_t DAGRE_RANK_MAX_N = 96; /* dagre rank+order below this many nodes; medium bench is N=100 */
+constexpr size_t DAGRE_RANK_MAX_N = 256; /* dagre rank+order up to this many nodes (v12: covers 200-node fixtures; medium bench N=100 now dagre) */
 constexpr size_t DAGRE_ORDER_MAX_S = 1024;
 constexpr size_t ORDER_ONE_SWEEP_MAX = 4096;
 constexpr size_t ACYC_GREEDY_REV_DIV = 20; /* DFS reverses >= 5% of nodes' worth of edges */
@@ -949,13 +949,17 @@ static cmm_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
 static cmm_status dagre_rank_graph(Arena *A, const Graph *g, size_t N, size_t E, size_t S, const int32_t *ef,
                                    const int32_t *et, const uint8_t *rev, const uint32_t *revord, size_t nrevord,
                                    const int32_t *esub, const int32_t *mlen, int32_t *rank, int32_t **ctop,
-                                   int32_t **cbot, int32_t **corder) {
+                                   int32_t **cbot, int32_t **corder, int32_t *elrank) {
 #define DV(e) (ef[e] != NONE && et[e] != NONE && ef[e] != et[e] && !(g->nflags[ef[e]] & NF_HIDDEN) && \
                !(g->nflags[et[e]] & NF_HIDDEN))
     int64_t *ikey = ANEW(A, int64_t, N + S + 1);
     uint32_t *ins = ANEW(A, uint32_t, N + S + 1), *real = ANEW(A, uint32_t, N + 1);
     uint32_t *koff = ANEW(A, uint32_t, S + 3), *kid = ANEW(A, uint32_t, N + S + 1), *stk = ANEW(A, uint32_t, S + 1);
     uint8_t *done = ANEW(A, uint8_t, S + 1), *inseq = ANEW(A, uint8_t, E + 1), *lab = ANEW(A, uint8_t, E + 1);
+    int32_t *lr = ANEW(A, int32_t, E + 1);
+    uint32_t *emap = ANEW(A, uint32_t, E + 1);
+    if (!lr || !emap) return CMM_ERR_NOMEM;
+    for (size_t e = 0; e < E; e++) elrank[e] = -1;
     int32_t *eu = ANEW(A, int32_t, E + 1), *ev = ANEW(A, int32_t, E + 1), *ml = ANEW(A, int32_t, E + 1);
     *ctop = ANEW(A, int32_t, S + 1), *cbot = ANEW(A, int32_t, S + 1), *corder = ANEW(A, int32_t, S + 1);
     if (!ikey || !ins || !real || !koff || !kid || !stk || !done || !inseq || !lab || !eu || !ev || !ml || !*ctop ||
@@ -1039,12 +1043,14 @@ static cmm_status dagre_rank_graph(Arena *A, const Graph *g, size_t N, size_t E,
             ev[ne] = rev[e] ? ef[e] : et[e];
             ml[ne] = mlen[e];
             lab[ne] = g->elw[e] > 0 && g->elh[e] > 0;
+            emap[ne] = (uint32_t)e;
             ne++;
         }
     }
     DRankIn in = {.N = N, .S = S, .nreal = nreal, .real = real, .ikey = ikey, .id = g->nid, .koff = koff,
-                  .kid = kid, .E = ne, .eu = eu, .ev = ev, .minlen = ml, .lab = lab};
+                  .kid = kid, .E = ne, .eu = eu, .ev = ev, .minlen = ml, .lab = lab, .lrank = lr};
     if (!dagre_rank(A, &in, rank, *ctop, *cbot, *corder)) return CMM_ERR_NOMEM;
+    for (size_t q = 0; q < ne; q++) elrank[emap[q]] = lr[q];
 #undef DV
     return CMM_OK;
 }
@@ -1102,10 +1108,34 @@ static cmm_status layout_core(Graph *g) {
         double lw = 0;
         unsigned ln = 0;
         measure(g, &g->elabel[e], &lw, &ln);
-        g->elw[e] = ln ? lw + 8 : 0;
-        g->elh[e] = ln ? ln * g->font_size * 1.5 + 4 : 0;
+        g->elw[e] = ln ? lw : 0;
+        g->elh[e] = ln ? ln * g->font_size * 1.5 : 0;
         if (ln && a != NONE && b != NONE && a != b) has_labels = true;
     }
+#ifdef CMM_RANKDUMP
+    if (getenv("CMM_DUMPGRAPH")) {
+        static const char *DN[] = {"TB", "BT", "LR", "RL"};
+        FILE *F = fopen(getenv("CMM_DUMPGRAPH"), "w");
+        fprintf(F, "{\"dir\":\"%s\",\"nodesep\":%g,\"ranksep\":%g,\"clusters\":[", DN[g->dir], g->node_sep, g->rank_sep);
+        for (size_t s = 0; s < S; s++) fprintf(F, "%s{\"id\":\"%.*s\",\"parent\":%s%.*s%s}", s ? "," : "", (int)g->sid[s].n, g->sid[s].p,
+            g->sparent[s] == NONE ? "null" : "\"", g->sparent[s] == NONE ? 0 : (int)g->sid[g->sparent[s]].n, g->sparent[s] == NONE ? "" : g->sid[g->sparent[s]].p, g->sparent[s] == NONE ? "" : "\"");
+        fprintf(F, "],\"nodes\":[");
+        bool first = true;
+        for (size_t v = 0; v < N; v++) {
+            if (g->nflags[v] & NF_HIDDEN) continue;
+            int32_t p = g->nparent[v];
+            fprintf(F, "%s{\"id\":\"%.*s\",\"w\":%.17g,\"h\":%.17g,\"parent\":%s%.*s%s}", first ? "" : ",", (int)g->nid[v].n, g->nid[v].p, g->nw[v], g->nh[v],
+                p == NONE ? "null" : "\"", p == NONE ? 0 : (int)g->sid[p].n, p == NONE ? "" : g->sid[p].p, p == NONE ? "" : "\"");
+            first = false;
+        }
+        fprintf(F, "],\"edges\":[");
+        for (size_t e = 0; e < E; e++)
+            fprintf(F, "%s{\"a\":\"%.*s\",\"b\":\"%.*s\",\"w\":%.17g,\"h\":%.17g,\"minlen\":%u}", e ? "," : "", (int)g->nid[g->efrom[e]].n, g->nid[g->efrom[e]].p,
+                (int)g->nid[g->eto[e]].n, g->nid[g->eto[e]].p, g->elw[e], g->elh[e], (unsigned)g->elen[e]);
+        fprintf(F, "]}\n");
+        fclose(F);
+    }
+#endif
     /* dagre-faithful path (makeSpaceForEdgeLabels always doubles minlen, nesting-graph ranking, dagre order) */
     const bool drank = g->order_mode != CMM_ORDER_FAST && S <= DAGRE_ORDER_MAX_S &&
                        (g->order_mode == CMM_ORDER_DAGRE || N <= DAGRE_RANK_MAX_N);
@@ -1165,6 +1195,7 @@ static cmm_status layout_core(Graph *g) {
     }
     /* effective DAG CSR */
     #define EU(e) (rev[e] ? et[e] : ef[e])
+    #define LABK(e, span) (elrank ? elrank[e] - rank[EU(e)] : (span) / 2)
     #define EV(e) (rev[e] ? ef[e] : et[e])
     memset(ooff, 0, (N + 1) * sizeof *ooff);
     memset(indeg, 0, N * sizeof *indeg);
@@ -1201,9 +1232,12 @@ static cmm_status layout_core(Graph *g) {
         if (!drank && !network_simplex(A, N, E, eu, ev, mlen, valid, hid, rank, 20 * N + 100)) return CMM_ERR_NOMEM;
     }
     int32_t *ctop = nullptr, *cbot = nullptr, *corder = nullptr;
+    int32_t *elrank = nullptr; /* dagre labelRank per edge (drank only) */
     size_t nco = 0;
     if (drank) {
-        cmm_status st = dagre_rank_graph(A, g, N, E, S, ef, et, rev, revord, nrevord, esub, mlen, rank, &ctop, &cbot, &corder);
+        elrank = ANEW(A, int32_t, E + 1);
+        if (!elrank) return CMM_ERR_NOMEM;
+        cmm_status st = dagre_rank_graph(A, g, N, E, S, ef, et, rev, revord, nrevord, esub, mlen, rank, &ctop, &cbot, &corder, elrank);
         if (st != CMM_OK) return st;
         while (nco < S && corder[nco] >= 0) nco++;
     }
@@ -1301,7 +1335,7 @@ static cmm_status layout_core(Graph *g) {
             L.cl[d] = lca;
             L.dummy[d] = 1;
             dedge[d - N] = (int32_t)e;
-            bool lab = has_labels && g->elw[e] > 0 && k == span / 2;
+            bool lab = has_labels && g->elw[e] > 0 && k == LABK(e, span);
             L.w[d] = lab ? (horiz ? g->elh[e] : g->elw[e]) : 0;
             L.h[d] = lab ? (horiz ? g->elw[e] : g->elh[e]) : 0;
         }
@@ -1374,6 +1408,7 @@ static cmm_status layout_core(Graph *g) {
 
     PROF("normalize");
     const bool use_dagre = drank;
+    if (use_dagre) L.cpad = 0; /* dagre: border nodes (edgesep) carry cluster separation */
     /* ---- initial order: DFS by rank ---- */
     size_t R = L.R;
     uint32_t *cnt = ANEW(A, uint32_t, R + 1), *byrank = ANEW(A, uint32_t, V + 1);
@@ -1719,7 +1754,7 @@ static cmm_status layout_core(Graph *g) {
                 clip_to_node(g, vv, FX(tx, ty) * sgx, FY(tx, ty) * sgy, &px, &py);
                 if (k) fixed1 = true; else fixed0 = true;
             }
-            if (k > 0 && k < span && has_labels && g->elw[e] > 0 && k == span / 2) { lx = px; ly = py; labset = true; }
+            if (k > 0 && k < span && has_labels && g->elw[e] > 0 && k == LABK(e, span)) { lx = px; ly = py; labset = true; }
             if (!VEC_PUSH(A, &g->pts, px) || !VEC_PUSH(A, &g->pts, py)) return CMM_ERR_NOMEM;
         }
         size_t np = (size_t)span + 1;

@@ -16,8 +16,10 @@ for f in sorted(glob.glob('/workspace/sbsf/refsvg/*.svg')):
     T[0]+=ok;T[1]+=okr;T[2]+=t
     if k:
         ox=sum(me[v][0]-ref[v][0] for v in k)/len(k); oy=sum(me[v][1]-ref[v][1] for v in k)/len(k)
-        E.extend(((me[v][0]-ox-ref[v][0])**2+(me[v][1]-oy-ref[v][1])**2)**.5 for v in k)
-    print(f'{n:45s} cross {ok}/{t}  rankaxis {okr}/{t}')
+        ee=[((me[v][0]-ox-ref[v][0])**2+(me[v][1]-oy-ref[v][1])**2)**.5 for v in k]; E.extend(ee)
+        ex=sum(abs(me[v][0]-ox-ref[v][0]) for v in k)/len(k); ey=sum(abs(me[v][1]-oy-ref[v][1]) for v in k)/len(k)
+    else: ee=[0]; ex=ey=0
+    print(f'{n:45s} cross {ok}/{t}  rankaxis {okr}/{t}  err {sum(ee)/len(ee):.1f} ex {ex:.1f} ey {ey:.1f} n {len(k)}')
 print('TOTAL cross %.4f rankaxis %.4f pairs %d'%(T[0]/T[2],T[1]/T[2],T[2]))
 E.sort()
 if E: print('RAW node-centre error (centroid-aligned, px): mean %.2f median %.2f p90 %.2f max %.2f n %d'%(sum(E)/len(E),E[len(E)//2],E[int(len(E)*.9)],E[-1],len(E)))

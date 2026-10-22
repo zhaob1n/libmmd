@@ -16,6 +16,7 @@ typedef struct DRankIn {
     size_t E;              /* layout-graph edges in g.edges() order (acyclic, no self loops) */
     const int32_t *eu, *ev, *minlen;
     const uint8_t *lab;    /* edge has a label with width && height */
+    int32_t *lrank;        /* optional out [E]: edge-label rank (proxy rank after removeEmptyRanks), -1 if none/fractional */
 } DRankIn;
 
 /* rank[N] for the listed real nodes; top/bot[S] = rank of the cluster's _bt/_bb border node
