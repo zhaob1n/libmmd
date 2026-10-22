@@ -22,8 +22,10 @@ def wall(cmd, n):
         if ts[-1] > 5: break
     return statistics.median(ts), err
 def ms(x): return f'{x*1000:9.2f}' if x is not None else '        -'
+# library times are often a few microseconds: report them in us (ms with 2dp rounded them to 0.00)
+def us(x): return f'{x*1e6:9.1f}' if x is not None else '        -'
 files = sys.argv[1:]
-print(f"{'input':44} {'cmm lib ms':>10} {'cmm cli ms':>10} {'mmdr lib ms':>11} {'mmdr cli ms':>11} {'cli x':>7}")
+print(f"{'input':44} {'cmm lib us':>10} {'cmm cli ms':>10} {'mmdr lib us':>11} {'mmdr cli ms':>11} {'lib x':>7} {'cli x':>7}")
 for f in files:
     n = 15
     b = subprocess.run([BENCH, f, '30'], capture_output=True, text=True).stdout
@@ -36,5 +38,6 @@ for f in files:
         try: dlib = json.loads(err.strip().splitlines()[-1])['total_us'] / 1e6
         except Exception: pass
     note = '' if d is not None else f'  mmdr: {err}'
+    lx = f'{dlib / clib:6.0f}x' if clib and dlib else '     -'
     sp = f'{d / c:6.1f}x' if c and d else '     -'
-    print(f'{os.path.basename(f)[:44]:44} {ms(clib):>10} {ms(c):>10} {ms(dlib):>11} {ms(d):>11} {sp:>7}{note}', flush=True)
+    print(f'{os.path.basename(f)[:44]:44} {us(clib):>10} {ms(c):>10} {us(dlib):>11} {ms(d):>11} {lx:>7} {sp:>7}{note}', flush=True)
