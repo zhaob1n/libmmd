@@ -560,9 +560,9 @@ DIAG_FN(state_render) {
             label_measure(g->nlabel[v], fs, &tw, &ln);
             unsigned dl = 0;
             label_measure(p.desc.v[v], fs, &dw, &dl);
-            w = (tw > dw ? tw : dw) + 30;
-            if (w < 50) w = 50;
-            h = (ln ? ln : 1) * lh + 16 + (dl ? dl * lh + 10 : 0);
+            /* mermaid stateStart/rect: plain = label + 2*padding(8); with description = max + 8, divider band 17 */
+            w = (tw > dw ? tw : dw) + (dl ? 8 : 16);
+            h = (ln ? ln : 1) * lh + (dl ? dl * lh + 17 : 16);
             g->nshape[v] = SH_ROUND;
             break;
         }
@@ -642,7 +642,7 @@ DIAG_FN(state_render) {
     if (bb.x0 > bb.x1) bb = (BBox){0, 0, 100, 100};
     if (title.n) bb.y0 -= 30;
     if (!buf_reserve(out, 1024 + N * 300 + E * 250)) return CMM_ERR_NOMEM;
-    DG_HEAD(out, bb, 10, "statediagram", CSS);
+    DG_HEAD(out, bb, 8, "statediagram", CSS);
     buf_lit(out, "<defs><marker id=\"st-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"8\" "
                  "markerHeight=\"8\" orient=\"auto\"><path d=\"M0,0 L10,5 L0,10 z\" fill=\"#333\"/></marker></defs>");
     if (title.n) dg_text(out, title, 18, (bb.x0 + bb.x1) / 2, bb.y0 + 12, "middle", "title");
