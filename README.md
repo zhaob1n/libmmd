@@ -128,3 +128,10 @@ mermaid itself fails to render `block_full` and `radar_full` (partial named curv
 - Self-loops reserve side room in BK placement; multiple loop labels stack outside the outermost loop.
 - Subgraph `direction` is ignored when member nodes link outside the subgraph (mermaid rule).
 - Numbers: bench/results_v7.txt.
+
+## v8
+- Medium avoid-on 394.7 µs (v1 404.1): single ordering sweep for mid-size graphs (512 < segs ≤ 4096).
+- `tests/bounds.py`: every case and repo fixture must keep all geometry (path control points, exact arcs,
+  shapes, text anchors) inside the root viewBox; self-loop curves now included in the flowchart viewBox.
+- Compound ordering seeded with dagre's tie order; same-rank order agreement with mermaid 0.175 → 0.936.
+- Numbers: bench/results_v8.txt.
