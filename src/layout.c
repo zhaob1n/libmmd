@@ -1395,12 +1395,34 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
     Arena *A = g->arena;
     int32_t *cand = ANEW(A, int32_t, S + 1), *gix = ANEW(A, int32_t, S + 1);
     if (!cand || !gix) return CMM_ERR_NOMEM;
+    /* mermaid: "if any of a subgraph's nodes are linked to the outside, subgraph direction is ignored"
+     * (edges to the subgraph id itself are fine). ext[s]: some member node links outside s's subtree. */
+    uint8_t *ext = ANEW(A, uint8_t, S + 1);
+    if (!ext) return CMM_ERR_NOMEM;
+    memset(ext, 0, S + 1);
+    for (size_t e = 0; e < E; e++) {
+        int32_t a = g->efrom[e], b = g->eto[e];
+        if (a == NONE || b == NONE) continue;
+        for (unsigned side = 0; side < 2; side++) {
+            int32_t x = side ? b : a, y = side ? a : b;
+            if (g->nflags[x] & NF_SUBREF) continue;
+            int32_t yloc = g->nparent[y];
+            if (g->nflags[y] & NF_SUBREF)
+                for (size_t t = 0; t < S; t++) if (str_eq(g->sid[t], g->nid[y])) { yloc = (int32_t)t; break; }
+            for (int32_t c = g->nparent[x]; c != NONE; c = g->sparent[c]) {
+                bool inside = false;
+                for (int32_t d = yloc; d != NONE; d = g->sparent[d]) if (d == c) { inside = true; break; }
+                if (inside) break; /* ancestors of c contain y too */
+                ext[c] = 1;
+            }
+        }
+    }
     size_t K = 0;
     for (size_t s = 0; s < S; s++) { /* parents precede children */
         int32_t p = g->sparent[s], pc = p == NONE ? NONE : cand[p];
         gix[s] = NONE;
         if (pc != NONE) cand[s] = pc;
-        else if ((g->sflags[s] & SF_DIRSET) && g->sdir[s] != g->dir) { cand[s] = (int32_t)s; gix[s] = (int32_t)++K; }
+        else if ((g->sflags[s] & SF_DIRSET) && g->sdir[s] != g->dir && !ext[s]) { cand[s] = (int32_t)s; gix[s] = (int32_t)++K; }
         else cand[s] = NONE;
     }
     if (!K) return layout_core(g);
