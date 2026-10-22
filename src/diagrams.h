@@ -20,6 +20,7 @@ typedef DIAG_FN((*DiagFn));
 [[nodiscard]] DIAG_FN(quadrant_render);
 [[nodiscard]] DIAG_FN(xychart_render);
 [[nodiscard]] DIAG_FN(gitgraph_render);
+[[nodiscard]] DIAG_FN(treemap_render);
 [[nodiscard]] DIAG_FN(radar_render);
 [[nodiscard]] DIAG_FN(packet_render);
 
