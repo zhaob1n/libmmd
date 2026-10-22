@@ -507,7 +507,7 @@ DIAG_FN(zenuml_render) {
     if (!dep || !fst) return CMM_ERR_NOMEM;
     memset(dep, 0, np * sizeof *dep);
     size_t fsp = 0;
-    double top = title.n ? TB + 12 : 12;
+    double top = TB + 12; /* zenuml always draws the (possibly empty) title bar */
     double cy = top + BH + 18;
     for (size_t k = 0; k < np; k++) P[k].y = top;
     for (size_t k = 0; k < ne; k++) {
@@ -587,10 +587,8 @@ DIAG_FN(zenuml_render) {
     BBox bb = {FX0, 0, FX1, bottom};
     DG_HEAD(o, bb, 1, "zenuml", CSS);
     dg_rect(o, FX0, 0, FX1 - FX0, bottom, 0, "zx");
-    if (title.n) {
-        dg_text(o, title, 13, FX0 + 6, TB / 2, "start", "zti");
-        dg_line(o, FX0, TB, FX1, TB, "zx");
-    }
+    if (title.n) dg_text(o, title, 13, FX0 + 6, TB / 2, "start", "zti");
+    dg_line(o, FX0, TB, FX1, TB, "zx");
     for (size_t k = 0; k < ne; k++) { /* fragments behind everything */
         Ev *e = &E[k];
         if (e->k == E_FRAG) {
