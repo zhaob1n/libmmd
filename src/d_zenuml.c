@@ -34,6 +34,35 @@ typedef struct Ev {
 enum { BK_CALL, BK_CTRL, BK_NONE };
 typedef struct Blk { uint8_t kind; bool returned; int32_t callee, caller, ev; Str ret, num; int cnt; } Blk;
 
+/* Consecutive `//` lines form one multi-line comment; `**bold**` markers are dropped. */
+static Str cm_join(Arena *a, Str prev, Str cm, bool *oom) {
+    size_t n = prev.n + (prev.n ? 1 : 0) + cm.n;
+    char *p = ANEW(a, char, n + 1);
+    if (!p) { *oom = true; return prev; }
+    size_t k = 0;
+    for (size_t i = 0; i < prev.n; i++) p[k++] = prev.p[i];
+    if (prev.n) p[k++] = '\n';
+    for (size_t i = 0; i < cm.n; i++) {
+        if (cm.p[i] == '*' && i + 1 < cm.n && cm.p[i + 1] == '*') { i++; continue; }
+        p[k++] = cm.p[i];
+    }
+    return (Str){.p = p, .n = k};
+}
+static double cm_width(Str c) {
+    if (!c.n) return 0;
+    double w;
+    unsigned nl;
+    label_measure(c, 10, &w, &nl);
+    return w;
+}
+static double cm_extra(Str c) {
+    if (!c.n) return 0;
+    double w;
+    unsigned nl;
+    label_measure(c, 10, &w, &nl);
+    return nl > 1 ? (nl - 1) * 15.0 : 0;
+}
+
 typedef struct ZT {
     Arena *a;
     VEC(Part) P;
@@ -408,11 +437,13 @@ DIAG_FN(zenuml_render) {
         if (q) { if (c == q || c == '\n') q = 0; continue; }
         if (c == '"') { q = c; continue; }
         if (c == '/' && i + 1 < n && src[i + 1] == '/') { /* comment to end of line: shown above the next message */
-            stmt(&z, (Str){.p = src + s0, .n = i - s0}, false);
+            Str before = {.p = src + s0, .n = i - s0};
+            stmt(&z, before, false);
+            if (str_trim(before).n) z.comment = (Str){}; /* a statement in between ends the comment block */
             size_t c0 = i + 2;
             while (i < n && src[i] != '\n') i++;
             Str cm = str_trim((Str){.p = src + c0, .n = i - c0});
-            if (cm.n) z.comment = cm;
+            if (cm.n) z.comment = cm_join(z.a, z.comment, cm, &z.oom);
             s0 = i + 1;
             continue;
         }
@@ -424,6 +455,7 @@ DIAG_FN(zenuml_render) {
             Str t = str_trim((Str){.p = src + s0, .n = i - s0});
             bool acc;
             if (c == '{' || !dcfg_is_acc(t, &acc)) stmt(&z, t, c == '{');
+            if (t.n) z.comment = (Str){}; /* only the next message/fragment carries a comment */
             if (c == '}') close_block(&z);
             s0 = i + 1;
         }
@@ -454,7 +486,7 @@ DIAG_FN(zenuml_render) {
         for (size_t k = 0; k < ne; k++) {
             if (E[k].k != E_MSG) continue;
             int32_t f = E[k].from, t = E[k].to;
-            double need = fmax(text_width(E[k].label, 13), E[k].comment.n ? text_width(E[k].comment, 10) : 0) + 34;
+            double need = fmax(text_width(E[k].label, 13), cm_width(E[k].comment)) + 34;
             double lo = fmin(P[f].x, P[t].x), hi = fmax(P[f].x, P[t].x);
             int32_t hiidx = P[f].x > P[t].x ? f : t;
             if (f == t) {
@@ -482,7 +514,7 @@ DIAG_FN(zenuml_render) {
         Ev *e = &E[k];
         switch (e->k) {
         case E_MSG: {
-            if (e->comment.n) cy += 14;
+            if (e->comment.n) cy += 14 + cm_extra(e->comment);
             cy += 20;
             e->y = cy;
             if (e->mk == M_CREATE) { P[e->to].y = cy - BH / 2; cy += BH / 2 - 4; }
@@ -507,7 +539,7 @@ DIAG_FN(zenuml_render) {
             cy += 6;
             break;
         case E_FRAG:
-            cy += 8 + (e->comment.n ? 14 : 0);
+            cy += 8 + (e->comment.n ? 14 + cm_extra(e->comment) : 0);
             e->y = cy;
             e->x0 = 1e300, e->x1 = -1e300;
             cy += 24 + (e->cond.n ? 20 : 0);
@@ -567,7 +599,7 @@ DIAG_FN(zenuml_render) {
             frag_icon(o, e->label, e->x0 + 6, e->y + 4);
             dg_text(o, e->label, 13, e->x0 + 24, e->y + 11, "start", "zht");
             dg_text(o, e->num, 9, e->x0 - 3, e->y + 6, "end", "zn");
-            if (e->comment.n) dg_text(o, e->comment, 10, e->x0, e->y - 8, "start", "zc");
+            if (e->comment.n) dg_text(o, e->comment, 10, e->x0, e->y - 8 - cm_extra(e->comment) / 2, "start", "zc");
             if (e->cond.n) dg_text(o, e->cond, 11, e->x0 + 6, e->y + 33, "start", "zfc");
         } else if (e->k == E_SEC) {
             const Ev *f = &E[e->ref];
@@ -606,7 +638,7 @@ DIAG_FN(zenuml_render) {
             arrow(o, x2 + 9, x2, y + 18, e->mk == M_SYNC ? M_SYNC : M_ASYNC);
             dg_text(o, e->label, 13, fx + 46, y + 9, "start", "zml");
             dg_text(o, e->num, 9, x1 - 4, y, "end", "zn");
-            if (e->comment.n) dg_text(o, e->comment, 10, x1 + 2, y - 12, "start", "zc");
+            if (e->comment.n) dg_text(o, e->comment, 10, x1 + 2, y - 12 - cm_extra(e->comment) / 2, "start", "zc");
             continue;
         }
         double dir = tx > fx ? 1 : -1;
@@ -616,7 +648,7 @@ DIAG_FN(zenuml_render) {
         arrow(o, x1, x2, y, e->mk);
         dg_text(o, e->label, 13, (x1 + x2) / 2, y - 7, "middle", "zml");
         dg_text(o, e->num, 9, fmin(x1, x2) - 4, y, "end", "zn");
-        if (e->comment.n) dg_text(o, e->comment, 10, fmin(x1, x2) + 2, y - 20, "start", "zc");
+        if (e->comment.n) dg_text(o, e->comment, 10, fmin(x1, x2) + 2, y - 20 - cm_extra(e->comment) / 2, "start", "zc");
     }
     buf_lit(o, "</svg>\n");
     (void)err_off; (void)msg;
