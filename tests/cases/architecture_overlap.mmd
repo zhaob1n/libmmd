@@ -1,0 +1,13 @@
+architecture-beta
+    group a(cloud)[A]
+    group b(cloud)[B]
+    group c(cloud)[C] in b
+    service a1(server)[a1] in a
+    service b1(server)[b1] in b
+    service a2(server)[a2] in a
+    service c1(logos:docker)[c1] in c
+    service b2(logos:redis)[b2] in b
+    a1:R --> L:b1
+    b1:R --> L:a2
+    a1:B --> T:c1
+    c1:R --> L:b2

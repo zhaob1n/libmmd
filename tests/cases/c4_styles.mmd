@@ -1,0 +1,24 @@
+C4Context
+    title System Context with styles
+    Enterprise_Boundary(b0, "Bank") {
+        Person(c1, "Customer A", "A customer")
+        Person(c2, "Customer B")
+        Person(c3, "Customer C")
+        System(sys, "Banking System", "Core")
+        System_Boundary(b1, "Inner") {
+            SystemDb(db, "Ledger")
+            SystemQueue(q, "Queue")
+        }
+        Boundary(b2, "Ops", "team") {
+            System_Ext(mon, "Monitoring")
+        }
+    }
+    Rel(c1, sys, "Uses")
+    Rel(c2, sys, "Uses", "HTTPS")
+    BiRel(sys, db, "Reads/Writes")
+    Rel(sys, q, "Publishes")
+    Rel(mon, sys, "Watches")
+    UpdateElementStyle(c1, $fontColor="red", $bgColor="grey", $borderColor="red")
+    UpdateRelStyle(c1, sys, $textColor="blue", $lineColor="blue", $offsetX="5", $offsetY="-10")
+    UpdateElementStyle(sys, $bgColor="red;}<script>")
+    UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="2")

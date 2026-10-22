@@ -1,0 +1,19 @@
+architecture-beta
+    group api(cloud)[API]
+    group data(database)[Data]
+    group edge(internet)[Edge]
+    service gw(internet)[Gateway] in edge
+    service lb(server)[Balancer] in edge
+    service app(server)[App] in api
+    service worker(server)[Worker] in api
+    service db(database)[DB] in data
+    service cache(disk)[Cache] in data
+    service gh(logos:github)[GitHub]
+    service aws(logos:aws)[AWS]
+    gw:R --> L:lb
+    lb:B --> T:app
+    app:R --> L:worker
+    app:B --> T:db
+    worker:B --> T:cache
+    worker:R -- L:gh
+    db:L -- R:aws
