@@ -720,6 +720,7 @@ static void port_sort(size_t n, PortKey a[static n]) {
 
 /* hybrid cycle removal thresholds (see results_v7): greedy only for big graphs with many back edges */
 constexpr size_t ACYC_GREEDY_MIN_N = 1500;
+constexpr size_t ORDER_ONE_SWEEP_MIN = 512, ORDER_ONE_SWEEP_MAX = 4096;
 constexpr size_t ACYC_GREEDY_REV_DIV = 20; /* DFS reverses >= 5% of nodes' worth of edges */
 
 static cmm_status layout_core(Graph *g) {
@@ -1086,7 +1087,10 @@ static cmm_status layout_core(Graph *g) {
     int64_t tbudget = 2000000 + 40 * (int64_t)nseg;
     uint8_t *tdirty = ANEW(A, uint8_t, R + 2);
     if (!tdirty) return CMM_ERR_NOMEM;
-    for (unsigned iter = 0; iter < 24 && since < patience && bestc > 0; iter++) {
+    /* mid-size graphs (medium bench and up to a few thousand segments): the up-sweep after the first
+     * down-sweep measured non-improving (medium 485 -> 508) while costing ~45 µs; large ones need it */
+    const unsigned maxit = (nseg > ORDER_ONE_SWEEP_MIN && nseg <= ORDER_ONE_SWEEP_MAX) ? 1 : 24;
+    for (unsigned iter = 0; iter < maxit && since < patience && bestc > 0; iter++) {
         bool down = (iter & 1u) == 0;
         if (clusters) cluster_keys(&L, S, csum, ccnt);
         if (down) for (size_t r = 1; r < R; r++) sweep_layer(&L, r, true, false, keys, idx, tmp, csum, ccnt, clusters);
