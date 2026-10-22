@@ -785,7 +785,23 @@ static cmm_status layout_core(Graph *g) {
         if (!valid || !hid) return CMM_ERR_NOMEM;
         for (size_t e = 0; e < E; e++) valid[e] = EVALID(e);
         for (size_t v = 0; v < N; v++) hid[v] = (g->nflags[v] & NF_HIDDEN) ? 1 : 0;
-        if (!greedy_fas(A, N, E, ef, et, valid, hid, rev)) return CMM_ERR_NOMEM;
+        (void)valid;
+        /* dagre default (mermaid): DFS feedback arc set in node/edge insertion order */
+        memset(state, 0, N * sizeof *state);
+        for (size_t e = 0; e < E; e++) rev[e] = 0;
+        for (size_t r = 0; r < N; r++) {
+            if (state[r] || hid[r]) continue;
+            size_t sp = 0;
+            stk[sp++] = (uint32_t)r; state[r] = 1; it[r] = ooff[r];
+            while (sp) {
+                uint32_t u = stk[sp - 1];
+                if (it[u] == ooff[u + 1]) { state[u] = 2; sp--; continue; }
+                uint32_t e = oidx[it[u]++], w = (uint32_t)et[e];
+                if (hid[w]) continue;
+                if (state[w] == 1) rev[e] = 1;
+                else if (!state[w]) { state[w] = 1; it[w] = ooff[w]; stk[sp++] = w; }
+            }
+        }
     }
     /* effective DAG CSR */
     #define EU(e) (rev[e] ? et[e] : ef[e])
