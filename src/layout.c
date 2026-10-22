@@ -1536,24 +1536,43 @@ static int vis_path(Router *R, Arena *A, double sx, double sy, double tx, double
         double *hh = ANEW(A, double, nc);
         if (!hh) return -1;
         for (size_t i = 0; i < nc; i++) hh[i] = edist(cx[i] - tx, cy[i] - ty);
+        bool reached = false;
+        /* lazy A*: relax without visibility tests, validate a node's parent link only when it is popped */
         for (;;) {
             size_t u = SIZE_MAX;
             double bd = INFINITY;
             for (size_t i = 0; i < nc; i++) if (!done[i] && dist[i] + hh[i] < bd) bd = dist[i] + hh[i], u = i;
-            if (u == SIZE_MAX || u == 1) break;
+            if (u == SIZE_MAX) break;
+            if (u != 0 && !done[u]) {
+                int32_t p = prev[u];
+                if (R->budget < 0) return -1;
+                if (seg_hit(R, cx[p], cy[p], cx[u], cy[u], s1, s2) != NONE) {
+                    /* parent invisible: best visible already-settled parent, else drop for now */
+                    double nd = INFINITY;
+                    int32_t np2 = -1;
+                    for (size_t q = 0; q < nc; q++) {
+                        if (done[q] != 1 || (int32_t)q == p) continue;
+                        double d = dist[q] + edist(cx[u] - cx[q], cy[u] - cy[q]);
+                        if (d >= nd) continue;
+                        if (seg_hit(R, cx[q], cy[q], cx[u], cy[u], s1, s2) != NONE) continue;
+                        nd = d, np2 = (int32_t)q;
+                    }
+                    dist[u] = nd, prev[u] = np2;
+                    if (np2 < 0) { done[u] = 2; continue; } /* unreachable via settled nodes */
+                    continue; /* re-select with the corrected key */
+                }
+            }
+            if (u == 1) { reached = true; break; }
             done[u] = 1;
             double du = dist[u];
-            /* try the goal first: if visible, other relaxations rarely matter */
             for (size_t w = 1; w < nc; w++) {
-                if (done[w]) continue;
+                if (done[w] == 1) continue;
                 double d = du + edist(cx[w] - cx[u], cy[w] - cy[u]);
-                if (d >= dist[w] || d + hh[w] >= dist[1]) continue;
-                if (R->budget < 0) return -1;
-                if (seg_hit(R, cx[u], cy[u], cx[w], cy[w], s1, s2) != NONE) continue;
-                dist[w] = d, prev[w] = (int32_t)u;
+                if (done[w] == 0 && d >= dist[w]) continue;
+                dist[w] = d, prev[w] = (int32_t)u, done[w] = 0;
             }
         }
-        if (dist[1] == INFINITY) { if (full) break; continue; }
+        if (!reached) { if (full) break; continue; }
         size_t k = 0;
         for (int32_t v = prev[1]; v > 0; v = prev[v]) k++;
         if (k > cap) return -1;
