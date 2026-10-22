@@ -1,0 +1,45 @@
+---
+config:
+  sequence:
+    wrap: false
+---
+sequenceDiagram
+    box Aqua Frontend Team
+        actor U as User
+        participant W@{ "type": "boundary" } as Web
+    end
+    box rgb(255, 230, 200) Backend
+        participant API
+        participant DB@{ "type": "database" }
+    end
+    participant Ext
+    link API: Dashboard @ https://example.com/dash
+    links DB: {"Repo": "https://example.com/repo"}
+    U->>W: click
+    W->>+API: wrap: This is a rather long message text which should be wrapped across several lines nicely
+    create participant Worker
+    API->>Worker: spawn
+    par_over parallel work
+        Worker->>DB: query
+    and
+        API->>Ext: notify
+    end
+    rect rgb(191, 223, 255)
+        note left of U: left note
+        note right of Ext: right note
+        Note over API: over one
+        Note over W,DB: nowrap: over many participants
+    end
+    rect rgba(0, 255, 0, 0.1)
+        critical lock
+            DB-->>API: rows
+        option timeout
+            API-xDB: cancel
+        end
+    end
+    destroy Worker
+    Worker-->>API: done
+    API-->>-W: 200
+    break failure
+        W-)U: oops
+    end

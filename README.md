@@ -25,7 +25,13 @@ API (`include/cmermaid.h`): `cmm_render_svg(n, src, opts, &buf, &err)`, `cmm_buf
 | ordering | `src/layout.c` | DFS init order, up/down barycenter sweeps (≤24, stop after 4 non-improving), Fenwick-tree crossing count, cluster-contiguous keys + dagre-style border chains |
 | x coords | `src/layout.c` | Brandes–Köpf: type-1 conflicts, 4 alignments, compaction, balance |
 | output | `src/flow_svg.c` | d3 `curveBasis` paths, boundary clipping per shape, markers, styles; fixed-point number formatting (no printf) |
-| sequence | `src/seq.c` | participants/actors, all arrows, activations, notes, blocks, autonumber |
+| sequence | `src/seq.c` | participants/actors, all arrows, activations, notes, blocks, autonumber 
+| diagram registry | `src/d_registry.c`, `src/diagrams.h` | keyword → renderer table; new types live in `src/d_*.c` |
+| shared helpers | `src/dgraph.[ch]` | graph building on top of `flow_layout`, line scanner, SVG primitives |
+| stateDiagram(-v2) | `src/d_state.c` | composites (recursive per-scope layout), `--` regions, `[*]`, fork/join/choice, notes, classDef |
+| classDiagram | `src/d_class.c` | members, `~generics~`, visibility/`$`/`*`, annotations, all relations + lollipop, cardinality, namespaces, notes |
+| erDiagram | `src/d_er.c` | attribute tables (type/name/keys/comment), aliases, all crow's-foot cardinalities (symbolic + word forms) |
+| pie | `src/d_pie.c` | slices, showData, title, legend |
 | text metrics | `src/text.c` | embedded Helvetica-compatible advance table, CJK/emoji wide, 8-byte ASCII fast path |
 
 ## Flowchart features (v2)

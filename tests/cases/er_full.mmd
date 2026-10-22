@@ -1,0 +1,29 @@
+erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ LINE-ITEM : contains
+    CUSTOMER }|..|{ DELIVERY-ADDRESS : uses
+    PRODUCT-CATEGORY ||--|{ PRODUCT : "has many"
+    PRODUCT |o--o| LINE-ITEM : "ordered in"
+    CUSTOMER {
+        string name "full name"
+        string custNumber PK, UK "unique id"
+        string[] sector
+        int age
+    }
+    ORDER {
+        int orderNumber PK
+        string deliveryAddress FK
+        datetime placed
+    }
+    LINE-ITEM {
+        string productCode FK
+        int quantity
+        float pricePerUnit
+    }
+    p[Person] {
+        string firstName
+    }
+    "Manager Role" }o--|| p : "is a"
+    p one or more to zero or many CUSTOMER : knows
+    p only one optionally to 1 ORDER : signs
+    EMPTY

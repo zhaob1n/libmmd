@@ -2,16 +2,24 @@
  * activate/deactivate, notes, loop/alt/opt/par/critical/break/rect/box blocks, autonumber.
  * Parse -> layout -> SVG in one translation unit. */
 #include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 
 #include "seq.h"
 #include "text.h"
 
-typedef enum : uint8_t { EV_MSG, EV_NOTE, EV_BEGIN, EV_ELSE, EV_END, EV_ACT, EV_DEACT } EvKind;
+typedef enum : uint8_t { EV_MSG, EV_NOTE, EV_BEGIN, EV_ELSE, EV_END, EV_ACT, EV_DEACT, EV_CREATE, EV_DESTROY } EvKind;
 typedef enum : uint8_t { NP_LEFT, NP_RIGHT, NP_OVER } NotePos;
 typedef enum : uint8_t { HD_NONE, HD_ARROW, HD_CROSS, HD_ASYNC } Head;
 
-typedef struct Part { Str id, label; bool actor; double x, w; } Part;
+typedef struct Part {
+    Str id, label;
+    int32_t box;                     /* index into SP.boxes or -1 */
+    bool actor, created, destroyed;  /* created/destroyed mid-diagram */
+    bool pend_create, pend_destroy;  /* render-time state */
+    double x, w, y0, y1;             /* lifeline extent (y1 == 0 => bottom) */
+} Part;
+typedef struct Box { Str color, label; } Box;
 typedef struct Ev {
     EvKind kind;
     uint8_t sub; /* NotePos */
@@ -28,7 +36,10 @@ typedef struct SP {
     char *msg;
     VEC(Part) parts;
     VEC(Ev) evs;
-    bool autonumber;
+    VEC(Box) boxes;
+    int32_t cur_box;  /* open box or -1 */
+    unsigned open_blk; /* open loop/alt/... blocks */
+    bool autonumber, wrap;
     Str title;
 } SP;
 
@@ -46,7 +57,7 @@ static cmm_status sfail(SP *p, size_t off, const char *m) {
 static int32_t part_get(SP *p, Str id, bool *oom) {
     for (size_t k = 0; k < p->parts.n; k++)
         if (str_eq(p->parts.v[k].id, id)) return (int32_t)k;
-    if (!VEC_PUSH(p->A, &p->parts, (Part){.id = id, .label = id})) { *oom = true; return -1; }
+    if (!VEC_PUSH(p->A, &p->parts, (Part){.id = id, .label = id, .box = -1})) { *oom = true; return -1; }
     return (int32_t)p->parts.n - 1;
 }
 
@@ -69,14 +80,104 @@ static constexpr ArrowTok ARROWS[] = {
     {"-->", HD_NONE, true, false},    {"->", HD_NONE, false, false},
 };
 
+constexpr double WRAP_MSG = 220;
+constexpr double WRAP_NOTE = 160;
+
+/* Greedy word wrap of a normalised label to maxw px. Returns s itself when nothing to do. */
+static Str wrap_text(Arena *A, Str s, double maxw, double fs, bool *ok) {
+    *ok = true;
+    if (text_width(s, fs) <= maxw) return s;
+    char *o = arena_alloc(A, s.n + 1, 1);
+    if (!o) { *ok = false; return (Str){}; }
+    memcpy(o, s.p, s.n);
+    size_t ls = 0, lastsp = SIZE_MAX;
+    for (size_t i = 0; i < s.n; i++) {
+        if (o[i] == '\n') { ls = i + 1; lastsp = SIZE_MAX; continue; }
+        if (o[i] == ' ') {
+            if (lastsp != SIZE_MAX && text_width((Str){.p = o + ls, .n = i - ls}, fs) > maxw) {
+                o[lastsp] = '\n';
+                ls = lastsp + 1;
+            }
+            lastsp = i;
+        }
+    }
+    if (lastsp != SIZE_MAX && lastsp >= ls && text_width((Str){.p = o + ls, .n = s.n - ls}, fs) > maxw) o[lastsp] = '\n';
+    return (Str){.p = o, .n = s.n};
+}
+
+/* strip a leading "wrap:"/"nowrap:" marker; returns effective wrap flag */
+static bool wrap_prefix(Str *t, bool dflt) {
+    Str x = str_trim(*t);
+    if (x.n && x.p[0] == ':') x.p++, x.n--;
+    if (str_starts(x, S("wrap:"))) { *t = (Str){.p = x.p + 5, .n = x.n - 5}; return true; }
+    if (str_starts(x, S("nowrap:"))) { *t = (Str){.p = x.p + 7, .n = x.n - 7}; return false; }
+    return dflt;
+}
+
+static bool looks_color(Str w) {
+    static const Str NAMES[] = {S("transparent"), S("red"), S("green"), S("blue"), S("yellow"), S("aqua"),
+        S("purple"), S("orange"), S("pink"), S("grey"), S("gray"), S("white"), S("black"), S("lightblue"),
+        S("lightgreen"), S("lightyellow"), S("lightgrey"), S("lightgray"), S("teal"), S("navy"), S("olive"),
+        S("lime"), S("cyan"), S("magenta"), S("silver"), S("maroon"), S("violet"), S("gold"), S("beige"),
+        S("coral"), S("salmon"), S("khaki"), S("lavender"), S("wheat"), S("tan")};
+    if (!w.n) return false;
+    if (w.p[0] == '#' || str_starts(w, S("rgb")) || str_starts(w, S("hsl"))) return true;
+    for (size_t k = 0; k < countof(NAMES); k++) if (str_ieq(w, NAMES[k])) return true;
+    return false;
+}
+
+/* split "color rest" where color may be rgb(...) containing spaces */
+static void split_color(Str rest, Str *color, Str *label) {
+    rest = str_trim(rest);
+    *color = (Str){};
+    *label = rest;
+    size_t k = 0;
+    if (str_starts(rest, S("rgb")) || str_starts(rest, S("hsl"))) {
+        const char *cp = memchr(rest.p, ')', rest.n);
+        k = cp ? (size_t)(cp - rest.p) + 1 : rest.n;
+    } else
+        while (k < rest.n && !is_sp(rest.p[k])) k++;
+    Str w = {.p = rest.p, .n = k};
+    if (!looks_color(w)) return;
+    *color = w;
+    *label = str_trim((Str){.p = rest.p + k, .n = rest.n - k});
+}
+
 static cmm_status parse_line(SP *p, Str line, size_t off) {
     bool oom = false;
     Str rest = line;
     Str w = word(&rest);
     Ev ev = {.a = -1, .b = -1};
-    if (str_eq(w, S("create"))) { w = word(&rest); }
+    bool create = false;
+    if (str_eq(w, S("create"))) { w = word(&rest); create = true; }
     if (str_eq(w, S("participant")) || str_eq(w, S("actor"))) {
         rest = str_trim(rest);
+        Str type = {};
+        for (size_t k = 0; k + 1 < rest.n; k++) /* id@{ "type": "..." } metadata: keep id, read type */
+            if (rest.p[k] == '@' && rest.p[k + 1] == '{') {
+                Str meta = {.p = rest.p + k, .n = rest.n - k};
+                for (size_t q = 0; q + 4 <= meta.n; q++)
+                    if (memcmp(meta.p + q, "type", 4) == 0) {
+                        size_t r = q + 4;
+                        while (r < meta.n && (meta.p[r] == '"' || meta.p[r] == ':' || is_sp(meta.p[r]))) r++;
+                        size_t r0 = r;
+                        while (r < meta.n && meta.p[r] != '"' && meta.p[r] != ',' && meta.p[r] != '}' && !is_sp(meta.p[r])) r++;
+                        type = (Str){.p = meta.p + r0, .n = r - r0};
+                        break;
+                    }
+                const char *close = memchr(meta.p, '}', meta.n);
+                Str tail = close ? (Str){.p = close + 1, .n = meta.n - (size_t)(close + 1 - meta.p)} : (Str){};
+                tail = str_trim(tail);
+                if (tail.n) { /* "A@{...} as Label": stitch id + tail via a fresh copy */
+                    char *o = arena_alloc(p->A, k + 1 + tail.n, 1);
+                    if (!o) return CMM_ERR_NOMEM;
+                    memcpy(o, rest.p, k);
+                    o[k] = ' ';
+                    memcpy(o + k + 1, tail.p, tail.n);
+                    rest = (Str){.p = o, .n = k + 1 + tail.n};
+                } else rest = (Str){.p = rest.p, .n = k};
+                break;
+            }
         Str id = rest, label = rest;
         for (size_t k = 0; k + 4 <= rest.n; k++)
             if (memcmp(rest.p + k, " as ", 4) == 0) {
@@ -90,7 +191,15 @@ static cmm_status parse_line(SP *p, Str line, size_t off) {
         bool ok;
         p->parts.v[k].label = label_normalize(p->A, label, &ok);
         if (!ok) return CMM_ERR_NOMEM;
-        p->parts.v[k].actor = str_eq(w, S("actor"));
+        Part *pp = &p->parts.v[k];
+        pp->actor = str_eq(w, S("actor")) || str_eq(type, S("actor"));
+        if (p->cur_box >= 0) pp->box = p->cur_box;
+        if (create) {
+            pp->created = true;
+            ev.kind = EV_CREATE;
+            ev.a = k;
+            return VEC_PUSH(p->A, &p->evs, ev) ? CMM_OK : CMM_ERR_NOMEM;
+        }
         return CMM_OK;
     }
     if (str_eq(w, S("autonumber"))) { p->autonumber = true; return CMM_OK; }
@@ -100,7 +209,24 @@ static cmm_status parse_line(SP *p, Str line, size_t off) {
         p->title = t;
         return CMM_OK;
     }
-    if (str_eq(w, S("destroy")) || str_starts(w, S("accTitle")) || str_starts(w, S("accDescr")) ||
+    if (str_eq(w, S("destroy"))) {
+        Str id = str_trim(rest);
+        if (!id.n) return sfail(p, off, "expected participant after 'destroy'");
+        ev.kind = EV_DESTROY;
+        ev.a = part_get(p, id, &oom);
+        if (oom) return CMM_ERR_NOMEM;
+        p->parts.v[ev.a].destroyed = true;
+        return VEC_PUSH(p->A, &p->evs, ev) ? CMM_OK : CMM_ERR_NOMEM;
+    }
+    if (str_eq(w, S("box"))) {
+        if (p->cur_box >= 0 || p->open_blk) return sfail(p, off, "'box' cannot be nested");
+        Box bx;
+        split_color(rest, &bx.color, &bx.label);
+        if (!VEC_PUSH(p->A, &p->boxes, bx)) return CMM_ERR_NOMEM;
+        p->cur_box = (int32_t)p->boxes.n - 1;
+        return CMM_OK;
+    }
+    if (str_starts(w, S("accTitle")) || str_starts(w, S("accDescr")) ||
         str_eq(w, S("links")) || str_eq(w, S("link")) || str_eq(w, S("properties")) || str_eq(w, S("details")))
         return CMM_OK;
     if (str_eq(w, S("activate")) || str_eq(w, S("deactivate"))) {
@@ -129,16 +255,18 @@ static cmm_status parse_line(SP *p, Str line, size_t off) {
         ev.a = part_get(p, a, &oom);
         ev.b = b.n ? part_get(p, b, &oom) : ev.a;
         if (oom) return CMM_ERR_NOMEM;
-        bool ok;
+        bool ok, wr = wrap_prefix(&text, p->wrap);
         ev.text = label_normalize(p->A, text, &ok);
+        if (ok && wr) ev.text = wrap_text(p->A, ev.text, WRAP_NOTE, 16, &ok);
         if (!ok) return CMM_ERR_NOMEM;
         return VEC_PUSH(p->A, &p->evs, ev) ? CMM_OK : CMM_ERR_NOMEM;
     }
-    static const Str BEG[] = {S("loop"), S("alt"), S("opt"), S("par"), S("critical"), S("break"), S("rect"), S("box"), S("par_over")};
+    static const Str BEG[] = {S("loop"), S("alt"), S("opt"), S("par"), S("critical"), S("break"), S("rect"), S("par_over")};
     for (size_t k = 0; k < countof(BEG); k++)
         if (str_eq(w, BEG[k])) {
             ev.kind = EV_BEGIN;
-            ev.kw = w;
+            ev.kw = str_eq(w, S("par_over")) ? S("par") : w;
+            p->open_blk++;
             ev.text = str_trim(rest);
             return VEC_PUSH(p->A, &p->evs, ev) ? CMM_OK : CMM_ERR_NOMEM;
         }
@@ -148,6 +276,8 @@ static cmm_status parse_line(SP *p, Str line, size_t off) {
         return VEC_PUSH(p->A, &p->evs, ev) ? CMM_OK : CMM_ERR_NOMEM;
     }
     if (str_eq(w, S("end"))) {
+        if (!p->open_blk && p->cur_box >= 0) { p->cur_box = -1; return CMM_OK; }
+        if (p->open_blk) p->open_blk--;
         ev.kind = EV_END;
         return VEC_PUSH(p->A, &p->evs, ev) ? CMM_OK : CMM_ERR_NOMEM;
     }
@@ -178,8 +308,9 @@ static cmm_status parse_line(SP *p, Str line, size_t off) {
     ev.head = at->h;
     ev.dotted = at->dotted;
     ev.bidir = at->bidir;
-    bool ok;
+    bool ok, wr = wrap_prefix(&text, p->wrap);
     ev.text = label_normalize(p->A, text, &ok);
+    if (ok && wr) ev.text = wrap_text(p->A, ev.text, WRAP_MSG, 16, &ok);
     if (!ok) return CMM_ERR_NOMEM;
     return VEC_PUSH(p->A, &p->evs, ev) ? CMM_OK : CMM_ERR_NOMEM;
 }
@@ -234,7 +365,7 @@ static void actor_box(Buf *b, const Part *pa, double y, double fs) {
 }
 
 typedef struct Act { int32_t p; double y0; unsigned depth; } Act;
-typedef struct Blk { size_t ev; double y0; int32_t lo, hi; } Blk;
+typedef struct Blk { size_t ev; double y0; int32_t lo, hi; double xl, xr; /* content x extent (notes, self msgs) */ } Blk;
 
 static constexpr char SEQ_CSS[] =
     "#mermaid{font-family:\"trebuchet ms\",verdana,arial,sans-serif;font-size:16px;}"
@@ -249,8 +380,10 @@ static constexpr char SEQ_CSS[] =
     "#mermaid .block{fill:none;stroke:#526e9c;stroke-width:1.5px;}"
     "#mermaid .block-sep{stroke:#526e9c;stroke-width:1.5px;stroke-dasharray:3,3;}"
     "#mermaid .block-tab{fill:#ECECFF;stroke:#526e9c;stroke-width:1.5px;}"
+    "#mermaid .block-kw{font-size:14px;font-weight:bold;}"
     "#mermaid .seqnum{fill:#333;}#mermaid .seqnum-t{fill:#fff;font-size:12px;}"
-    "#mermaid .title{font-size:18px;}";
+    "#mermaid .title{font-size:18px;}"
+    "#mermaid .box{stroke:rgba(0,0,0,0.5);stroke-width:1px;}#mermaid .destroy{stroke:#333;stroke-width:2px;fill:none;}";
 
 static constexpr char SEQ_DEFS[] =
     "<defs><marker id=\"sq-arrow\" viewBox=\"0 0 12 12\" refX=\"11\" refY=\"6\" markerWidth=\"12\" markerHeight=\"12\" "
@@ -265,7 +398,13 @@ static constexpr char SEQ_DEFS[] =
 
 cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, Str title, double fs,
                       Buf *out, size_t *err_off, char msg[static 160]) {
-    SP p = {.A = a, .s = src, .n = n, .msg = msg, .title = title};
+    SP p = {.A = a, .s = src, .n = n, .msg = msg, .title = title, .cur_box = -1};
+    for (size_t k = 0; k + 4 <= off; k++) /* global wrap from frontmatter/directive config */
+        if (memcmp(src + k, "wrap", 4) == 0) {
+            size_t j = k + 4;
+            while (j < off && (src[j] == '"' || src[j] == '\'' || src[j] == ':' || is_sp(src[j]))) j++;
+            if (j + 4 <= off && memcmp(src + j, "true", 4) == 0) p.wrap = true;
+        }
     cmm_status st = CMM_OK;
     Buf back = {}, mid = {}, front = {};
     /* skip header line */
@@ -290,7 +429,8 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
         unsigned ln;
         label_measure(pa[k].label, fs, &tw, &ln);
         pa[k].w = tw + 30 > ACT_W ? tw + 30 : ACT_W;
-        pa[k].x = k ? pa[k - 1].x + pa[k - 1].w / 2 + ACT_MARGIN + pa[k].w / 2 : pa[k].w / 2;
+        double gap = ACT_MARGIN + (k && pa[k].box != pa[k - 1].box ? 2 * BOX_MARGIN : 0);
+        pa[k].x = k ? pa[k - 1].x + pa[k - 1].w / 2 + gap + pa[k].w / 2 : pa[k].w / 2;
     }
     for (size_t k = 0; k < p.evs.n; k++) {
         const Ev *ev = &p.evs.v[k];
@@ -310,6 +450,10 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
             for (size_t q = (size_t)hi; q < P; q++) pa[q].x += need - d;
     }
     double lh = fs * 1.5, title_h = p.title.n ? 40 : 0;
+    bool box_lbl = false;
+    for (size_t k = 0; k < p.boxes.n; k++) box_lbl |= p.boxes.v[k].label.n > 0;
+    if (p.boxes.n) title_h += box_lbl ? lh + 10 : 10;
+    for (size_t k = 0; k < P; k++) pa[k].y0 = title_h + ACT_H;
     double y = title_h + ACT_H + 20, minx = pa[0].x - pa[0].w / 2, maxx = pa[P - 1].x + pa[P - 1].w / 2;
     Act acts[256];
     size_t nact = 0;
@@ -328,6 +472,14 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
                 if (lo < blks[q].lo) blks[q].lo = lo;
                 if (hi > blks[q].hi) blks[q].hi = hi;
             }
+            Part *cr = ev->a != ev->b && pa[ev->b].pend_create ? &pa[ev->b] : nullptr;
+            if (cr) { /* created participant: its head box sits on the message line */
+                ly += ACT_H / 2 - 10;
+                cr->pend_create = false;
+                actor_box(&front, cr, ly - ACT_H / 2, fs);
+                cr->y0 = ly + ACT_H / 2;
+                x2 += x2 > x1 ? -cr->w / 2 : cr->w / 2;
+            }
             const char *mk = ev->head == HD_ARROW ? "sq-arrow" : ev->head == HD_CROSS ? "sq-cross" : ev->head == HD_ASYNC ? "sq-async" : nullptr;
             if (ev->a == ev->b) {
                 text_(&front, ev->text, fs, x1 + 8, y + lh / 2, "start", "msg-text");
@@ -336,6 +488,8 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
                 buf_ch(&front, ' '); pt(&front, x1 + 60, ly + 40); buf_ch(&front, ' '); pt(&front, x1, ly + 30); buf_ch(&front, '"');
                 ly += 30;
                 if (x1 + 70 + text_width(ev->text, fs) > maxx) maxx = x1 + 70 + text_width(ev->text, fs);
+                for (size_t q = 0; q < nblk; q++)
+                    if (x1 + 70 > blks[q].xr) blks[q].xr = x1 + 70;
             } else {
                 text_(&front, ev->text, fs, (x1 + x2) / 2, y + lh / 2, "middle", "msg-text");
                 double dir = x2 > x1 ? 1 : -1;
@@ -366,9 +520,19 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
                         acts[q] = acts[--nact];
                         break;
                     }
-            y = ly + 22;
+            for (unsigned q = 0; q < 2; q++) {
+                Part *dp = &pa[q ? ev->b : ev->a];
+                if (!dp->pend_destroy) continue;
+                dp->pend_destroy = false;
+                dp->y1 = ly;
+                buf_lit(&front, "<path class=\"destroy\" d=\"M"); pt(&front, dp->x - 9, ly - 9);
+                buf_lit(&front, " l18,18 m0,-18 l-18,18\"/>");
+            }
+            y = ly + (cr ? ACT_H / 2 : 0) + 22;
             break;
         }
+        case EV_CREATE: pa[ev->a].pend_create = true; break;
+        case EV_DESTROY: pa[ev->a].pend_destroy = true; break;
         case EV_NOTE: {
             double tw = 0;
             unsigned ln;
@@ -384,6 +548,10 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
             if (x < minx) minx = x;
             if (x + w > maxx) maxx = x + w;
             rect(&front, x, y, w, h, "note");
+            for (size_t q = 0; q < nblk; q++) {
+                if (x < blks[q].xl) blks[q].xl = x;
+                if (x + w > blks[q].xr) blks[q].xr = x + w;
+            }
             text_(&front, ev->text, fs, x + w / 2, y + 7 + lh / 2, "middle", "note-text");
             for (size_t q = 0; q < nblk; q++) {
                 int32_t lo = ev->a < ev->b ? ev->a : ev->b, hi = ev->a ^ ev->b ^ lo;
@@ -394,7 +562,7 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
             break;
         }
         case EV_BEGIN:
-            if (nblk < countof(blks)) blks[nblk++] = (Blk){.ev = k, .y0 = y, .lo = INT32_MAX, .hi = -1};
+            if (nblk < countof(blks)) blks[nblk++] = (Blk){.ev = k, .y0 = y, .lo = INT32_MAX, .hi = -1, .xl = 1e300, .xr = -1e300};
             y += lh + 18;
             break;
         case EV_ELSE:
@@ -418,6 +586,12 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
             pad = 60 - 8.0 * depth;
             double x0 = pa[bl.lo].x - pad, x1 = pa[bl.hi].x + pad;
             if (bl.lo == bl.hi) { x0 = pa[bl.lo].x - pa[bl.lo].w / 2 + 8.0 * depth; x1 = pa[bl.lo].x + pa[bl.lo].w / 2 + 60 - 8.0 * depth; }
+            if (bl.xl - 10 < x0) x0 = bl.xl - 10;
+            if (bl.xr + 10 > x1) x1 = bl.xr + 10;
+            for (size_t q = 0; q < nblk; q++) { /* parents must enclose this block */
+                if (x0 - 8 < blks[q].xl) blks[q].xl = x0 - 8;
+                if (x1 + 8 > blks[q].xr) blks[q].xr = x1 + 8;
+            }
             double y1 = y;
             if (str_eq(be->kw, S("rect")) || str_eq(be->kw, S("box"))) {
                 buf_lit(&back, "<rect x=\""); buf_num(&back, x0); buf_lit(&back, "\" y=\""); buf_num(&back, bl.y0);
@@ -428,10 +602,10 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
                 buf_lit(&back, "\"/>");
             } else {
                 rect(&mid, x0, bl.y0, x1 - x0, y1 - bl.y0, "block");
-                double tw = text_width(be->kw, 14) + 20;
+                double tw = text_width(be->kw, 14) * 1.3 + 26; /* bold keyword (fallback fonts are wide) + slanted corner */
                 buf_lit(&mid, "<path class=\"block-tab\" d=\"M"); pt(&mid, x0, bl.y0); buf_lit(&mid, " h"); buf_num(&mid, tw);
                 buf_lit(&mid, " v14 l-8,8 H"); buf_num(&mid, x0); buf_lit(&mid, " Z\"/>");
-                text_(&mid, be->kw, 14, x0 + tw / 2 - 4, bl.y0 + 11, "middle", "block-kw");
+                text_(&front, be->kw, 14, x0 + 8, bl.y0 + 11, "start", "block-kw");
                 if (be->text.n) {
                     buf_lit(&mid, "<text x=\""); buf_num(&mid, (x0 + x1) / 2); buf_lit(&mid, "\" y=\""); buf_num(&mid, bl.y0 + lh / 2 + 4);
                     buf_lit(&mid, "\" text-anchor=\"middle\" dominant-baseline=\"central\">[");
@@ -482,9 +656,34 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
     if (nblk) { st = sfail(&p, n, "unterminated block (missing 'end')"); goto done; }
     for (size_t q = 0; q < nact; q++) rect(&mid, pa[acts[q].p].x - 5 + acts[q].depth * 5, acts[q].y0, 10, y - acts[q].y0, "act");
     double bottom = y + 10;
-    for (size_t k = 0; k < P; k++) line_(&back, pa[k].x, title_h + ACT_H, pa[k].x, bottom, "lifeline");
-    for (size_t k = 0; k < P; k++) { actor_box(&back, &pa[k], title_h, fs); actor_box(&front, &pa[k], bottom, fs); }
-    if (back.oom || mid.oom || front.oom) { st = CMM_ERR_NOMEM; goto done; }
+    for (size_t k = 0; k < P; k++) {
+        if (pa[k].pend_create) continue; /* declared but never messaged: drawn nowhere */
+        line_(&back, pa[k].x, pa[k].y0, pa[k].x, pa[k].y1 > 0 ? pa[k].y1 : bottom, "lifeline");
+        if (!pa[k].created) actor_box(&back, &pa[k], title_h, fs);
+        if (pa[k].y1 <= 0) actor_box(&front, &pa[k], bottom, fs);
+    }
+    Buf boxes = {};
+    for (size_t bi = 0; bi < p.boxes.n; bi++) {
+        double x0 = INFINITY, x1 = -INFINITY;
+        for (size_t k = 0; k < P; k++)
+            if (pa[k].box == (int32_t)bi) {
+                if (pa[k].x - pa[k].w / 2 < x0) x0 = pa[k].x - pa[k].w / 2;
+                if (pa[k].x + pa[k].w / 2 > x1) x1 = pa[k].x + pa[k].w / 2;
+            }
+        if (x0 > x1) continue;
+        x0 -= BOX_MARGIN, x1 += BOX_MARGIN;
+        if (x0 < minx) minx = x0;
+        if (x1 > maxx) maxx = x1;
+        const Box *bx = &p.boxes.v[bi];
+        double by = title_h - (box_lbl ? lh + 10 : 10);
+        buf_lit(&boxes, "<rect class=\"box\" x=\""); buf_num(&boxes, x0); buf_lit(&boxes, "\" y=\""); buf_num(&boxes, by);
+        buf_lit(&boxes, "\" width=\""); buf_num(&boxes, x1 - x0); buf_lit(&boxes, "\" height=\"");
+        buf_num(&boxes, bottom + ACT_H + 10 - by); buf_lit(&boxes, "\" fill=\"");
+        if (bx->color.n) buf_xml(&boxes, bx->color); else buf_lit(&boxes, "none");
+        buf_lit(&boxes, "\"/>");
+        if (bx->label.n) text_(&boxes, bx->label, fs, (x0 + x1) / 2, by + lh / 2 + 4, "middle", "box-label");
+    }
+    if (back.oom || mid.oom || front.oom || boxes.oom) { free(boxes.p); st = CMM_ERR_NOMEM; goto done; }
     double m = 20, vx = minx - m, vy = -m / 2, vw = maxx - minx + 2 * m, vh = bottom + ACT_H + m;
     buf_lit(out, "<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"mermaid\" class=\"sequence\" width=\"");
     buf_num(out, vw); buf_lit(out, "\" height=\""); buf_num(out, vh); buf_lit(out, "\" viewBox=\"");
@@ -496,6 +695,8 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
     buf_lit(out, "<rect x=\""); buf_num(out, vx); buf_lit(out, "\" y=\""); buf_num(out, vy);
     buf_lit(out, "\" width=\""); buf_num(out, vw); buf_lit(out, "\" height=\""); buf_num(out, vh); buf_lit(out, "\" fill=\"white\"/>");
     if (p.title.n) text_(out, p.title, 18, (minx + maxx) / 2, 15, "middle", "title");
+    buf_put(out, boxes.n, boxes.p ? boxes.p : "");
+    free(boxes.p);
     buf_put(out, back.n, back.p ? back.p : "");
     buf_put(out, mid.n, mid.p ? mid.p : "");
     buf_put(out, front.n, front.p ? front.p : "");

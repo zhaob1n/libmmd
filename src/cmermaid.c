@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #include "graph.h"
+#include "diagrams.h"
 #include "seq.h"
 
 const char *cmm_status_str(cmm_status s) {
@@ -172,6 +173,8 @@ cmm_status cmm_render_svg(size_t n, const char src[static n], const cmm_options 
         if ((st = flow_svg(&g, &b))) goto fail;
     } else if (str_eq(kw, S("sequenceDiagram"))) {
         if ((st = seq_render(&arena, n, src, off, cfg.title, fs, &b, &eoff, msg))) goto fail;
+    } else if (diag_lookup(kw)) {
+        if ((st = diag_lookup(kw)(&arena, n, src, off, cfg.title, fs, &b, &eoff, msg))) goto fail;
     } else {
         st = CMM_ERR_UNSUPPORTED;
         snprintf(msg, sizeof msg, "unsupported diagram type '%.*s'", (int)(kw.n > 40 ? 40 : kw.n), kw.p);
