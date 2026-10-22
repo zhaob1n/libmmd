@@ -1,0 +1,9 @@
+v9: dagre order() port (src/dorder.c), default for V <= 512 (flowchart.order: auto|dagre|fast, env CMM_ORDER)
+min µs over 3 runs, taskset -c 2; v1 = /workspace/cmm-v1
+avoid on:   small v1 11.6 / v9 16.8 | medium v1 404.2 / v9 399.4 | large v1 8895.4 / v9 8315.3 | xlarge v1 53412.1 / v9 49861
+no-avoid:   medium v1 406.0 / v9 294.3 | large v1 8917 / v9 7712.4 | xlarge v1 54081.9 / v9 45158.5
+(small is under the dagre threshold: +5 µs; medium bench V=528 stays on the fast path)
+medium forced dagre (CMM_ORDER=d): 458.6 µs; order step 0.18 ms vs 0.11 ms; crossings 408 (dagre) vs 399 (fast)
+ordagree (31 fixtures): 973/1012 = 0.961 (v8 0.936), macro 0.813 (v8 0.658), excl large/medium 197/236 (v8 171/236)
+remaining misses are cluster fixtures whose dagre ranks differ (nesting-graph bt/bb ranks not ported):
+  nested_clusters 0/8, event_mesh 3/14, backedges_subgraphs 0/4, crosslane 6/16, component_packing 5/9, asymmetric 0/2

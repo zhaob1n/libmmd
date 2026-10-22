@@ -1,0 +1,13 @@
+cmermaid round 8 — min of 3 runs, taskset -c 2, µs per render (v1 = /workspace/cmm-v1/build/bench)
+size     v1 avoid   v8 avoid   v1 no-avoid  v8 no-avoid
+small      11.7       12.6        11.7         11.6
+medium    404.1      394.7       404.4        293.8
+large    8888.5     8339.3      8858.5       7724.4
+xlarge  53047.6    49270.0     54228.6      45464.6
+Crossings: medium 454 -> 399, large 6281 (unchanged), xlarge 36203 (unchanged).
+Ordering: one down-sweep for 512 < segs <= 4096 (no crossing change on any bench input / mmdr fixture).
+Layer seed uses dagre compound tie order (sub-clusters reverse-declared, then direct members).
+Same-rank order agreement with mermaid-cli 11 over 31 mmdr flowchart fixtures (pairs):
+  before 177/1012 (0.175), after 947/1012 (0.936); per-fixture macro 0.628 -> 0.658;
+  excluding flowchart_large/medium 177/236 -> 171/236 (small fixtures mixed).
+Tests now include a viewBox bounds check (tests/bounds.py) over all cases + repo fixtures.

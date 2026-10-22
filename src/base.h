@@ -1,6 +1,7 @@
 #ifndef CMM_BASE_H
 #define CMM_BASE_H
 #include <stdalign.h>
+#include <stdckdint.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -108,8 +109,25 @@ typedef struct Arena {
     size_t last_size;
 } Arena;
 
-[[nodiscard]] void *arena_alloc(Arena *a, size_t size, size_t align);
-[[nodiscard]] void *arena_alloc_array(Arena *a, size_t n, size_t size, size_t align);
+[[nodiscard]] void *arena_alloc_slow(Arena *a, size_t size, size_t align);
+[[nodiscard]] static inline void *arena_alloc(Arena *a, size_t size, size_t align) {
+    ArenaBlock *b = a->head;
+    if (b) { /* bump fast path */
+        size_t off = (b->used + (align - 1)) & ~(align - 1);
+        if (off <= b->cap && b->cap - off >= size) {
+            b->used = off + size;
+            a->last = b->data + off;
+            a->last_size = size;
+            return a->last;
+        }
+    }
+    return arena_alloc_slow(a, size, align);
+}
+[[nodiscard]] static inline void *arena_alloc_array(Arena *a, size_t n, size_t size, size_t align) {
+    size_t total = 0;
+    if (ckd_mul(&total, n, size)) return nullptr;
+    return arena_alloc(a, total ? total : 1, align);
+}
 /* grow an array previously allocated from the arena (or nullptr). */
 [[nodiscard]] void *arena_grow(Arena *a, void *old, size_t *cap, size_t elem, size_t align);
 void arena_free(Arena *a);

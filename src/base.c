@@ -5,7 +5,7 @@
 
 constexpr size_t ARENA_MIN_BLOCK = 64 * 1024;
 
-void *arena_alloc(Arena *a, size_t size, size_t align) {
+void *arena_alloc_slow(Arena *a, size_t size, size_t align) {
     ArenaBlock *b = a->head;
     if (b) {
         size_t off = (b->used + (align - 1)) & ~(align - 1);
@@ -32,13 +32,6 @@ void *arena_alloc(Arena *a, size_t size, size_t align) {
     a->last = nb->data;
     a->last_size = size;
     return nb->data;
-}
-
-void *arena_alloc_array(Arena *a, size_t n, size_t size, size_t align) {
-    size_t total = 0;
-    if (ckd_mul(&total, n, size)) return nullptr;
-    void *p = arena_alloc(a, total ? total : 1, align);
-    return p;
 }
 
 void *arena_grow(Arena *a, void *old, size_t *cap, size_t elem, size_t align) {
