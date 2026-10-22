@@ -1,0 +1,7 @@
+input                                        cmm lib ms cmm cli ms mmdr lib ms mmdr cli ms   cli x
+flowchart.mmd                                      0.01       0.79       63.03       61.85   78.5x
+flowchart_medium.mmd                               0.04       0.77      142.53      143.82  186.9x
+flowchart_large.mmd                                0.24       1.20      397.52      402.21  335.6x
+flowchart_mega_event_mesh.mmd                      0.13       0.90      535.63      526.45  587.7x
+small.mmd                                          0.02       0.83      119.42      121.25  146.2x
+medium.mmd                                         0.45       1.53     7186.81     7189.26 4710.6x

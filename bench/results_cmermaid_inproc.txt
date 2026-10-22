@@ -1,0 +1,14 @@
+== build
+bench/inputs/small.mmd: bytes_in=376 svg_bytes=9236 min=14.8us median=15.1us
+bench/inputs/medium.mmd: bytes_in=4415 svg_bytes=80341 min=445.8us median=506.4us
+bench/mmdr_fixtures/flowchart_large.mmd: bytes_in=6419 svg_bytes=75137 min=214.3us median=248.9us
+bench/inputs/large.mmd: bytes_in=44345 svg_bytes=1167886 min=9327.9us median=10064.5us
+bench/inputs/xlarge.mmd: bytes_in=142594 svg_bytes=4670606 min=56338.5us median=60408.0us
+tests/cases/seq_basic.mmd: bytes_in=612 svg_bytes=9226 min=5.3us median=5.4us
+== build-gcc
+bench/inputs/small.mmd: bytes_in=376 svg_bytes=9236 min=15.8us median=16.8us
+bench/inputs/medium.mmd: bytes_in=4415 svg_bytes=80341 min=453.5us median=472.4us
+bench/mmdr_fixtures/flowchart_large.mmd: bytes_in=6419 svg_bytes=75137 min=237.3us median=263.5us
+bench/inputs/large.mmd: bytes_in=44345 svg_bytes=1167886 min=9755.5us median=10946.3us
+bench/inputs/xlarge.mmd: bytes_in=142594 svg_bytes=4670606 min=62755.7us median=70640.4us
+tests/cases/seq_basic.mmd: bytes_in=612 svg_bytes=9226 min=5.9us median=6.2us
