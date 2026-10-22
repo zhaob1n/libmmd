@@ -7,6 +7,7 @@
  * front matter/init selects the two-sided tidy tree. */
 #include <stdio.h>
 #include <math.h>
+#include <string.h>
 
 #include "dgraph.h"
 #include "dcfg.h"
@@ -168,6 +169,57 @@ static void mm_pair(const MNode V[], size_t i, size_t j, double margin, double f
     return true;
 }
 
+/* SVG endpoint arc (rotation ignored; mermaid's are circular or ~1 degree) sampled into bb */
+static void arc_bb(BBox *bb, double x1, double y1, double rx, double ry, bool large, bool sweep, double x2, double y2) {
+    double dx = (x1 - x2) / 2, dy = (y1 - y2) / 2;
+    if (rx <= 0 || ry <= 0 || (!dx && !dy)) { bb_add(bb, fmin(x1, x2), fmin(y1, y2), fmax(x1, x2), fmax(y1, y2)); return; }
+    double lam = dx * dx / (rx * rx) + dy * dy / (ry * ry);
+    if (lam > 1) rx *= sqrt(lam), ry *= sqrt(lam);
+    double num = rx * rx * ry * ry - rx * rx * dy * dy - ry * ry * dx * dx, den = rx * rx * dy * dy + ry * ry * dx * dx;
+    double co = sqrt(fmax(0, num / den)) * (large == sweep ? -1 : 1);
+    double cxp = co * rx * dy / ry, cyp = -co * ry * dx / rx, cx = cxp + (x1 + x2) / 2, cy = cyp + (y1 + y2) / 2;
+    double t1 = atan2((dy - cyp) / ry, (dx - cxp) / rx), t2 = atan2((-dy - cyp) / ry, (-dx - cxp) / rx), dt = t2 - t1;
+    if (sweep && dt < 0) dt += 2 * M_PI;
+    if (!sweep && dt > 0) dt -= 2 * M_PI;
+    for (int k = 0; k <= 64; k++) {
+        double t = t1 + dt * k / 64, px = cx + rx * cos(t), py = cy + ry * sin(t);
+        bb_add(bb, px, py, px, py);
+    }
+}
+/* mermaid cloud.ts / bang.ts outlines (relative arcs from the top-left corner) */
+static void scallop(Buf *out, BBox *bb, const MNode *m) {
+    double w = m->w, h = m->h, x = m->x - w / 2, y = m->y - h / 2;
+    double A[16][4]; /* rx ry dx dy */
+    int n = 0, sw;
+    if (m->shape == M_CLOUD) {
+        double r1 = .15 * w, r2 = .25 * w, r3 = .35 * w, r4 = .2 * w;
+        const double c[10][4] = {{r1, r1, w * .25, -w * .1}, {r3, r3, w * .4, -w * .1}, {r2, r2, w * .35, w * .2},
+                                 {r1, r1, w * .15, h * .35}, {r4, r4, -w * .15, h * .65}, {r2, r1, -w * .25, w * .15},
+                                 {r3, r3, -w * .5, 0}, {r1, r1, -w * .25, -w * .15}, {r1, r1, -w * .1, -h * .35},
+                                 {r4, r4, w * .1, -h * .65}};
+        memcpy(A, c, sizeof c), n = 10, sw = 1;
+    } else {
+        double r = .15 * w;
+        const double c[14][4] = {{r, r, w * .25, -h * .1}, {r, r, w * .25, 0}, {r, r, w * .25, 0}, {r, r, w * .25, h * .1},
+                                 {r, r, w * .15, h * .33}, {r * .8, r * .8, 0, h * .34}, {r, r, -w * .15, h * .33},
+                                 {r, r, -w * .25, h * .15}, {r, r, -w * .25, 0}, {r, r, -w * .25, 0}, {r, r, -w * .25, -h * .15},
+                                 {r, r, -w * .1, -h * .33}, {r * .8, r * .8, 0, -h * .34}, {r, r, w * .1, -h * .33}};
+        memcpy(A, c, sizeof c), n = 14, sw = 0;
+    }
+    if (out) { buf_lit(out, "<path d=\"M"); dg_pt(out, x, y); }
+    double px = x, py = y;
+    for (int k = 0; k < n; k++) {
+        if (out) {
+            buf_lit(out, "a"); buf_num(out, A[k][0]); buf_ch(out, ','); buf_num(out, A[k][1]);
+            buf_lit(out, sw ? " 0 0,1 " : " 0 0,0 "); buf_num(out, A[k][2]); buf_ch(out, ','); buf_num(out, A[k][3]);
+        }
+        if (bb) arc_bb(bb, px, py, A[k][0], A[k][1], false, sw, px + A[k][2], py + A[k][3]);
+        px += A[k][2], py += A[k][3];
+    }
+    if (out) { buf_ch(out, 'H'); buf_num(out, x); buf_ch(out, 'V'); buf_num(out, y); buf_lit(out, "Z\"/>"); }
+    if (bb) bb_add(bb, fmin(px, x), fmin(py, y), fmax(px, x), fmax(py, y));
+}
+
 DIAG_FN(mindmap_render) {
     (void)fs, (void)title;
     LineIt it = {.s = src, .n = n, .i = off};
@@ -239,10 +291,14 @@ DIAG_FN(mindmap_render) {
         double w;
         unsigned nl;
         label_measure(lab, 16, &w, &nl);
-        double pad = V[i].shape == M_DEF ? 8 : 20;
-        V[i].w = w + 2 * pad, V[i].h = nl * 24 + (V[i].shape == M_DEF ? 8 : 20);
-        if (V[i].shape == M_CIR) V[i].w = V[i].h = fmax(V[i].w, V[i].h);
-        if (V[i].shape == M_HEX) V[i].w += 20;
+        double pad = 20; /* mermaid mindmap: padding 10 per side horizontally, rect/default h = lines + 10 */
+        V[i].w = w + 2 * pad, V[i].h = nl * 24 + (V[i].shape == M_DEF ? 10 : 20);
+        if (V[i].shape == M_RND) V[i].w = w + 30, V[i].h = nl * 24 + 30;
+        if (V[i].shape == M_CIR) V[i].w = V[i].h = fmax(w, nl * 24) + 20;
+        if (V[i].shape == M_HEX) V[i].w += 2;
+        /* mermaid cloud.ts: bbox + 2*halfPadding (5); bang.ts: bbox + 10/8 halfPaddings, min bbox + 20 */
+        if (V[i].shape == M_CLOUD) V[i].w = w + 10, V[i].h = nl * 24 + 10;
+        if (V[i].shape == M_BANG) V[i].w = fmax(w + 50, w + 20), V[i].h = fmax(nl * 24 + 40, nl * 24 + 20);
         /* mermaid-cli: ::icon() classes (fa/mdi) need page CSS it never loads, so no glyph and no space */
         if (i) V[i].sec = V[i].depth == 1 ? 0 : V[V[i].parent].sec;
     }
@@ -309,7 +365,10 @@ DIAG_FN(mindmap_render) {
         }
     }
     BBox bb = BB_EMPTY;
-    for (size_t i = 0; i < v.n; i++) bb_add(&bb, V[i].x - V[i].w / 2, V[i].y - V[i].h / 2, V[i].x + V[i].w / 2, V[i].y + V[i].h / 2);
+    for (size_t i = 0; i < v.n; i++) {
+        if (V[i].shape == M_CLOUD || V[i].shape == M_BANG) scallop(nullptr, &bb, &V[i]);
+        else bb_add(&bb, V[i].x - V[i].w / 2, V[i].y - V[i].h / 2, V[i].x + V[i].w / 2, V[i].y + V[i].h / 2);
+    }
     if (!buf_reserve(out, 2048 + v.n * 600)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 10, "mindmap", CSS);
     for (size_t i = 1; i < v.n; i++) { /* edges: cubic from parent side to child side, thinner with depth */
@@ -358,27 +417,7 @@ DIAG_FN(mindmap_render) {
             dg_pt(out, x + w - 12, y); buf_ch(out, 'L'); dg_pt(out, x + w, m->y); buf_ch(out, 'L');
             dg_pt(out, x + w - 12, y + h); buf_ch(out, 'L'); dg_pt(out, x + 12, y + h); buf_lit(out, "Z\"/>");
             break;
-        case M_BANG: case M_CLOUD: { /* scalloped outline: bumps (cloud) or spikes (bang) */
-            int nx = (int)fmax(3, w / 30), ny = (int)fmax(2, h / 30);
-            bool bang = m->shape == M_BANG;
-            buf_lit(out, "<path d=\"M"); dg_pt(out, x, y);
-            const double cxs[4][4] = {{x, y, x + w, y}, {x + w, y, x + w, y + h}, {x + w, y + h, x, y + h}, {x, y + h, x, y}};
-            for (int s = 0; s < 4; s++) {
-                int cnt = s % 2 ? ny : nx;
-                double ax = cxs[s][0], ay = cxs[s][1], bx = cxs[s][2], by = cxs[s][3];
-                double nxv = (by - ay), nyv = -(bx - ax), L = hypot(nxv, nyv);
-                nxv /= -L, nyv /= -L;
-                for (int j = 0; j < cnt; j++) {
-                    double t0 = (double)j / cnt, t1 = (double)(j + 1) / cnt, tm = (t0 + t1) / 2, d = bang ? 10 : 8;
-                    buf_ch(out, 'Q');
-                    dg_pt(out, ax + (bx - ax) * tm + nxv * d * (bang ? 1 : 1.6), ay + (by - ay) * tm + nyv * d * (bang ? 1 : 1.6));
-                    buf_ch(out, ' ');
-                    dg_pt(out, ax + (bx - ax) * t1, ay + (by - ay) * t1);
-                }
-            }
-            buf_lit(out, "Z\"/>");
-            break;
-        }
+        case M_BANG: case M_CLOUD: scallop(out, nullptr, m); break;
         }
         buf_lit(out, "</g>");
         double tx = m->x;
