@@ -395,7 +395,6 @@ DIAG_FN(gantt_render) {
         nrows = base + (used ? used : 1);
         i = j;
     }
-    double H = TOP + nrows * (BH + GAP) + 40;
     /* ticks */
     /* d3 time-scale intervals (scale.ticks(10)): mermaid's default axis density */
     static const double STEPS[] = {1000, 5000, 15000, 30000, 60000, 300000, 900000, 1800000, 3600000,
@@ -466,9 +465,9 @@ DIAG_FN(gantt_render) {
         int64_t yy = mm >= 0 ? mm / 12 : (mm - 11) / 12;
         mbase = (double)days_from_civil(yy, (unsigned)(mm - yy * 12) + 1, 1) * DAY;
     }
-    /* width: mermaid's default 1000px unless the axis labels need more room */
+    /* width: mermaid-cli renders into an 800px page with an 8px body margin, so the container is 784px wide */
     char lab[96];
-    double W = 1000, maxlab = 0;
+    double W = 784, maxlab = 0;
     { Str uw = dcfg_get("gantt.useWidth"); double v; if (uw.n && dg_parse_num(uw, &v) && v >= 100 && v <= 20000) W = v; }
     /* tick times; d3 day intervals restart at each month (... Jan 29, Jan 31, Feb 01) */
     double TK[600];
@@ -492,11 +491,10 @@ DIAG_FN(gantt_render) {
         double lw = text_width((Str){.p = lab, .n = fmt_time(axis, t, sizeof lab, lab)}, 10);
         if (lw > maxlab) maxlab = lw;
     }
-    if (left + 75 + (double)nticks * (maxlab + 12) > W) W = ceil(left + 75 + (double)nticks * (maxlab + 12));
     double plot = W - left - 75, sc = plot / (hi_t - lo_t);
-    BBox bb = {0, title.n ? 0 : 20, W, H};
+    BBox bb = {0, 0, W, nrows * (BH + GAP) + 2 * TOP}; /* ganttRenderer: viewBox 0 0 w (tasks*(barHeight+barGap) + 2*topPadding) */
     if (!buf_reserve(out, 4096 + tv.n * 700)) return CMM_ERR_NOMEM;
-    DG_HEAD(out, bb, 4, "gantt", CSS);
+    DG_HEAD(out, bb, 0, "gantt", CSS);
     /* section stripes */
     for (size_t i = 0; i < tv.n;) {
         size_t j = i;
@@ -505,7 +503,7 @@ DIAG_FN(gantt_render) {
         snprintf(cls, sizeof cls, "sec%u", tv.v[i].sec % 4);
         size_t r0 = row[i], r1 = r0 + 1;
         for (size_t k = i; k < j; k++) if (row[k] + 1u > r1) r1 = row[k] + 1u;
-        dg_rect(out, 0, TOP + r0 * (BH + GAP) - 2, W, (r1 - r0) * (BH + GAP), 0, cls);
+        dg_rect(out, 0, TOP + r0 * (BH + GAP) - 2, W - 75 / 2.0, (r1 - r0) * (BH + GAP), 0, cls);
         if (secs.n) dg_text(out, secs.v[tv.v[i].sec], 11, 10, TOP + (r0 + r1) * (BH + GAP) / 2.0 - 2, "start", "stitle");
         i = j;
     }
@@ -536,7 +534,7 @@ DIAG_FN(gantt_render) {
     /* tasks */
     for (size_t i = 0; i < tv.n; i++) {
         const Task *t = &tv.v[i];
-        double y = TOP + row[i] * (BH + GAP), x0 = left + (t->t0 - lo_t) * sc, x1 = left + (t->t1 - lo_t) * sc;
+        double y = TOP + row[i] * (BH + GAP), x0 = round(left + (t->t0 - lo_t) * sc), x1 = round(left + (t->t1 - lo_t) * sc); /* d3 scaleTime().rangeRound */
         char cls[40];
         snprintf(cls, sizeof cls, "task%s%s%s", t->tags & T_CRIT ? " crit" : "", t->tags & T_DONE ? " done" : "",
                  t->tags & T_ACTIVE ? " active" : "");
