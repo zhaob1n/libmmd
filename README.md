@@ -53,15 +53,27 @@ API (`include/cmermaid.h`): `cmm_render_svg(n, src, opts, &buf, &err)`, `cmm_buf
 ## Fidelity vs mermaid-cli 11.17
 
 Side-by-side renders (left: cmermaid, right: mermaid 11.17) live in `samples/sbs/*.png`.
-Already fixed: C4 grid and person shape, gitGraph lane order, packet title position, requirement label plates.
+Already fixed:
+- C4: grid layout, person shape, centred boundary titles, relation labels placed to avoid boxes and other labels;
+- gitGraph: lane order, vivid palette, commit labels rotated -45 degrees;
+- treemap and radar: cScale palettes;
+- gantt: excluded days/weekends shaded, light grid;
+- kanban: mermaid column/card widths;
+- mindmap: compacted with a spring relaxation;
+- pie: declaration order and palette;
+- timeline: cScale section colours;
+- sequence: participant `@{type}` shapes;
+- packet: title position;
+- requirement: label plates.
+
 Known remaining differences:
-- mindmap: mermaid's layout is more compact;
-- treemap: mermaid uses a pastel palette per section;
-- gantt: mermaid shades weekends and draws vertical grid lines;
-- gitGraph: mermaid uses its vivid default palette and rotated commit labels;
-- kanban: mermaid uses narrower columns;
-- radar: the palettes differ;
-- C4: mermaid accepts arbitrary bgColor strings, which cmermaid rejects.
+- mindmap: section colours, and the layout is still not cose-bilkent;
+- gantt: mermaid draws denser ticks;
+- state: concurrent regions are not drawn as grey boxes;
+- class: wide single-row layout, same as mermaid's;
+- journey: legend order;
+- quadrant: mermaid 11.17 renders points with a broken `hsl(NaN)` fill, so cmermaid keeps blue;
+- C4: arbitrary bgColor strings are rejected.
 mermaid itself fails to render `block_full` and `radar_full` (partial named curve).
 
 ## Flowchart features (v2)
