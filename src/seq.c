@@ -503,7 +503,7 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
     for (size_t k = 0; k < p.boxes.n; k++) box_lbl |= p.boxes.v[k].label.n > 0;
     if (p.boxes.n) title_h += box_lbl ? lh + 10 : 10;
     for (size_t k = 0; k < P; k++) pa[k].y0 = title_h + ACT_H;
-    double y = title_h + ACT_H + 20, minx = pa[0].x - pa[0].w / 2, maxx = pa[P - 1].x + pa[P - 1].w / 2;
+    double y = title_h + ACT_H + 10, minx = pa[0].x - pa[0].w / 2, maxx = pa[P - 1].x + pa[P - 1].w / 2;
     Act acts[256];
     size_t nact = 0;
     Blk blks[64];
@@ -514,7 +514,10 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
         switch (ev->kind) {
         case EV_MSG: {
             unsigned ln = nlines(ev->text);
-            double ly = y + ln * lh + 4;
+            /* boundMessage: pos += boxMargin + lineH; line at pos + textH (lineH 17px, 18 with descenders) */
+            double H = 17 + (memchr(ev->text.p, 'y', ev->text.n) || memchr(ev->text.p, 'g', ev->text.n) || memchr(ev->text.p, 'p', ev->text.n) ||
+                             memchr(ev->text.p, 'q', ev->text.n) || memchr(ev->text.p, 'j', ev->text.n) || memchr(ev->text.p, ',', ev->text.n));
+            double ly = y + (ln + 1) * H, ty = ly - 2 - H - (ln - 1) * lh;
             double x1 = pa[ev->a].x, x2 = pa[ev->b].x;
             for (size_t q = 0; q < nblk; q++) {
                 int32_t lo = ev->a < ev->b ? ev->a : ev->b, hi = ev->a ^ ev->b ^ lo;
@@ -531,7 +534,7 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
             }
             const char *mk = ev->head == HD_ARROW ? "sq-arrow" : ev->head == HD_CROSS ? "sq-cross" : ev->head == HD_ASYNC ? "sq-async" : nullptr;
             if (ev->a == ev->b) {
-                text_(&front, ev->text, fs, x1 + 8, y + lh / 2, "start", "msg-text");
+                text_(&front, ev->text, fs, x1 + 8, ty, "start", "msg-text");
                 buf_lit(&front, "<path class=\"msg"); if (ev->dotted) buf_lit(&front, " dotted");
                 buf_lit(&front, "\" d=\"M"); pt(&front, x1, ly); buf_lit(&front, " C"); pt(&front, x1 + 60, ly - 10);
                 buf_ch(&front, ' '); pt(&front, x1 + 60, ly + 40); buf_ch(&front, ' '); pt(&front, x1, ly + 30); buf_ch(&front, '"');
@@ -540,7 +543,7 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
                 for (size_t q = 0; q < nblk; q++)
                     if (x1 + 70 > blks[q].xr) blks[q].xr = x1 + 70;
             } else {
-                text_(&front, ev->text, fs, (x1 + x2) / 2, y + lh / 2, "middle", "msg-text");
+                text_(&front, ev->text, fs, (x1 + x2) / 2, ty, "middle", "msg-text");
                 double dir = x2 > x1 ? 1 : -1;
                 buf_lit(&front, "<path class=\"msg"); if (ev->dotted) buf_lit(&front, " dotted");
                 buf_lit(&front, "\" d=\"M"); pt(&front, x1, ly); buf_lit(&front, " L"); pt(&front, x2 - dir * 1, ly); buf_ch(&front, '"');
@@ -582,7 +585,7 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
                 buf_lit(&front, "<path class=\"destroy\" d=\"M"); pt(&front, dp->x - 9, ly - 9);
                 buf_lit(&front, " l18,18 m0,-18 l-18,18\"/>");
             }
-            y = ly + (cr ? ACT_H / 2 : 0) + 22;
+            y = ly + (cr ? ACT_H / 2 : 0) + 10;
             break;
         }
         case EV_CREATE: pa[ev->a].pend_create = true; break;
@@ -591,13 +594,15 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
             double tw = 0;
             unsigned ln;
             label_measure(ev->text, fs, &tw, &ln);
-            double w = tw + 20, h = ln * lh + 14, x;
-            if (ev->sub == NP_LEFT) x = pa[ev->a].x - 15 - w;
-            else if (ev->sub == NP_RIGHT) x = pa[ev->a].x + 15;
+            /* sequenceRenderer buildNoteModel: noteMargin 10, actorMargin 50; note text lines are 17px */
+            const Part *fa = &pa[ev->a], *ta = &pa[ev->b];
+            double w = fmax(fa->w / 2 + ta->w / 2, tw + 20), h = ln * 17.0 + 20, x;
+            if (ev->sub == NP_LEFT) x = fa->x - w - 25;
+            else if (ev->sub == NP_RIGHT) x = fa->x + 25;
+            else if (ev->a == ev->b) w = fmax(fmax(fa->w, 150), tw + 20), x = fa->x - w / 2;
             else {
-                double l = pa[ev->a].x < pa[ev->b].x ? pa[ev->a].x : pa[ev->b].x, r = pa[ev->a].x + pa[ev->b].x - l;
-                if (r - l + 50 > w) w = r - l + 50;
-                x = (l + r) / 2 - w / 2;
+                double l = fmin(fa->x, ta->x), r = fmax(fa->x, ta->x);
+                w = r - l + 50, x = l - 25;
             }
             if (x < minx) minx = x;
             if (x + w > maxx) maxx = x + w;
@@ -606,13 +611,13 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
                 if (x < blks[q].xl) blks[q].xl = x;
                 if (x + w > blks[q].xr) blks[q].xr = x + w;
             }
-            text_(&front, ev->text, fs, x + w / 2, y + 7 + lh / 2, "middle", "note-text");
+            text_(&front, ev->text, fs, x + w / 2, y + h / 2 - (ln - 1) * lh / 2, "middle", "note-text");
             for (size_t q = 0; q < nblk; q++) {
                 int32_t lo = ev->a < ev->b ? ev->a : ev->b, hi = ev->a ^ ev->b ^ lo;
                 if (lo < blks[q].lo) blks[q].lo = lo;
                 if (hi > blks[q].hi) blks[q].hi = hi;
             }
-            y += h + 16;
+            y += h + 10;
             break;
         }
         case EV_BEGIN:
@@ -738,7 +743,7 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
         if (bx->label.n) text_(&boxes, bx->label, fs, (x0 + x1) / 2, by + lh / 2 + 4, "middle", "box-label");
     }
     if (back.oom || mid.oom || front.oom || boxes.oom) { free(boxes.p); st = CMM_ERR_NOMEM; goto done; }
-    double m = 20, vx = minx - m, vy = -m / 2, vw = maxx - minx + 2 * m, vh = bottom + ACT_H + m;
+    double m = 50, vx = minx - m, vy = -10, vw = maxx - minx + 2 * m, vh = bottom + ACT_H + 21; /* diagramMarginX 50, diagramMarginY 10 (+1 as mermaid-cli emits) */
     buf_lit(out, "<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"mermaid\" class=\"sequence\" width=\"");
     buf_num(out, vw); buf_lit(out, "\" height=\""); buf_num(out, vh); buf_lit(out, "\" viewBox=\"");
     buf_num(out, vx); buf_ch(out, ' '); buf_num(out, vy); buf_ch(out, ' '); buf_num(out, vw); buf_ch(out, ' '); buf_num(out, vh);
