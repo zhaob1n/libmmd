@@ -1760,7 +1760,10 @@ static int side_path(Router *R, double sx, double sy, double tx, double ty, int3
     Router R = {.g = g, .nb = nb, .stamp = stamp, .budget = 4000000 + 200 * (int64_t)(N + E)};
     if (!grid_build(A, &R.G, N, nb, use)) return false;
     if (!R.G.gw) return true;
-    VEC(double) out = {};
+    VEC(double) out = {}; /* points of detoured edges only; untouched edges keep theirs */
+    uint8_t *moved = ANEW(A, uint8_t, E + 1);
+    if (!moved) return false;
+    memset(moved, 0, E + 1);
     for (size_t e = 0; e < E; e++) {
         uint32_t np = g->eptn[e];
         const double *P = g->pts.v + g->eptoff[e];
@@ -1780,9 +1783,8 @@ static int side_path(Router *R, double sx, double sy, double tx, double ty, int3
             k = side_path(&R, P[2 * fi], P[2 * fi + 1], P[2 * li + 2], P[2 * li + 3], a, b, tmp);
             if (k < 0) k = vis_path(&R, A, P[2 * fi], P[2 * fi + 1], P[2 * li + 2], P[2 * li + 3], a, b, 64, tmp);
         }
-        if (k < 0) {
-            for (uint32_t i = 0; i < 2 * np; i++) if (!VEC_PUSH(A, &out, P[i])) return false;
-        } else {
+        if (k < 0) continue;
+        {
             for (size_t i = 0; i <= fi; i++)
                 if (!VEC_PUSH(A, &out, P[2 * i]) || !VEC_PUSH(A, &out, P[2 * i + 1])) return false;
             for (int i = 0; i < k; i++)
@@ -1792,8 +1794,22 @@ static int side_path(Router *R, double sx, double sy, double tx, double ty, int3
         }
         g->eptoff[e] = (uint32_t)base;
         g->eptn[e] = (uint32_t)((out.n - base) / 2);
+        moved[e] = 1;
     }
-    g->pts.v = out.v, g->pts.n = out.n, g->pts.cap = out.cap;
+    if (!out.n) return true;
+    /* rebuild in edge order (later passes compact in place and rely on it) */
+    size_t tot = 0;
+    for (size_t e = 0; e < E; e++) tot += 2 * (size_t)g->eptn[e];
+    double *nv = ANEW(A, double, tot + 1);
+    if (!nv) return false;
+    size_t w = 0;
+    for (size_t e = 0; e < E; e++) {
+        const double *src = (moved[e] ? out.v : g->pts.v) + g->eptoff[e];
+        memcpy(nv + w, src, 2 * (size_t)g->eptn[e] * sizeof *nv);
+        g->eptoff[e] = (uint32_t)w;
+        w += 2 * (size_t)g->eptn[e];
+    }
+    g->pts.v = nv, g->pts.n = w, g->pts.cap = tot + 1;
     return true;
 }
 
