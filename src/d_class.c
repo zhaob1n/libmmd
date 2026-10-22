@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #include "dgraph.h"
+#include "dcfg.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -241,7 +242,15 @@ static cmm_status parse(CP *p, LineIt *it) {
             if (r.n && r.p[r.n - 1] == '{') r = str_trim((Str){.p = r.p, .n = r.n - 1});
             if (!r.n) return cfail(p, off, "namespace needs a name");
             if (p->ns_depth >= countof(p->ns_stack)) return cfail(p, off, "namespaces nested too deeply");
-            int32_t s = dg_cluster(g, r, r, p->ns_depth ? p->ns_stack[p->ns_depth - 1] : NONE);
+            Str nid = r, nlab = r;
+            for (size_t k = 0; k < r.n; k++)
+                if (r.p[k] == '[' && r.p[r.n - 1] == ']') {
+                    nid = str_trim((Str){.p = r.p, .n = k});
+                    nlab = str_trim((Str){.p = r.p + k + 1, .n = r.n - k - 2});
+                    if (nlab.n >= 2 && nlab.p[0] == '"' && nlab.p[nlab.n - 1] == '"') nlab = (Str){.p = nlab.p + 1, .n = nlab.n - 2};
+                    break;
+                }
+            int32_t s = dg_cluster(g, nid, nlab, p->ns_depth ? p->ns_stack[p->ns_depth - 1] : NONE);
             if (s == NONE) return CMM_ERR_NOMEM;
             p->ns_stack[p->ns_depth++] = s;
             continue;
@@ -415,7 +424,8 @@ static const char *mark_id(RMark m, bool end) {
     return nullptr;
 }
 
-constexpr double MPAD = 10;
+constexpr double CPAD = 12;   /* config.class.padding */
+constexpr double CLS_BOLD = 1.0617; /* bolder label width factor */
 
 static void card_label(Buf *b, const double *P0, const double *P1, Str t, double fs) {
     double dx = P1[0] - P0[0], dy = P1[1] - P0[1], L = sqrt(dx * dx + dy * dy);
@@ -445,30 +455,40 @@ DIAG_FN(class_render) {
     for (size_t v = 0; v < N; v++) { p.ci.v[v].m0 = acc; acc += p.ci.v[v].mn; p.ci.v[v].mn = 0; }
     for (size_t i = 0; i < M; i++) { CInfo *c = &p.ci.v[p.mem.v[i].cls]; ms[c->m0 + c->mn++] = p.mem.v[i]; }
     double lh = fs * 1.5;
+    bool hide_empty = dcfg_bool("class.hideEmptyMembersBox", false);
     for (size_t v = 0; v < N; v++) {
         const CInfo *c = &p.ci.v[v];
         double tw;
         unsigned ln;
         label_measure(g->nlabel[v], fs, &tw, &ln);
         if (c->note) { dg_size(g, (int32_t)v, tw + 20, (ln ? ln : 1) * lh + 14); continue; }
-        double w = tw, h = lh + 2 * MPAD;
-        if (c->annot.n) { double aw = text_width(c->annot, 14) + 30; if (aw > w) w = aw; h += lh; }
+        /* mermaid classBox/textHelper: label+annotation groups are centred,
+         * member/method groups start at x=0, so bbox = max(half, mw) + half */
+        tw *= CLS_BOLD;
+        double half = tw / 2, A = 0, L = (ln ? ln : 1) * lh;
+        if (c->annot.n) { double aw = text_width(c->annot, fs) + text_width(S("\u00ab\u00bb"), fs); if (aw / 2 > half) half = aw / 2; A = lh; }
         unsigned na = 0, nm = 0;
+        double mw = 0;
         for (uint32_t i = 0; i < c->mn; i++) {
             const Member *m = &ms[c->m0 + i];
-            double mw = text_width(m->text, fs);
-            if (mw > w) w = mw;
+            double t = text_width(m->text, fs);
+            if (t > mw) mw = t;
             if (m->flags & MF_METHOD) nm++; else na++;
         }
-        h += (na ? na * lh : 0) + MPAD * 2 + (nm ? nm * lh : 0) + MPAD;
-        dg_size(g, (int32_t)v, w + 2 * MPAD + 10, h);
+        double w = (na || nm) ? (mw > half ? mw : half) + half : 2 * half;
+        double MH = na ? na * lh : CPAD / 2, h = A + L;
+        if (na) h = A + L + 2 * CPAD + na * lh;
+        if (nm) h = A + L + MH + 4 * CPAD + nm * lh;
+        if (!na && !nm) h += hide_empty ? 0 : CPAD + 2 * CPAD; /* +GAP-PAD, or +GAP+renderExtraBox */
+        else if (!nm) h += 2 * CPAD;
+        dg_size(g, (int32_t)v, w + 2 * CPAD, h + 2 * CPAD);
     }
     g->iso_toggle = true;
     if ((st = flow_layout(g))) return st;
     BBox bb = dg_bbox(g);
     if (title.n) bb.y0 -= 30;
     if (!buf_reserve(out, 4096 + N * 400 + g->ne * 300 + M * 120)) return CMM_ERR_NOMEM;
-    DG_HEAD(out, bb, 12, "classDiagram", CSS);
+    DG_HEAD(out, bb, 8, "classDiagram", CSS);
     buf_lit(out, DEFS);
     if (title.n) dg_text(out, title, 18, (bb.x0 + bb.x1) / 2, bb.y0 + 12, "middle", "title");
     for (size_t s = 0; s < g->ns; s++) {
@@ -508,29 +528,30 @@ DIAG_FN(class_render) {
             continue;
         }
         dg_rect(out, x0, y, w, h, 0, "cls");
-        y += MPAD;
+        double ltw;
+        unsigned lln;
+        label_measure(g->nlabel[v], fs, &ltw, &lln);
+        double O = y + CPAD, A = c->annot.n ? lh : 0, L = (lln ? lln : 1) * lh;
+        unsigned na = 0;
+        for (uint32_t i = 0; i < c->mn; i++) if (!(ms[c->m0 + i].flags & MF_METHOD)) na++;
         if (c->annot.n) {
             buf_lit(out, "<text class=\"ann\" x=\""); buf_num(out, g->nx[v]); buf_lit(out, "\" y=\"");
-            buf_num(out, y + lh / 2); buf_lit(out, "\" text-anchor=\"middle\" dominant-baseline=\"central\">&#171;");
+            buf_num(out, O + lh / 2); buf_lit(out, "\" text-anchor=\"middle\" dominant-baseline=\"central\">&#171;");
             buf_xml(out, c->annot); buf_lit(out, "&#187;</text>");
-            y += lh;
         }
-        dg_text(out, g->nlabel[v], fs, g->nx[v], y + lh / 2, "middle", "title");
-        y += lh + MPAD;
-        dg_line(out, x0, y, x0 + w, y, "div");
-        y += MPAD;
+        dg_text(out, g->nlabel[v], fs, g->nx[v], O + A + L / 2, "middle", "title");
+        if (!c->mn && hide_empty) continue;
+        dg_line(out, x0, O + A + L, x0 + w, O + A + L, "div");
+        dg_line(out, x0, O + A + L + na * lh + 2 * CPAD, x0 + w, O + A + L + na * lh + 2 * CPAD, "div");
+        double my[2] = {O + A + L + 2 * CPAD, O + A + L + (na ? na * lh : CPAD / 2) + 4 * CPAD};
         for (unsigned pass = 0; pass < 2; pass++) {
+            double yy = my[pass];
             for (uint32_t i = 0; i < c->mn; i++) {
                 const Member *m = &ms[c->m0 + i];
                 if (!(m->flags & MF_METHOD) != !pass) continue;
                 const char *mc = m->flags & MF_STATIC ? "static" : m->flags & MF_ABSTRACT ? "abstract" : nullptr;
-                dg_text(out, m->text, fs, x0 + MPAD, y + lh / 2, "start", mc);
-                y += lh;
-            }
-            if (!pass) {
-                y += MPAD;
-                dg_line(out, x0, y, x0 + w, y, "div");
-                y += MPAD / 2;
+                dg_text(out, m->text, fs, x0 + CPAD, yy + lh / 2, "start", mc);
+                yy += lh;
             }
         }
     }
