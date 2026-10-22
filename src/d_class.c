@@ -33,7 +33,7 @@ static cmm_status cfail(CP *p, size_t off, const char *m) { return diag_fail(p->
 /* ~T~ -> <T> (zero-copy unless a tilde is present) */
 static Str generics(Arena *A, Str s, bool *ok) {
     *ok = true;
-    if (!memchr(s.p, '~', s.n)) return s;
+    if (!s.n || !memchr(s.p, '~', s.n)) return s;
     char *o = arena_alloc(A, s.n + 1, 1);
     if (!o) { *ok = false; return (Str){}; }
     for (size_t i = 0; i < s.n; i++) {
@@ -79,7 +79,7 @@ static Str class_ref(CP *p, Str s, Str *label) {
     }
     s = str_trim(s);
     if (s.n >= 2 && s.p[0] == '`' && s.p[s.n - 1] == '`') s.p++, s.n -= 2;
-    const char *t = memchr(s.p, '~', s.n);
+    const char *t = s.n ? memchr(s.p, '~', s.n) : nullptr;
     if (t && !label->n) { /* Name~T~: id is Name, label shows Name<T> */
         bool ok;
         *label = generics(p->A, s, &ok);

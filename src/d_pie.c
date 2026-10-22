@@ -49,7 +49,9 @@ DIAG_FN(pie_render) {
         total += v;
     }
     if (!sl.n) return diag_fail(err_off, msg, off, "pie has no slices");
-    constexpr double R = 185, CX = 225, CY = 225;
+    constexpr double R = 185;
+    constexpr double CX = 225;
+    constexpr double CY = 225;
     double lw = 0;
     for (size_t i = 0; i < sl.n; i++) {
         double w = text_width(sl.v[i].label, fs) + (show ? text_width(S(" [000000]"), fs) : 0);

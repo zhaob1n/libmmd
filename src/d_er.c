@@ -25,7 +25,7 @@ typedef struct EP {
 [[nodiscard]] static int32_t ent(EP *p, Str ref) {
     ref = str_trim(ref);
     Str label = {};
-    const char *b = memchr(ref.p, '[', ref.n);
+    const char *b = ref.n ? memchr(ref.p, '[', ref.n) : nullptr;
     if (b && ref.p[ref.n - 1] == ']') {
         label = str_trim((Str){.p = b + 1, .n = ref.n - (size_t)(b + 1 - ref.p) - 1});
         if (label.n >= 2 && label.p[0] == '"' && label.p[label.n - 1] == '"') label.p++, label.n -= 2;
