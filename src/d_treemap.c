@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #include "dgraph.h"
+#include "dcfg.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -23,6 +24,7 @@ static constexpr char CSS[] =
 /* mermaid 11 default cScale (hsl(h,100%,~76%)): sections fill .6 opacity, leaves .3 with a 3px same-colour border */
 static const char *const SEC[] = {"#8686ff", "#ffff78", "#d7ff86", "#86c2ff", "#86ffff", "#86ffc2", "#ff86ff", "#ff8686"};
 static const char *const SECD[] = {"#3939ff", "#ffff2c", "#b5ff20", "#399cff", "#39ffff", "#39ff9c", "#ff39ff", "#ff3939"};
+static constexpr unsigned char TMI[] = {0, 1, 2, 11, 10, 9, 4, 6}; /* SEC[k] == cScale[TMI[k]] */
 static const char *const SECT[] = {"#fff", "#000", "#000", "#000", "#000", "#000", "#000", "#000"};
 
 static double worst(double s, double mn, double mx, double side) {
@@ -188,7 +190,8 @@ DIAG_FN(treemap_render) {
     for (size_t i = 1; i < v.n; i++) {
         const TNode *t = &V[i];
         if (t->w < 1 || t->h < 1) continue;
-        const char *fill = SEC[t->sec % countof(SEC)], *st = SECD[t->sec % countof(SECD)];
+        const char *fill = dcfg_pal("cScale", TMI[t->sec % countof(SEC)], SEC[t->sec % countof(SEC)]),
+                   *st = dcfg_pal("cScalePeer", TMI[t->sec % countof(SECD)], SECD[t->sec % countof(SECD)]);
         const TCls *uc = nullptr;
         for (size_t k = 0; k < cls.n && t->cls.n; k++) if (str_eq(cls.v[k].name, t->cls)) uc = &cls.v[k];
         bool leaf = t->first == UINT32_MAX;
@@ -214,7 +217,7 @@ DIAG_FN(treemap_render) {
         /* mermaid fits leaf labels up to 38px; value at ~0.6x */
         double fsz = fmin(38, fmax(8, fmin((t->w - 12) / fmax(1, text_width(t->label, 1)), t->h / 2.2)));
         double vsz = fmax(8, fmin(23, fsz * 0.6));
-        const char *tc = SECT[t->sec % countof(SECT)];
+        const char *tc = dcfg_pal("cScaleLabel", TMI[t->sec % countof(SECT)], SECT[t->sec % countof(SECT)]);
         if (t->w > 20 && t->h > 20) {
             buf_lit(out, "<g fill=\""); buf_put(out, strlen(tc), tc); buf_lit(out, "\">");
             char cl[64];

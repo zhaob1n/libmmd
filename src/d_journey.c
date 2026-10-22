@@ -3,6 +3,7 @@
 #include <stdio.h>
 
 #include "dgraph.h"
+#include "dcfg.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -120,7 +121,7 @@ DIAG_FN(journey_render) {
         size_t j = i;
         while (j < tk.n && tk.v[j].sec == tk.v[i].sec) j++;
         double x = left + i * (TW + TM), w = (j - i) * (TW + TM) - TM;
-        const char *col = SECCOL[tk.v[i].sec % countof(SECCOL)];
+        const char *col = dcfg_pal("fillType", tk.v[i].sec % countof(SECCOL), SECCOL[tk.v[i].sec % countof(SECCOL)]);
         if (secs.n) {
             dg_rect_fill(out, x, SY, w, BOX, 3, "tbox", col);
             dg_text(out, dg_wrap(a, secs.v[tk.v[i].sec], 14, w - 10), 14, x + w / 2, SY + BOX / 2, "middle", "tx");
@@ -132,7 +133,7 @@ DIAG_FN(journey_render) {
         double x = left + i * (TW + TM), cx = x + TW / 2;
         double s = t->score < 0 ? 0 : t->score > 5 ? 5 : t->score, fy = FACE0 + (5 - s) * 25;
         dg_line(out, cx, TY + BOX, cx, AX, "tl");
-        dg_rect_fill(out, x, TY, TW, BOX, 3, "tbox", SECCOL[t->sec % countof(SECCOL)]);
+        dg_rect_fill(out, x, TY, TW, BOX, 3, "tbox", dcfg_pal("fillType", t->sec % countof(SECCOL), SECCOL[t->sec % countof(SECCOL)]));
         Str nm = dg_wrap(a, t->name, 14, TW - 10);
         dg_text(out, nm, 14, cx, TY + BOX / 2, "middle", "tx");
         face(out, cx, fy, s);

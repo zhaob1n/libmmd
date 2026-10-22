@@ -1,5 +1,5 @@
 // Generates src/d_themes.h from mermaid's own theme objects (values that differ from the default theme).
-// usage: node tools/gen_themes.mjs <var...> > src/d_themes.h
+// usage: node tools/gen_themes.mjs $(cat tools/theme_vars.txt) > src/d_themes.h
 const m = await import(process.env.HOME + '/node_modules/mermaid/dist/chunks/mermaid.core/chunk-DU6HZSFF.mjs');
 const themes = Object.values(m).find(v => v && v.dark && v.forest && v.neutral);
 const get = (o, k) => k.split('.').reduce((a, p) => a == null ? a : a[p], o);

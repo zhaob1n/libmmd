@@ -308,7 +308,7 @@ DIAG_FN(mindmap_render) {
         double dir = c->x > p->x ? 1 : -1;
         double x0 = V[i].parent == 0 ? p->x : p->x + dir * p->w / 2, y0 = p->y;
         double x1 = c->x - dir * c->w / 2, y1 = c->y + (c->shape == M_DEF ? c->h / 2 : 0);
-        const char *col = SECS[c->sec % countof(SECS)];
+        const char *col = dcfg_pal("cScalePeer", c->sec % countof(SECS) + 1, SECS[c->sec % countof(SECS)]);
         buf_lit(out, "<path class=\"me\" stroke=\""); buf_put(out, strlen(col), col);
         buf_lit(out, "\" stroke-width=\""); buf_num(out, fmax(2, 17 - 3.0 * c->depth)); buf_lit(out, "\" d=\"M");
         dg_pt(out, x0, y0); buf_ch(out, 'C'); dg_pt(out, (x0 + x1) / 2, y0); buf_ch(out, ' ');
@@ -316,7 +316,7 @@ DIAG_FN(mindmap_render) {
     }
     for (size_t i = 0; i < v.n; i++) {
         const MNode *m = &V[i];
-        const char *fill = i ? dcfg_pal("cScale", m->sec % countof(SEC) + 1, SEC[m->sec % countof(SEC)]) : dcfg_pal("cScale", 0, "#0000ec"), *st = i ? SECS[m->sec % countof(SECS)] : "#0000a0";
+        const char *fill = i ? dcfg_pal("cScale", m->sec % countof(SEC) + 1, SEC[m->sec % countof(SEC)]) : dcfg_pal("git", 0, "#0000ec"), *st = i ? dcfg_pal("cScalePeer", m->sec % countof(SECS) + 1, SECS[m->sec % countof(SECS)]) : dcfg_pal("cScalePeer", 0, "#0000a0");
         const char *tcls = !i || SECW[m->sec % countof(SECW)] ? "mt\" fill=\"#fff" : "mt";
         double x = m->x - m->w / 2, y = m->y - m->h / 2, w = m->w, h = m->h;
         buf_lit(out, "<g class=\"mindmap-node section-");

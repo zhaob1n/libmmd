@@ -186,7 +186,7 @@ DIAG_FN(xychart_render) {
     for (size_t s = 0; s < ser.n; s++) {
         if (ser.v[s].line) continue;
         double bwid = band * 0.9 / (double)nbar;
-        const char *col = ser.v[s].col = PAL[bi % countof(PAL)];
+        const char *col = ser.v[s].col = dcfg_list("xyChart.plotColorPalette", s, PAL[bi % countof(PAL)]);
         for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
             double v = vals.v[ser.v[s].v0 + k], p = VPOS(v), c0 = CPOS(k) - band * 0.45 + bwid * (double)bi;
             if (horiz) dg_rect_fill(out, fmin(base, p), c0, fabs(p - base), bwid, 0, nullptr, col);
@@ -196,7 +196,7 @@ DIAG_FN(xychart_render) {
     }
     for (size_t s = 0; s < ser.n; s++) {
         if (!ser.v[s].line) continue;
-        const char *col = ser.v[s].col = LINEPAL[li++ % countof(LINEPAL)];
+        const char *col = ser.v[s].col = dcfg_list("xyChart.plotColorPalette", s, LINEPAL[li++ % countof(LINEPAL)]);
         buf_lit(out, "<path class=\"ln\" stroke=\""); buf_put(out, strlen(col), col); buf_lit(out, "\" d=\"");
         for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
             double v = vals.v[ser.v[s].v0 + k];

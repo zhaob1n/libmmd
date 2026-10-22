@@ -4,6 +4,7 @@
 #include <math.h>
 
 #include "dgraph.h"
+#include "dcfg.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -106,7 +107,7 @@ DIAG_FN(kanban_render) {
     if (!cy) return CMM_ERR_NOMEM;
     for (size_t c = 0; c < cols.n; c++) {
         double x = (double)c * (CW + GAP);
-        dg_rect_fill(out, x, top, CW, ch[c] + 5, 5, "kc", COLF[c % countof(COLF)]); /* mermaid sizes each column to its cards */
+        dg_rect_fill(out, x, top, CW, ch[c] + 5, 5, "kc", dcfg_pal("cScale", c % 10 + 2, COLF[c % countof(COLF)])); /* mermaid sizes each column to its cards */
         Str t = dg_wrap(a, cols.v[c], 16, CW - 20);
         dg_text(out, t.p ? t : cols.v[c], 16, x + CW / 2, top + 13, "middle", "kt");
         cy[c] = top + 28;
