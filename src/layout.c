@@ -8,9 +8,7 @@
 #include <stdio.h>
 #include <time.h>
 
-static double prof_t0;
-static double prof_now(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_sec * 1e3 + ts.tv_nsec / 1e6; }
-#define PROF(name) do { double t_ = prof_now(); if (*name) fprintf(stderr, "  %-10s %8.3f ms\n", name, t_ - prof_t0); prof_t0 = t_; } while (0)
+#define PROF(name) do { if (*name) prof_mark(name); } while (0)
 #else
 #define PROF(name) do { } while (0)
 #endif
@@ -1188,7 +1186,7 @@ static cmm_status layout_core(Graph *g) {
         bool greedy = g->acyclicer == CMM_ACYC_GREEDY ||
                       (g->acyclicer == CMM_ACYC_AUTO && N >= ACYC_GREEDY_MIN_N && nrev * ACYC_GREEDY_REV_DIV >= N);
 #ifdef CMM_PROFILE
-        fprintf(stderr, "  fas: N=%zu dfs_rev=%zu -> %s\n", N, nrev, greedy ? "greedy" : "dfs");
+        if (getenv("CMM_PROFV")) fprintf(stderr, "  fas: N=%zu dfs_rev=%zu -> %s\n", N, nrev, greedy ? "greedy" : "dfs");
 #endif
         if (greedy && !greedy_fas(A, N, E, ef, et, valid, hid, rev)) return CMM_ERR_NOMEM;
         if (greedy) { nrevord = 0; for (size_t e = 0; e < E; e++) if (rev[e]) revord[nrevord++] = (uint32_t)e; }
@@ -1537,7 +1535,7 @@ static cmm_status layout_core(Graph *g) {
      * down-sweep measured non-improving (medium 485 -> 508) while costing ~45 µs; large ones need it */
     if (use_dagre) tbudget = 0;
 #ifdef CMM_PROFILE
-    fprintf(stderr, "  order: V=%zu nseg=%zu S=%zu -> %s\n", V, nseg, S, use_dagre ? "dagre" : "fast");
+    if (getenv("CMM_PROFV")) fprintf(stderr, "  order: V=%zu nseg=%zu S=%zu -> %s\n", V, nseg, S, use_dagre ? "dagre" : "fast");
 #endif
     const unsigned maxit = use_dagre ? 0 : (nseg > ORDER_ONE_SWEEP_MIN && nseg <= ORDER_ONE_SWEEP_MAX) ? 1 : 24;
     for (unsigned iter = 0; iter < maxit && since < patience && bestc > 0; iter++) {
@@ -1549,7 +1547,7 @@ static cmm_status layout_core(Graph *g) {
         if (c < bestc) { bestc = c; memcpy(best, L.lay, placed * sizeof *best); since = 0; }
         else since++;
 #ifdef CMM_PROFILE
-        fprintf(stderr, "  iter %u c=%llu\n", iter, (unsigned long long)c);
+        if (getenv("CMM_PROFV")) fprintf(stderr, "  iter %u c=%llu\n", iter, (unsigned long long)c);
 #endif
     }
     if (!use_dagre) {
@@ -1560,13 +1558,13 @@ static cmm_status layout_core(Graph *g) {
     if (bestc > 0 && tbudget > 0) { /* final polish on the kept-best order */
         uint64_t gn = transpose(&L, &tbudget, tdirty);
 #ifdef CMM_PROFILE
-        fprintf(stderr, "  transpose gain=%llu\n", (unsigned long long)gn);
+        if (getenv("CMM_PROFV")) fprintf(stderr, "  transpose gain=%llu\n", (unsigned long long)gn);
 #endif
         bestc = gn <= bestc ? bestc - gn : 0;
     }
 
 #ifdef CMM_PROFILE
-    fprintf(stderr, "  crossings=%llu tbudget_left=%lld\n", (unsigned long long)bestc, (long long)tbudget);
+    if (getenv("CMM_PROFV")) fprintf(stderr, "  crossings=%llu tbudget_left=%lld\n", (unsigned long long)bestc, (long long)tbudget);
 #endif
     if (use_dagre) {
         PROF("oldseed");
@@ -1606,7 +1604,7 @@ static cmm_status layout_core(Graph *g) {
                 double x = L.x[bbase[c] + 2 * (size_t)(r - cmin[c]) + side];
                 mn[side] = dmin(mn[side], x), mx[side] = dmax(mx[side], x);
             }
-        fprintf(stderr, "cl %zu ranks %d-%d left %.0f..%.0f right %.0f..%.0f\n", c, cmin[c], cmax[c], mn[0], mx[0], mn[1], mx[1]);
+        if (getenv("CMM_PROFV")) fprintf(stderr, "cl %zu ranks %d-%d left %.0f..%.0f right %.0f..%.0f\n", c, cmin[c], cmax[c], mn[0], mx[0], mn[1], mx[1]);
     }
 #endif
     /* ---- rank axis ---- */
@@ -1781,7 +1779,7 @@ static cmm_status layout_core(Graph *g) {
     }
     PROF("edges");
 #ifdef CMM_PROFILE
-    fprintf(stderr, "  V=%zu N=%zu D=%zu R=%zu segs=%zu\n", V, N, D, R, nseg);
+    if (getenv("CMM_PROFV")) fprintf(stderr, "  V=%zu N=%zu D=%zu R=%zu segs=%zu\n", V, N, D, R, nseg);
 #endif
     return CMM_OK;
 }

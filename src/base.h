@@ -181,4 +181,12 @@ void buf_pt(Buf *b, double x, double y); /* "x,y" with buf_num formatting, one r
 void buf_int(Buf *b, int64_t v);
 void buf_xml(Buf *b, Str s);     /* XML-escape text, handles mermaid #entity; */
 
+#ifdef CMM_PROFILE
+/* per-phase cycle accounting: time since the previous mark is charged to name ("" just resets);
+ * totals print at exit, divided by the number of "" marks at render start (CMM_PROFILE builds only) */
+void prof_mark(const char *name);
+#define PMARK(name) prof_mark(name)
+#else
+#define PMARK(name) do { } while (0)
+#endif
 #endif

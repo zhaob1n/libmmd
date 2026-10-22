@@ -269,7 +269,7 @@ static void run_component(NS *s, size_t max_iter) {
         dfs_range(s, l, s->pe[l], llow);
     }
 #ifdef CMM_PROFILE
-    if (s->nc > 100) fprintf(stderr, "  ns: nc=%zu feasible=%.2fms simplex=%.2fms iters=%zu\n", s->nc, t1 - t0, ns_now() - t1, iters);
+    if (s->nc > 100 && getenv("CMM_PROFV")) fprintf(stderr, "  ns: nc=%zu feasible=%.2fms simplex=%.2fms iters=%zu\n", s->nc, t1 - t0, ns_now() - t1, iters);
 #endif
 }
 

@@ -168,6 +168,7 @@ static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n],
     char msg[160] = {};
     size_t eoff = 0;
     cmm_status st = CMM_OK;
+    PMARK("");
     dcfg_begin(&arena, n, src, off); /* %%{init}%% / frontmatter keys + accTitle/accDescr, all diagram kinds */
     dcfg_set_theme(opt && opt->theme ? opt->theme : cfg.theme);
     if (str_eq(kw, S("graph")) || str_eq(kw, S("flowchart")) || str_eq(kw, S("flowchart-elk"))) {
@@ -190,10 +191,14 @@ static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n],
         if (oe && *oe == 'f') g.order_mode = CMM_ORDER_FAST;
         Str cv = dcfg_get("flowchart.curve");
         g.curve = flow_curve_kind(cv);
+        PMARK("setup");
         if ((st = flow_parse(&g, n, src, off, &eoff, msg))) goto fail;
+        PMARK("parse");
         if ((st = flow_layout(&g))) goto fail;
+        PMARK("layout-misc");
         if (!buf_reserve(&b, 256 + g.nn * 320 + g.ne * 200)) { st = CMM_ERR_NOMEM; goto fail; }
         if ((st = flow_svg(&g, &b))) goto fail;
+        PMARK("svg");
     } else if (str_eq(kw, S("sequenceDiagram"))) {
         if ((st = seq_render(&arena, n, src, off, cfg.title, fs, &b, &eoff, msg))) goto fail;
     } else if (diag_lookup(kw)) {

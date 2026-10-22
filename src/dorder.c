@@ -437,6 +437,7 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
             for (uint32_t i = d->loff[r]; i < d->loff[r + 1]; i++) d->pos[d->lay[i]] = (int32_t)(i - d->loff[r]);
     }
     DT(t_init);
+    PMARK("o-init");
 #ifdef CMM_PROFILE
     double t_sw = 0, t_cc = 0;
 #endif
@@ -517,6 +518,7 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
             }
         }
         DT(t1);
+        PMARK("o-sweep");
         /* only cc < bestcc matters (and the best's exact count): sum cached pairs first, then count stale
          * pairs and stop once the sum reaches bestcc; skipped pairs stay stale for the next sweep */
         uint64_t cc = 0;
@@ -527,11 +529,12 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
             pcc[r] = cross_pair(d, d->lay, r, tree), pva[r] = ver[r], pvb[r] = ver[r + 1];
             cc += pcc[r];
         }
+        PMARK("o-cross");
 #ifdef CMM_PROFILE
         t_sw += t1 - t0, t_cc += dnow() - t1;
 #endif
 #ifdef CMM_PROFILE
-        fprintf(stderr, "  dsweep %u cc=%llu\n", it, (unsigned long long)cc);
+        if (getenv("CMM_PROFV")) fprintf(stderr, "  dsweep %u cc=%llu\n", it, (unsigned long long)cc);
 #endif
         if (cc < bestcc) { last = 0; bestcc = cc; memcpy(best, d->pos, V * sizeof *best); }
         if (bestcc == 0) break; /* dagre keeps sweeping, but nothing can beat 0 (strict <) */
@@ -540,7 +543,7 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
     for (size_t v = 0; v < V; v++) if (d->rank[v] >= 0) d->lay[d->loff[d->rank[v]] + (uint32_t)d->pos[v]] = (int32_t)v;
     if (crossings) *crossings = bestcc;
 #ifdef CMM_PROFILE
-    fprintf(stderr, "  dtime init=%.1f sweeps=%.1f cc=%.1f us R=%zu V=%zu E=%u\n", t_init - t_start, t_sw, t_cc, R, V, d->soff[V]);
+    if (getenv("CMM_PROFV")) fprintf(stderr, "  dtime init=%.1f sweeps=%.1f cc=%.1f us R=%zu V=%zu E=%u\n", t_init - t_start, t_sw, t_cc, R, V, d->soff[V]);
 #endif
     ok = true;
 done:

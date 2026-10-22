@@ -264,3 +264,34 @@ void buf_xml(Buf *b, Str s) {
     }
     buf_put(b, s.n - run, s.p + run);
 }
+
+#ifdef CMM_PROFILE
+#include <stdio.h>
+#include <string.h>
+#include <x86intrin.h>
+static struct { const char *n; uint64_t c; } prof_tab[64];
+static size_t prof_nt;
+static uint64_t prof_t, prof_runs;
+static void prof_dump(void) {
+    uint64_t tot = 0;
+    for (size_t i = 0; i < prof_nt; i++) tot += prof_tab[i].c;
+    fprintf(stderr, "phase cycles/render (%llu renders)\n", (unsigned long long)prof_runs);
+    for (size_t i = 0; i < prof_nt; i++)
+        fprintf(stderr, "  %-10s %10.0f  %5.1f%%\n", prof_tab[i].n, (double)prof_tab[i].c / (double)prof_runs,
+                100.0 * (double)prof_tab[i].c / (double)tot);
+    fprintf(stderr, "  %-10s %10.0f\n", "total", (double)tot / (double)prof_runs);
+}
+void prof_mark(const char *name) {
+    uint64_t t = __rdtsc();
+    if (!*name) {
+        if (!prof_runs++) atexit(prof_dump);
+        prof_t = t;
+        return;
+    }
+    size_t i = 0;
+    while (i < prof_nt && strcmp(prof_tab[i].n, name)) i++;
+    if (i == prof_nt && prof_nt < 64) prof_tab[prof_nt++].n = name;
+    if (i < 64) prof_tab[i].c += t - prof_t;
+    prof_t = __rdtsc();
+}
+#endif
