@@ -66,6 +66,7 @@ static void measure(Graph *g, Str *lab, double *w, unsigned *lines) {
     }
     *lab = (Str){.p = o, .n = n};
     label_measure(*lab, fs, w, lines);
+    *w = maxw; /* the label div is display:table-cell with max-width: it reports exactly maxw */
 }
 
 void node_size(Graph *g, size_t v) {
@@ -77,18 +78,19 @@ void node_size(Graph *g, size_t v) {
     double th = lines * fs * 1.5;
     double w = tw + 2 * PAD_NODE, h = th + 2 * PAD_NODE;
     switch (g->nshape[v]) {
-    case SH_RECT: case SH_ROUND: break;
+    case SH_RECT: case SH_ROUND: w = tw + 4 * PAD_NODE; break; /* mermaid 11: labelPaddingX = 2·padding */
     case SH_STADIUM: w = tw + h; break;
     case SH_SUBROUTINE: w += 16; break;
     case SH_CYLINDER: {
+        w = tw + PAD_NODE; /* mermaid cylinder: bbox + padding, ry = rx / (2.5 + w/50) */
         double rx = w / 2, ry = rx / (2.5 + w / 50);
-        h = th + 2 * PAD_NODE + 2 * ry;
+        h = th + PAD_NODE + 3 * ry;
         break;
     }
     case SH_CIRCLE: w = h = dmax(tw, th) + 2 * PAD_NODE; break;
     case SH_DCIRCLE: w = h = dmax(tw, th) + 2 * PAD_NODE + 10; break;
     case SH_ASYM: w = tw + 2 * PAD_NODE + h / 4; break;
-    case SH_RHOMBUS: { double s = (tw + 16) + (th + 16); w = h = s; break; }
+    case SH_RHOMBUS: { double s = tw + th + 2 * PAD_NODE; w = h = s; break; }
     case SH_HEXAGON: w = tw + 2 * PAD_NODE + h / 2; break;
     case SH_LEAN_R: case SH_LEAN_L: case SH_TRAP: case SH_TRAP_ALT: w = tw + 2 * PAD_NODE + h * 2 / 3; break;
     default: break;
