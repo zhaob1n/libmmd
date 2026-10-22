@@ -32,13 +32,22 @@ API (`include/cmermaid.h`): `cmm_render_svg(n, src, opts, &buf, &err)`, `cmm_buf
 | classDiagram | `src/d_class.c` | members, `~generics~`, visibility/`$`/`*`, annotations, all relations + lollipop, cardinality, namespaces, notes |
 | erDiagram | `src/d_er.c` | attribute tables (type/name/keys/comment), aliases, all crow's-foot cardinalities (symbolic + word forms) |
 | pie | `src/d_pie.c` | slices, showData, title, legend |
-| gantt | `src/d_gantt.c` | dayjs-style dateFormat, strftime axisFormat, tickInterval, excludes (weekends/dates), after/until deps, done/active/crit/milestone/vert |
+| gantt | `src/d_gantt.c` | dayjs-style dateFormat (incl. Z/ZZ offsets), todayMarker (CMM_TODAY override), weekday/weekend friday, strftime axisFormat, tickInterval, excludes (weekends/dates), after/until deps, done/active/crit/milestone/vert |
 | journey | `src/d_journey.c` | sections, scored tasks with faces, actor legend/dots |
-| mindmap | `src/d_mindmap.c` | indentation tree, all node shapes, two-sided tidy layout, section colours |
+| mindmap | `src/d_mindmap.c` | indentation tree, all node shapes, radial layout (tidy-tree opt-in), `::icon()` badges, `:::class`, section colours |
 | timeline | `src/d_timeline.c` | sections, periods, multi-event / continuation lines, wrapping |
 | quadrantChart | `src/d_quadrant.c` | axes, quadrant labels, points with inline style and classDef |
-| xychart(-beta) | `src/d_xychart.c` | vertical/horizontal, categories or numeric range, bar + line series, nice ticks |
-| gitGraph | `src/d_gitgraph.c` | LR/TB/BT, branch order, merge, cherry-pick, tags, NORMAL/REVERSE/HIGHLIGHT |
+| xychart(-beta) | `src/d_xychart.c` | vertical/horizontal, categories or numeric range, bar + line series, nice ticks, legend for titled series |
+| gitGraph | `src/d_gitgraph.c` | LR/TB/BT, branch order, merge, cherry-pick, tags, NORMAL/REVERSE/HIGHLIGHT, lane-routed merges, hashed auto ids |
+| sankey(-beta) | `src/d_sankey.c` | RFC-4180 CSV, longest-path columns (sinks justified), barycentric relaxation, value labels |
+| block(-beta) | `src/d_block.c` | columns, spans, `space`, nested blocks, 10 shapes, labelled edges; grid layout |
+| requirementDiagram | `src/d_requirement.c` | 6 requirement kinds + element, all 7 relations, `direction`; layered layout |
+| C4* | `src/d_c4.c` | Context/Container/Component/Dynamic/Deployment, Person/System/Container/Component(+Db/Queue/_Ext), boundaries, Rel variants |
+| architecture(-beta) | `src/d_architecture.c` | groups (nested), services, junctions, port-constraint grid, orthogonal edges, built-in icons |
+| packet(-beta) | `src/d_packet.c` | bit ranges, `+N`, row splitting, bit numbers |
+| radar(-beta) | `src/d_radar.c` | axes, positional/named curves, max/min/ticks, polygon graticule, legend |
+| treemap(-beta) | `src/d_treemap.c` | squarified layout, sections, classDef/`:::` |
+| kanban | `src/d_kanban.c` | columns, cards, `@{assigned, ticket, priority}` |
 | text metrics | `src/text.c` | embedded Helvetica-compatible advance table, CJK/emoji wide, 8-byte ASCII fast path |
 
 ## Flowchart features (v2)
