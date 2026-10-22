@@ -9,7 +9,7 @@
 #include "diagrams.h"
 #include "text.h"
 
-enum { BS_RECT, BS_ROUND, BS_STADIUM, BS_CIRCLE, BS_CYL, BS_DIAMOND, BS_HEX, BS_SUB, BS_ASYM, BS_PARA,
+enum { BS_RECT, BS_ROUND, BS_STADIUM, BS_CIRCLE, BS_CYL, BS_DIAMOND, BS_HEX, BS_SUB, BS_ASYM, BS_PARA, BS_PARA_L, BS_TRAP, BS_TRAPI,
        BS_AR_R, BS_AR_L, BS_AR_U, BS_AR_D, BS_AR_X, BS_AR_Y }; /* id<[".."]>(dir) block arrows */
 typedef struct Blk {
     Str id, label;
@@ -18,6 +18,7 @@ typedef struct Blk {
     uint32_t span;
     uint8_t shape;
     bool group, space;
+    double nr; /* circle: natural radius tw/2 + padding/2 (mermaid ignores the cell size) */
     double x, y, w, h, lh;
 } Blk;
 typedef struct BEdge { uint32_t a, b; Str label; bool arrow, arrow_s; } BEdge;
@@ -106,7 +107,11 @@ static bool node_tok(P *p, Str *id, Str *label, uint8_t *shape, uint32_t *span, 
         *has_label = true;
         *shape = !strcmp(op, "((") || !strcmp(op, "(((") ? BS_CIRCLE : !strcmp(op, "(") ? BS_ROUND : !strcmp(op, "([") ? BS_STADIUM
                : !strcmp(op, "[(") ? BS_CYL : !strcmp(op, "{") ? BS_DIAMOND : !strcmp(op, "{{") ? BS_HEX : !strcmp(op, "[[") ? BS_SUB
-               : op[0] == '>' ? BS_ASYM : (!strcmp(op, "[/") || !strcmp(op, "[\\")) ? BS_PARA : BS_RECT;
+               : op[0] == '>' ? BS_ASYM : BS_RECT;
+        if (!strcmp(op, "[/") || !strcmp(op, "[\\")) { /* [/ /] lean_right, [\ \] lean_left, [/ \] trapezoid, [\ /] inv_trapezoid */
+            bool o = op[1] == '/', c = p->s[p->i - cl] == '/';
+            *shape = o ? (c ? BS_PARA : BS_TRAP) : (c ? BS_TRAPI : BS_PARA_L);
+        }
     }
     if (p->i < p->n && p->s[p->i] == ':') {
         p->i++;
@@ -188,6 +193,21 @@ static bool style_shape(Buf *b, size_t from, Str css) {
     return true;
 }
 
+/* mermaid lean/trapezoid shapes: slant h/2 inside a cell of width label + padding + h; TL TR BR BL */
+static void para_pts(uint8_t shape, double x, double y, double w, double h, double Q[static 8]) {
+    double o = (h - 32) / 2; /* overhang: polygon width tw + 8 + h vs cell tw + 40 */
+    x -= o, w += 2 * o;
+    double e = fmin(h / 2, w / 3), tl = x, tr = x + w, br = x + w, bl = x;
+    switch (shape) {
+    case BS_PARA: tl += e, bl = x, br -= e; break;
+    case BS_PARA_L: tr -= e, bl += e; break;
+    case BS_TRAP: tl += e, tr -= e; break;
+    default: bl += e, br -= e; break;
+    }
+    const double q[8] = {tl, y, tr, y, br, y + h, bl, y + h};
+    memcpy(Q, q, sizeof q);
+}
+
 /* outline polygon of b (arcs approximated); returns vertex count */
 static size_t outline(const Blk *b, double P[static 80]) {
     double x = b->x, y = b->y, w = b->w, h = b->h, cx = x + w / 2, cy = y + h / 2;
@@ -195,7 +215,7 @@ static size_t outline(const Blk *b, double P[static 80]) {
     #define V(px, py) (P[2 * k] = (px), P[2 * k + 1] = (py), k++)
     switch (b->shape) {
     case BS_CIRCLE: {
-        double r = fmin(w, h) / 2;
+        double r = b->nr > 0 ? fmin(b->nr, fmin(w, h) / 2) : fmin(w, h) / 2;
         for (int i = 0; i < 32; i++) V(cx + r * cos(i * M_PI / 16), cy + r * sin(i * M_PI / 16));
         break;
     }
@@ -212,7 +232,12 @@ static size_t outline(const Blk *b, double P[static 80]) {
     case BS_DIAMOND: V(cx, y); V(x + w, cy); V(cx, y + h); V(x, cy); break;
     case BS_HEX: { double e = fmin(h / 2, w / 4); V(x + e, y); V(x + w - e, y); V(x + w, cy); V(x + w - e, y + h); V(x + e, y + h); V(x, cy); break; }
     case BS_ASYM: { double e = h / 3; V(x, y); V(x + w, y); V(x + w, y + h); V(x, y + h); V(x + e, cy); break; }
-    case BS_PARA: { double e = h / 3; V(x + e, y); V(x + w, y); V(x + w - e, y + h); V(x, y + h); break; }
+    case BS_PARA: case BS_PARA_L: case BS_TRAP: case BS_TRAPI: {
+        double Q[8];
+        para_pts(b->shape, x, y, w, h, Q);
+        for (int i = 0; i < 4; i++) V(Q[2 * i], Q[2 * i + 1]);
+        break;
+    }
     default: V(x, y); V(x + w, y); V(x + w, y + h); V(x, y + h);
     }
     #undef V
@@ -366,6 +391,7 @@ DIAG_FN(block_render) {
             b->w = tw + 32, b->h = lh + 16;
             switch (b->shape) {
             case BS_ROUND: b->w = tw + 16; break;
+            case BS_PARA: case BS_PARA_L: case BS_TRAP: case BS_TRAPI: b->w = tw + 40; break; /* mermaid layout width; the polygon (tw + 8 + h) overhangs it */
             case BS_STADIUM: case BS_ASYM: b->w = tw + 16, b->h = lh + 8; break;
             case BS_SUB: case BS_HEX: b->w = tw + 24, b->h = lh + 8; break;
             case BS_CYL: {
@@ -375,7 +401,7 @@ DIAG_FN(block_render) {
             }
             default: break;
             }
-            if (b->shape == BS_CIRCLE) b->w = b->h = tw + 8; /* mermaid: r = tw/2 + padding/2 */
+            if (b->shape == BS_CIRCLE) b->w = b->h = tw + 8, b->nr = (tw + 8) / 2; /* mermaid: r = tw/2 + padding/2 */
             if (b->shape == BS_DIAMOND) b->w = b->h = tw + lh + 16; /* mermaid: square, side = w + h */
             continue;
         }
@@ -407,6 +433,21 @@ DIAG_FN(block_render) {
     double top = title.n ? 40 : 0;
     /* mermaid: viewBox = drawn content (the root group is not drawn) + 5 */
     BBox bb = {B[0].x + PAD, B[0].y + PAD - top, B[0].x + B[0].w - PAD, B[0].y + B[0].h - PAD};
+    if (nb > 1) { /* vertical extent follows the drawn shapes (circles keep their natural size) */
+        double y0 = INFINITY, y1 = -INFINITY;
+        for (size_t i = 1; i < nb; i++) {
+            const Blk *b = &B[i];
+            if (b->space) continue;
+            double r = b->shape == BS_CIRCLE && b->nr > 0 ? fmin(b->nr, fmin(b->w, b->h) / 2) : -1;
+            double t = r < 0 ? b->y : b->y + b->h / 2 - r, u = r < 0 ? b->y + b->h : b->y + b->h / 2 + r;
+            y0 = fmin(y0, t), y1 = fmax(y1, u);
+            if (b->shape >= BS_PARA && b->shape <= BS_TRAPI) { /* polygon overhang (para_pts) */
+                double o = (b->h - 32) / 2;
+                bb.x0 = fmin(bb.x0, b->x - o), bb.x1 = fmax(bb.x1, b->x + b->w + o);
+            }
+        }
+        if (y0 < y1) bb.y0 = y0 - top, bb.y1 = y1;
+    }
     if (!buf_reserve(out, 2048 + nb * 400 + ev.n * 300)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 5, "block", CSS);
     buf_lit(out, DEFS);
@@ -426,7 +467,7 @@ DIAG_FN(block_render) {
         case BS_ROUND: dg_rect(out, x, y, w, h, 8, "bn"); break;
         case BS_STADIUM: dg_rect(out, x, y, w, h, h / 2, "bn"); break;
         case BS_CIRCLE: {
-            double r = fmin(w, h) / 2;
+            double r = b->nr > 0 ? fmin(b->nr, fmin(w, h) / 2) : fmin(w, h) / 2;
             buf_lit(out, "<circle class=\"bn\" cx=\""); buf_num(out, cx); buf_lit(out, "\" cy=\""); buf_num(out, cy);
             buf_lit(out, "\" r=\""); buf_num(out, r); buf_lit(out, "\"/>");
             break;
@@ -456,13 +497,13 @@ DIAG_FN(block_render) {
             buf_lit(out, "\"/>");
             break;
         }
-        case BS_DIAMOND: case BS_HEX: case BS_ASYM: case BS_PARA: {
+        case BS_DIAMOND: case BS_HEX: case BS_ASYM: case BS_PARA: case BS_PARA_L: case BS_TRAP: case BS_TRAPI: {
             double P_[12];
             size_t k;
             if (b->shape == BS_DIAMOND) { double q[] = {cx, y, x + w, cy, cx, y + h, x, cy}; k = 4; memcpy(P_, q, sizeof q); }
             else if (b->shape == BS_HEX) { double e = fmin(h / 2, w / 4), q[] = {x + e, y, x + w - e, y, x + w, cy, x + w - e, y + h, x + e, y + h, x, cy}; k = 6; memcpy(P_, q, sizeof q); }
             else if (b->shape == BS_ASYM) { double e = h / 3, q[] = {x, y, x + w, y, x + w, y + h, x, y + h, x + e, cy}; k = 5; memcpy(P_, q, sizeof q); }
-            else { double e = h / 3, q[] = {x + e, y, x + w, y, x + w - e, y + h, x, y + h}; k = 4; memcpy(P_, q, sizeof q); }
+            else { para_pts(b->shape, x, y, w, h, P_); k = 4; }
             buf_lit(out, "<polygon class=\"bn\" points=\"");
             for (size_t j = 0; j < k; j++) { if (j) buf_ch(out, ' '); dg_pt(out, P_[2 * j], P_[2 * j + 1]); }
             buf_lit(out, "\"/>");
