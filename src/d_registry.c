@@ -50,6 +50,8 @@ static const DiagEnt DIAGS[] = {
     {S("cynefin"), cynefin_render},
     {S("venn-beta"), venn_render},
     {S("venn"), venn_render},
+    {S("treeView-beta"), treeview_render},
+    {S("treeView"), treeview_render},
 };
 
 DiagFn diag_lookup(Str kw) {

@@ -33,6 +33,7 @@ typedef DIAG_FN((*DiagFn));
 [[nodiscard]] DIAG_FN(ishikawa_render);
 [[nodiscard]] DIAG_FN(cynefin_render);
 [[nodiscard]] DIAG_FN(venn_render);
+[[nodiscard]] DIAG_FN(treeview_render);
 
 /* keyword -> renderer, nullptr when not a diagram type handled here */
 [[nodiscard]] DiagFn diag_lookup(Str kw);
