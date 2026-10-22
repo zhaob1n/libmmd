@@ -722,7 +722,7 @@ static void port_sort(size_t n, PortKey a[static n]) {
 /* hybrid cycle removal thresholds (see results_v7): greedy only for big graphs with many back edges */
 constexpr size_t ACYC_GREEDY_MIN_N = 1500;
 constexpr size_t ORDER_ONE_SWEEP_MIN = 512;
-constexpr size_t DAGRE_ORDER_MAX_V = 2000;
+constexpr size_t DAGRE_ORDER_MAX_V = 512; /* dagre order (>=5 full sweeps) costs ~2x the fast path; medium bench is V=528 */
 constexpr size_t DAGRE_ORDER_MAX_S = 1024;
 constexpr size_t ORDER_ONE_SWEEP_MAX = 4096;
 constexpr size_t ACYC_GREEDY_REV_DIV = 20; /* DFS reverses >= 5% of nodes' worth of edges */
@@ -924,6 +924,7 @@ static cmm_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
     DOrder d = {.V = V, .S = S, .R = L->R, .rank = L->rank, .par = par, .nn = nn, .nord = nord, .ikey = ikey,
                 .poff = L->poff, .pidx = L->pidx, .soff = L->soff, .sidx = L->sidx, .doff = doff, .didx = didx,
                 .cmin = cmin, .cmax = cmax, .bbase = bbase, .loff = L->loff, .lay = L->lay, .pos = L->pos};
+    PROF("dprep");
     if (!dagre_order(A, &d, bestc)) return CMM_ERR_NOMEM;
 #undef DV
 #undef DU
@@ -1227,6 +1228,8 @@ static cmm_status layout_core(Graph *g) {
             }
 
     PROF("normalize");
+    const bool use_dagre = g->order_mode != CMM_ORDER_FAST && S <= DAGRE_ORDER_MAX_S &&
+                           (g->order_mode == CMM_ORDER_DAGRE || V <= DAGRE_ORDER_MAX_V);
     /* ---- initial order: DFS by rank ---- */
     size_t R = L.R;
     uint32_t *cnt = ANEW(A, uint32_t, R + 1), *byrank = ANEW(A, uint32_t, V + 1);
@@ -1242,7 +1245,7 @@ static cmm_status layout_core(Graph *g) {
     size_t placed = L.loff[R];
     memset(vis, 0, V);
     for (size_t r = 0; r < R; r++) cnt[r] = L.loff[r];
-    for (size_t i = 0; i < placed; i++) {
+    for (size_t i = 0; i < (use_dagre ? 0 : placed); i++) {
         uint32_t s0 = byrank[i];
         if (vis[s0]) continue;
         size_t sp = 0;
@@ -1268,7 +1271,7 @@ static cmm_status layout_core(Graph *g) {
     /* mermaid/dagre tie order for compound graphs: a cluster's children are its sub-clusters in reverse
      * declaration order (flowDb pushes subgraphs reversed), then its direct members. Seed every layer with
      * that hierarchy order (stable on the DFS order within a cluster); sweeps then move by barycenters. */
-    if (S) {
+    if (S && !use_dagre) {
         uint32_t *post = ANEW(A, uint32_t, S + 1), *cst = ANEW(A, uint32_t, S + 1), *kc = ANEW(A, uint32_t, 2 * S + 3);
         int32_t *kid = ANEW(A, int32_t, S + 1), *sib = ANEW(A, int32_t, S + 1), *tmpl = ANEW(A, int32_t, placed + 1);
         uint8_t *done = ANEW(A, uint8_t, S + 1);
@@ -1337,11 +1340,11 @@ static cmm_status layout_core(Graph *g) {
     memset(csum, 0, (S + 1) * sizeof *csum);
     memset(ccnt, 0, (S + 1) * sizeof *ccnt);
     bool clusters = S > 0;
-    if (clusters) cluster_keys(&L, S, csum, ccnt);
-    if (clusters) /* establish cluster contiguity (borders at extremes) before any scoring */
+    if (clusters && !use_dagre) cluster_keys(&L, S, csum, ccnt);
+    if (clusters && !use_dagre) /* establish cluster contiguity (borders at extremes) before any scoring */
         for (size_t r = 0; r < R; r++) sweep_layer(&L, r, false, true, keys, idx, tmp, csum, ccnt, clusters);
-    uint64_t bestc = cross_all(&L, cbuf, fen);
-    memcpy(best, L.lay, placed * sizeof *best);
+    uint64_t bestc = use_dagre ? 0 : cross_all(&L, cbuf, fen);
+    if (!use_dagre) memcpy(best, L.lay, placed * sizeof *best);
     unsigned since = 0;
     /* patience: small graphs afford one extra non-improving sweep; on big ones the sweeps settle into a
      * period-2 oscillation (down/up alternate) and the extra sweep only repeats a seen order */
@@ -1353,9 +1356,10 @@ static cmm_status layout_core(Graph *g) {
     if (!tdirty) return CMM_ERR_NOMEM;
     /* mid-size graphs (medium bench and up to a few thousand segments): the up-sweep after the first
      * down-sweep measured non-improving (medium 485 -> 508) while costing ~45 µs; large ones need it */
-    const bool use_dagre = g->order_mode != CMM_ORDER_FAST && S <= DAGRE_ORDER_MAX_S &&
-                           (g->order_mode == CMM_ORDER_DAGRE || V <= DAGRE_ORDER_MAX_V);
     if (use_dagre) tbudget = 0;
+#ifdef CMM_PROFILE
+    fprintf(stderr, "  order: V=%zu nseg=%zu S=%zu -> %s\n", V, nseg, S, use_dagre ? "dagre" : "fast");
+#endif
     const unsigned maxit = use_dagre ? 0 : (nseg > ORDER_ONE_SWEEP_MIN && nseg <= ORDER_ONE_SWEEP_MAX) ? 1 : 24;
     for (unsigned iter = 0; iter < maxit && since < patience && bestc > 0; iter++) {
         bool down = ((iter & 1u) == 0);
@@ -1369,9 +1373,11 @@ static cmm_status layout_core(Graph *g) {
         fprintf(stderr, "  iter %u c=%llu\n", iter, (unsigned long long)c);
 #endif
     }
-    memcpy(L.lay, best, placed * sizeof *best);
-    for (size_t r = 0; r < R; r++)
-        for (size_t i = L.loff[r]; i < L.loff[r + 1]; i++) L.pos[L.lay[i]] = (int32_t)(i - L.loff[r]);
+    if (!use_dagre) {
+        memcpy(L.lay, best, placed * sizeof *best);
+        for (size_t r = 0; r < R; r++)
+            for (size_t i = L.loff[r]; i < L.loff[r + 1]; i++) L.pos[L.lay[i]] = (int32_t)(i - L.loff[r]);
+    }
     if (bestc > 0 && tbudget > 0) { /* final polish on the kept-best order */
         uint64_t gn = transpose(&L, &tbudget, tdirty);
 #ifdef CMM_PROFILE
@@ -1384,6 +1390,7 @@ static cmm_status layout_core(Graph *g) {
     fprintf(stderr, "  crossings=%llu tbudget_left=%lld\n", (unsigned long long)bestc, (long long)tbudget);
 #endif
     if (use_dagre) {
+        PROF("oldseed");
         cmm_status dr = dagre_prep_order(&L, g, E, ef, et, rev, revord, nrevord, esub, rank, choff, cmin, cmax, bbase, sdepth, &bestc);
         if (dr) return dr;
     }

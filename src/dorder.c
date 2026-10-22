@@ -5,6 +5,14 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef CMM_PROFILE
+#include <stdio.h>
+#include <time.h>
+static double dnow(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_sec * 1e6 + ts.tv_nsec / 1e3; }
+#define DT(x) double x = dnow()
+#else
+#define DT(x)
+#endif
 
 typedef struct Res { int32_t head, tail; uint32_t len; double bc, w; bool has; } Res;
 typedef struct Ent {
@@ -219,12 +227,13 @@ static Res sort_subgraph(Ctx *c, int32_t k) {
         }
         if (e->has) srt[nsort++] = e; else uns[nun++] = e;
     }
-    /* sort.js: unsortable by -i (stable); consume from the end (smallest i) */
-    for (size_t a = 1; a < nun; a++) {
-        Ent *x = uns[a];
-        size_t b = a;
-        while (b > 0 && uns[b - 1]->i < x->i) { uns[b] = uns[b - 1]; b--; }
-        uns[b] = x;
+    /* sort.js: unsortable sorted by -i; unmerged entries have distinct i < n, so bucket them */
+    if (nun > 1) {
+        Ent **bk = c->stmp;
+        for (uint32_t j = 0; j < n; j++) bk[j] = nullptr;
+        for (size_t a = 0; a < nun; a++) bk[uns[a]->i] = uns[a];
+        size_t k = 0;
+        for (uint32_t j = n; j-- > 0;) if (bk[j]) uns[k++] = bk[j];
     }
     msort(srt, c->stmp, nsort, c->bias);
     double sum = 0, wt = 0;
@@ -265,35 +274,27 @@ static void cg_set(Ctx *c, int32_t a, int32_t b) {
     c->cga[c->cgn] = a, c->cgb[c->cgn] = b, c->cgn++;
 }
 
+/* crossCount (weighted by multiplicity, like dagre's accumulator tree): Fenwick over south positions;
+ * a north node queries all its edges before inserting them, so edges sharing a north end never count. */
 static uint64_t cross_count(const DOrder *d, const int32_t *lay, uint32_t *tree, uint32_t *buf) {
+    (void)buf;
     uint64_t cc = 0;
     for (size_t r = 0; r + 1 < d->R; r++) {
-        uint32_t a = d->loff[r], na = d->loff[r + 1] - a, b = d->loff[r + 1], nb = d->loff[r + 2] - b;
+        uint32_t a = d->loff[r], na = d->loff[r + 1] - a, nb = d->loff[r + 2] - d->loff[r + 1];
         if (!na || !nb) continue;
-        uint32_t fi = 1;
-        while (fi < nb) fi <<= 1;
-        uint32_t tsz = 2 * fi - 1;
-        fi -= 1;
-        memset(tree, 0, tsz * sizeof *tree);
+        memset(tree, 0, (nb + 1) * sizeof *tree);
+        uint32_t ins = 0;
         for (uint32_t i = 0; i < na; i++) {
             int32_t v = lay[a + i];
-            uint32_t m = 0;
-            for (uint32_t j = d->soff[v]; j < d->soff[v + 1]; j++) {
-                uint32_t p = (uint32_t)d->pos[d->sidx[j]], q = m++;
-                while (q > 0 && buf[q - 1] > p) { buf[q] = buf[q - 1]; q--; }
-                buf[q] = p;
+            uint32_t j0 = d->soff[v], j1 = d->soff[v + 1];
+            for (uint32_t j = j0; j < j1; j++) {
+                uint32_t le = 0;
+                for (uint32_t k = (uint32_t)d->pos[d->sidx[j]] + 1; k; k &= k - 1) le += tree[k];
+                cc += ins - le;
             }
-            for (uint32_t j = 0; j < m; j++) {
-                uint32_t idx = buf[j] + fi;
-                tree[idx] += 1;
-                uint64_t ws = 0;
-                while (idx > 0) {
-                    if (idx % 2) ws += tree[idx + 1];
-                    idx = (idx - 1) >> 1;
-                    tree[idx] += 1;
-                }
-                cc += ws;
-            }
+            for (uint32_t j = j0; j < j1; j++)
+                for (uint32_t k = (uint32_t)d->pos[d->sidx[j]] + 1; k <= nb; k += k & -k) tree[k]++;
+            ins += j1 - j0;
         }
     }
     return cc;
@@ -302,6 +303,7 @@ static uint64_t cross_count(const DOrder *d, const int32_t *lay, uint32_t *tree,
 bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
     (void)A;
     size_t V = d->V, S = d->S, R = d->R, NS = V + S;
+    DT(t_start);
     Ctx c = {.d = d, .V = V, .S = S, .NS = NS};
     bool ok = false;
     uint32_t *rioff = calloc(R + 2, sizeof *rioff), *ri = nullptr, *dstk = nullptr, *dit = nullptr;
@@ -385,8 +387,13 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
         for (size_t r = 0; r < R; r++)
             for (uint32_t i = d->loff[r]; i < d->loff[r + 1]; i++) d->pos[d->lay[i]] = (int32_t)(i - d->loff[r]);
     }
+    DT(t_init);
+#ifdef CMM_PROFILE
+    double t_sw = 0, t_cc = 0;
+#endif
     uint64_t bestcc = UINT64_MAX;
     for (unsigned it = 0, last = 0; last < 4; it++, last++) {
+        DT(t0);
         c.down = it % 2;
         c.bias = it % 4 >= 2;
         for (size_t q = 0; q < c.cgn; q++) {
@@ -430,12 +437,22 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
         }
         /* buildLayerMatrix */
         for (size_t v = 0; v < V; v++) if (d->rank[v] >= 0) d->lay[d->loff[d->rank[v]] + (uint32_t)d->pos[v]] = (int32_t)v;
+        DT(t1);
         uint64_t cc = cross_count(d, d->lay, tree, cbuf);
+#ifdef CMM_PROFILE
+        t_sw += t1 - t0, t_cc += dnow() - t1;
+#endif
+#ifdef CMM_PROFILE
+        fprintf(stderr, "  dsweep %u cc=%llu\n", it, (unsigned long long)cc);
+#endif
         if (cc < bestcc) { last = 0; bestcc = cc; memcpy(best, d->pos, V * sizeof *best); }
     }
     memcpy(d->pos, best, V * sizeof *best);
     for (size_t v = 0; v < V; v++) if (d->rank[v] >= 0) d->lay[d->loff[d->rank[v]] + (uint32_t)d->pos[v]] = (int32_t)v;
     if (crossings) *crossings = bestcc;
+#ifdef CMM_PROFILE
+    fprintf(stderr, "  dtime init=%.1f sweeps=%.1f cc=%.1f us R=%zu V=%zu E=%u\n", t_init - t_start, t_sw, t_cc, R, V, d->soff[V]);
+#endif
     ok = true;
 done:
     free(rioff); free(ri); free(dstk); free(dit); free(vis); free(best); free(tree); free(cbuf);

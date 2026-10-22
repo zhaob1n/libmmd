@@ -136,3 +136,10 @@ mermaid itself fails to render `block_full` and `radar_full` (partial named curv
   shapes, text anchors) inside the root viewBox; self-loop curves now included in the flowchart viewBox.
 - Compound ordering seeded with dagre's tie order; same-rank order agreement with mermaid 0.175 → 0.936.
 - Numbers: bench/results_v8.txt.
+
+## v9
+- Faithful port of dagre's order step (`src/dorder.c`: initOrder DFS, layer graphs with cluster borders,
+  barycenter/sortSubgraph/resolveConflicts with subgraph constraints, biased down/up sweeps, keep best by
+  crossCount), reproducing graphlib key order. Default for graphs with V ≤ 512; the fast ordering is kept above.
+  Override: `flowchart.order: dagre|fast` or env `CMM_ORDER`.
+- Same-rank order agreement with mermaid 0.936 → 0.961 (macro 0.658 → 0.813). Numbers: bench/results_v9.txt.
