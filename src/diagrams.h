@@ -20,6 +20,7 @@ typedef DIAG_FN((*DiagFn));
 [[nodiscard]] DIAG_FN(quadrant_render);
 [[nodiscard]] DIAG_FN(xychart_render);
 [[nodiscard]] DIAG_FN(gitgraph_render);
+[[nodiscard]] DIAG_FN(architecture_render);
 [[nodiscard]] DIAG_FN(c4_render);
 [[nodiscard]] DIAG_FN(requirement_render);
 [[nodiscard]] DIAG_FN(block_render);

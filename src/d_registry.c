@@ -24,6 +24,8 @@ static const DiagEnt DIAGS[] = {
     {S("xychart"), xychart_render},
     {S("gitGraph"), gitgraph_render},
     {S("mindmap"), mindmap_render},
+    {S("architecture"), architecture_render},
+    {S("architecture-beta"), architecture_render},
     {S("C4Deployment"), c4_render},
     {S("C4Dynamic"), c4_render},
     {S("C4Component"), c4_render},
