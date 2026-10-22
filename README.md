@@ -34,21 +34,35 @@ API (`include/cmermaid.h`): `cmm_render_svg(n, src, opts, &buf, &err)`, `cmm_buf
 | pie | `src/d_pie.c` | slices, showData, title, legend |
 | gantt | `src/d_gantt.c` | dayjs-style dateFormat (incl. Z/ZZ offsets), todayMarker (CMM_TODAY override), weekday/weekend friday, strftime axisFormat, tickInterval, excludes (weekends/dates), after/until deps, done/active/crit/milestone/vert |
 | journey | `src/d_journey.c` | sections, scored tasks with faces, actor legend/dots |
-| mindmap | `src/d_mindmap.c` | indentation tree, all node shapes, radial layout (tidy-tree opt-in), `::icon()` badges, `:::class`, section colours |
+| mindmap | `src/d_mindmap.c` | indentation tree, all node shapes, radial layout (tidy-tree opt-in), `::icon(fa ...)` drawn as real Font Awesome paths (badge fallback), `:::class`, section colours |
 | timeline | `src/d_timeline.c` | sections, periods, multi-event / continuation lines, wrapping |
 | quadrantChart | `src/d_quadrant.c` | axes, quadrant labels, points with inline style and classDef |
 | xychart(-beta) | `src/d_xychart.c` | vertical/horizontal, categories or numeric range, bar + line series, nice ticks, legend for titled series |
-| gitGraph | `src/d_gitgraph.c` | LR/TB/BT, branch order, merge, cherry-pick, tags, NORMAL/REVERSE/HIGHLIGHT, lane-routed merges, hashed auto ids |
-| sankey(-beta) | `src/d_sankey.c` | RFC-4180 CSV, longest-path columns (sinks justified), barycentric relaxation, value labels |
-| block(-beta) | `src/d_block.c` | columns, spans, `space`, nested blocks, 10 shapes, labelled edges; grid layout |
-| requirementDiagram | `src/d_requirement.c` | 6 requirement kinds + element, all 7 relations, `direction`; layered layout |
-| C4* | `src/d_c4.c` | Context/Container/Component/Dynamic/Deployment, Person/System/Container/Component(+Db/Queue/_Ext), boundaries, Rel variants |
-| architecture(-beta) | `src/d_architecture.c` | groups (nested), services, junctions, port-constraint grid, orthogonal edges, built-in icons |
-| packet(-beta) | `src/d_packet.c` | bit ranges, `+N`, row splitting, bit numbers |
+| gitGraph | `src/d_gitgraph.c` | LR/TB/BT, branch order, merge, cherry-pick, tags, NORMAL/REVERSE/HIGHLIGHT, lane-routed merges, mermaid lane order (unordered branches = `0.<index>`), hashed auto ids |
+| sankey(-beta) | `src/d_sankey.c` | RFC-4180 CSV, longest-path columns (sinks justified), barycentric relaxation, value labels with collision avoidance |
+| block(-beta) | `src/d_block.c` | columns, spans, `space`, nested blocks, 10 shapes, labelled edges clipped to the true shape outline; grid layout |
+| requirementDiagram | `src/d_requirement.c` | 6 requirement kinds + element, all 7 relations (grey label plates), `direction`; layered layout |
+| C4* | `src/d_c4.c` | Context/Container/Component/Dynamic/Deployment, Person/System/Container/Component(+Db/Queue/_Ext), boundaries, Rel variants, `c4ShapeInRow`/`c4BoundaryInRow` grid, UpdateLayoutConfig/UpdateElementStyle/UpdateRelStyle (colours whitelisted), mermaid-11 person shape + `[Type: techn]` line |
+| architecture(-beta) | `src/d_architecture.c` | groups (nested), services, junctions, port-constraint grid, orthogonal edges, non-overlapping groups, built-in icons + embedded `logos:`/`fa:` subset (src/icons_data.h via tools/genicons.js: simple-icons CC0, FA Free CC-BY-4.0) |
+| packet(-beta) | `src/d_packet.c` | bit ranges, `+N`, row splitting, bit numbers, title below (as mermaid) |
 | radar(-beta) | `src/d_radar.c` | axes, positional/named curves, max/min/ticks, polygon graticule, legend |
 | treemap(-beta) | `src/d_treemap.c` | squarified layout, sections, classDef/`:::` |
 | kanban | `src/d_kanban.c` | columns, cards, `@{assigned, ticket, priority}` |
 | text metrics | `src/text.c` | embedded Helvetica-compatible advance table, CJK/emoji wide, 8-byte ASCII fast path |
+
+## Fidelity vs mermaid-cli 11.17
+
+Side-by-side renders (left: cmermaid, right: mermaid 11.17) live in `samples/sbs/*.png`.
+Already fixed: C4 grid and person shape, gitGraph lane order, packet title position, requirement label plates.
+Known remaining differences:
+- mindmap: mermaid's layout is more compact;
+- treemap: mermaid uses a pastel palette per section;
+- gantt: mermaid shades weekends and draws vertical grid lines;
+- gitGraph: mermaid uses its vivid default palette and rotated commit labels;
+- kanban: mermaid uses narrower columns;
+- radar: the palettes differ;
+- C4: mermaid accepts arbitrary bgColor strings, which cmermaid rejects.
+mermaid itself fails to render `block_full` and `radar_full` (partial named curve).
 
 ## Flowchart features (v2)
 - `direction` inside subgraphs: clusters with their own direction are laid out recursively and placed as
