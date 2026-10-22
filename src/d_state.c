@@ -123,6 +123,9 @@ static cmm_status add_desc(StP *p, int32_t v, Str d) {
     if (!ok) return CMM_ERR_NOMEM;
     if (!d.n) return CMM_OK;
     Str *dst = &p->desc.v[v];
+    /* mermaid: a lone description replaces the id as the label (plain state); a second one, or one
+       on an aliased state, gives the title + divider shape */
+    if (!dst->n && str_eq(p->g.nlabel[v], p->g.nid[v])) { p->g.nlabel[v] = d; return CMM_OK; }
     if (!dst->n) { *dst = d; return CMM_OK; }
     *dst = cat3(p->A, *dst, S("\n"), d);
     return dst->n ? CMM_OK : CMM_ERR_NOMEM;
@@ -330,17 +333,20 @@ constexpr double C_PAD = 16;   /* composite inner padding */
 constexpr double C_TITLE = 26; /* composite title bar */
 constexpr double R_PAD = 10;   /* region padding */
 
-constexpr double NOTE_GAP = 30;
 
 typedef struct Scope {
     Graph lg;
     int32_t *elem;      /* local node -> element (node v >= 0, cluster s -> -(s+2)) */
     double w, h, bx0, by0;
     bool regions;       /* composite whose children are concurrent regions */
+    size_t nreal;       /* layout edges [0, nreal) are note connectors (mermaid adds them first) */
 } Scope;
 typedef struct EdgeLoc { int32_t scope, ra, rb; } EdgeLoc; /* scope as cluster id (NONE = root) */
 
 static inline int32_t el_cl(int32_t s) { return -(s + 2); }
+/* notes are layout nodes too (mermaid: note node + undirected edge, inside an invisible noteGroup) */
+constexpr int32_t NOTE_EL0 = INT32_MIN + 1;
+static inline bool el_is_note(int32_t e) { return e >= NOTE_EL0 && e < NOTE_EL0 + (1 << 24); }
 static inline int32_t sc_ix(int32_t c) { return c + 1; } /* scope index: 0 = root */
 
 static int32_t elem_parent(const StP *p, int32_t e) {
@@ -367,6 +373,7 @@ typedef struct Ctx {
     double *relx;      /* region x offset inside its composite */
     double *npad, *nph; /* per global node: horizontal note reservation each side, note height */
     double *cpad, *cph; /* same per cluster */
+    double *ntx, *nty, *ntw, *nth; /* per note: absolute centre and size */
     double fs;
 } Ctx;
 
@@ -411,10 +418,23 @@ static cmm_status layout_scope(Ctx *c, int32_t cl) {
             lg->nshape[lv_] = (SH);                                                       \
             dg_size(lg, lv_, (W), (H));                                                   \
         } while (0)
+    /* mermaid inserts a state's note node before the state itself (dagre initial order) */
+    #define ADD_NOTES(V, R)                                                                   \
+        for (size_t i = 0; i < p->notes.n; i++) {                                             \
+            int32_t nv_ = p->notes.v[i].v;                                                    \
+            if ((R) == NONE ? nv_ != (int32_t)(V) || p->ccl.v[nv_] != NONE : p->ccl.v[nv_] != (R)) continue; \
+            char tag[24];                                                                     \
+            int len = snprintf(tag, sizeof tag, "----note-%zu", i);                           \
+            Str nid = cat3(p->A, (R) == NONE ? g->nid[nv_] : g->sid[R], (Str){.p = tag, .n = (size_t)len}, S("")); \
+            if (!nid.n) return CMM_ERR_NOMEM;                                                 \
+            ADD_ELEM(NOTE_EL0 + (int32_t)i, nid, c->ntw[i], c->nth[i], SH_RECT);              \
+        }
     for (size_t v = 0; v < g->nn; v++)
-        if (g->nparent[v] == cl && p->ccl.v[v] == NONE)
+        if (g->nparent[v] == cl && p->ccl.v[v] == NONE) {
+            ADD_NOTES(v, NONE);
             ADD_ELEM((int32_t)v, g->nid[v], g->nw[v] + 2 * c->npad[v], g->nh[v] > c->nph[v] ? g->nh[v] : c->nph[v],
                      g->nshape[v]);
+        }
     for (size_t r = 0; r < g->ns; r++) {
         if (g->sparent[r] != cl || g->sclass[r].n) continue;
         const Scope *rs = &c->sc[sc_ix((int32_t)r)];
@@ -422,9 +442,21 @@ static cmm_status layout_scope(Ctx *c, int32_t cl) {
         if (w < tw) w = tw;
         if (w < 60) w = 60;
         c->cw[r] = w, c->ch[r] = h; /* true size; the layout node may be widened for notes */
+        ADD_NOTES(r, (int32_t)r);
         ADD_ELEM(el_cl((int32_t)r), g->sid[r], w + 2 * c->cpad[r], h > c->cph[r] ? h : c->cph[r], SH_RECT);
     }
+    #undef ADD_NOTES
     #undef ADD_ELEM
+    for (size_t lv = 0; lv < lg->nn; lv++) {
+        if (!el_is_note(s->elem[lv])) continue;
+        size_t i = (size_t)(s->elem[lv] - NOTE_EL0);
+        int32_t v = p->notes.v[i].v, r = p->ccl.v[v];
+        int32_t sv = dg_find(lg, r == NONE ? g->nid[v] : g->sid[r]);
+        if (sv == NONE) continue;
+        bool left = p->notes.v[i].left; /* mermaid: right of = state -> note, left of = note -> state */
+        if (dg_edge(lg, left ? (int32_t)lv : sv, left ? sv : (int32_t)lv, (Str){}) == NONE) return CMM_ERR_NOMEM;
+    }
+    s->nreal = lg->ne;
     for (size_t e = 0; e < g->ne; e++) {
         const EdgeLoc *L = &c->eloc[e];
         if (L->scope != cl || L->ra == INT32_MIN) continue;
@@ -443,6 +475,7 @@ static cmm_status layout_scope(Ctx *c, int32_t cl) {
         double *P = lg->pts.v + lg->eptoff[e];
         for (unsigned end = 0; end < 2; end++) {
             int32_t lv = end ? lg->eto[e] : lg->efrom[e], el = s->elem[lv];
+            if (el_is_note(el)) continue;
             double pad = el >= 0 ? c->npad[el] : c->cpad[-el - 2];
             if (pad <= 0) continue;
             double hw = (lg->nw[lv] - 2 * pad) / 2, hh = (el >= 0 ? g->nh[el] : c->ch[-el - 2]) / 2;
@@ -484,6 +517,7 @@ static void place(Ctx *c, int32_t cl, double ox, double oy, unsigned depth) {
         int32_t e = s->elem[lv];
         double x = lg->nx[lv], y = lg->ny[lv], w = lg->nw[lv], h = lg->nh[lv];
         if (e >= 0) { c->ax[e] = x, c->ay[e] = y; continue; }
+        if (el_is_note(e)) { c->ntx[e - NOTE_EL0] = x, c->nty[e - NOTE_EL0] = y; continue; }
         int32_t r = -e - 2;
         (void)w;
         h = c->ch[r];
@@ -576,16 +610,17 @@ DIAG_FN(state_render) {
     if (!c.npad || !c.nph || !c.cpad || !c.cph || !nx || !ny || !nw || !nh) return CMM_ERR_NOMEM;
     for (size_t v = 0; v < N; v++) c.npad[v] = c.nph[v] = 0;
     for (size_t r = 0; r <= S; r++) c.cpad[r] = c.cph[r] = 0;
-    for (size_t i = 0; i < p.notes.n; i++) { /* reserve note space beside its state in the layout */
-        const Note *no = &p.notes.v[i];
+    c.ntx = ANEW(a, double, p.notes.n + 1), c.nty = ANEW(a, double, p.notes.n + 1);
+    c.ntw = nw, c.nth = nh;
+    if (!c.ntx || !c.nty) return CMM_ERR_NOMEM;
+    for (size_t i = 0; i < p.notes.n; i++) { /* mermaid note: text wrapped at 200px, padding 15 */
+        Note *no = &p.notes.v[i];
+        no->text = dg_wrap(a, no->text, fs, 200);
         double tw;
         unsigned ln;
         label_measure(no->text, fs, &tw, &ln);
-        nw[i] = tw + 20, nh[i] = (ln ? ln : 1) * lh + 12;
-        int32_t v = no->v, r = p.ccl.v[v];
-        double *pad = r != NONE ? &c.cpad[r] : &c.npad[v], *ph = r != NONE ? &c.cph[r] : &c.nph[v];
-        if (nw[i] + NOTE_GAP > *pad) *pad = nw[i] + NOTE_GAP;
-        if (nh[i] > *ph) *ph = nh[i];
+        nw[i] = tw + 30, nh[i] = (ln ? ln : 1) * lh + 30;
+        c.ntx[i] = c.nty[i] = 0;
     }
     int32_t maxd = 0;
     for (size_t r = 0; r < S; r++) {
@@ -603,15 +638,7 @@ DIAG_FN(state_render) {
     BBox bb = BB_EMPTY;
     for (size_t r = 0; r <= S; r++) if (c.sc[r].lg.nn) { BBox b2 = dg_bbox(&c.sc[r].lg); bb_add(&bb, b2.x0, b2.y0, b2.x1, b2.y1); }
     for (size_t r = 0; r < S; r++) if (c.cw[r] > 0) bb_add(&bb, c.cx[r], c.cy[r], c.cx[r] + c.cw[r], c.cy[r] + c.ch[r]);
-    for (size_t i = 0; i < p.notes.n; i++) {
-        const Note *no = &p.notes.v[i];
-        int32_t v = no->v;
-        double vw = g->nw[v];
-        if (p.ccl.v[v] != NONE) { int32_t r = p.ccl.v[v]; c.ax[v] = c.cx[r] + c.cw[r] / 2; c.ay[v] = c.cy[r] + c.ch[r] / 2; vw = c.cw[r]; }
-        nx[i] = no->left ? c.ax[v] - vw / 2 - NOTE_GAP - nw[i] : c.ax[v] + vw / 2 + NOTE_GAP;
-        ny[i] = c.ay[v] - nh[i] / 2;
-        bb_add(&bb, nx[i], ny[i], nx[i] + nw[i], ny[i] + nh[i]);
-    }
+    for (size_t i = 0; i < p.notes.n; i++) nx[i] = c.ntx[i] - nw[i] / 2, ny[i] = c.nty[i] - nh[i] / 2;
     if (bb.x0 > bb.x1) bb = (BBox){0, 0, 100, 100};
     if (title.n) bb.y0 -= 30;
     if (!buf_reserve(out, 1024 + N * 300 + E * 250)) return CMM_ERR_NOMEM;
@@ -637,9 +664,12 @@ DIAG_FN(state_render) {
         const Graph *lg = &c.sc[si].lg;
         for (size_t e = 0; e < lg->ne; e++) {
             if (!lg->eptn[e] && lg->efrom[e] != lg->eto[e]) continue;
-            buf_lit(out, "<path class=\"tr\" d=\"");
+            bool note = e < c.sc[si].nreal;
+            if (note) buf_lit(out, "<path class=\"note-l\" fill=\"none\" d=\"");
+            else buf_lit(out, "<path class=\"tr\" d=\"");
             dg_edge_d(out, lg, e);
-            buf_lit(out, "\" marker-end=\"url(#st-arrow)\"/>");
+            if (note) buf_lit(out, "\"/>");
+            else buf_lit(out, "\" marker-end=\"url(#st-arrow)\"/>");
         }
         for (size_t e = 0; e < lg->ne; e++) {
             if (!lg->elabel[e].n) continue;
@@ -686,10 +716,6 @@ DIAG_FN(state_render) {
         }
     }
     for (size_t i = 0; i < p.notes.n; i++) {
-        int32_t v = p.notes.v[i].v;
-        double vw = p.ccl.v[v] != NONE ? c.cw[p.ccl.v[v]] : g->nw[v];
-        double sx = p.notes.v[i].left ? c.ax[v] - vw / 2 : c.ax[v] + vw / 2;
-        dg_line(out, sx, c.ay[v], p.notes.v[i].left ? nx[i] + nw[i] : nx[i], c.ay[v], "note-l");
         dg_rect(out, nx[i], ny[i], nw[i], nh[i], 0, "note");
         dg_text(out, p.notes.v[i].text, fs, nx[i] + nw[i] / 2, ny[i] + nh[i] / 2, "middle", nullptr);
     }
