@@ -2466,6 +2466,77 @@ static int side_path(Router *R, double sx, double sy, double tx, double ty, int3
     return true;
 }
 
+
+/* does the rendered basis spline of polyline P enter a node other than a/b? */
+static bool spline_hits(const Graph *g, uint32_t np, const double *P, int32_t a, int32_t b) {
+    if (np < 3) return false;
+    for (uint32_t s = 0; s + 1 < np + 4; s++) {
+        double q[8];
+        for (unsigned j = 0; j < 4; j++) {
+            int64_t k = (int64_t)s + j - 2;
+            if (k < 0) k = 0;
+            if (k >= np) k = np - 1;
+            q[2 * j] = P[2 * k], q[2 * j + 1] = P[2 * k + 1];
+        }
+        for (unsigned t8 = 0; t8 <= 8; t8++) {
+            double t = t8 / 8.0, it = 1 - t;
+            double b0 = it * it * it / 6, b1 = (3 * t * t * t - 6 * t * t + 4) / 6, b2 = (-3 * t * t * t + 3 * t * t + 3 * t + 1) / 6, b3 = t * t * t / 6;
+            double x = b0 * q[0] + b1 * q[2] + b2 * q[4] + b3 * q[6], y = b0 * q[1] + b1 * q[3] + b2 * q[5] + b3 * q[7];
+            for (size_t v = 0; v < g->nn; v++) {
+                if ((int32_t)v == a || (int32_t)v == b || (g->nflags[v] & NF_HIDDEN) || g->nw[v] <= 0 || g->nh[v] <= 0) continue;
+                if (fabs(x - g->nx[v]) < g->nw[v] / 2 - 2 && fabs(y - g->ny[v]) < g->nh[v] / 2 - 2) return true;
+            }
+        }
+    }
+    return false;
+}
+
+/* basis curves cut corners; where that cuts through a node, pin the curve to the polyline corners */
+[[nodiscard]] static bool tighten_curves(Graph *g) {
+    if (g->curve != CURVE_BASIS) return true;
+    Arena *A = g->arena;
+    for (size_t e = 0; e < g->ne; e++) {
+        uint32_t np = g->eptn[e];
+        if (np < 3 || np > 200 || !spline_hits(g, np, g->pts.v + g->eptoff[e], g->efrom[e], g->eto[e])) continue;
+        for (double d = 14; d >= 3.5; d /= 2) {
+            const double *P = g->pts.v + g->eptoff[e];
+            double *Q = ANEW(A, double, 6 * (size_t)np);
+            if (!Q) return false;
+            size_t m = 0;
+            Q[m++] = P[0], Q[m++] = P[1];
+            for (uint32_t i = 1; i + 1 < np; i++) {
+                double x = P[2 * i], y = P[2 * i + 1];
+                for (int sgn = -1; sgn <= 1; sgn += 2) {
+                    double ox = P[2 * (i + sgn)] - x, oy = P[2 * (i + sgn) + 1] - y, l = hypot(ox, oy);
+                    double f = l > 0 ? fmin(d, l / 3) / l : 0;
+                    if (sgn > 0) Q[m++] = x, Q[m++] = y;
+                    Q[m++] = x + ox * f, Q[m++] = y + oy * f;
+                }
+            }
+            Q[m++] = P[2 * np - 2], Q[m++] = P[2 * np - 1];
+            uint32_t nq = (uint32_t)(m / 2);
+            size_t base = g->pts.n;
+            for (size_t i = 0; i < m; i++) if (!VEC_PUSH(A, &g->pts, Q[i])) return false;
+            bool ok = !spline_hits(g, nq, g->pts.v + base, g->efrom[e], g->eto[e]);
+            if (!ok && d > 7) { g->pts.n = base; continue; }
+            g->eptoff[e] = (uint32_t)base, g->eptn[e] = nq;
+            break;
+        }
+    }
+    size_t tot = 0;
+    for (size_t e = 0; e < g->ne; e++) tot += 2 * (size_t)g->eptn[e];
+    double *nv = ANEW(A, double, tot + 1);
+    if (!nv) return false;
+    size_t w = 0;
+    for (size_t e = 0; e < g->ne; e++) {
+        memcpy(nv + w, g->pts.v + g->eptoff[e], 2 * (size_t)g->eptn[e] * sizeof *nv);
+        g->eptoff[e] = (uint32_t)w;
+        w += 2 * (size_t)g->eptn[e];
+    }
+    g->pts.v = nv, g->pts.n = w, g->pts.cap = tot + 1;
+    return true;
+}
+
 /* drop interior polyline points collinear with their neighbours (dummy-node runs) */
 static void simplify_pts(Graph *g) {
     size_t w = 0;
@@ -2765,6 +2836,7 @@ cmm_status flow_layout(Graph *g) {
         if (!route_avoid(g)) return CMM_ERR_NOMEM;
         PROF("route");
         simplify_pts(g);
+        if (!tighten_curves(g)) return CMM_ERR_NOMEM;
     }
     labels_on_curve(g);
     if (!place_titles(g)) return CMM_ERR_NOMEM;
