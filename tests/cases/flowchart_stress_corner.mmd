@@ -1,0 +1,151 @@
+flowchart RL
+  n0{"gamma"}
+  n1{"delta"}
+  n2{"parse input"}
+  n3{"long label with words"}
+  n4["beta"]
+  n5{"parse input"}
+  n6["cache miss"]
+  n7{"user"}
+  n8{"delta"}
+  n9["ok"]
+  n10["validate"]
+  n11["validate"]
+  n12["validate"]
+  n13["long label with words"]
+  n14["gamma"]
+  n15{"x"}
+  n16["delta"]
+  n17{"delta"}
+  n18["db"]
+  n19{"cache miss"}
+  n20{"alpha"}
+  n21["x"]
+  n22["x"]
+  n23["retry later"]
+  n24["alpha"]
+  n25{"gamma"}
+  n26["load config"]
+  n27["parse input"]
+  n28{"parse input"}
+  n29["x"]
+  n30{"cache miss"}
+  n31["cache miss"]
+  n32["delta"]
+  n33["user"]
+  n34["delta"]
+  n35["cache miss"]
+  n36{"user"}
+  n37["db"]
+  n38["x"]
+  n39["validate"]
+  n40{"ok"}
+  n41{"long label with words"}
+  n42["alpha"]
+  n43["send mail"]
+  n44{"x"}
+  n45["long label with words"]
+  n46{"parse input"}
+  n47["gamma"]
+  n48["load config"]
+  n49{"alpha"}
+  n50{"beta"}
+  n51{"gamma"}
+  n52["long label with words"]
+  n53{"parse input"}
+  n54["alpha"]
+  n55["x"]
+  n56["long label with words"]
+  n57{"validate"}
+  n58["beta"]
+  n59["parse input"]
+  n34 ---|delta| n16
+  n46 ---|cache miss| n33
+  n14 --> n13
+  n38 -.->|parse input| n34
+  n31 -.-> n30
+  n28 --> n51
+  n43 -.-> n3
+  n41 --> n57
+  n24 --- n13
+  n50 --> n23
+  n11 ==> n39
+  n48 -.->|send mail| n24
+  n32 ---|send mail| n56
+  n35 --- n18
+  n56 -->|x| n23
+  n11 ==> n22
+  n1 --- n58
+  n48 -.-> n1
+  n13 ==> n59
+  n32 -->|long label with words| n18
+  n27 --- n39
+  n48 -.->|validate| n12
+  n52 -.-> n24
+  n16 ---|db| n2
+  n52 --- n21
+  n47 -.-> n8
+  n24 ---|db| n9
+  n42 ==> n55
+  n29 ---|ok| n12
+  n35 --- n51
+  n1 -.-> n23
+  n29 --- n22
+  n28 --> n38
+  n48 ==> n6
+  n46 --- n50
+  n59 -.-> n57
+  n21 --> n56
+  n15 -.->|cache miss| n40
+  n59 --> n16
+  n18 -.-> n41
+  n8 ---|long label with words| n31
+  n57 ==>|cache miss| n21
+  n9 -->|cache miss| n18
+  n26 --> n3
+  n38 --> n41
+  n14 --- n38
+  n34 ==> n35
+  n1 ==>|validate| n40
+  n48 --- n28
+  n37 --- n14
+  n1 --- n54
+  n49 -->|gamma| n37
+  n10 ==>|parse input| n0
+  n19 --> n13
+  n12 --> n9
+  n54 -.-> n9
+  n10 --> n34
+  n7 -->|ok| n48
+  n13 -->|delta| n34
+  n14 -->|validate| n38
+  n36 -->|parse input| n50
+  n51 ==> n58
+  n26 ---|validate| n2
+  n49 ---|user| n51
+  n40 ==> n5
+  n46 -.->|parse input| n16
+  n42 ==>|db| n31
+  n18 -->|beta| n3
+  n31 -.-> n20
+  n9 ==>|load config| n19
+  n42 --- n43
+  n3 --- n23
+  n6 ---|user| n40
+  n23 -.->|long label with words| n46
+  n19 ==> n38
+  n49 --> n58
+  n12 -->|gamma| n10
+  n55 --> n21
+  n14 ---|parse input| n54
+  n33 ---|ok| n54
+  n38 -.-> n57
+  n30 ==>|user| n9
+  n54 -.->|db| n41
+  n49 --> n44
+  subgraph S1 [group one]
+    n0
+    n1
+    n2
+    n3
+  end

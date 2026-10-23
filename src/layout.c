@@ -2556,7 +2556,7 @@ static bool spline_hits(const SBox *SX, const SBox *SY /* nullable */, size_t n,
     if (!S || !cand || !sc) return false;
     size_t nS = 0;
     for (size_t v = 0; v < g->nn; v++) {
-        double hw = g->nw[v] / 2 - 2, hh = g->nh[v] / 2 - 2;
+        double hw = g->nw[v] / 2, hh = g->nh[v] / 2; /* full box: a curve grazing a corner reads as through it */
         if (!(g->nflags[v] & NF_HIDDEN) && hw > 0 && hh > 0) S[nS++] = (SBox){g->nx[v], g->ny[v], hw, hh, (int32_t)v};
     }
     SBox *SY = nullptr; /* small graphs scan every node */
