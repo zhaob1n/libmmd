@@ -386,7 +386,7 @@ static double lbl_cost(const Blk *B, size_t nb, const Blk *s, const Blk *t, cons
         if (ox > 0 && oy > 0) ov += ox * oy;
     }
     for (size_t q = 0; q < nlb; q++) {
-        double ox = fmin(cx + tw / 2 + 2, LBX[4 * q + 2]) - fmax(cx - tw / 2 - 2, LBX[4 * q]);
+        double ox = fmin(cx + tw / 2 + 8, LBX[4 * q + 2]) - fmax(cx - tw / 2 - 8, LBX[4 * q]);
         double oy = fmin(cy + fs * 0.6, LBX[4 * q + 3]) - fmax(cy - fs * 0.6, LBX[4 * q + 1]);
         if (ox > 0 && oy > 0) ov += 2 * ox * oy;
     }
@@ -704,7 +704,7 @@ DIAG_FN(block_render) {
                     if (ox > 0 && oy > 0) ov += ox * oy;
                 }
                 for (size_t q = 0; q < nlb; q++) { /* and earlier edge labels */
-                    double ox = fmin(cx + tw / 2 + 2, LBX[4 * q + 2]) - fmax(cx - tw / 2 - 2, LBX[4 * q]);
+                    double ox = fmin(cx + tw / 2 + 8, LBX[4 * q + 2]) - fmax(cx - tw / 2 - 8, LBX[4 * q]);
                     double oy = fmin(cy + fs * 0.6, LBX[4 * q + 3]) - fmax(cy - fs * 0.6, LBX[4 * q + 1]);
                     if (ox > 0 && oy > 0) ov += 2 * ox * oy;
                 }
@@ -735,9 +735,11 @@ DIAG_FN(block_render) {
             }
             if (rn >= 2) { /* routed: try points along every run, scored against all blocks and earlier labels */
                 best = INFINITY;
-                for (size_t i = 0; i + 1 < rn; i++)
-                    for (int k = 1; k < 8; k++) {
-                        double u = k / 8.0, cx = RP[2 * i] + (RP[2 * i + 2] - RP[2 * i]) * u, cy = RP[2 * i + 1] + (RP[2 * i + 3] - RP[2 * i + 1]) * u;
+                for (size_t i = 0; i + 1 < rn; i++) {
+                    /* long runs pass many blocks: sample every ~8px so the row / column gaps are tried */
+                    int ns = (int)fmin(200, fmax(8, hypot(RP[2 * i + 2] - RP[2 * i], RP[2 * i + 3] - RP[2 * i + 1]) / 8));
+                    for (int k = 1; k < ns; k++) {
+                        double u = (double)k / ns, cx = RP[2 * i] + (RP[2 * i + 2] - RP[2 * i]) * u, cy = RP[2 * i + 1] + (RP[2 * i + 3] - RP[2 * i + 1]) * u;
                         double ov = fabs(u - .5) * 4;
                         for (size_t j = 1; j < nb; j++) {
                             const Blk *o = &B[j];
@@ -745,14 +747,20 @@ DIAG_FN(block_render) {
                             double ox = fmin(cx + tw / 2 + 2, o->x + o->w) - fmax(cx - tw / 2 - 2, o->x);
                             double oy = fmin(cy + fs * 0.6, o->y + o->h) - fmax(cy - fs * 0.6, o->y);
                             if (ox > 0 && oy > 0) ov += ox * oy;
+                            /* covering a block's text is far worse than its border */
+                            double th = fs * 0.7, tx = fmin(o->w, text_width(o->label, fs) + 4) / 2, ty = o->y + o->lh + (o->h - o->lh) / 2;
+                            ox = fmin(cx + tw / 2 + 2, o->x + o->w / 2 + tx) - fmax(cx - tw / 2 - 2, o->x + o->w / 2 - tx);
+                            oy = fmin(cy + fs * 0.6, ty + th) - fmax(cy - fs * 0.6, ty - th);
+                            if (o->label.n && ox > 0 && oy > 0) ov += 20 * ox * oy;
                         }
                         for (size_t q = 0; q < nlb; q++) {
-                            double ox = fmin(cx + tw / 2 + 2, LBX[4 * q + 2]) - fmax(cx - tw / 2 - 2, LBX[4 * q]);
+                            double ox = fmin(cx + tw / 2 + 8, LBX[4 * q + 2]) - fmax(cx - tw / 2 - 8, LBX[4 * q]); /* 8px: words must not run together */
                             double oy = fmin(cy + fs * 0.6, LBX[4 * q + 3]) - fmax(cy - fs * 0.6, LBX[4 * q + 1]);
-                            if (ox > 0 && oy > 0) ov += 2 * ox * oy;
+                            if (ox > 0 && oy > 0) ov += 40 * ox * oy;
                         }
                         if (ov < best) best = ov, mx = cx, my = cy;
                     }
+                }
                 bb.x0 = fmin(bb.x0, mx - tw / 2 - 2), bb.x1 = fmax(bb.x1, mx + tw / 2 + 2);
                 bb.y0 = fmin(bb.y0, my - fs * 0.6), bb.y1 = fmax(bb.y1, my + fs * 0.6);
             }
