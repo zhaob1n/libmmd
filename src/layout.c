@@ -2662,8 +2662,28 @@ static void labels_on_curve(Graph *g) {
         size_t ni = 0, nc = 0;
         cand[nc++] = mid;
         for (size_t e = 0; e < E && ni < 64; e++) {
-            for (uint32_t i = 0; i + 1 < g->eptn[e] && ni < 64; i++) {
-                const double *P = g->pts.v + g->eptoff[e] + 2 * i;
+            /* test the polyline and its curveBasis rendering (which cuts corners): 8 samples per span */
+            uint32_t np = g->eptn[e], ns = np > 2 ? 8 * (np - 1) + 1 : 0;
+            for (uint32_t i = 0; i + 1 < np + ns && ni < 64; i++) {
+                double Pb[4];
+                const double *P = Pb;
+                if (i + 1 < np) P = g->pts.v + g->eptoff[e] + 2 * i;
+                else if (i == np - 1) continue;
+                else {
+                    const double *Q = g->pts.v + g->eptoff[e];
+                    for (int h = 0; h < 2; h++) {
+                        double u = (double)(i - np + h) / 8; /* 0..np-1 */
+                        uint32_t k = (uint32_t)u;
+                        if (k > np - 2) k = np - 2;
+                        double t = u - k;
+                        int32_t k0 = (int32_t)k - 1, k3 = (int32_t)k + 2;
+                        const double *a = Q + 2 * (k0 < 0 ? 0 : k0), *b = Q + 2 * k, *c = Q + 2 * (k + 1), *d = Q + 2 * (k3 > (int32_t)np - 1 ? np - 1 : (uint32_t)k3);
+                        double w0 = (1 - t) * (1 - t) * (1 - t) / 6, w1 = (3 * t * t * t - 6 * t * t + 4) / 6;
+                        double w2 = (-3 * t * t * t + 3 * t * t + 3 * t + 1) / 6, w3 = t * t * t / 6;
+                        Pb[2 * h] = w0 * a[0] + w1 * b[0] + w2 * c[0] + w3 * d[0];
+                        Pb[2 * h + 1] = w0 * a[1] + w1 * b[1] + w2 * c[1] + w3 * d[1];
+                    }
+                }
                 double ya = P[1], yb = P[3];
                 if (dmax(ya, yb) < y0 || dmin(ya, yb) > y1) continue;
                 double xa = P[0], xb = P[2];
