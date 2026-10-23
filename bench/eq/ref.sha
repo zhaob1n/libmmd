@@ -457,10 +457,10 @@ a163e308f3db855a tests/cases/dir_subgraphs.mmd
 53ea9622d461dc28 tests/cases/dir_subgraphs_isolated.mmd
 4c22cdfc36d2c18f tests/cases/edge_ids.mmd
 9ee58fad9009c249 tests/cases/edges.mmd
-9aeade426974b49a tests/cases/er_full.mmd
-e1cfca9287777872 tests/cases/er_sub_dir.mmd
-752ea07a38fcfa80 tests/cases/er_sub_iso.mmd
-63f0a0797894b39a tests/cases/er_subgraph.mmd
+2cb34dd30ee85f6f tests/cases/er_full.mmd
+2a4621862682edae tests/cases/er_sub_dir.mmd
+5989e0b7d5fdd56c tests/cases/er_sub_iso.mmd
+255c7d1477b6f9f2 tests/cases/er_subgraph.mmd
 e3b0c44298fc1c14 tests/cases/err1.mmd
 9d4e350b9eb52396 tests/cases/eventmodeling_04.mmd
 af7e6f9cbf935c8d tests/cases/eventmodeling_06.mmd
@@ -502,7 +502,7 @@ c30d794f7e2c5580 tests/cases/seq_types.mmd
 047f87ad8e9ce83c tests/cases/shapes.mmd
 c455f991c71798d4 tests/cases/state_full.mmd
 715f5012f0d8902c tests/cases/styles.mmd
-b3dc8aad83bd71dc tests/cases/subgraphs.mmd
+cd68ad5b79474019 tests/cases/subgraphs.mmd
 93a6f7a491b99c4e tests/cases/swimlane_01.mmd
 b93297be0a7e1e7a tests/cases/swimlane_03.mmd
 51e6f702b77bc31c tests/cases/swimlane_06.mmd
@@ -510,7 +510,7 @@ b93297be0a7e1e7a tests/cases/swimlane_03.mmd
 67c0577c4669380e tests/cases/swimlane_edge.mmd
 aa2c1a8b439e5c16 tests/cases/theme_dark.mmd
 0311d0e51d617e21 tests/cases/theme_dark_class.mmd
-08e5b7eb313db370 tests/cases/theme_dark_er.mmd
+04d222da3d1fd60a tests/cases/theme_dark_er.mmd
 04047b5fe41f2155 tests/cases/theme_dark_gantt.mmd
 fbd2f0182f209389 tests/cases/theme_dark_journey.mmd
 f6cf249a32e61eb9 tests/cases/theme_dark_kanban.mmd
@@ -527,7 +527,7 @@ b8cfd072d1516985 tests/cases/theme_forest_gitgraph.mmd
 5df5a23bbe3fc490 tests/cases/theme_forest_state.mmd
 7867504613dc622e tests/cases/theme_forest_treemap.mmd
 35f3a459562c7d42 tests/cases/theme_neutral.mmd
-beefd240fefa50fe tests/cases/theme_neutral_er.mmd
+2fdd2f2dcd95fbf7 tests/cases/theme_neutral_er.mmd
 fa782bafe7d87dcc tests/cases/theme_neutral_req.mmd
 01be922636efbaf8 tests/cases/theme_neutral_seq.mmd
 624afa047ee8f70e tests/cases/theme_neutral_xychart.mmd
