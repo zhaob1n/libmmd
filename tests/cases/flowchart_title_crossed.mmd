@@ -1,0 +1,33 @@
+flowchart RL
+  n0["validate"]
+  n1["alpha"]
+  n2["beta"]
+  n3["ok"]
+  n4{"gamma"}
+  n5{"alpha"}
+  n6{"gamma"}
+  n7["ok"]
+  n8["validate"]
+  n9["x"]
+  n10["alpha"]
+  n11{"user"}
+  n6 -.->|validate| n5
+  n5 -.->|delta| n9
+  n6 --> n9
+  n2 -.->|cache miss| n5
+  n6 --> n0
+  n7 -.->|validate| n10
+  n11 -.->|cache miss| n5
+  n3 -->|load config| n7
+  n5 --- n9
+  n10 -.-> n5
+  n1 -.-> n4
+  n8 ==>|delta| n10
+  n0 ==> n9
+  n1 ---|load config| n10
+  n10 --> n3
+  n5 --- n7
+  subgraph S1 [group one]
+    n0
+    n1
+  end

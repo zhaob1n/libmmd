@@ -2787,13 +2787,14 @@ static void labels_on_curve(Graph *g) {
             }
         }
         if (!ni) continue;
+        double fb = mid, fbo = INFINITY; /* no clear spot: the least-crossed one */
         for (size_t c = 0; c < nc; c++) {
-            double x = dmin(dmax(cand[c], lo), hi);
-            bool free_ = true;
-            for (size_t i = 0; i < ni && free_; i++) if (x + half > iv[2 * i] && x - half < iv[2 * i + 1]) free_ = false;
-            if (free_ && fabs(x - mid) < bestd) { bestd = fabs(x - mid); best = x; }
+            double x = dmin(dmax(cand[c], lo), hi), ov = 0;
+            for (size_t i = 0; i < ni; i++) ov += dmax(0, dmin(x + half, iv[2 * i + 1]) - dmax(x - half, iv[2 * i]));
+            if (ov <= 0 && fabs(x - mid) < bestd) { bestd = fabs(x - mid); best = x; }
+            if (ov + fabs(x - mid) * 0.01 < fbo) fbo = ov + fabs(x - mid) * 0.01, fb = x;
         }
-        g->stx[s] = best;
+        g->stx[s] = bestd < INFINITY ? best : fb;
     }
     return true;
 }
