@@ -200,18 +200,33 @@ DIAG_FN(quadrant_render) {
     for (size_t i = 0; i < pts.n; i++) {
         const QPt *p = &pts.v[i];
         double cx = ox + p->x * SW, cy = oy + (1 - p->y) * SH, r = p->st.r + p->st.sw / 2, w = text_width(p->name, 12);
-        const double DX[4] = {0, 0, r + 4 + w / 2, -(r + 4 + w / 2)}, DY[4] = {r + 10, -(r + 10), 0, 0};
+        /* rings 0..2 of below/above/right/left/diagonals; farther rings get a leader line */
+        double DX[24], DY[24];
+        for (int k = 0; k < 3; k++) {
+            double dy = r + 10 + 18 * k, dx = r + 4 + w / 2 + 12 * k, ex = w / 2 + r;
+            const double X[8] = {0, 0, dx, -dx, ex, -ex, ex, -ex}, Y[8] = {dy, -dy, 0, 0, dy, dy, -dy, -dy};
+            for (int c = 0; c < 8; c++) DX[8 * k + c] = X[c], DY[8 * k + c] = Y[c];
+        }
         double best = HUGE_VAL, bx = cx, by = cy + r + 10;
-        for (int c = 0; c < 4; c++) {
+        int bk = 0;
+        for (int c = 0; c < 24; c++) {
+            if (c >= 4 && c < 8 && best == 0) break; /* unchanged first choice when the plain spots are free */
             double lx = cx + DX[c], ly = cy + DY[c], x0 = lx - w / 2 - 2, x1 = lx + w / 2 + 2, y0 = ly - 8, y1 = ly + 8;
-            double sc = c * 2.0;
-            if (x0 < 0 || x1 > ox + SW + 30) sc += 1e4;
+            double sc = (c % 8) * 2.0 + (c / 8) * 40.0 + (c % 8 >= 4 ? 10 : 0);
+            if (c < 4) sc = c * 2.0;
+            if (x0 < 0 || x1 > ox + SW + 30 || y0 < oy - 30 || y1 > oy + SH + 40) sc += 1e4;
             for (size_t k = 0; k < no; k++) {
                 const double *o = ob + 4 * k;
                 double ix = fmin(x1, o[2]) - fmax(x0, o[0]), iy = fmin(y1, o[3]) - fmax(y0, o[1]);
-                if (ix > 0 && iy > 0) sc += ix * iy;
+                if (ix > 0 && iy > 0) sc += ix * iy * 4;
             }
-            if (sc < best) best = sc, bx = lx, by = ly;
+            if (sc < best) best = sc, bx = lx, by = ly, bk = c / 8;
+        }
+        if (bk) { /* leader from the point's rim toward the label */
+            double vx = bx - cx, vy = by - cy, l = hypot(vx, vy);
+            buf_lit(out, "<path class=\"leader\" stroke=\"#888\" stroke-width=\"1\" d=\"M");
+            dg_pt(out, cx + vx / l * (r + 1), cy + vy / l * (r + 1)); buf_ch(out, 'L');
+            dg_pt(out, bx - vx / l * fmin(8, l / 3), by - vy / l * fmin(8, l / 3)); buf_lit(out, "\"/>");
         }
         dg_text(out, p->name, 12, bx, by, "middle", "pl");
         double *o = ob + 4 * no++;
