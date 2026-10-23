@@ -487,6 +487,7 @@ DIAG_FN(zenuml_render) {
             if (E[k].k != E_MSG) continue;
             int32_t f = E[k].from, t = E[k].to;
             double need = fmax(text_width(E[k].label, 13), cm_width(E[k].comment)) + 34;
+            if (E[k].mk == M_CREATE && f != t) need += P[t].w / 2; /* arrow stops at the new box's edge */
             double lo = fmin(P[f].x, P[t].x), hi = fmax(P[f].x, P[t].x);
             int32_t hiidx = P[f].x > P[t].x ? f : t;
             if (f == t) {
@@ -584,11 +585,14 @@ DIAG_FN(zenuml_render) {
     /* ---- draw ---- */
     Buf *o = out;
     if (!buf_reserve(o, 4096 + ne * 400 + np * 400)) return CMM_ERR_NOMEM;
-    BBox bb = {FX0, 0, FX1, bottom};
+    double FY0 = title.n ? 0 : TB; /* no empty title bar without a title */
+    BBox bb = {FX0, FY0, FX1, bottom};
     DG_HEAD(o, bb, 1, "zenuml", CSS);
-    dg_rect(o, FX0, 0, FX1 - FX0, bottom, 0, "zx");
-    if (title.n) dg_text(o, title, 13, FX0 + 6, TB / 2, "start", "zti");
-    dg_line(o, FX0, TB, FX1, TB, "zx");
+    dg_rect(o, FX0, FY0, FX1 - FX0, bottom - FY0, 0, "zx");
+    if (title.n) {
+        dg_text(o, title, 13, FX0 + 6, TB / 2, "start", "zti");
+        dg_line(o, FX0, TB, FX1, TB, "zx");
+    }
     for (size_t k = 0; k < ne; k++) { /* fragments behind everything */
         Ev *e = &E[k];
         if (e->k == E_FRAG) {
