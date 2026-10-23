@@ -418,6 +418,14 @@ DIAG_FN(block_render) {
         double S = 0; /* deviate from mermaid: room for a label on an edge between neighbouring blocks in a row */
         for (size_t e = 0; e < ev.n; e++) {
             uint32_t L = ev.v[e].a, R = ev.v[e].b;
+            if (L == R && L < nb && B[L].parent == i) { /* self loop + label live in the gap right of the block */
+                uint32_t k = cc[L] + (B[L].span < cols ? B[L].span : cols) - 1;
+                double need = 30 + (ev.v[e].label.n ? text_width(ev.v[e].label, fs * 0.875) + 8 : 0) - GAP;
+                if (k >= cols || need <= 0) continue;
+                if (!gx[i] && !(gx[i] = ANEW(a, double, cols))) return CMM_ERR_NOMEM;
+                gx[i][k] = fmax(gx[i][k], need);
+                continue;
+            }
             if (!ev.v[e].label.n || L >= nb || R >= nb || B[L].parent != i || B[R].parent != i || rc[L] != rc[R]) continue;
             if (cc[L] > cc[R]) { uint32_t t = L; L = R; R = t; }
             uint32_t sL = B[L].span < cols ? B[L].span : cols;
@@ -555,6 +563,19 @@ DIAG_FN(block_render) {
     for (size_t e = 0; e < ev.n; e++) {
         const Blk *s = &B[ev.v[e].a], *t = &B[ev.v[e].b];
         double x0, y0, x1, y1;
+        if (s == t) { /* self edge: a loop on the right side, label right of it (room reserved in gx) */
+            double X = s->x + s->w, Y = s->y + s->h / 2, q = fmin(10, s->h / 4);
+            buf_lit(out, "<path class=\"be\" fill=\"none\" d=\"M"); dg_pt(out, X, Y - q); buf_ch(out, 'C'); dg_pt(out, X + 28, Y - q - 14);
+            buf_ch(out, ' '); dg_pt(out, X + 28, Y + q + 14); buf_ch(out, ' '); dg_pt(out, X, Y + q); buf_ch(out, '"');
+            if (ev.v[e].arrow) buf_lit(out, " marker-end=\"url(#blk-ae)\"");
+            buf_lit(out, "/>");
+            if (ev.v[e].label.n) {
+                double tw = text_width(ev.v[e].label, fs * 0.875);
+                dg_rect(out, X + 26, Y - fs * 0.6, tw + 4, fs * 1.2, 0, "bl");
+                dg_text(out, ev.v[e].label, fs * 0.875, X + 28 + tw / 2, Y, "middle", "bt\" font-size=\"14");
+            }
+            continue;
+        }
         clip(s, t->x + t->w / 2, t->y + t->h / 2, &x0, &y0);
         clip(t, s->x + s->w / 2, s->y + s->h / 2, &x1, &y1);
         buf_lit(out, "<path class=\"be\" d=\"M"); dg_pt(out, x0, y0); buf_ch(out, 'L'); dg_pt(out, x1, y1); buf_ch(out, '"');
