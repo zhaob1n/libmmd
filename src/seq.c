@@ -515,8 +515,8 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
         case EV_MSG: {
             unsigned ln = nlines(ev->text);
             /* boundMessage: pos += boxMargin + lineH; line at pos + textH (lineH 17px, 18 with descenders) */
-            double H = 17 + (memchr(ev->text.p, 'y', ev->text.n) || memchr(ev->text.p, 'g', ev->text.n) || memchr(ev->text.p, 'p', ev->text.n) ||
-                             memchr(ev->text.p, 'q', ev->text.n) || memchr(ev->text.p, 'j', ev->text.n) || memchr(ev->text.p, ',', ev->text.n));
+            double H = 17 + (ev->text.n && (memchr(ev->text.p, 'y', ev->text.n) || memchr(ev->text.p, 'g', ev->text.n) || memchr(ev->text.p, 'p', ev->text.n) ||
+                             memchr(ev->text.p, 'q', ev->text.n) || memchr(ev->text.p, 'j', ev->text.n) || memchr(ev->text.p, ',', ev->text.n)));
             double ly = y + (ln + 1) * H, ty = ly - 2 - H - (ln - 1) * lh;
             double x1 = pa[ev->a].x, x2 = pa[ev->b].x;
             for (size_t q = 0; q < nblk; q++) {
