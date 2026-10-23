@@ -2467,7 +2467,7 @@ static int side_path(Router *R, double sx, double sy, double tx, double ty, int3
 }
 
 
-/* does the rendered basis spline of polyline P enter a node other than a/b? (9 samples per span;
+/* does the rendered basis spline of polyline P enter a node other than a/b? (17 samples per span;
  * each sample looks up only the grid cell it falls in: a node containing it covers that cell) */
 typedef struct SBox { double x, y, hw, hh; int32_t v; } SBox; /* a node's shrunk half-box */
 static int cmp_sbox_y(const void *p, const void *q) {
@@ -2536,7 +2536,7 @@ static bool spline_hits(const SBox *SX, const SBox *SY /* nullable */, size_t n,
             ns += (B->x + B->hw >= sx0) & (B->x - B->hw <= sx1) & (B->y + B->hh >= sy0) & (B->y - B->hh <= sy1);
         }
         if (!ns) continue;
-        for (unsigned t8 = 0; t8 <= 8; t8++) {
+        for (unsigned t8 = 0; t8 <= 16; t8++) {
             const double *w = BW[t8];
             double x = w[0] * q[0] + w[1] * q[2] + w[2] * q[4] + w[3] * q[6], y = w[0] * q[1] + w[1] * q[3] + w[2] * q[5] + w[3] * q[7];
             bool hit = false;
@@ -2570,9 +2570,9 @@ static bool spline_hits(const SBox *SX, const SBox *SY /* nullable */, size_t n,
     S[nS] = (SBox){0, 0, 0, 0, -1}; /* slot nS: layout width / height, largest half-width / height */
     for (size_t i = 0; i < nS; i++) S[nS].hw = dmax(S[nS].hw, S[i].hw), S[nS].hh = dmax(S[nS].hh, S[i].hh);
     if (SY) S[nS].x = S[nS - 1].x - S[0].x + 1, S[nS].y = SY[nS - 1].y - SY[0].y + 1;
-    double BW[9][4]; /* uniform cubic B-spline weights at t = k/8 */
-    for (unsigned t8 = 0; t8 <= 8; t8++) {
-        double t = t8 / 8.0, it = 1 - t;
+    double BW[17][4]; /* uniform cubic B-spline weights at t = k/16 */
+    for (unsigned t8 = 0; t8 <= 16; t8++) {
+        double t = t8 / 16.0, it = 1 - t;
         BW[t8][0] = it * it * it / 6, BW[t8][1] = (3 * t * t * t - 6 * t * t + 4) / 6;
         BW[t8][2] = (-3 * t * t * t + 3 * t * t + 3 * t + 1) / 6, BW[t8][3] = t * t * t / 6;
     }
