@@ -2922,10 +2922,14 @@ static cmm_status loops_collapse(Graph *g, const LoopSave *sv) {
         if (fabs(dx) > fabs(dy)) side = dx > 0 ? 3 : 2;
         else if (fabs(dy) > 0) side = dy > 0 ? 1 : 0;
         else side = g->dir == DIR_BT ? 1 : g->dir == DIR_LR ? 3 : g->dir == DIR_RL ? 2 : 0;
-        (void)horiz;
+        /* a loop on the rank-axis side runs into the node's in/out edges and their labels: move it to the
+         * cross-axis side nearest the helpers */
+        if (!horiz && side < 2) side = dx >= 0 ? 3 : 2;
+        else if (horiz && side >= 2) side = dy >= 0 ? 1 : 0;
         double labw = g->elw[k + 1], labh = g->elh[k + 1];
         double maxspan = fmax(36, fmin(100, g->nw[a] * 0.8));
         double span = fmin(fmax(fmax(labw, g->nw[a] * 0.35), 36), maxspan);
+        if (side >= 2) span = fmax(fmin(span, g->nh[a] - 16), fmin(g->nh[a] * 0.6, 20)); /* stay on the node's side */
         double depth = fmin(fmax(fmin(g->nw[a], g->nh[a]) * 0.45, 24), 48);
         double P[8];
         switch (side) {
