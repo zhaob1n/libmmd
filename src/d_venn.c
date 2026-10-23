@@ -318,10 +318,12 @@ DIAG_FN(venn_render) {
         for (size_t i = 0; i < ar.n; i++) {
             if (!ar.v[i].label.n || LD[i] <= -1e299) continue;
             double avail = pass ? LW[i] : fmax(2 * LD[i] * 1.9, 60 * sc);
+            size_t hj = 0;
             if (pass) {
                 bool hit = false;
                 for (size_t j = 0; j < ar.n && !hit; j++) {
                     if (j == i || !ar.v[j].label.n || LD[j] <= -1e299 || LW[j] > LW[i]) continue;
+                    hj = j;
                     hit = fabs(LX[i] - LX[j]) < (LW[i] + LW[j]) / 2 && fabs(LY[i] - LY[j]) < 0.6 * (LN[i] * LF[i] + LN[j] * LF[j]);
                 }
                 if (!hit || LN[i] > 3) continue;
@@ -337,6 +339,16 @@ DIAG_FN(venn_render) {
             double mw = 0;
             for (size_t k = 0; k <= lb.n; nl++) mw = fmax(mw, text_width(nl_next(lb, &k), fz));
             if (mw > avail && !pass) fz *= fmax(avail / mw, 0.5), mw *= fmax(avail / mw, 0.5);
+            if (pass && nl == LN[i] && mw >= LW[i] - 0.5) { /* an unbreakable word still collides: slide it away inside its region, else shrink it */
+                double gap = (mw + LW[hj]) / 2 + 4 - fabs(LX[i] - LX[hj]), dir = LX[i] >= LX[hj] ? 1 : -1;
+                double gy = 0.6 * (LN[i] * LF[i] + LN[hj] * LF[hj]) + 2 - fabs(LY[i] - LY[hj]), dy = LY[i] >= LY[hj] ? 1 : -1;
+                bool same = fabs(LX[i] - LX[hj]) < 1 && fabs(LY[i] - LY[hj]) < 1; /* degenerate (empty set): leave it */
+                if (same) fz = LF[i], mw = LW[i];
+                else if (gap > 0 && depth(ns, X, Y, R, ar.v[i].mask, LX[i] + dir * gap, LY[i]) > 0) LX[i] += dir * gap, fz = LF[i], mw = LW[i];
+                else if (gy > 0 && depth(ns, X, Y, R, ar.v[i].mask, LX[i], LY[i] + dy * gy) > 0) LY[i] += dy * gy, fz = LF[i], mw = LW[i];
+                else if (LF[i] > 24 * sc) fz = LF[i] * 0.85, mw = LW[i] * 0.85;
+                else fz = LF[i], mw = LW[i];
+            }
             LB[i] = lb, LF[i] = fz, LN[i] = nl, LW[i] = mw;
         }
         if (pass && !again) break;
