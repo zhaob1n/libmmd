@@ -199,7 +199,9 @@ More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 
 ## License
 
-No license has been chosen yet.
+MIT. See [LICENSE](LICENSE).
+
+Embedded icon data comes from Font Awesome Free (CC BY 4.0) and simple-icons (CC0 1.0). See [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
 
 ---
 
@@ -212,3 +214,5 @@ cmermaid 是一个用 C 语言（gnu2y）编写的高速 Mermaid 渲染器，可
 - 流程图采用与 mermaid（dagre）一致的布局算法。
 
 构建只需 `make`，用法为 `build/mmdc-c in.mmd -o out.svg`。效果对比见上方 Gallery。
+
+许可证：MIT（见 [LICENSE](LICENSE)）。内嵌图标数据来自 Font Awesome Free（CC BY 4.0）和 simple-icons（CC0 1.0），详见 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES)。
