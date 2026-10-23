@@ -754,6 +754,8 @@ DIAG_FN(block_render) {
                 bb.x0 = fmin(bb.x0, mx - tw / 2 - 2), bb.x1 = fmax(bb.x1, mx + tw / 2 + 2);
                 bb.y0 = fmin(bb.y0, my - fs * 0.6), bb.y1 = fmax(bb.y1, my + fs * 0.6);
             }
+            bb.x0 = fmin(bb.x0, mx - tw / 2 - 6), bb.x1 = fmax(bb.x1, mx + tw / 2 + 6); /* every placement path; slack for font width drift */
+            bb.y0 = fmin(bb.y0, my - fs * 0.6), bb.y1 = fmax(bb.y1, my + fs * 0.6);
             double *lq = LBX + 4 * nlb++;
             lq[0] = mx - tw / 2 - 2, lq[1] = my - fs * 0.6, lq[2] = mx + tw / 2 + 2, lq[3] = my + fs * 0.6;
             dg_rect(eb, mx - tw / 2 - 2, my - fs * 0.6, tw + 4, fs * 1.2, 0, "bl");

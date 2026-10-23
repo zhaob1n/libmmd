@@ -1,0 +1,24 @@
+block-beta
+  columns 2
+  b0["ok"]
+  b1["gamma"]:2
+  b2["db"]:1
+  b3["long label with words"]
+  b4["retry later"]
+  b5["alpha"]:1
+  b6["cache miss"]:2
+  b7["gamma"]
+  b8["db"]
+  b9["cache miss"]:2
+  b10["beta"]
+  b11["parse input"]
+  b12["gamma"]
+  b13["retry later"]:1
+  b14["alpha"]
+  b10 --> b8
+  b5 -- "delta" --> b6
+  b10 -- "delta" --> b8
+  b2 -- "long label with words" --> b13
+  b13 --> b1
+  b8 -- "alpha" --> b5
+  b14 -- "db" --> b13
