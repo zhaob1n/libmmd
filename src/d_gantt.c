@@ -548,7 +548,9 @@ DIAG_FN(gantt_render) {
             buf_lit(out, "<path class=\""); buf_put(out, strlen(cls), cls); buf_lit(out, "\" d=\"M");
             dg_pt(out, x0, cy - s); buf_ch(out, 'L'); dg_pt(out, x0 + s, cy); buf_ch(out, 'L'); dg_pt(out, x0, cy + s);
             buf_ch(out, 'L'); dg_pt(out, x0 - s, cy); buf_lit(out, "Z\"/>");
-            dg_text(out, t->name, 11, x0 + s + 5, cy, "start", "tout");
+            /* label past the right edge would be clipped: put it left of the diamond */
+            if (x0 + s + 5 + text_width(t->name, 11) <= W) dg_text(out, t->name, 11, x0 + s + 5, cy, "start", "tout");
+            else dg_text(out, t->name, 11, x0 - s - 5, cy, "end", "tout");
             continue;
         }
         dg_rect(out, x0, y, x1 - x0, BH, 3, cls);

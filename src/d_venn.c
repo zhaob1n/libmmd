@@ -303,7 +303,8 @@ DIAG_FN(venn_render) {
     BBox bb = {0, 0, W, H};
     if (title.n) {
         buf_lit(&b, "<text class=\"vt\" font-size=\"32px\" text-anchor=\"middle\" dominant-baseline=\"middle\" x=\"");
-        buf_num(&b, W / 2); buf_lit(&b, "\" y=\""); buf_num(&b, 32 * sc); buf_lit(&b, "\">"); buf_xml(&b, title); buf_lit(&b, "</text>");
+        buf_num(&b, W / 2); buf_lit(&b, "\" y=\""); buf_num(&b, fmax(32 * sc, 20)); /* 32px glyphs: keep the cap height inside the viewBox */
+        buf_lit(&b, "\">"); buf_xml(&b, title); buf_lit(&b, "</text>");
     }
     const VStyle none = {};
     for (size_t pass = 0; pass < 2; pass++)
