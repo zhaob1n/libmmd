@@ -2,6 +2,7 @@
  * all crow's-foot cardinalities (symbolic and word forms), identifying (--) and
  * non-identifying (..) relationships, labels, direction. Layout: flow_layout. */
 #include "dcfg.h"
+#include "rich.h"
 #include <math.h>
 
 #include "dgraph.h"
@@ -46,18 +47,14 @@ typedef struct EP {
     if (quoted) ref.p++, ref.n -= 2;
     if (!ref.n) return NONE - 1;
     if (quoted && !label.n && (memchr(ref.p, '*', ref.n) || memchr(ref.p, '_', ref.n))) {
-        /* mermaid renders quoted names as markdown: drop ** and word-boundary _ markers */
-        char *md = arena_alloc(p->A, ref.n + 1, 1);
-        if (!md) return NONE;
-        size_t n = 0;
-        for (size_t i = 0; i < ref.n; i++) {
-            char c = ref.p[i];
-            if (c == '*' && i + 1 < ref.n && ref.p[i + 1] == '*') { i++; continue; }
-            bool lb = !i || ref.p[i - 1] == ' ', rb = i + 1 == ref.n || ref.p[i + 1] == ' ';
-            if (c == '_' && (lb || rb)) continue;
-            md[n++] = c;
-        }
-        label = (Str){.p = md, .n = n};
+        /* mermaid renders quoted names as markdown: keep emphasis as rich toggles */
+        char *q = arena_alloc(p->A, ref.n + 4, 1);
+        if (!q) return NONE;
+        q[0] = '"', q[1] = '`', memcpy(q + 2, ref.p, ref.n), q[ref.n + 2] = '`', q[ref.n + 3] = '"';
+        bool ok = true;
+        label = rich_normalize(p->A, (Str){.p = q, .n = ref.n + 4}, &ok);
+        if (!ok) return NONE;
+        if (label.n && label.p[0] == RICH_MD) label.p++, label.n--;
     }
     bool fresh;
     int32_t v = dg_node(&p->g, ref, &fresh);
@@ -272,7 +269,7 @@ static constexpr char CSS[] =
     "#mermaid .row1{fill:#f6f6ff;stroke:#9370DB;stroke-width:0.5px;}"
     "#mermaid .rel{fill:none;stroke:#333;stroke-width:1px;}#mermaid .rel.dash{stroke-dasharray:8,8;}"
     "#mermaid .mk{fill:none;stroke:#333;stroke-width:1px;}#mermaid .mkc{fill:#fff;stroke:#333;stroke-width:1px;}"
-    "#mermaid .lbl{fill:#fff;opacity:0.85;}#mermaid .name{font-weight:bold;}#mermaid .attr{font-size:14px;}";
+    "#mermaid .lbl{fill:#fff;opacity:0.85;}";
 
 
 /* crow's foot at P (entity boundary) pointing outward along unit (ux,uy) */
@@ -323,7 +320,9 @@ DIAG_FN(er_render) {
     double minw = dcfg_num("er.minEntityWidth", 100);
     for (size_t v = 0; v < N; v++) {
         EInfo *e = &p.ei.v[v];
-        double nmw = text_width(g->nlabel[v], fs);
+        double nmw;
+        unsigned nl_;
+        rich_measure(g->nlabel[v], fs, &nmw, &nl_);
         if (!e->an) {
             double w = nmw + 2 * epad;
             e->cw[0] = w < minw ? minw : w;

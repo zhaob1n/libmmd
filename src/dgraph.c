@@ -1,4 +1,5 @@
 #include "dgraph.h"
+#include "rich.h"
 #include "dcfg.h"
 
 #include <math.h>
@@ -208,7 +209,8 @@ void dg_text_lh(Buf *b, Str s, double lh, double x, double cy, const char *ancho
         buf_lit(b, " x=\""); buf_num(b, x); buf_lit(b, "\" y=\""); buf_num(b, y);
         buf_lit(b, "\" text-anchor=\""); buf_put(b, strlen(anchor), anchor);
         buf_lit(b, "\" dominant-baseline=\"central\">");
-        buf_xml(b, ln);
+        if (rich_needed(ln)) { bool bo = false, it = false; rich_emit_line(b, ln, &bo, &it); }
+        else buf_xml(b, ln);
         buf_lit(b, "</text>");
         y += lh;
     }
