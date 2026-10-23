@@ -465,14 +465,15 @@ static void card_label(Buf *b, const Graph *g, const double *P, uint32_t np, boo
     if (L < 1e-9) return;
     dx /= L, dy /= L;
     double hw = (double)t.n * fs * 0.3 + 2, hh = fs * 0.6, x = 0, y = 0, best = HUGE_VAL;
-    static const double C[][2] = {{22, 12}, {22, -12}, {14, 12}, {14, -12}, {30, 12}, {30, -12}, {40, 12}, {40, -12}, {52, 12}, {52, -12}};
+    static const double C[][2] = {{22, 12}, {22, -12}, {14, 12}, {14, -12}, {30, 12}, {30, -12}, {40, 12}, {40, -12}, {52, 12}, {52, -12},
+        {22, 28}, {22, -28}, {40, 28}, {40, -28}, {64, 12}, {64, -12}, {14, 40}, {14, -40}, {52, 28}, {52, -28}}; /* later: wider fans */
     for (unsigned c = 0; c < sizeof C / sizeof *C; c++) {
-        double cx = P0[0] + dx * C[c][0] - dy * C[c][1], cy = P0[1] + dy * C[c][0] + dx * C[c][1], sc = c * 0.5;
+        double cx = P0[0] + dx * C[c][0] - dy * C[c][1], cy = P0[1] + dy * C[c][0] + dx * C[c][1], sc = c < 10 ? c * 0.5 : 8 + c;
         for (size_t q = 0; q < g->ne; q++)
             if (g->elabel[q].n) sc += 4 * ov_area(cx, cy, hw, hh, g->elx[q], g->ely[q], g->elw[q] / 2, g->elh[q] / 2);
         for (size_t v = 0; v < g->nn; v++) sc += 4 * ov_area(cx, cy, hw, hh, g->nx[v], g->ny[v], g->nw[v] / 2, g->nh[v] / 2);
         if (cx - hw < bb->x0 - 6 || cx + hw > bb->x1 + 6 || cy - hh < bb->y0 - 6 || cy + hh > bb->y1 + 6) sc += 1e4; /* clipped */
-        for (size_t q = 0; q < *npl; q++) sc += 4 * ov_area(cx, cy, hw, hh, pl[4 * q], pl[4 * q + 1], pl[4 * q + 2], pl[4 * q + 3]);
+        for (size_t q = 0; q < *npl; q++) sc += 8 * ov_area(cx, cy, hw, hh, pl[4 * q], pl[4 * q + 1], pl[4 * q + 2], pl[4 * q + 3]);
         if (sc < best) best = sc, x = cx, y = cy;
     }
     double *o = pl + 4 * (*npl)++;

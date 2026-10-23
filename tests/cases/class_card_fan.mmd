@@ -1,0 +1,75 @@
+classDiagram
+  class C0 {
+    +ok int
+    +m0() void
+  }
+  class C1 {
+    +retry_later int
+    +m1() void
+  }
+  class C2 {
+    +delta int
+    +m2() void
+  }
+  class C3 {
+    +gamma int
+    +m3() void
+  }
+  class C4 {
+    +user int
+    +m4() void
+  }
+  class C5 {
+    +alpha int
+    +m5() void
+  }
+  class C6 {
+    +alpha int
+    +m6() void
+  }
+  class C7 {
+    +alpha int
+    +m7() void
+  }
+  class C8 {
+    +send_mail int
+    +m8() void
+  }
+  class C9 {
+    +alpha int
+    +m9() void
+  }
+  class C10 {
+    +validate int
+    +m10() void
+  }
+  class C11 {
+    +gamma int
+    +m11() void
+  }
+  class C12 {
+    +delta int
+    +m12() void
+  }
+  class C13 {
+    +gamma int
+    +m13() void
+  }
+  C0 "1" <|-- "1" C2 : validate
+  C3 "many" ..> "*" C13 : x
+  C2 "many" o-- "1" C4 : long label with words
+  C0 "many" --> "1" C6 : cache miss
+  C6 "many" --> "1" C11 : long label with words
+  C7 "1" *-- "1" C4 : delta
+  C10 "1" <|-- "*" C11 : user
+  C11 "0..*" <|-- "*" C10 : send mail
+  C10 "0..*" ..> "*" C4 : long label with words
+  C3 "1" ..> "1" C2 : load config
+  C3 "many" *-- "1" C11 : user
+  C5 "1" --> "*" C9 : delta
+  C6 "many" ..> "*" C7 : cache miss
+  C8 "many" <|-- "1" C6 : ok
+  C3 "many" o-- "1" C6 : x
+  C9 "1" ..> "1" C2 : alpha
+  C0 "1" <|-- "1" C5 : gamma
+  C11 "1" <|-- "1" C2 : ok
