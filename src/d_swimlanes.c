@@ -12,6 +12,39 @@
 
 constexpr double SW_TITLE = 32; /* drawn title rect (layout band is 36) */
 
+/* cost of an orthogonal route Q (n points, (main, cross) space): segments through other nodes or running along
+ * an already routed edge segment */
+static bool boxy(const Graph *g, int32_t v) {
+    Shape s = g->nshape ? g->nshape[v] : SH_RECT;
+    return s == SH_RECT || s == SH_ROUND || s == SH_SUBROUTINE;
+}
+
+static double route_cost(const Graph *g, bool horiz, int32_t f, int32_t t, size_t ecur, uint32_t n, const double Q[static 2 * n]) {
+    double c = 0;
+    for (uint32_t k = 0; k + 1 < n; k++) {
+        double u0 = fmin(Q[2 * k], Q[2 * k + 2]), u1 = fmax(Q[2 * k], Q[2 * k + 2]);
+        double w0 = fmin(Q[2 * k + 1], Q[2 * k + 3]), w1 = fmax(Q[2 * k + 1], Q[2 * k + 3]);
+        for (size_t v = 0; v < g->nn; v++) {
+            if ((int32_t)v == f || (int32_t)v == t || g->nw[v] <= 0) continue;
+            double nu = horiz ? g->nx[v] : g->ny[v], nw = horiz ? g->ny[v] : g->nx[v];
+            double hm = (horiz ? g->nw[v] : g->nh[v]) / 2 + 2, hc = (horiz ? g->nh[v] : g->nw[v]) / 2 + 2;
+            if (u1 > nu - hm && u0 < nu + hm && w1 > nw - hc && w0 < nw + hc) c += 100;
+        }
+        for (size_t e = 0; e < g->ne; e++) {
+            if (e == ecur || !g->eptn[e]) continue;
+            const double *R = g->pts.v + g->eptoff[e];
+            for (uint32_t j = 0; j + 1 < g->eptn[e]; j++) {
+                double ru0 = horiz ? R[2 * j] : R[2 * j + 1], rw0 = horiz ? R[2 * j + 1] : R[2 * j];
+                double ru1 = horiz ? R[2 * j + 2] : R[2 * j + 3], rw1 = horiz ? R[2 * j + 3] : R[2 * j + 2];
+                bool hz = fabs(rw0 - rw1) < 0.5, mine_hz = w1 - w0 < 0.5;
+                if (hz && mine_hz && fabs(rw0 - w0) < 3 && fmax(ru0, ru1) > u0 + 1 && fmin(ru0, ru1) < u1 - 1) c += 50;
+                if (!hz && !mine_hz && fabs(ru0 - u0) < 3 && fmax(rw0, rw1) > w0 + 1 && fmin(rw0, rw1) < w1 - 1) c += 50;
+            }
+        }
+    }
+    return c;
+}
+
 static int32_t top_lane(const Graph *g, int32_t s) {
     while (s != NONE && g->sparent[s] != NONE) s = g->sparent[s];
     return s;
@@ -261,36 +294,74 @@ cmm_status swim_layout(Graph *g, Str **keep) {
     }
     /* orthogonal edges, in (main, cross) space then mapped */
     g->curve = CURVE_LINEAR;
+    /* each edge owns a fixed 5-point slot so later rounds can re-route it against all the others */
     for (size_t e = 0; e < g->ne; e++) {
+        g->eptn[e] = 0, g->eptoff[e] = (uint32_t)g->pts.n;
+        for (int k = 0; k < 10; k++) if (!VEC_PUSH(a, &g->pts, 0.0)) return CMM_ERR_NOMEM;
+    }
+    for (size_t pe = 0; pe < 4 * g->ne; pe++) { /* round 0: straight, 1: L, 2-3: refine all */
+        size_t e = pe % g->ne, round = pe / g->ne;
         int32_t f = g->efrom[e], t = g->eto[e];
         if (f == t || f < 0 || t < 0 || (size_t)f >= nn || (size_t)t >= nn) continue;
         double fu = horiz ? g->nx[f] : g->ny[f], fw = horiz ? g->ny[f] : g->nx[f];
         double tu = horiz ? g->nx[t] : g->ny[t], tw = horiz ? g->ny[t] : g->nx[t];
         double fm = (horiz ? g->nw[f] : g->nh[f]) / 2, fc = (horiz ? g->nh[f] : g->nw[f]) / 2;
         double tm = (horiz ? g->nw[t] : g->nh[t]) / 2, tc = (horiz ? g->nh[t] : g->nw[t]) / 2;
-        double P[8];
-        uint32_t np;
-        if (fabs(fw - tw) < 0.5) {
-            double sg = tu >= fu ? 1 : -1;
-            P[0] = fu + sg * fm, P[1] = fw, P[2] = tu - sg * tm, P[3] = tw, np = 2;
-        } else if (fabs(fu - tu) < 0.5) {
-            double sg = tw >= fw ? 1 : -1;
-            P[0] = fu, P[1] = fw + sg * fc, P[2] = tu, P[3] = tw - sg * tc, np = 2;
-        } else {
-            double sg = tu >= fu ? 1 : -1, sw = tw >= fw ? 1 : -1;
-            P[0] = fu + sg * fm, P[1] = fw, P[2] = tu, P[3] = fw, P[4] = tu, P[5] = tw - sw * tc, np = 3;
-        }
-        g->eptoff[e] = (uint32_t)g->pts.n, g->eptn[e] = np;
-        for (uint32_t k = 0; k < np; k++) {
-            double px = horiz ? P[2 * k] : P[2 * k + 1], py = horiz ? P[2 * k + 1] : P[2 * k];
-            if (!VEC_PUSH(a, &g->pts, px) || !VEC_PUSH(a, &g->pts, py)) return CMM_ERR_NOMEM;
-        }
+        bool straight = fabs(fw - tw) < 0.5 || fabs(fu - tu) < 0.5;
+        if ((round == 0 && !straight) || (round == 1 && straight)) continue;
+        double best[10], bc = INFINITY;
+        uint32_t bn = 0;
+        double C[10];
+        /* offsets of the attachment legs, so parallel routes don't share a line */
+        static constexpr double OFF[] = {0, 10, -10, 20, -20};
+        for (size_t oi = 0; oi < countof(OFF); oi++)
+            for (size_t oj = 0; oj < countof(OFF); oj++) {
+                bool detour = fabs(fw - tw) < 0.5;
+                if ((oi && !detour && !boxy(g, f)) || (oj && !boxy(g, t))) continue; /* offset ends only on flat sides */
+                double o1 = OFF[oi], o2 = OFF[oj], pen = (fabs(o1) + fabs(o2)) / 2;
+                if (fabs(fw - tw) < 0.5) { /* same lane line: straight, or a detour beside the nodes */
+                    double sg = tu >= fu ? 1 : -1;
+                    if (oi == 0 && oj == 0) {
+                        C[0] = fu + sg * fm, C[1] = fw, C[2] = tu - sg * tm, C[3] = tw;
+                        double c = route_cost(g, horiz, f, t, e, 2, C);
+                        if (c < bc) bc = c, bn = 2, memcpy(best, C, sizeof C);
+                    }
+                    if (oj) continue;
+                    for (int side = -1; side <= 1; side += 2) {
+                        double wd = fw + side * (fmax(fc, tc) + 20 + fabs(o1));
+                        C[0] = fu, C[1] = fw + side * fc, C[2] = fu, C[3] = wd, C[4] = tu, C[5] = wd, C[6] = tu, C[7] = tw + side * tc;
+                        double c = route_cost(g, horiz, f, t, e, 4, C) + 30 + pen;
+                        if (c < bc) bc = c, bn = 4, memcpy(best, C, sizeof C);
+                    }
+                } else if (fabs(fu - tu) < 0.5) {
+                    if (oi || oj) continue;
+                    double sg = tw >= fw ? 1 : -1;
+                    C[0] = fu, C[1] = fw + sg * fc, C[2] = tu, C[3] = tw - sg * tc;
+                    double c = route_cost(g, horiz, f, t, e, 2, C);
+                    if (c < bc) bc = c, bn = 2, memcpy(best, C, sizeof C);
+                } else {
+                    double sg = tu >= fu ? 1 : -1, sw = tw >= fw ? 1 : -1;
+                    if (fabs(o1) < fc - 4 && fabs(o2) < tm - 4) { /* main-axis first */
+                        C[0] = fu + sg * fm, C[1] = fw + o1, C[2] = tu + o2, C[3] = fw + o1, C[4] = tu + o2, C[5] = tw - sw * tc;
+                        double c = route_cost(g, horiz, f, t, e, 3, C) + pen;
+                        if (c < bc) bc = c, bn = 3, memcpy(best, C, sizeof C);
+                    }
+                    if (fabs(o1) < fm - 4 && fabs(o2) < tc - 4) { /* cross-axis first */
+                        C[0] = fu + o1, C[1] = fw + sw * fc, C[2] = fu + o1, C[3] = tw + o2, C[4] = tu - sg * tm, C[5] = tw + o2;
+                        double c = route_cost(g, horiz, f, t, e, 3, C) + pen + 0.5;
+                        if (c < bc) bc = c, bn = 3, memcpy(best, C, sizeof C);
+                    }
+                }
+            }
+        if (!bn) continue;
+        g->eptn[e] = bn;
+        double *Q = g->pts.v + g->eptoff[e];
+        for (uint32_t k = 0; k < bn; k++) Q[2 * k] = horiz ? best[2 * k] : best[2 * k + 1], Q[2 * k + 1] = horiz ? best[2 * k + 1] : best[2 * k];
         /* label: middle of the longest segment */
-        const double *Q = g->pts.v + g->eptoff[e];
-        double best = -1;
-        for (uint32_t k = 0; k + 1 < np; k++) {
+        double bl = -1;
+        for (uint32_t k = 0; k + 1 < bn; k++) {
             double d = fabs(Q[2 * k + 2] - Q[2 * k]) + fabs(Q[2 * k + 3] - Q[2 * k + 1]);
-            if (d > best) best = d, g->elx[e] = (Q[2 * k] + Q[2 * k + 2]) / 2, g->ely[e] = (Q[2 * k + 1] + Q[2 * k + 3]) / 2;
+            if (d > bl) bl = d, g->elx[e] = (Q[2 * k] + Q[2 * k + 2]) / 2, g->ely[e] = (Q[2 * k + 1] + Q[2 * k + 3]) / 2;
         }
     }
     /* titles are drawn by swim_titles (rotated for row lanes) */
