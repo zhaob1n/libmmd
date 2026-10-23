@@ -446,6 +446,20 @@ DIAG_FN(architecture_render) {
         const AGroup *G = &gv.v[g];
         dg_rect(out, G->x0, G->y0, G->x1 - G->x0, G->y1 - G->y0, 0, "ag");
         double tx = G->x0 + 6;
+        /* deviate from mermaid: slide the title (icon + text) right past edges that cross its band */
+        double tw = (G->icon.n ? 30 : 0) + text_width(G->label.n ? G->label : G->id, fs);
+        for (int it = 0; it < 8; it++) {
+            bool moved = false;
+            for (size_t i = 0; i < ns; i++) {
+                const double *S = SG + 4 * i;
+                if (fabs(S[0] - S[2]) > 0.5) continue;
+                if (fmax(S[1], S[3]) < G->y0 + 1 || fmin(S[1], S[3]) > G->y0 + 29) continue;
+                if (S[0] < tx - 4 || S[0] > tx + tw + 4) continue;
+                if (S[0] + 8 + tw > G->x1 - 2) continue; /* no room: leave it */
+                tx = S[0] + 8, moved = true;
+            }
+            if (!moved) break;
+        }
         if (G->icon.n) {
             dg_rect(out, tx, G->y0 + 3, 24, 24, 3, "ai");
             glyph(out, G->icon, tx, G->y0 + 3, 24);
