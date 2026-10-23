@@ -510,7 +510,7 @@ DIAG_FN(class_render) {
     for (size_t s = 0; s < g->ns; s++) {
         if (g->sw[s] <= 0) continue;
         dg_rect(out, g->sx[s], g->sy[s], g->sw[s], g->sh[s], 0, "ns");
-        dg_text(out, g->stitle[s], fs, g->sx[s] + g->sw[s] / 2, g->sy[s] + 14, "middle", "title");
+        dg_text(out, g->stitle[s], fs, g->sx[s] + g->sw[s] / 2, g->sy[s] + 14, "middle", "nst");
     }
     for (size_t e = 0; e < g->ne; e++) {
         const Rel *r = &p.rel.v[e];
