@@ -197,6 +197,21 @@ DIAG_FN(gitgraph_render) {
         }
         ncol = fmax(ncol, col[i] + 1);
     }
+    if (dir == 0 && !rot && !par_c && cm.n) { /* deviate from mermaid: horizontal labels never overlap their lane neighbour */
+        double *lx = ANEW(a, double, 2 * br.n + 2);
+        if (!lx) return CMM_ERR_NOMEM;
+        for (size_t l = 0; l < br.n; l++) lx[2 * l] = -HUGE_VAL, lx[2 * l + 1] = 0;
+        double x = 0;
+        for (size_t i = 0; i < cm.n; i++) {
+            uint32_t l = cm.v[i].lane;
+            double w = cm.v[i].type == C_CHERRY ? 0 : text_width(cm.v[i].id, 10) + 4;
+            if (i) x += STEP;
+            if (l < br.n && lx[2 * l] > -HUGE_VAL) x = fmax(x, lx[2 * l] + (lx[2 * l + 1] + w) / 2 + 8);
+            col[i] = x / STEP;
+            if (l < br.n) lx[2 * l] = x, lx[2 * l + 1] = w;
+        }
+        ncol = col[cm.n - 1] + 1;
+    }
     double plen = p0 + ncol * STEP; /* branch lines end 40 past the last commit */
     double lanesep = dir == 0 ? LANE : (bnw + 30 > LANE ? bnw + 30 : LANE);
     /* lane offsets: a lane whose rotated commit labels hang deeper than the default gap pushes the
