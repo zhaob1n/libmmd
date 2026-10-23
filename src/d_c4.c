@@ -459,12 +459,38 @@ DIAG_FN(c4_render) {
             if (f != NONE && ((g.efrom[e] == f && g.eto[e] == t) || (g.efrom[e] == t && g.eto[e] == f))) rst[e] = &rs.v[i];
         }
     double *lbw = ANEW(a, double, g.ne + 1), *lbh = ANEW(a, double, g.ne + 1);
-    if (!lbw || !lbh) return CMM_ERR_NOMEM;
+    double *ep = ANEW(a, double, 6 * (g.ne + 1)); /* x0 y0 qx qy x1 y1: quadratic bend that clears other boxes */
+    if (!lbw || !lbh || !ep) return CMM_ERR_NOMEM;
     for (size_t e = 0; e < g.ne; e++) {
         int32_t f = g.efrom[e], t = g.eto[e];
-        double x0, y0, x1, y1;
-        rclip(g.nx[f], g.ny[f], g.nw[f], g.nh[f], g.nx[t], g.ny[t], &x0, &y0);
-        rclip(g.nx[t], g.ny[t], g.nw[t], g.nh[t], g.nx[f], g.ny[f], &x1, &y1);
+        double sx0, sy0, sx1, sy1;
+        rclip(g.nx[f], g.ny[f], g.nw[f], g.nh[f], g.nx[t], g.ny[t], &sx0, &sy0);
+        rclip(g.nx[t], g.ny[t], g.nw[t], g.nh[t], g.nx[f], g.ny[f], &sx1, &sy1);
+        double sl = hypot(sx1 - sx0, sy1 - sy0), snx = sl > 0 ? -(sy1 - sy0) / sl : 0, sny = sl > 0 ? (sx1 - sx0) / sl : 1;
+        double bestc = HUGE_VAL, *E = ep + 6 * e;
+        for (int k = 0; k <= 12; k++) {
+            double off = (k + 1) / 2 * 40.0 * (k % 2 ? 1 : -1) * (k ? 1 : 0);
+            double qx = (g.nx[f] + g.nx[t]) / 2 + snx * off, qy = (g.ny[f] + g.ny[t]) / 2 + sny * off, c[6];
+            rclip(g.nx[f], g.ny[f], g.nw[f], g.nh[f], k ? qx : g.nx[t], k ? qy : g.ny[t], &c[0], &c[1]);
+            rclip(g.nx[t], g.ny[t], g.nw[t], g.nh[t], k ? qx : g.nx[f], k ? qy : g.ny[f], &c[4], &c[5]);
+            c[2] = k ? 2 * qx - (c[0] + c[4]) / 2 : (c[0] + c[4]) / 2, c[3] = k ? 2 * qy - (c[1] + c[5]) / 2 : (c[1] + c[5]) / 2;
+            double cost = fabs(off);
+            for (int i = 1; i < 32; i++) {
+                double u = i / 32.0, w0 = (1 - u) * (1 - u), w1 = 2 * u * (1 - u), w2 = u * u;
+                double px = w0 * c[0] + w1 * c[2] + w2 * c[4], py = w0 * c[1] + w1 * c[3] + w2 * c[5];
+                for (size_t v = 0; v < g.nn; v++)
+                    if ((int32_t)v != f && (int32_t)v != t && fabs(px - g.nx[v]) < g.nw[v] / 2 + 6 && fabs(py - g.ny[v]) < g.nh[v] / 2 + 6) cost += 60;
+                for (size_t q = 0; q < e; q++) {
+                    const double *Q = ep + 6 * q;
+                    for (int j = 1; j < 16; j++) {
+                        double uj = j / 16.0, a0 = (1 - uj) * (1 - uj), a1 = 2 * uj * (1 - uj), a2 = uj * uj;
+                        if (hypot(a0 * Q[0] + a1 * Q[2] + a2 * Q[4] - px, a0 * Q[1] + a1 * Q[3] + a2 * Q[5] - py) < 10) cost += 6;
+                    }
+                }
+            }
+            if (cost < bestc) bestc = cost, memcpy(E, c, sizeof c);
+        }
+        double x0 = E[0], y0 = E[1], x1 = E[4], y1 = E[5];
         bb_add(&bb, x0, y0, x0, y0), bb_add(&bb, x1, y1, x1, y1);
         double lw;
         unsigned ln;
@@ -479,7 +505,8 @@ DIAG_FN(c4_render) {
             for (size_t oi = 0; oi < countof(OS); oi++)
                 for (size_t ti = 0; ti < countof(TS); ti++) {
                     double off = OS[oi] * (fabs(nx) > fabs(ny) ? lw / 2 + 6 : lh / 2 + 4);
-                    double cx = x0 + (x1 - x0) * TS[ti] + nx * off, cy = y0 + (y1 - y0) * TS[ti] + ny * off;
+                    double u = TS[ti], w0 = (1 - u) * (1 - u), w1 = 2 * u * (1 - u), w2 = u * u;
+                    double cx = w0 * x0 + w1 * E[2] + w2 * x1 + nx * off, cy = w0 * y0 + w1 * E[3] + w2 * y1 + ny * off;
                     double ax0 = cx - lw / 2 - 3, ax1 = cx + lw / 2 + 3, ay0 = cy - lh / 2, ay1 = cy + lh / 2, sc = 0;
                     for (size_t v = 0; v < g.nn; v++) {
                         double ox = fmin(ax1, g.nx[v] + g.nw[v] / 2) - fmax(ax0, g.nx[v] - g.nw[v] / 2);
@@ -497,6 +524,17 @@ DIAG_FN(c4_render) {
                 }
             lbw[e] = lw, lbh[e] = lh;
             g.elx[e] = bx + (rst[e] ? rst[e]->ox : 0), g.ely[e] = by + (rst[e] ? rst[e]->oy : 0);
+            for (int it = 0; it < 3 && rst[e]; it++) /* a user offset that lands on a box: push the label clear */
+                for (size_t v = 0; v < g.nn; v++) {
+                    double hx = g.nw[v] / 2 + lw / 2 + 3, hy = g.nh[v] / 2 + lh / 2 + 2;
+                    double dx = g.elx[e] - g.nx[v], dy = g.ely[e] - g.ny[v];
+                    if (fabs(dx) >= hx || fabs(dy) >= hy) continue;
+                    double px = (dx < 0 ? -hx : hx) - dx, py = (dy < 0 ? -hy : hy) - dy;
+                    if (fabs(px) < fabs(py)) g.elx[e] += px; else g.ely[e] += py;
+                }
+            /* deviate from mermaid: keep user-offset labels and bent edges inside the viewBox */
+            bb_add(&bb, g.elx[e] - lw / 2, g.ely[e] - lh / 2 - 4, g.elx[e] + lw / 2, g.ely[e] + lh / 2);
+            bb_add(&bb, (x0 + x1) / 4 + E[2] / 2, (y0 + y1) / 4 + E[3] / 2, (x0 + x1) / 4 + E[2] / 2, (y0 + y1) / 4 + E[3] / 2);
         }
         (void)lw; /* mermaid does not grow the viewBox for relation labels */
     }
@@ -518,24 +556,19 @@ DIAG_FN(c4_render) {
     }
     for (size_t e = 0; e < g.ne; e++) {
         int32_t f = g.efrom[e], t = g.eto[e];
-        double P[4];
-        rclip(g.nx[f], g.ny[f], g.nw[f], g.nh[f], g.nx[t], g.ny[t], &P[0], &P[1]);
-        rclip(g.nx[t], g.ny[t], g.nw[t], g.nh[t], g.nx[f], g.ny[f], &P[2], &P[3]);
-        bool lc = rst[e] && color_ok(rst[e]->line), tc = rst[e] && color_ok(rst[e]->text);
+        (void)f, (void)t;
+        const double *E = ep + 6 * e;
+        double P[4] = {E[0], E[1], E[4], E[5]}, Q0[2] = {E[2], E[3]};
+        bool bent = fabs(E[2] - (E[0] + E[4]) / 2) + fabs(E[3] - (E[1] + E[5]) / 2) > 0.5;
+        bool lc = rst[e] && color_ok(rst[e]->line);
         if (lc) { buf_lit(out, "<g class=\"crc\" stroke=\""); put_attr(out, rst[e]->line); buf_lit(out, "\" fill=\""); put_attr(out, rst[e]->line); buf_lit(out, "\">"); }
         buf_lit(out, "<path class=\"cr\"");
-        buf_lit(out, " d=\"M"); dg_pt(out, P[0], P[1]); buf_ch(out, 'L'); dg_pt(out, P[2], P[3]); buf_lit(out, "\"/>");
-        arrowhead(out, P + 2, P);
-        if (cr.v[e].bi) arrowhead(out, P, P + 2);
+        buf_lit(out, " d=\"M"); dg_pt(out, P[0], P[1]);
+        if (bent) { buf_ch(out, 'Q'); dg_pt(out, Q0[0], Q0[1]); buf_ch(out, ' '); } else buf_ch(out, 'L');
+        dg_pt(out, P[2], P[3]); buf_lit(out, "\"/>");
+        arrowhead(out, P + 2, bent ? Q0 : P);
+        if (cr.v[e].bi) arrowhead(out, P, bent ? Q0 : P + 2);
         if (lc) buf_lit(out, "</g>");
-        if (tc) { buf_lit(out, "<g fill=\""); put_attr(out, rst[e]->text); buf_lit(out, "\">"); }
-        Str l = g.elabel[e];
-        const char *nl = memchr(l.p, '\n', l.n);
-        Str l1 = nl ? (Str){.p = l.p, .n = (size_t)(nl - l.p)} : l;
-        double y = g.ely[e] - (nl ? 8 : 0);
-        dg_text(out, l1, 13, g.elx[e], y, "middle", tc ? "crl crx" : "crl");
-        if (nl) dg_text(out, (Str){.p = nl + 1, .n = l.n - (size_t)(nl + 1 - l.p)}, 12, g.elx[e], y + 16, "middle", tc ? "crt crx" : "crt");
-        if (tc) buf_lit(out, "</g>");
     }
     for (size_t v = 0; v < g.nn; v++) {
         const CInfo *c = &ci.v[v];
@@ -603,6 +636,17 @@ DIAG_FN(c4_render) {
             dg_text_lh(out, dw[v], 1.1 * C4_DF, cx, y + sec_h(dl, C4_DF) / 2, "middle", "cd");
         }
         buf_lit(out, "</g>");
+    }
+    for (size_t e = 0; e < g.ne; e++) { /* labels last so a user-offset label is never hidden under a box */
+        bool tc = rst[e] && color_ok(rst[e]->text);
+        if (tc) { buf_lit(out, "<g fill=\""); put_attr(out, rst[e]->text); buf_lit(out, "\">"); }
+        Str l = g.elabel[e];
+        const char *nl = memchr(l.p, '\n', l.n);
+        Str l1 = nl ? (Str){.p = l.p, .n = (size_t)(nl - l.p)} : l;
+        double y = g.ely[e] - (nl ? 8 : 0);
+        dg_text(out, l1, 13, g.elx[e], y, "middle", tc ? "crl crx" : "crl");
+        if (nl) dg_text(out, (Str){.p = nl + 1, .n = l.n - (size_t)(nl + 1 - l.p)}, 12, g.elx[e], y + 16, "middle", tc ? "crt crx" : "crt");
+        if (tc) buf_lit(out, "</g>");
     }
     buf_lit(out, "</svg>\n");
     return out->oom ? CMM_ERR_NOMEM : CMM_OK;
