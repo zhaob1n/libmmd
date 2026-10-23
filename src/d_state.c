@@ -453,6 +453,11 @@ static cmm_status layout_scope(Ctx *c, int32_t cl) {
         int32_t v = p->notes.v[i].v, r = p->ccl.v[v];
         int32_t sv = dg_find(lg, r == NONE ? g->nid[v] : g->sid[r]);
         if (sv == NONE) continue;
+        { /* mermaid wraps each note in its own (invisible) noteGroup cluster */
+            int32_t gc = dg_cluster(lg, cat3(p->A, lg->nid[lv], S("----parent"), S("")), (Str){}, NONE);
+            if (gc == NONE) return CMM_ERR_NOMEM;
+            lg->nparent[lv] = gc;
+        }
         bool left = p->notes.v[i].left; /* mermaid: right of = state -> note, left of = note -> state */
         if (dg_edge(lg, left ? (int32_t)lv : sv, left ? sv : (int32_t)lv, (Str){}) == NONE) return CMM_ERR_NOMEM;
     }
