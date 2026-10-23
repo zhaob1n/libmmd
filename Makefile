@@ -45,7 +45,7 @@ else
 CFLAGS += -fprofile-use=$(PGO_USE) -fprofile-correction -Wno-missing-profile
 endif
 endif
-STD := $(shell echo 'int x;' | $(CC) -std=gnu2y -fsyntax-only -xc - >/dev/null 2>&1 && echo gnu2y || echo gnu23)
+STD := gnu23
 CFLAGS += -std=$(STD) -fms-extensions -fPIC -fvisibility=hidden $(WARN) -Iinclude -Isrc
 LDLIBS = -lm
 BUILD ?= build

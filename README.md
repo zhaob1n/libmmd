@@ -1,6 +1,6 @@
 # cmermaid
 
-A fast [Mermaid](https://mermaid.js.org) renderer written in C (`-std=gnu2y`).
+A fast [Mermaid](https://mermaid.js.org) renderer written in C (`-std=gnu23`).
 It turns Mermaid source into SVG. It works as a command-line tool (`mmdc-c`) and as a small C library (`libcmermaid`).
 It needs no browser, no Node.js, no JavaScript engine and no dependencies beyond libc and libm.
 
@@ -60,7 +60,7 @@ You need a C compiler with C23 support:
 - **clang** (the default; tested with clang 23);
 - or **gcc 14**.
 
-The Makefile uses `-std=gnu2y` when the compiler accepts it and falls back to `gnu23` otherwise. You also need GNU make. Python 3 is needed only for the test and benchmark scripts.
+The Makefile builds with `-std=gnu23`. You also need GNU make. Python 3 is needed only for the test and benchmark scripts.
 
 ```sh
 make                      # -> build/mmdc-c, build/libcmermaid.{a,so}, build/cmermaid.pc, build/bench
@@ -106,7 +106,7 @@ int main(void) {
 ```
 
 ```sh
-cc -std=gnu2y -Iinclude example.c build/libcmermaid.a -lm      # or: $(pkg-config --cflags --libs cmermaid)
+cc -std=gnu23 -Iinclude example.c build/libcmermaid.a -lm      # or: $(pkg-config --cflags --libs cmermaid)
 ```
 
 - `cmm_options` (which may be `nullptr`) sets node and rank spacing, font size, theme, and the `CMM_F_*` layout flags.
@@ -207,7 +207,7 @@ Embedded icon data comes from Font Awesome Free (CC BY 4.0) and simple-icons (CC
 
 ## 中文简介
 
-cmermaid 是一个用 C 语言（gnu2y）编写的高速 Mermaid 渲染器，可作为命令行工具 `mmdc-c` 或 C 库 `libcmermaid` 使用。它把 Mermaid 源码直接渲染成 SVG，不需要浏览器、Node.js 或任何第三方依赖。
+cmermaid 是一个用 C 语言（gnu23）编写的高速 Mermaid 渲染器，可作为命令行工具 `mmdc-c` 或 C 库 `libcmermaid` 使用。它把 Mermaid 源码直接渲染成 SVG，不需要浏览器、Node.js 或任何第三方依赖。
 
 - 支持上表列出的全部 30 多种图表类型。
 - 单个图表的命令行渲染约 1 毫秒，mermaid-cli 约 1 秒。
