@@ -1,0 +1,18 @@
+architecture-beta
+  group g0(cloud)[gamma]
+  service s0(internet)[ok]
+  service s1(disk)[validate]
+  service s2(internet)[db]
+  service s3(server)[db] in g0
+  service s4(cloud)[cache miss]
+  service s5(cloud)[retry later]
+  service s6(disk)[beta]
+  service s7(database)[alpha]
+  s3:R -- T:s4
+  s7:R --> L:s0
+  s7:L --> R:s6
+  s6:L --> T:s3
+  s0:T -- R:s3
+  s1:B --> L:s0
+  s0:B -- T:s7
+  s6:R --> T:s1

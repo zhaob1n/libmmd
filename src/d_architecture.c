@@ -443,8 +443,7 @@ DIAG_FN(architecture_render) {
     DG_HEAD(out, bb, 16, "architecture", CSS);
     if (title.n) dg_text(out, title, 18, (bb.x0 + bb.x1) / 2, bb.y0 + 14, "middle", "agl");
     for (size_t g = 0; g < gv.n; g++) {
-        const AGroup *G = &gv.v[g];
-        dg_rect(out, G->x0, G->y0, G->x1 - G->x0, G->y1 - G->y0, 0, "ag");
+        AGroup *G = &gv.v[g];
         double tx = G->x0 + 6;
         /* deviate from mermaid: slide the title (icon + text) right past edges that cross its band */
         double tw = (G->icon.n ? 30 : 0) + text_width(G->label.n ? G->label : G->id, fs);
@@ -457,11 +456,22 @@ DIAG_FN(architecture_render) {
                 double lo = fmin(S[0], S[2]), hi = fmax(S[0], S[2]);
                 if (hi - lo > 0.5 && fabs(S[1] - S[3]) > 0.5) continue;
                 if (hi < tx - 4 || lo > tx + tw + 4) continue;
-                if (hi + 8 + tw > G->x1 - 2) continue; /* no room: leave it */
+                if (hi + 8 + tw > G->x1 - 2) { /* no room: widen the group if the strip it gains is free */
+                    double nx1 = hi + 8 + tw + 8;
+                    bool free_ = G->parent == NONE || nx1 <= gv.v[G->parent].x1 - 15;
+                    for (size_t i = 0; i < nn && free_; i++)
+                        if (N[i].group != (int32_t)g && cx[i] + HW[i] > G->x1 && cx[i] - HW[i] < nx1 + 8 && cy[i] + IS / 2 + 30 > G->y0 && cy[i] - IS / 2 < G->y1) free_ = false;
+                    for (size_t k = 0; k < gv.n && free_; k++)
+                        if (k != g && gv.v[k].parent != (int32_t)g && (int32_t)k != G->parent && gv.v[k].x1 > G->x1 && gv.v[k].x0 < nx1 + 8 && gv.v[k].y1 > G->y0 && gv.v[k].y0 < G->y1) free_ = false;
+                    if (!free_) continue;
+                    G->x1 = nx1;
+                    bb_add(&bb, G->x0, G->y0, G->x1, G->y1);
+                }
                 tx = hi + 8, moved = true;
             }
             if (!moved) break;
         }
+        dg_rect(out, G->x0, G->y0, G->x1 - G->x0, G->y1 - G->y0, 0, "ag");
         if (G->icon.n) {
             dg_rect(out, tx, G->y0 + 3, 24, 24, 3, "ai");
             glyph(out, G->icon, tx, G->y0 + 3, 24);
