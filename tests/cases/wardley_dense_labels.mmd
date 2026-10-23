@@ -1,0 +1,86 @@
+wardley-beta
+title delta
+component Db 0 [0.11, 0.46]
+component Cache Miss 1 [0.40, 0.86]
+component Validate 2 [0.76, 0.58]
+component X 3 [0.45, 0.93]
+component Retry Later 4 [0.86, 0.38]
+component Db 5 [0.57, 0.14]
+component Gamma 6 [0.07, 0.22]
+component Long Label With Words 7 [0.06, 0.14]
+component Ok 8 [0.44, 0.60]
+component Ok 9 [0.20, 0.78]
+component Load Config 10 [0.20, 0.94]
+component Delta 11 [0.59, 0.64]
+component X 12 [0.85, 0.31]
+component Load Config 13 [0.90, 0.52]
+component Cache Miss 14 [0.85, 0.51]
+component Long Label With Words 15 [0.25, 0.26]
+component Validate 16 [0.06, 0.93]
+component Alpha 17 [0.37, 0.24]
+component Long Label With Words 18 [0.43, 0.17]
+component Validate 19 [0.78, 0.13]
+component Send Mail 20 [0.45, 0.09]
+component X 21 [0.51, 0.62]
+component X 22 [0.42, 0.58]
+component Delta 23 [0.14, 0.45]
+component Retry Later 24 [0.46, 0.76]
+component Alpha 25 [0.20, 0.57]
+component Retry Later 26 [0.85, 0.58]
+component Validate 27 [0.58, 0.69]
+component User 28 [0.43, 0.25]
+component User 29 [0.50, 0.90]
+component Load Config 30 [0.58, 0.45]
+component Long Label With Words 31 [0.66, 0.75]
+component Ok 32 [0.06, 0.18]
+component Long Label With Words 33 [0.11, 0.14]
+component Retry Later 34 [0.85, 0.88]
+component Alpha 35 [0.18, 0.31]
+component Retry Later 36 [0.16, 0.53]
+component Delta 37 [0.68, 0.16]
+component Delta 38 [0.80, 0.89]
+component Long Label With Words 39 [0.15, 0.47]
+component Retry Later 40 [0.08, 0.77]
+component Cache Miss 41 [0.58, 0.51]
+Validate 19 -> Ok 32
+Alpha 35 -> Alpha 35
+Retry Later 24 -> X 21
+Alpha 35 -> Alpha 17
+Retry Later 40 -> Load Config 30
+Ok 32 -> Db 5
+User 28 -> Delta 23
+Retry Later 40 -> Retry Later 4
+Long Label With Words 7 -> Validate 2
+Delta 11 -> Ok 9
+Load Config 30 -> Cache Miss 1
+Alpha 35 -> X 12
+Ok 8 -> Retry Later 40
+Load Config 13 -> User 29
+Delta 38 -> Delta 38
+Validate 27 -> X 21
+Long Label With Words 39 -> Load Config 30
+X 22 -> Alpha 17
+Long Label With Words 15 -> Retry Later 34
+Long Label With Words 31 -> Retry Later 40
+Long Label With Words 33 -> User 29
+Delta 23 -> Ok 9
+X 21 -> Load Config 30
+Validate 16 -> Long Label With Words 39
+Retry Later 4 -> Retry Later 4
+Retry Later 34 -> User 29
+Long Label With Words 33 -> Alpha 25
+Retry Later 36 -> Retry Later 34
+Ok 8 -> Long Label With Words 31
+Validate 16 -> Validate 2
+Ok 9 -> Delta 23
+Gamma 6 -> Validate 16
+Db 0 -> Load Config 30
+Delta 11 -> Cache Miss 41
+Long Label With Words 7 -> Validate 27
+Long Label With Words 7 -> Delta 38
+Delta 11 -> Gamma 6
+Db 5 -> Cache Miss 14
+User 28 -> Retry Later 4
+Retry Later 4 -> User 29
+X 12 -> Delta 11
+Long Label With Words 15 -> Load Config 13

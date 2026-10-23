@@ -443,16 +443,16 @@ DIAG_FN(wardley_render) {
         double *L = lbo + 6 * i, r = NLO + (nd->ss ? 10 : 0), tw = text_width(nd->label, 10);
         L[0] = r, L[1] = -r, L[2] = L[3] = L[4] = L[5] = 0;
         if (nd->k == WK_ANCHOR || nd->has_lo) continue;
-        double cand[12 + 32][2] = {{r, -r}, {-r - tw, -r}, {r, r + 9}, {-r - tw, r + 9}, {r + 4, 3}, {-r - 4 - tw, 3},
+        double cand[12 + 64][2] = {{r, -r}, {-r - tw, -r}, {r, r + 9}, {-r - tw, r + 9}, {r + 4, 3}, {-r - 4 - tw, 3},
             {-tw / 2, -r - 3}, {-tw / 2, r + 12}, {2 * r, -2 * r}, {-2 * r - tw, -2 * r}, {2 * r, 2 * r + 9}, {-2 * r - tw, 2 * r + 9}};
-        for (int k = 0; k < 32; k++) { /* farther ring: label side faces the node */
-            double th = (k % 16) * M_PI / 8, R = (k < 16 ? 3 : 4.5) * r, ct = cos(th);
+        for (int k = 0; k < 64; k++) { /* farther rings: label side faces the node; rings 3-4 get a leader */
+            double th = (k % 16) * M_PI / 8, R = (const double[]){3, 4.5, 6.5, 9}[k / 16] * r, ct = cos(th);
             cand[12 + k][0] = R * ct - (ct < -0.3 ? tw : ct > 0.3 ? 0 : tw / 2), cand[12 + k][1] = R * sin(th) + 4;
         }
         double bc = INFINITY;
         for (size_t c = 0; c < countof(cand); c++) {
             double bx[4] = {nd->px + cand[c][0], nd->py + cand[c][1] - 9, nd->px + cand[c][0] + tw, nd->py + cand[c][1] + 2};
-            double cost = c < 12 ? c * 0.5 : 6 + (c >= 28) * 3;
+            double cost = c < 12 ? c * 0.5 : 6 + (c >= 28) * 3 + (c >= 44) * 9 + (c >= 60) * 6;
             if (bx[0] < 2 || bx[2] > W_ - 2 || bx[1] < 2 || bx[3] > H - 2) cost += 40;
             for (size_t l = 0; l < w.links.n; l++) {
                 const WNode *s = &w.nodes.v[w.links.v[l].s], *t = &w.nodes.v[w.links.v[l].t];
@@ -589,6 +589,12 @@ DIAG_FN(wardley_render) {
                  " class=\"wardley-node-label\" fill=\"#000\" font-size=\"10\" font-weight=\"bold\" text-anchor=\"middle\" dominant-baseline=\"middle\"", nd->label);
         else {
             double ox = nd->has_lo ? nd->lox : lbo[6 * i], oy = nd->has_lo ? nd->loy : lbo[6 * i + 1];
+            if (!nd->has_lo && lbo[6 * i + 4] > lbo[6 * i + 2]) { /* far placement: leader to the nearest box point */
+                const double *B = lbo + 6 * i + 2;
+                double qx = fmin(fmax(x, B[0]), B[2]), qy = fmin(fmax(y, B[1]), B[3]), vx = qx - x, vy = qy - y, l = hypot(vx, vy);
+                double rr = NR + (nd->ss ? NR : 0) + 1;
+                if (l > 3.2 * NLO + rr) line(&b, x + vx / l * rr, y + vy / l * rr, qx - vx / l * 2, qy - vy / l * 2, " class=\"wardley-leader\" stroke=\"#999\" stroke-width=\"0.75\"");
+            }
             text(&b, x + ox, y + oy, " class=\"wardley-node-label\" fill=\"" TXT "\" font-size=\"10\" font-weight=\"normal\" text-anchor=\"start\" dominant-baseline=\"auto\"", nd->label);
         }
         buf_lit(&b, "</g>");
