@@ -290,6 +290,39 @@ DIAG_FN(architecture_render) {
             if (!fixed) break;
         }
     }
+    /* outsiders: a node that isn't a member of a group but sits inside its grid box would be drawn inside
+     * it; push it (and everything beyond it that isn't in that group) past the box on the cheaper axis */
+    if (gv.n) {
+        int32_t *bx0 = ANEW(a, int32_t, gv.n), *bx1 = ANEW(a, int32_t, gv.n), *by0 = ANEW(a, int32_t, gv.n), *by1 = ANEW(a, int32_t, gv.n);
+        if (!bx0 || !bx1 || !by0 || !by1) return CMM_ERR_NOMEM;
+        for (size_t iter = 0; iter < 4 * nn + 8; iter++) {
+            for (size_t g = 0; g < gv.n; g++) bx0[g] = by0[g] = INT32_MAX, bx1[g] = by1[g] = INT32_MIN;
+            for (size_t i = 0; i < nn; i++)
+                for (int32_t g = N[i].group; g != NONE; g = gv.v[g].parent) {
+                    bx0[g] = N[i].gx < bx0[g] ? N[i].gx : bx0[g], bx1[g] = N[i].gx > bx1[g] ? N[i].gx : bx1[g];
+                    by0[g] = N[i].gy < by0[g] ? N[i].gy : by0[g], by1[g] = N[i].gy > by1[g] ? N[i].gy : by1[g];
+                }
+            bool fixed = false;
+            for (size_t i = 0; i < nn && !fixed; i++)
+                for (size_t g = 0; g < gv.n && !fixed; g++) {
+                    if (bx0[g] == INT32_MAX || N[i].gx < bx0[g] || N[i].gx > bx1[g] || N[i].gy < by0[g] || N[i].gy > by1[g]) continue;
+                    bool mem = false;
+                    for (int32_t h = N[i].group; h != NONE; h = gv.v[h].parent) mem |= (size_t)h == g;
+                    if (mem) continue;
+                    int32_t dx = bx1[g] - N[i].gx + 1, dy = by1[g] - N[i].gy + 1;
+                    bool horiz = dx <= dy;
+                    int32_t at = horiz ? N[i].gx : N[i].gy, d = horiz ? dx : dy;
+                    for (size_t j = 0; j < nn; j++) {
+                        bool in = false;
+                        for (int32_t h = N[j].group; h != NONE; h = gv.v[h].parent) in |= (size_t)h == g;
+                        int32_t *c = horiz ? &N[j].gx : &N[j].gy;
+                        if (!in && *c >= at) *c += d;
+                    }
+                    fixed = true;
+                }
+            if (!fixed) break;
+        }
+    }
     int32_t my = INT32_MAX;
     for (size_t i = 0; i < nn; i++) if (N[i].gy < my) my = N[i].gy;
     double *cx = ANEW(a, double, nn), *cy = ANEW(a, double, nn);

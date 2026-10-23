@@ -1,0 +1,18 @@
+architecture-beta
+  group g0(cloud)[user]
+  service s0(cloud)[alpha]
+  service s1(database)[long label with words] in g0
+  service s2(server)[user] in g0
+  service s3(internet)[gamma]
+  service s4(database)[cache miss] in g0
+  service s5(server)[x] in g0
+  service s6(database)[gamma] in g0
+  service s7(server)[long label with words] in g0
+  s3:B -- B:s7
+  s6:T -- T:s4
+  s4:L -- L:s2
+  s6:B -- B:s4
+  s5:R -- B:s3
+  s2:T --> T:s1
+  s6:B -- B:s3
+  s5:T -- L:s4
