@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Generate larger random diagrams of each type for stress-testing layout quality.
-usage: tools/stress_gen.py OUTDIR [per_type=3] [seed=1]   then: tools/quality_scan.py OUTDIR/*.mmd"""
+usage: tools/stress_gen.py OUTDIR [per_type=3] [seed=1] [scale=1]   then: tools/quality_scan.py OUTDIR/*.mmd"""
 import sys,random,os
 out=sys.argv[1]; N=int(sys.argv[2]) if len(sys.argv)>2 else 3; R=random.Random(int(sys.argv[3]) if len(sys.argv)>3 else 1)
+SC=float(sys.argv[4]) if len(sys.argv)>4 else 1.0
+_ri=R.randint
+R.randint=lambda a,b:_ri(a,max(a,int(b*SC)) if b>=6 else b)  # scale size ranges (upper bounds >= 6)
 W=['alpha','beta','gamma','delta','load config','parse input','validate','retry later','send mail','x','long label with words','ok','db','cache miss','user']
 w=lambda:R.choice(W)
 def flow():

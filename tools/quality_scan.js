@@ -1,6 +1,16 @@
 function R(e){const b=e.getBoundingClientRect();return [b.left,b.top,b.right,b.bottom];}
 function inter(a,b,i){return Math.min(a[2],b[2])-Math.max(a[0],b[0])>i&&Math.min(a[3],b[3])-Math.max(a[1],b[1])>i;}
 function inside(p,b,i){return p[0]>b[0]+i&&p[0]<b[2]-i&&p[1]>b[1]+i&&p[1]<b[3]-i;}
+// text as a screen-space quad (rotation-aware), shrunk by i px toward its centre
+function Q(e,i){let b;try{b=e.getBBox();}catch(x){return null;} const m=e.getScreenCTM(); if(!m) return null;
+  const c=[[b.x,b.y],[b.x+b.width,b.y],[b.x+b.width,b.y+b.height],[b.x,b.y+b.height]].map(([x,y])=>[m.a*x+m.c*y+m.e,m.b*x+m.d*y+m.f]);
+  const cx=(c[0][0]+c[2][0])/2, cy=(c[0][1]+c[2][1])/2;
+  return c.map(([x,y])=>{const dx=x-cx,dy=y-cy,l=Math.hypot(dx,dy)||1,k=Math.max(0,l-i*1.414)/l;return [cx+dx*k,cy+dy*k];});}
+function rotq(e){const m=e.getScreenCTM();return !!m&&(Math.abs(m.b)>1e-3||Math.abs(m.c)>1e-3);}
+function sat(A,B){for(const P of [A,B])for(let k=0;k<4;k++){const p=P[k],q=P[(k+1)%4],nx=q[1]-p[1],ny=p[0]-q[0];
+  let a0=1e18,a1=-1e18,b0=1e18,b1=-1e18;for(const v of A){const d=v[0]*nx+v[1]*ny;a0=Math.min(a0,d);a1=Math.max(a1,d);}
+  for(const v of B){const d=v[0]*nx+v[1]*ny;b0=Math.min(b0,d);b1=Math.max(b1,d);} if(a1<=b0||b1<=a0) return false;} return true;}
+function inq(p,A){let s=0;for(let k=0;k<4;k++){const a=A[k],b=A[(k+1)%4],c=(b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]);if(c===0)return false;s+=c>0?1:-1;}return Math.abs(s)===4;}
 const EDGE=/edge|link|relation|transition|message|arrow|flowchart-link|branch|commit-line|messageLine|loopLine|er relationshipLine|path/i;
 const out=[];
 for(const wrap of document.querySelectorAll('div[data-f]')){
@@ -12,13 +22,13 @@ for(const wrap of document.querySelectorAll('div[data-f]')){
     if(t.closest('defs,marker')) continue;
     const s=t.textContent.trim(); if(!s) continue;
     const b=R(t); if(b[2]-b[0]<1) continue;
-    texts.push({t,s,b,cl:!!t.closest('.cluster,.cluster-label,[class*=cluster]')});
+    texts.push({t,s,b,rot:rotq(t),q:Q(t,2),anc:!!t.closest('.wardley-node--anchor'),cl:!!t.closest('.cluster,.cluster-label,[class*=cluster]')});
   }
   // also html labels
   for(const t of svg.querySelectorAll('foreignObject')){const s=t.textContent.trim(); if(s) texts.push({t,s,b:R(t.querySelector('span,div,p')||t),cl:!!t.closest('.cluster,.cluster-label')});}
   for(let i=0;i<texts.length;i++)for(let j=i+1;j<texts.length;j++){
     const a=texts[i],c=texts[j]; if(a.t.contains(c.t)||c.t.contains(a.t)) continue;
-    if(inter(a.b,c.b,2)) res.ll.push([a.s.slice(0,18),c.s.slice(0,18)]);
+    if((a.rot||c.rot)&&a.q&&c.q?sat(a.q,c.q):inter(a.b,c.b,2)) res.ll.push([a.s.slice(0,18),c.s.slice(0,18)]);
   }
   const edges=[];
   for(const p of svg.querySelectorAll('path,line,polyline')){
@@ -38,7 +48,8 @@ for(const wrap of document.querySelectorAll('div[data-f]')){
     let bg=false; const g=t.t.parentNode;
     for(const r of (g.parentNode||g).querySelectorAll('rect')){const rb=R(r);if(rb[0]<=t.b[0]+1&&rb[2]>=t.b[2]-1&&rb[1]<=t.b[1]+1&&rb[3]>=t.b[3]-1&&getComputedStyle(r).fill!=='none'&&(rb[2]-rb[0])<(t.b[2]-t.b[0])+60){bg=true;break;}}
     for(const e of edges){
-      const h=e.pts.filter(p=>inside(p,t.b,2)).length;
+      if(t.anc) continue; // wardley anchors sit centred on their own links by design
+      const h=e.pts.filter(p=>t.rot&&t.q?inq(p,t.q):inside(p,t.b,2)).length;
       if(h>=2){ if(t.cl) res.ct.push([t.s.slice(0,18),e.id]); else if(!bg) res.le.push([t.s.slice(0,18),e.id]); }
     }
   }

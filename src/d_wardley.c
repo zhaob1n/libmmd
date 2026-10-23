@@ -190,13 +190,22 @@ constexpr double PAD = 48;
 constexpr double NR = 6;
 constexpr double NLO = 8;
 /* hits of segment (x0,y0)-(x1,y1) with box b (x0 y0 x1 y1), sampled */
-static int seg_box_hits(double x0, double y0, double x1, double y1, const double b[static 4]) {
-    int h = 0;
-    for (int k = 0; k <= 24; k++) {
-        double x = x0 + (x1 - x0) * k / 24, y = y0 + (y1 - y0) * k / 24;
-        h += x > b[0] && x < b[2] && y > b[1] && y < b[3];
+/* how much of segment (x0,y0)-(x1,y1) lies inside box b (Liang-Barsky); 0 when it misses */
+static double seg_box_len(double x0, double y0, double x1, double y1, const double b[static 4]) {
+    double t0 = 0, t1 = 1, dx = x1 - x0, dy = y1 - y0;
+    const double P[4] = {-dx, dx, -dy, dy}, Q[4] = {x0 - b[0], b[2] - x0, y0 - b[1], b[3] - y0};
+    for (int k = 0; k < 4; k++) {
+        if (fabs(P[k]) < 1e-12) { if (Q[k] < 0) return 0; continue; }
+        double r = Q[k] / P[k];
+        if (P[k] < 0) t0 = fmax(t0, r); else t1 = fmin(t1, r);
+        if (t0 >= t1) return 0;
     }
-    return h;
+    return (t1 - t0) * sqrt(dx * dx + dy * dy);
+}
+/* label cost of a segment crossing a box: a flat charge plus its length inside */
+static double seg_box_hits(double x0, double y0, double x1, double y1, const double b[static 4]) {
+    double l = seg_box_len(x0, y0, x1, y1, b);
+    return l > 0 ? 3 + l / 3 : 0;
 }
 
 #define TXT "#131300"
@@ -425,47 +434,6 @@ DIAG_FN(wardley_render) {
         buf_put(&b, pl.n, pl.p);
         free(pl.p);
     }
-    /* links */
-    buf_lit(&b, "<g class=\"wardley-links\">");
-    for (size_t pass = 0; pass < 2; pass++)
-        for (size_t l = 0; l < w.links.n; l++) {
-            WLink *lk = &w.links.v[l];
-            WNode *s = &w.nodes.v[lk->s], *t = &w.nodes.v[lk->t];
-            bool skip = false;
-            for (size_t p = 0; p < w.pipes.n; p++)
-                if (w.pipes.v[p].parent == lk->t && lk->s >= w.pipes.v[p].first && lk->s < w.pipes.v[p].first + w.pipes.v[p].n) skip = true;
-            if (skip) continue;
-            double dx = t->px - s->px, dy = t->py - s->py, d = sqrt(dx * dx + dy * dy);
-            if (d < 1e-9) d = 1e-9; /* mermaid divides by zero here (NaN); keep finite */
-            if (pass == 0) {
-                double rs = s->pparent ? sq / sqrt(2) : NR, rt = t->pparent ? sq / sqrt(2) : NR;
-                bs(&b, lk->dashed ? "<line class=\"wardley-link wardley-link--dashed\"" : "<line class=\"wardley-link\"");
-                attr(&b, "x1", s->px + dx / d * rs); attr(&b, "y1", s->py + dy / d * rs);
-                attr(&b, "x2", t->px - dx / d * rt); attr(&b, "y2", t->py - dy / d * rt);
-                buf_lit(&b, " stroke=\"" STK "\" stroke-width=\"1\"");
-                if (lk->dashed) buf_lit(&b, " stroke-dasharray=\"6 6\"");
-                if (lk->flow & 1) buf_lit(&b, " marker-end=\"url(#mermaid-link-arrow-end)\"");
-                if (lk->flow & 2) buf_lit(&b, " marker-start=\"url(#mermaid-link-arrow-start)\"");
-                buf_lit(&b, "/>");
-            } else if (lk->label.n) {
-                double lx = (s->px + t->px) / 2 + dy / d * 8, ly = (s->py + t->py) / 2 - dx / d * 8;
-                double ang = atan2(dy, dx) * 180 / M_PI;
-                if (ang > 90 || ang < -90) ang += 180;
-                char tr[128];
-                snprintf(tr, sizeof tr, " transform=\"rotate(%.4g %.2f %.2f)\"", ang, lx, ly);
-                buf_lit(&b, "<text class=\"wardley-link-label\""); attr(&b, "x", lx); attr(&b, "y", ly);
-                buf_lit(&b, " fill=\"" TXT "\" font-size=\"10\" text-anchor=\"middle\" dominant-baseline=\"middle\"");
-                buf_put(&b, strlen(tr), tr); buf_ch(&b, '>'); buf_xml(&b, lk->label); buf_lit(&b, "</text>");
-            }
-        }
-    buf_lit(&b, "</g><g class=\"wardley-trends\">");
-    for (size_t k = 0; k < w.trends.n; k++) {
-        WNode *o = &w.nodes.v[w.trends.v[k].num];
-        double tx = PX(w.trends.v[k].x), ty = PY(w.trends.v[k].y), dx = tx - o->px, dy = ty - o->py, d = sqrt(dx * dx + dy * dy), sb = NR + 2;
-        double x2 = d > sb ? tx - dx / d * sb : tx, y2 = d > sb ? ty - dy / d * sb : ty;
-        line(&b, o->px, o->py, x2, y2, " class=\"wardley-trend\" stroke=\"#dc3545\" stroke-width=\"1\" stroke-dasharray=\"4 4\" marker-end=\"url(#mermaid-arrow)\"");
-    }
-    buf_lit(&b, "</g><g class=\"wardley-nodes\">");
     /* component labels without a user offset: the default up-right spot, or the first of a few
      * alternatives that keeps clear of links, trends, other nodes, earlier labels and the canvas */
     double *lbo = ANEW(a, double, 6 * w.nodes.n + 1); /* ox, oy, box x0 y0 x1 y1 */
@@ -475,12 +443,16 @@ DIAG_FN(wardley_render) {
         double *L = lbo + 6 * i, r = NLO + (nd->ss ? 10 : 0), tw = text_width(nd->label, 10);
         L[0] = r, L[1] = -r, L[2] = L[3] = L[4] = L[5] = 0;
         if (nd->k == WK_ANCHOR || nd->has_lo) continue;
-        const double cand[][2] = {{r, -r}, {-r - tw, -r}, {r, r + 9}, {-r - tw, r + 9}, {r + 4, 3}, {-r - 4 - tw, 3},
+        double cand[12 + 32][2] = {{r, -r}, {-r - tw, -r}, {r, r + 9}, {-r - tw, r + 9}, {r + 4, 3}, {-r - 4 - tw, 3},
             {-tw / 2, -r - 3}, {-tw / 2, r + 12}, {2 * r, -2 * r}, {-2 * r - tw, -2 * r}, {2 * r, 2 * r + 9}, {-2 * r - tw, 2 * r + 9}};
+        for (int k = 0; k < 32; k++) { /* farther ring: label side faces the node */
+            double th = (k % 16) * M_PI / 8, R = (k < 16 ? 3 : 4.5) * r, ct = cos(th);
+            cand[12 + k][0] = R * ct - (ct < -0.3 ? tw : ct > 0.3 ? 0 : tw / 2), cand[12 + k][1] = R * sin(th) + 4;
+        }
         double bc = INFINITY;
         for (size_t c = 0; c < countof(cand); c++) {
             double bx[4] = {nd->px + cand[c][0], nd->py + cand[c][1] - 9, nd->px + cand[c][0] + tw, nd->py + cand[c][1] + 2};
-            double cost = c * 0.5;
+            double cost = c < 12 ? c * 0.5 : 6 + (c >= 28) * 3;
             if (bx[0] < 2 || bx[2] > W_ - 2 || bx[1] < 2 || bx[3] > H - 2) cost += 40;
             for (size_t l = 0; l < w.links.n; l++) {
                 const WNode *s = &w.nodes.v[w.links.v[l].s], *t = &w.nodes.v[w.links.v[l].t];
@@ -505,6 +477,82 @@ DIAG_FN(wardley_render) {
             if (cost < bc) bc = cost, L[0] = cand[c][0], L[1] = cand[c][1], memcpy(L + 2, bx, sizeof bx);
         }
     }
+    /* links */
+    double *LL = ANEW(a, double, 4 * w.links.n + 4); /* placed link-label boxes */
+    size_t nll = 0;
+    if (!LL) { free(b.p); return CMM_ERR_NOMEM; }
+    buf_lit(&b, "<g class=\"wardley-links\">");
+    for (size_t pass = 0; pass < 2; pass++)
+        for (size_t l = 0; l < w.links.n; l++) {
+            WLink *lk = &w.links.v[l];
+            WNode *s = &w.nodes.v[lk->s], *t = &w.nodes.v[lk->t];
+            bool skip = false;
+            for (size_t p = 0; p < w.pipes.n; p++)
+                if (w.pipes.v[p].parent == lk->t && lk->s >= w.pipes.v[p].first && lk->s < w.pipes.v[p].first + w.pipes.v[p].n) skip = true;
+            if (skip) continue;
+            double dx = t->px - s->px, dy = t->py - s->py, d = sqrt(dx * dx + dy * dy);
+            if (d < 1e-9) d = 1e-9; /* mermaid divides by zero here (NaN); keep finite */
+            if (pass == 0) {
+                double rs = s->pparent ? sq / sqrt(2) : NR, rt = t->pparent ? sq / sqrt(2) : NR;
+                bs(&b, lk->dashed ? "<line class=\"wardley-link wardley-link--dashed\"" : "<line class=\"wardley-link\"");
+                attr(&b, "x1", s->px + dx / d * rs); attr(&b, "y1", s->py + dy / d * rs);
+                attr(&b, "x2", t->px - dx / d * rt); attr(&b, "y2", t->py - dy / d * rt);
+                buf_lit(&b, " stroke=\"" STK "\" stroke-width=\"1\"");
+                if (lk->dashed) buf_lit(&b, " stroke-dasharray=\"6 6\"");
+                if (lk->flow & 1) buf_lit(&b, " marker-end=\"url(#mermaid-link-arrow-end)\"");
+                if (lk->flow & 2) buf_lit(&b, " marker-start=\"url(#mermaid-link-arrow-start)\"");
+                buf_lit(&b, "/>");
+            } else if (lk->label.n) {
+                /* default: midpoint, 8px to the left of the direction; else the cheapest spot along the
+                 * link (either side) clear of other links, nodes, component labels and earlier link labels */
+                double ux = dx / d, uy = dy / d, hw = text_width(lk->label, 10) / 2 + 2, hh = 7;
+                double lx = (s->px + t->px) / 2 + uy * 8, ly = (s->py + t->py) / 2 - ux * 8, bc = INFINITY;
+                static const double TT[] = {0.5, 0.4, 0.6, 0.3, 0.7, 0.22, 0.78};
+                for (size_t ti = 0; ti < countof(TT); ti++)
+                    for (int sd = 0; sd < 4; sd++) {
+                        double off = (sd & 1 ? -1 : 1) * (sd < 2 ? 8 : 15), mx = s->px + dx * TT[ti], my = s->py + dy * TT[ti];
+                        double cx = mx + uy * off, cy = my - ux * off, cost = ti * 0.6 + sd * 0.4;
+                        if (d * fmin(TT[ti], 1 - TT[ti]) < hw + NR) cost += 20; /* label would reach a node */
+                        const double box[4] = {-hw, -hh, hw, hh};
+                        for (size_t m = 0; m < w.links.n; m++) { /* other links, in the label's frame */
+                            if (m == l) continue;
+                            const WNode *p0 = &w.nodes.v[w.links.v[m].s], *p1 = &w.nodes.v[w.links.v[m].t];
+                            double ax = p0->px - cx, ay = p0->py - cy, bx_ = p1->px - cx, by = p1->py - cy;
+                            cost += 4 * seg_box_hits(ax * ux + ay * uy, -ax * uy + ay * ux, bx_ * ux + by * uy, -bx_ * uy + by * ux, box);
+                        }
+                        double ab[4] = {cx - fabs(ux) * hw - fabs(uy) * hh, cy - fabs(uy) * hw - fabs(ux) * hh, cx + fabs(ux) * hw + fabs(uy) * hh, cy + fabs(uy) * hw + fabs(ux) * hh};
+                        for (size_t j = 0; j < w.nodes.n; j++) {
+                            double qx = w.nodes.v[j].px - cx, qy = w.nodes.v[j].py - cy, rr = NR + 2;
+                            if (fabs(qx * ux + qy * uy) < hw + rr && fabs(-qx * uy + qy * ux) < hh + rr) cost += 30;
+                            const double *M = lbo + 6 * j;
+                            if (M[4] > M[2] && M[2] < ab[2] && ab[0] < M[4] && M[3] < ab[3] && ab[1] < M[5]) cost += 15;
+                        }
+                        for (size_t j = 0; j < nll; j++)
+                            if (LL[4 * j] < ab[2] && ab[0] < LL[4 * j + 2] && LL[4 * j + 1] < ab[3] && ab[1] < LL[4 * j + 3]) cost += 15;
+                        if (ab[0] < 2 || ab[1] < 2 || ab[2] > W_ - 2 || ab[3] > H - 2) cost += 40;
+                        if (cost < bc - 1e-9) {
+                            bc = cost, lx = cx, ly = cy;
+                            memcpy(LL + 4 * nll, ab, sizeof ab);
+                        }
+                    }
+                nll++;
+                double ang = atan2(dy, dx) * 180 / M_PI;
+                if (ang > 90 || ang < -90) ang += 180;
+                char tr[128];
+                snprintf(tr, sizeof tr, " transform=\"rotate(%.4g %.2f %.2f)\"", ang, lx, ly);
+                buf_lit(&b, "<text class=\"wardley-link-label\""); attr(&b, "x", lx); attr(&b, "y", ly);
+                buf_lit(&b, " fill=\"" TXT "\" font-size=\"10\" text-anchor=\"middle\" dominant-baseline=\"middle\"");
+                buf_put(&b, strlen(tr), tr); buf_ch(&b, '>'); buf_xml(&b, lk->label); buf_lit(&b, "</text>");
+            }
+        }
+    buf_lit(&b, "</g><g class=\"wardley-trends\">");
+    for (size_t k = 0; k < w.trends.n; k++) {
+        WNode *o = &w.nodes.v[w.trends.v[k].num];
+        double tx = PX(w.trends.v[k].x), ty = PY(w.trends.v[k].y), dx = tx - o->px, dy = ty - o->py, d = sqrt(dx * dx + dy * dy), sb = NR + 2;
+        double x2 = d > sb ? tx - dx / d * sb : tx, y2 = d > sb ? ty - dy / d * sb : ty;
+        line(&b, o->px, o->py, x2, y2, " class=\"wardley-trend\" stroke=\"#dc3545\" stroke-width=\"1\" stroke-dasharray=\"4 4\" marker-end=\"url(#mermaid-arrow)\"");
+    }
+    buf_lit(&b, "</g><g class=\"wardley-nodes\">");
     const double tr = NR * 1.2, c6 = cos(M_PI / 6), s6 = sin(M_PI / 6);
     for (size_t i = 0; i < w.nodes.n; i++) {
         WNode *nd = &w.nodes.v[i];
