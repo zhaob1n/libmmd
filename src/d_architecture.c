@@ -5,6 +5,7 @@
  * constraint; components are placed side by side. Groups are padded bounding boxes; edges are
  * orthogonal between port anchors. Built-in icons: cloud, database, disk, internet, server. */
 #include <math.h>
+#include <stdlib.h>
 
 #include "dgraph.h"
 #include "icons.h"
@@ -89,6 +90,37 @@ static void glyph(Buf *b, Str icon, double x, double y, double s) { /* x,y top-l
         buf_lit(b, "\" x=\""); buf_num(b, x + 40 * u); buf_lit(b, "\" y=\""); buf_num(b, y + 40 * u); buf_lit(b, "\">?</text>");
     }
     #undef P
+}
+
+/* do the polyline's segments cross a service box (icon + label)? the endpoints' own boxes count except on the segment leaving / entering them. summed overlap */
+static double path_hits(size_t np, const double *P, size_t nn, const ANode *N, const double *cx, const double *cy, const double *hw, uint32_t a, uint32_t b, char pa, char pb) {
+    double h = 0;
+    for (size_t i = 0; i + 1 < np; i++) {
+        double x0 = fmin(P[2 * i], P[2 * i + 2]), x1 = fmax(P[2 * i], P[2 * i + 2]), y0 = fmin(P[2 * i + 1], P[2 * i + 3]), y1 = fmax(P[2 * i + 1], P[2 * i + 3]);
+        for (size_t v = 0; v < nn; v++) {
+            if (N[v].junction) continue;
+            /* own box is fine on the segment leaving / entering it outward through its port */
+            if (v == a && i == 0 && (P[2] - P[0]) * pdx(pa) + (P[3] - P[1]) * pdy(pa) > 0) continue;
+            if (v == b && i + 2 == np && (P[2 * i] - P[2 * i + 2]) * pdx(pb) + (P[2 * i + 1] - P[2 * i + 3]) * pdy(pb) > 0) continue;
+            double ox = fmin(x1, cx[v] + hw[v]) - fmax(x0, cx[v] - hw[v]), oy = fmin(y1, cy[v] + IS / 2 + 22) - fmax(y0, cy[v] - IS / 2);
+            if (ox >= 0 && oy >= 0) h += 1 + ox + oy;
+        }
+    }
+    return h;
+}
+
+/* collinear overlap (within 3px) of the polyline with already-routed segments SG[4*i] */
+static double path_shared(size_t np, const double *P, size_t ns, const double *SG) {
+    double o = 0;
+    for (size_t i = 0; i + 1 < np; i++)
+        for (size_t j = 0; j < ns; j++) {
+            const double *q = SG + 4 * j, *p = P + 2 * i;
+            bool ph = fabs(p[1] - p[3]) < 1e-6, qh = fabs(q[1] - q[3]) < 1e-6;
+            if (ph != qh) continue;
+            if (ph && fabs(p[1] - q[1]) < 3) o += fmax(0, fmin(fmax(p[0], p[2]), fmax(q[0], q[2])) - fmax(fmin(p[0], p[2]), fmin(q[0], q[2])));
+            if (!ph && fabs(p[0] - q[0]) < 3) o += fmax(0, fmin(fmax(p[1], p[3]), fmax(q[1], q[3])) - fmax(fmin(p[1], p[3]), fmin(q[1], q[3])));
+        }
+    return o;
 }
 
 DIAG_FN(architecture_render) {
@@ -291,7 +323,90 @@ DIAG_FN(architecture_render) {
     }
     for (size_t g = 0; g < gv.n; g++) bb_add(&bb, gv.v[g].x0, gv.v[g].y0, gv.v[g].x1, gv.v[g].y1);
     if (title.n) bb.y0 -= 34;
-    if (!buf_reserve(out, 4096 + nn * 1500 + ev.n * 300 + gv.n * 1200)) return CMM_ERR_NOMEM;
+    double *HW = ANEW(a, double, nn + 1); /* service half-widths (icon or label) */
+    if (!HW) return CMM_ERR_NOMEM;
+    for (size_t i = 0; i < nn; i++) HW[i] = fmax(IS / 2, text_width(N[i].label.n ? N[i].label : N[i].id, fs) / 2 + 4);
+    double *SG = ANEW(a, double, 4 * 8 * (ev.n + 1)); /* routed segments, for de-bundling detours */
+    if (!SG) return CMM_ERR_NOMEM;
+    size_t ns = 0;
+    Buf eb = {}; /* edges first: detours may grow the bbox */
+    for (size_t e = 0; e < ev.n; e++) {
+        const AEdge *E = &ev.v[e];
+        double ra = N[E->a].junction ? 0 : IS / 2, rb = N[E->b].junction ? 0 : IS / 2;
+        /* deviate from mermaid: a bottom port sits below the service label, not on it */
+        double ya = E->pa == 'B' && ra > 0 ? IS / 2 + 22 : ra, yb = E->pb == 'B' && rb > 0 ? IS / 2 + 22 : rb;
+        double x0 = cx[E->a] + pdx(E->pa) * ra, y0 = cy[E->a] + pdy(E->pa) * ya;
+        double x1 = cx[E->b] + pdx(E->pb) * rb, y1 = cy[E->b] + pdy(E->pb) * yb;
+        bool ha = pdx(E->pa) != 0, hb = pdx(E->pb) != 0;
+        double P[16];
+        size_t np = 0;
+        P[np++] = x0, P[np++] = y0;
+        if (ha && hb && fabs(y0 - y1) > 0.5) { double mx = (x0 + x1) / 2; P[np++] = mx, P[np++] = y0, P[np++] = mx, P[np++] = y1; }
+        else if (!ha && !hb && fabs(x0 - x1) > 0.5) { double m = (y0 + y1) / 2; P[np++] = x0, P[np++] = m, P[np++] = x1, P[np++] = m; }
+        else if (ha != hb) { if (ha) P[np++] = x1, P[np++] = y0; else P[np++] = x0, P[np++] = y1; }
+        P[np++] = x1, P[np++] = y1;
+        double *hwv = HW;
+        if (path_hits(np / 2, P, nn, N, cx, cy, hwv, E->a, E->b, E->pa, E->pb) > 0) {
+            /* deviate from mermaid: the plain elbow crosses another service; step out of both ports and
+             * take the cheapest channel between grid rows / columns instead */
+            double sx0 = x0 + pdx(E->pa) * 20, sy0 = y0 + pdy(E->pa) * 20, sx1 = x1 + pdx(E->pb) * 20, sy1 = y1 + pdy(E->pb) * 20;
+            double best = path_hits(np / 2, P, nn, N, cx, cy, hwv, E->a, E->b, E->pa, E->pb) * 1000, Q[16], BQ[16];
+            size_t bq = 0;
+            for (size_t v = 0; v <= nn; v++)
+                for (int side = -1; side <= 1; side += 2)
+                    for (int vert = 0; vert < 2; vert++)
+                        for (int sh = -2; sh <= 2; sh++) {
+                        double c = v < nn ? (vert ? cx[v] + side * PITCH_X / 2 : cy[v] + side * PITCH_Y / 2 + 11) : 0;
+                        if (v == nn) { if (side > 0) continue; c = vert ? (sx0 + sx1) / 2 : (sy0 + sy1) / 2; }
+                        c += sh * 12;
+                        size_t m = 0;
+                        Q[m++] = x0, Q[m++] = y0, Q[m++] = sx0, Q[m++] = sy0;
+                        if (vert) Q[m++] = c, Q[m++] = sy0, Q[m++] = c, Q[m++] = sy1;
+                        else Q[m++] = sx0, Q[m++] = c, Q[m++] = sx1, Q[m++] = c;
+                        Q[m++] = sx1, Q[m++] = sy1, Q[m++] = x1, Q[m++] = y1;
+                        double len = 0;
+                        for (size_t i = 0; i + 2 < m; i += 2) len += fabs(Q[i + 2] - Q[i]) + fabs(Q[i + 3] - Q[i + 1]);
+                        double cost = path_hits(m / 2, Q, nn, N, cx, cy, hwv, E->a, E->b, E->pa, E->pb) * 1000 + len + 3 * path_shared(m / 2, Q, ns, SG) + 6 * abs(sh);
+                        if (cost < best) best = cost, bq = m, memcpy(BQ, Q, m * sizeof *Q);
+                    }
+            if (bq) {
+                np = 0; /* drop zero-length and collinear points */
+                for (size_t i = 0; i < bq; i += 2) {
+                    if (np >= 2 && fabs(BQ[i] - P[np - 2]) < 1e-6 && fabs(BQ[i + 1] - P[np - 1]) < 1e-6) continue;
+                    if (np >= 4) {
+                        double ax = P[np - 4], ay = P[np - 3], mx = P[np - 2], my = P[np - 1];
+                        if ((fabs(ax - mx) < 1e-6 && fabs(mx - BQ[i]) < 1e-6) || (fabs(ay - my) < 1e-6 && fabs(my - BQ[i + 1]) < 1e-6)) np -= 2;
+                    }
+                    P[np++] = BQ[i], P[np++] = BQ[i + 1];
+                }
+                for (size_t i = 0; i < np; i += 2) bb_add(&bb, P[i] - 1, P[i + 1] - 1, P[i] + 1, P[i + 1] + 1);
+            }
+        }
+        for (size_t i = 0; i + 2 < np && ns < 8 * (ev.n + 1); i += 2) memcpy(SG + 4 * ns++, P + i, 4 * sizeof *P);
+        size_t k = np / 2;
+        buf_lit(&eb, "<path class=\"ae\" d=\"M");
+        for (size_t i = 0; i < k; i++) { if (i) buf_ch(&eb, 'L'); dg_pt(&eb, P[2 * i], P[2 * i + 1]); }
+        buf_lit(&eb, "\"/>");
+        for (int end = 0; end < 2; end++) {
+            if (!(end ? E->arr_b : E->arr_a)) continue;
+            const double *T = end ? P + 2 * (k - 1) : P, *F = end ? P + 2 * (k - 2) : P + 2;
+            double dx = T[0] - F[0], dy = T[1] - F[1], L = sqrt(dx * dx + dy * dy);
+            if (L < 1e-9) continue;
+            dx /= L, dy /= L;
+            buf_lit(&eb, "<path class=\"ah\" d=\"M"); dg_pt(&eb, T[0], T[1]); buf_ch(&eb, 'L');
+            dg_pt(&eb, T[0] - dx * 12 - dy * 6, T[1] - dy * 12 + dx * 6); buf_ch(&eb, 'L');
+            dg_pt(&eb, T[0] - dx * 12 + dy * 6, T[1] - dy * 12 - dx * 6); buf_lit(&eb, "z\"/>");
+        }
+        if (E->label.n) {
+            size_t mid = (k - 1) / 2;
+            double lx = (P[2 * mid] + P[2 * mid + 2]) / 2, ly = (P[2 * mid + 1] + P[2 * mid + 3]) / 2;
+            double tw = text_width(E->label, 14);
+            dg_rect_fill(&eb, lx - tw / 2 - 3, ly - 10, tw + 6, 20, 0, "ael", "#fff");
+            dg_text(&eb, E->label, 14, lx, ly, "middle", "ael");
+        }
+    }
+    if (eb.oom) { free(eb.p); return CMM_ERR_NOMEM; }
+    if (!buf_reserve(out, 4096 + nn * 1500 + eb.n + gv.n * 1200)) { free(eb.p); return CMM_ERR_NOMEM; }
     DG_HEAD(out, bb, 16, "architecture", CSS);
     if (title.n) dg_text(out, title, 18, (bb.x0 + bb.x1) / 2, bb.y0 + 14, "middle", "agl");
     for (size_t g = 0; g < gv.n; g++) {
@@ -305,41 +420,8 @@ DIAG_FN(architecture_render) {
         }
         dg_text(out, G->label.n ? G->label : G->id, fs, tx, G->y0 + 15, "start", "agl");
     }
-    for (size_t e = 0; e < ev.n; e++) {
-        const AEdge *E = &ev.v[e];
-        double ra = N[E->a].junction ? 0 : IS / 2, rb = N[E->b].junction ? 0 : IS / 2;
-        double x0 = cx[E->a] + pdx(E->pa) * ra, y0 = cy[E->a] + pdy(E->pa) * ra;
-        double x1 = cx[E->b] + pdx(E->pb) * rb, y1 = cy[E->b] + pdy(E->pb) * rb;
-        bool ha = pdx(E->pa) != 0, hb = pdx(E->pb) != 0;
-        double P[8];
-        size_t np = 0;
-        P[np++] = x0, P[np++] = y0;
-        if (ha && hb && fabs(y0 - y1) > 0.5) { double mx = (x0 + x1) / 2; P[np++] = mx, P[np++] = y0, P[np++] = mx, P[np++] = y1; }
-        else if (!ha && !hb && fabs(x0 - x1) > 0.5) { double m = (y0 + y1) / 2; P[np++] = x0, P[np++] = m, P[np++] = x1, P[np++] = m; }
-        else if (ha != hb) { if (ha) P[np++] = x1, P[np++] = y0; else P[np++] = x0, P[np++] = y1; }
-        P[np++] = x1, P[np++] = y1;
-        size_t k = np / 2;
-        buf_lit(out, "<path class=\"ae\" d=\"M");
-        for (size_t i = 0; i < k; i++) { if (i) buf_ch(out, 'L'); dg_pt(out, P[2 * i], P[2 * i + 1]); }
-        buf_lit(out, "\"/>");
-        for (int end = 0; end < 2; end++) {
-            if (!(end ? E->arr_b : E->arr_a)) continue;
-            const double *T = end ? P + 2 * (k - 1) : P, *F = end ? P + 2 * (k - 2) : P + 2;
-            double dx = T[0] - F[0], dy = T[1] - F[1], L = sqrt(dx * dx + dy * dy);
-            if (L < 1e-9) continue;
-            dx /= L, dy /= L;
-            buf_lit(out, "<path class=\"ah\" d=\"M"); dg_pt(out, T[0], T[1]); buf_ch(out, 'L');
-            dg_pt(out, T[0] - dx * 12 - dy * 6, T[1] - dy * 12 + dx * 6); buf_ch(out, 'L');
-            dg_pt(out, T[0] - dx * 12 + dy * 6, T[1] - dy * 12 - dx * 6); buf_lit(out, "z\"/>");
-        }
-        if (E->label.n) {
-            size_t mid = (k - 1) / 2;
-            double lx = (P[2 * mid] + P[2 * mid + 2]) / 2, ly = (P[2 * mid + 1] + P[2 * mid + 3]) / 2;
-            double tw = text_width(E->label, 14);
-            dg_rect_fill(out, lx - tw / 2 - 3, ly - 10, tw + 6, 20, 0, "ael", "#fff");
-            dg_text(out, E->label, 14, lx, ly, "middle", "ael");
-        }
-    }
+    buf_put(out, eb.n, eb.p);
+    free(eb.p);
     for (size_t i = 0; i < nn; i++) {
         if (N[i].junction) {
             buf_lit(out, "<circle class=\"aj\" cx=\""); buf_num(out, cx[i]); buf_lit(out, "\" cy=\""); buf_num(out, cy[i]); buf_lit(out, "\" r=\"4\"/>");

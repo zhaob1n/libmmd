@@ -11,7 +11,7 @@ function sat(A,B){for(const P of [A,B])for(let k=0;k<4;k++){const p=P[k],q=P[(k+
   let a0=1e18,a1=-1e18,b0=1e18,b1=-1e18;for(const v of A){const d=v[0]*nx+v[1]*ny;a0=Math.min(a0,d);a1=Math.max(a1,d);}
   for(const v of B){const d=v[0]*nx+v[1]*ny;b0=Math.min(b0,d);b1=Math.max(b1,d);} if(a1<=b0||b1<=a0) return false;} return true;}
 function inq(p,A){let s=0;for(let k=0;k<4;k++){const a=A[k],b=A[(k+1)%4],c=(b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]);if(c===0)return false;s+=c>0?1:-1;}return Math.abs(s)===4;}
-const EDGE=/edge|link|relation|transition|message|arrow|flowchart-link|branch|commit-line|messageLine|loopLine|er relationshipLine|path/i;
+const EDGE=/edge|link|relation|transition|message|arrow|flowchart-link|branch|commit-line|messageLine|loopLine|er relationshipLine|path|(^|\s)ae(\s|$)/i;
 const out=[];
 for(const wrap of document.querySelectorAll('div[data-f]')){
   const f=wrap.dataset.f, svg=wrap.querySelector('svg'); if(!svg) continue;
@@ -70,7 +70,7 @@ for(const wrap of document.querySelectorAll('div[data-f]')){
   // clipping: text outside the svg viewport
   for(const t of texts) if(t.b[0]<SB[0]-1||t.b[1]<SB[1]-1||t.b[2]>SB[2]+1||t.b[3]>SB[3]+1) res.cl.push([t.s.slice(0,18),Math.round(Math.max(SB[0]-t.b[0],SB[1]-t.b[1],t.b[2]-SB[2],t.b[3]-SB[3]))]);
   // edge through a node that is not one of its ends
-  const nodes=[...svg.querySelectorAll('.node,[class*=em-frame],.classGroup,.er.entityBox')].map(g=>({g,b:R(g)})).filter(n=>n.b[2]-n.b[0]>8&&n.b[3]-n.b[1]>8);
+  const nodes=[...svg.querySelectorAll('.node,[class*=em-frame],.classGroup,.er.entityBox,.architecture-service')].map(g=>({g,b:R(g)})).filter(n=>n.b[2]-n.b[0]>8&&n.b[3]-n.b[1]>8);
   for(const e of edges){const a=e.pts[0],z=e.pts[e.pts.length-1];
     for(const n of nodes){const B=n.b; const near=p=>p[0]>B[0]-10&&p[0]<B[2]+10&&p[1]>B[1]-10&&p[1]<B[3]+10;
       if(near(a)||near(z)||n.g.contains(e.p)) continue;
