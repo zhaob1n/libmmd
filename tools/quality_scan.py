@@ -6,7 +6,7 @@ env BIN=path/to/mmdc-c"""
 import sys,subprocess,os,json,tempfile,html,re,glob
 ROOT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BIN=os.environ.get('BIN',os.path.join(ROOT,'build/mmdc-c'))
-files=sys.argv[1:] or sorted(glob.glob(os.path.join(ROOT,'tests/docs/**/*.mmd'),recursive=True)+glob.glob(os.path.join(ROOT,'tests/cases/*.mmd'))+glob.glob(os.path.join(ROOT,'bench/mmdr_fixtures/*.mmd')))
+files=[x for x in sys.argv[1:] if x!='-a'] or sorted(glob.glob(os.path.join(ROOT,'tests/docs/**/*.mmd'),recursive=True)+glob.glob(os.path.join(ROOT,'tests/cases/*.mmd'))+glob.glob(os.path.join(ROOT,'bench/mmdr_fixtures/*.mmd')))
 js=open(os.path.join(ROOT,'tools/quality_scan.js')).read()
 allr=[]
 for i in range(0,len(files),40):
@@ -28,6 +28,19 @@ for i in range(0,len(files),40):
     subprocess.run(['rm','-rf',T])
     if m and m.group(1): allr+=json.loads(html.unescape(m.group(1)))
     else: print('batch fail',i,file=sys.stderr)
+# flags that are intended (reviewed); reported as "known" and not counted. Pass -a to show them anyway.
+KNOWN={
+ 'tests/cases/wardley_19.mmd':{'le','cl'}, # notes/label offsets at user-given coords; the note text runs to the user-sized canvas edge (as mermaid)
+ 'tests/cases/wardley_edge.mmd':{'ll'}, # 300x200 edge case: note and annotation pinned to nearby user coords
+ 'tests/cases/venn_edge.mmd':{'ll'}, # degenerate set A:0 has no area; its label sits on the union label by construction
+}
+showall='-a' in sys.argv
 for r in allr:
     f=os.path.relpath(r['f'],ROOT)
+    kn=KNOWN.get(f,set())
+    if kn and not showall:
+        hid=[k for k in kn if r.get(k)]
+        for k in kn: r.pop(k,None)
+        if hid: print(f,'known:',','.join(sorted(hid)))
+        if not any(v for k,v in r.items() if k!='f'): continue
     print(f, {k:(len(v),v[:3]) for k,v in r.items() if k!='f' and v})
