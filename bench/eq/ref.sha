@@ -25,7 +25,7 @@ aa82cf76170dc329 bench/eq/in/f022.mmd
 c5d323f6345fc355 bench/eq/in/f024.mmd
 190910a87b3892eb bench/eq/in/f025.mmd
 144c65ffecb5cb20 bench/eq/in/f026.mmd
-aabfa8854f8d7949 bench/eq/in/f027.mmd
+4450668ee91b4f06 bench/eq/in/f027.mmd
 a10326d1bd9763ae bench/eq/in/f028.mmd
 e89060369c0ba48b bench/eq/in/f029.mmd
 0a523f3ccad3f11a bench/eq/in/f030.mmd
@@ -134,7 +134,7 @@ de3c041d72b03c14 bench/eq/in/f127.mmd
 0bba2bd4976d6c03 bench/eq/in/f133.mmd
 390af6e13cf3454c bench/eq/in/f134.mmd
 3de0f06132c8ffa5 bench/eq/in/f135.mmd
-1e731fe896cb09df bench/eq/in/f136.mmd
+95b35287fb093b11 bench/eq/in/f136.mmd
 effa21c7d55876ba bench/eq/in/f137.mmd
 747660b7255d81c2 bench/eq/in/f138.mmd
 605c8c45c0cef315 bench/eq/in/f139.mmd
@@ -159,7 +159,7 @@ e3e542e805a3388f bench/eq/in/f155.mmd
 04252ee0e86dcb41 bench/eq/in/f158.mmd
 b4b68215924305ec bench/eq/in/f159.mmd
 69bc2493503704b2 bench/eq/in/f160.mmd
-7a9d0517117d8c45 bench/eq/in/f161.mmd
+32eec96b84155377 bench/eq/in/f161.mmd
 9d7e871029df06e0 bench/eq/in/f162.mmd
 90c737cd91243f7d bench/eq/in/f163.mmd
 0fa35e5c2a64033e bench/eq/in/f164.mmd
@@ -171,7 +171,7 @@ d2e5690ac59f13da bench/eq/in/f167.mmd
 6f92dcd6f003f235 bench/eq/in/f170.mmd
 4d90452ef573ebe9 bench/eq/in/f171.mmd
 fa42946929172073 bench/eq/in/f172.mmd
-f812ab1f5029149a bench/eq/in/f173.mmd
+90f6ec1d4eefb6cf bench/eq/in/f173.mmd
 1f3ae77de2229e15 bench/eq/in/f174.mmd
 460ac585464387dc bench/eq/in/f175.mmd
 6cb1b43a9d3874ef bench/eq/in/f176.mmd
@@ -179,7 +179,7 @@ f812ab1f5029149a bench/eq/in/f173.mmd
 b598cfd7ca7a5755 bench/eq/in/f178.mmd
 d766e388d55d4807 bench/eq/in/f179.mmd
 29c3ff124cf4b6a0 bench/eq/in/f180.mmd
-8a56ac776b48816b bench/eq/in/f181.mmd
+df9fbcb2f581b585 bench/eq/in/f181.mmd
 dacb40f2634db4c1 bench/eq/in/f182.mmd
 233f92a4d009c99f bench/eq/in/f183.mmd
 920cd95ee185c9e5 bench/eq/in/f184.mmd
@@ -270,7 +270,7 @@ ec67e892069e1a61 bench/eq/in/f266.mmd
 109545ab4594f621 bench/eq/in/f269.mmd
 3681c7eb57087906 bench/eq/in/f270.mmd
 a9bff8e055de5771 bench/eq/in/f271.mmd
-24267225a45b821d bench/eq/in/f272.mmd
+94964a5ddbe8b689 bench/eq/in/f272.mmd
 6446c9cf564a7486 bench/eq/in/f273.mmd
 bd21292399de79ff bench/eq/in/f274.mmd
 6d991f4165f94b5a bench/eq/in/f275.mmd
@@ -296,7 +296,7 @@ e8aa39b9d949d25e bench/eq/in/f294.mmd
 573186541225beaa bench/eq/in/f295.mmd
 f4a8735b19ab9d7b bench/eq/in/f296.mmd
 15744398ce7f2b08 bench/eq/in/f297.mmd
-fd904dff445bcb34 bench/eq/in/f298.mmd
+dcdeb5e70d094333 bench/eq/in/f298.mmd
 6105b2df2d7ee99d bench/eq/in/f299.mmd
 d8b7480e8d3e4245 bench/eq/in/f300.mmd
 0bbbdfda352b135d bench/eq/in/f301.mmd
@@ -352,7 +352,7 @@ f9732fca5b984553 bench/eq/in/f350.mmd
 e9ab4062dcb64060 bench/eq/in/f351.mmd
 540a0685bdc6c653 bench/eq/in/f352.mmd
 3c874aadf26db0fe bench/eq/in/f353.mmd
-463c5c42a0a7c186 bench/eq/in/f354.mmd
+783b589e50aa41ca bench/eq/in/f354.mmd
 357d178139803614 bench/eq/in/f355.mmd
 05e75b92191a6dc5 bench/eq/in/f356.mmd
 b23ba18f828eed73 bench/eq/in/f357.mmd
@@ -437,19 +437,22 @@ fe2d332718f19b28 bench/inputs/large.mmd
 82d5d592ed315e67 tests/cases/architecture_groups.mmd
 a902f82afcc5bd32 tests/cases/architecture_outsider.mmd
 6adb29bec2e21342 tests/cases/architecture_overlap.mmd
+39fe86aad7a509fb tests/cases/architecture_title_hrun.mmd
 0b0c13f2f1776d9d tests/cases/basic.mmd
 d739efc9ff6f8eff tests/cases/block_full.mmd
 a49253bdf9cf6e78 tests/cases/block_label_edge.mmd
+e2f59cceb3e093c1 tests/cases/block_loop_lastcol.mmd
 5af449c568482320 tests/cases/block_route.mmd
 49330118db45e8d7 tests/cases/bt_rl.mmd
 1fffeb2386a38d8a tests/cases/c4_bgcolor.mmd
-9826537f886b7d8a tests/cases/c4_full.mmd
-743874ece51b1332 tests/cases/c4_loop_label.mmd
+e404ce5215ac0b01 tests/cases/c4_full.mmd
+9f2751c55c0bb6aa tests/cases/c4_loop_label.mmd
 03c938de59d5ad82 tests/cases/c4_selfrel.mmd
 b36a36c6199b897e tests/cases/c4_styles.mmd
-5d12dda317e8eb4a tests/cases/class_card_fan.mmd
+80b8b24185caea79 tests/cases/class_card_fan.mmd
 62a7ca1c8916485f tests/cases/class_full.mmd
 78b64e09f441c0ef tests/cases/class_ns_iso.mmd
+e4955e564035f7c2 tests/cases/class_parallel_labels.mmd
 eeadabde68c69c9d tests/cases/config_keys.mmd
 b2a9983ee0faecb0 tests/cases/config_pie.mmd
 3f90ebf94953c684 tests/cases/config_quadrant.mmd
@@ -462,7 +465,7 @@ b2a9983ee0faecb0 tests/cases/config_pie.mmd
 a163e308f3db855a tests/cases/dir_subgraphs.mmd
 53ea9622d461dc28 tests/cases/dir_subgraphs_isolated.mmd
 e8fb4339558404ee tests/cases/edge_ids.mmd
-4bf71a04e6efc0d1 tests/cases/edges.mmd
+4ee2bbf61978a57b tests/cases/edges.mmd
 b300dec060978f00 tests/cases/er_full.mmd
 8e21339bfc6b221d tests/cases/er_selfloop.mmd
 afbaa6b4ebd14b86 tests/cases/er_sub_dir.mmd
@@ -479,7 +482,7 @@ b86cfe9ab2e03b76 tests/cases/flow_config_curve.mmd
 da12ad4c1e8e2285 tests/cases/flow_config_linear.mmd
 e09f507647b1fba3 tests/cases/flow_iso_toggle.mmd
 1e6fe1049583057f tests/cases/flowchart_stress_corner.mmd
-45e52ee71c93d242 tests/cases/flowchart_title_crossed.mmd
+450c25ade31c007f tests/cases/flowchart_title_crossed.mmd
 61f87be15f6f04ff tests/cases/gantt_cfg_comments.mmd
 c2a3004a31919108 tests/cases/gantt_compact.mmd
 11d5f40e47aa89f0 tests/cases/gantt_full.mmd
@@ -496,9 +499,10 @@ bc31d149bb5b4002 tests/cases/mindmap_full.mmd
 a0e90a7be466dade tests/cases/pie_full.mmd
 9b61eac120ee08fa tests/cases/pie_tall_legend.mmd
 303de87bb96035b6 tests/cases/pie_tiny_slices.mmd
-b4a19940a6e4e22d tests/cases/quadrant_crowded.mmd
-a425acb2d3dcce37 tests/cases/quadrant_dense_labels.mmd
+d66bcba1c0c7ab1c tests/cases/quadrant_crowded.mmd
+a255a819ea6cfa90 tests/cases/quadrant_dense_labels.mmd
 578abe0ad86c9f8d tests/cases/quadrant_full.mmd
+512c39564070a1c9 tests/cases/quadrant_ring_fallback.mmd
 5d529551c71e664c tests/cases/radar_full.mmd
 46a85b2e6172aede tests/cases/railroad_abnf.mmd
 61d448727e53c5c6 tests/cases/railroad_ebnf.mmd
@@ -515,7 +519,7 @@ af64380ec0563af0 tests/cases/seq_full.mmd
 c30d794f7e2c5580 tests/cases/seq_types.mmd
 047f87ad8e9ce83c tests/cases/shapes.mmd
 cc95989feb36d618 tests/cases/state_full.mmd
-34e951bc0216382f tests/cases/state_stress_looplabels.mmd
+11fe6505c2707180 tests/cases/state_stress_looplabels.mmd
 715f5012f0d8902c tests/cases/styles.mmd
 cd68ad5b79474019 tests/cases/subgraphs.mmd
 4c13b5c1ecd51ad8 tests/cases/swimlane_01.mmd
@@ -566,6 +570,8 @@ e3eb9c31312baeb8 tests/cases/wardley_10.mmd
 abb9b133681bc039 tests/cases/wardley_16.mmd
 609d6eebf1907779 tests/cases/wardley_17.mmd
 61b913fd7eaa5112 tests/cases/wardley_19.mmd
+3b722e821a6e0e49 tests/cases/wardley_dense_labels.mmd
+0a330df059a4a1ab tests/cases/wardley_dense_text.mmd
 3a007588f83e1b8c tests/cases/wardley_edge.mmd
 c669fbe34dccf7ac tests/cases/xychart_full.mmd
 566fbe582282399a tests/cases/xychart_horiz.mmd
