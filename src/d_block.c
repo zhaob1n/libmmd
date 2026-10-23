@@ -377,7 +377,8 @@ DIAG_FN(block_render) {
     Blk *B = bv.v;
     size_t nb = bv.n;
     uint32_t *rc = ANEW(a, uint32_t, nb), *cc = ANEW(a, uint32_t, nb), *rows = ANEW(a, uint32_t, nb);
-    if (!rc || !cc || !rows) return CMM_ERR_NOMEM;
+    double **gx = ANEW(a, double *, nb); /* per group: extra gap after column k (labelled side-by-side edges) */
+    if (!rc || !cc || !rows || !gx) return CMM_ERR_NOMEM;
     /* bottom-up natural sizes (children always have larger indices) */
     for (size_t i = nb; i-- > 0;) {
         Blk *b = &B[i];
@@ -414,7 +415,20 @@ DIAG_FN(block_render) {
         rows[i] = flow(B, b, cols, rc, cc);
         b->lh = (i && b->label.n) ? fs * 1.4 : 0;
         double lw = b->label.n ? text_width(b->label, fs) + 2 * PAD : 0;
-        b->w = fmax(cols * uw + (cols - 1) * GAP + 2 * PAD, lw);
+        double S = 0; /* deviate from mermaid: room for a label on an edge between neighbouring blocks in a row */
+        for (size_t e = 0; e < ev.n; e++) {
+            uint32_t L = ev.v[e].a, R = ev.v[e].b;
+            if (!ev.v[e].label.n || L >= nb || R >= nb || B[L].parent != i || B[R].parent != i || rc[L] != rc[R]) continue;
+            if (cc[L] > cc[R]) { uint32_t t = L; L = R; R = t; }
+            uint32_t sL = B[L].span < cols ? B[L].span : cols;
+            if (cc[R] != cc[L] + sL || !cc[R]) continue;
+            double need = text_width(ev.v[e].label, fs) + 16 - GAP;
+            if (need <= 0) continue;
+            if (!gx[i] && !(gx[i] = ANEW(a, double, cols))) return CMM_ERR_NOMEM;
+            gx[i][cc[R] - 1] = fmax(gx[i][cc[R] - 1], need);
+        }
+        if (gx[i]) for (uint32_t k = 0; k < cols; k++) S += gx[i][k];
+        b->w = fmax(cols * uw + (cols - 1) * GAP + S + 2 * PAD, lw);
         b->h = rows[i] ? rows[i] * uh + (rows[i] - 1) * GAP + 2 * PAD + b->lh : 2 * PAD + fmax(b->lh, 20);
     }
     B[0].x = B[0].y = 0;
@@ -422,12 +436,19 @@ DIAG_FN(block_render) {
         Blk *b = &B[i];
         if (!b->group || b->first == UINT32_MAX) continue;
         uint32_t cols = group_cols(B, b);
-        double cw = (b->w - 2 * PAD - (cols - 1) * GAP) / cols, ch = (b->h - 2 * PAD - b->lh - (rows[i] - 1) * GAP) / rows[i];
+        double S = 0;
+        if (gx[i]) for (uint32_t k = 0; k < cols; k++) S += gx[i][k];
+        double cw = (b->w - 2 * PAD - (cols - 1) * GAP - S) / cols, ch = (b->h - 2 * PAD - b->lh - (rows[i] - 1) * GAP) / rows[i];
         for (uint32_t c = b->first; c != UINT32_MAX; c = B[c].next) {
             uint32_t s = B[c].span < cols ? B[c].span : cols;
-            B[c].x = b->x + PAD + cc[c] * (cw + GAP);
+            double pre = 0, in = 0;
+            if (gx[i]) {
+                for (uint32_t k = 0; k < cc[c] && k < cols; k++) pre += gx[i][k];
+                for (uint32_t k = cc[c]; k + 1 < cc[c] + s && k < cols; k++) in += gx[i][k];
+            }
+            B[c].x = b->x + PAD + cc[c] * (cw + GAP) + pre;
             B[c].y = b->y + PAD + b->lh + rc[c] * (ch + GAP);
-            B[c].w = s * cw + (s - 1) * GAP, B[c].h = ch;
+            B[c].w = s * cw + (s - 1) * GAP + in, B[c].h = ch;
         }
     }
     double top = title.n ? 40 : 0;
