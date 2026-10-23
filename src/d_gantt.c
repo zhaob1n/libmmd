@@ -522,11 +522,16 @@ DIAG_FN(gantt_render) {
     /* grid + axis labels */
     double gy0 = TOP - 2, gy1 = TOP + nrows * (BH + GAP) - 2;
     const bool top_axis = dcfg_bool("gantt.topAxis", false);
+    /* deviate from mermaid: labels wider than the tick spacing would overprint, so label every m-th tick */
+    double mind = INFINITY;
+    for (size_t k = 1; k < ntk; k++) mind = fmin(mind, (TK[k] - TK[k - 1]) * sc);
+    size_t every = ntk > 1 && mind > 0 && maxlab + 6 > mind ? (size_t)ceil((maxlab + 6) / mind) : 1, shown = 0;
     for (size_t k = 0; k < ntk; k++) {
         double t = TK[k];
         if (t < lo_t - 1e-6) continue;
         double x = left + (t - lo_t) * sc;
         dg_line(out, x, gy0, x, gy1, "grid");
+        if (shown++ % every) continue;
         size_t len = fmt_time(axis, t, sizeof lab, lab);
         dg_text(out, (Str){.p = lab, .n = len}, 10, x, gy1 + 14, "middle", "tick");
         if (top_axis) dg_text(out, (Str){.p = lab, .n = len}, 10, x, gy0 - 10, "middle", "tick");
