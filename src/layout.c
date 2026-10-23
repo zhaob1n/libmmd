@@ -2711,18 +2711,25 @@ static void labels_on_curve(Graph *g) {
     if (!L) return;
     for (size_t e = 0; e < E; e++) if (g->elabel[e].n) L[nl++] = e;
     if (nl > 4000) return;
-    for (size_t i = 0; i < nl; i++)
+    for (int pass = 0; pass < 4; pass++) { /* a push can land on a third label: repeat until clear */
+      bool any = false;
+      for (size_t i = 0; i < nl; i++)
         for (size_t j = i + 1; j < nl; j++) {
             size_t a = L[i], b = L[j];
             if (!lab_overlap(g, a, b)) continue;
+            any = true;
             if (slide_on_curve(g, L, nl, b) || slide_on_curve(g, L, nl, a)) continue;
-            g->elx[a] = ox[2 * a], g->ely[a] = ox[2 * a + 1];
-            g->elx[b] = ox[2 * b], g->ely[b] = ox[2 * b + 1];
-            if (!lab_overlap(g, a, b)) continue;
+            if (!pass) {
+                g->elx[a] = ox[2 * a], g->ely[a] = ox[2 * a + 1];
+                g->elx[b] = ox[2 * b], g->ely[b] = ox[2 * b + 1];
+                if (!lab_overlap(g, a, b)) continue;
+            }
             double need = (g->elw[a] + g->elw[b]) / 2 + 4 - fabs(g->elx[a] - g->elx[b]);
             double sgn = g->elx[a] < g->elx[b] || (g->elx[a] == g->elx[b] && a < b) ? -1 : 1;
             g->elx[a] += sgn * need / 2, g->elx[b] -= sgn * need / 2;
         }
+      if (!any) break;
+    }
 }
 
 /* place each cluster title where no edge crosses the title band (prefer centred) */
