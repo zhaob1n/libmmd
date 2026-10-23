@@ -1832,8 +1832,10 @@ static Box content_box(const Graph *g) {
 }
 
 constexpr double ISO_RANK_EXTRA = 25;   /* mermaid sub-graph ranksep = ranksep + 25 */
-constexpr double ISO_PAD_RANK = 37.5;   /* isolated cluster padding along its rank axis */
-constexpr double ISO_PAD_CROSS = 35;    /* ... and across it */
+/* isolated cluster padding: (ranksep + 25)/2 along its rank axis, (nodesep + 20)/2 across it
+ * (flowchart 50/50: 37.5 / 35; er 140/80: 52.5 / 80) */
+static inline double iso_pad_rank(const Graph *g) { return (g->rank_sep + 25) / 2; }
+static inline double iso_pad_cross(const Graph *g) { return (g->node_sep + 20) / 2; }
 
 [[nodiscard]] static bool gsub_alloc(Graph *d, const Graph *g, Dir dir, size_t nn, size_t ne, size_t ns) {
     Arena *A = g->arena;
@@ -2008,8 +2010,8 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
         double w = dmax(b.x1 - b.x0, tw) + 2 * CLUSTER_PAD, h = b.y1 - b.y0 + 2 * CLUSTER_PAD + CLUSTER_TITLE;
         if (g->iso_toggle) { /* mermaid: dagre margins + cluster padding, title sits in the top margin */
             bool lr = G[k].dir == DIR_LR || G[k].dir == DIR_RL;
-            ipx[k] = lr ? ISO_PAD_RANK : ISO_PAD_CROSS;
-            ipy[k] = lr ? ISO_PAD_CROSS : ISO_PAD_RANK;
+            ipx[k] = lr ? iso_pad_rank(g) : iso_pad_cross(g);
+            ipy[k] = lr ? iso_pad_cross(g) : iso_pad_rank(g);
             w = dmax(b.x1 - b.x0, tw) + 2 * ipx[k];
             h = b.y1 - b.y0 + 2 * ipy[k];
         }

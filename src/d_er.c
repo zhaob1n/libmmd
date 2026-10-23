@@ -1,6 +1,7 @@
 /* erDiagram: entities with attribute tables (type, name, PK/FK/UK keys, comments), aliases,
  * all crow's-foot cardinalities (symbolic and word forms), identifying (--) and
  * non-identifying (..) relationships, labels, direction. Layout: flow_layout. */
+#include "dcfg.h"
 #include <math.h>
 
 #include "dgraph.h"
@@ -41,8 +42,23 @@ typedef struct EP {
         if (label.n >= 2 && label.p[0] == '"' && label.p[label.n - 1] == '"') label.p++, label.n -= 2;
         ref = str_trim((Str){.p = ref.p, .n = (size_t)(b - ref.p)});
     }
-    if (ref.n >= 2 && ref.p[0] == '"' && ref.p[ref.n - 1] == '"') ref.p++, ref.n -= 2;
+    bool quoted = ref.n >= 2 && ref.p[0] == '"' && ref.p[ref.n - 1] == '"';
+    if (quoted) ref.p++, ref.n -= 2;
     if (!ref.n) return NONE - 1;
+    if (quoted && !label.n && (memchr(ref.p, '*', ref.n) || memchr(ref.p, '_', ref.n))) {
+        /* mermaid renders quoted names as markdown: drop ** and word-boundary _ markers */
+        char *md = arena_alloc(p->A, ref.n + 1, 1);
+        if (!md) return NONE;
+        size_t n = 0;
+        for (size_t i = 0; i < ref.n; i++) {
+            char c = ref.p[i];
+            if (c == '*' && i + 1 < ref.n && ref.p[i + 1] == '*') { i++; continue; }
+            bool lb = !i || ref.p[i - 1] == ' ', rb = i + 1 == ref.n || ref.p[i + 1] == ' ';
+            if (c == '_' && (lb || rb)) continue;
+            md[n++] = c;
+        }
+        label = (Str){.p = md, .n = n};
+    }
     bool fresh;
     int32_t v = dg_node(&p->g, ref, &fresh);
     if (v == NONE) return NONE;
@@ -258,7 +274,6 @@ static constexpr char CSS[] =
     "#mermaid .mk{fill:none;stroke:#333;stroke-width:1px;}#mermaid .mkc{fill:#fff;stroke:#333;stroke-width:1px;}"
     "#mermaid .lbl{fill:#fff;opacity:0.85;}#mermaid .name{font-weight:bold;}#mermaid .attr{font-size:14px;}";
 
-constexpr double ROW_PAD = 8;
 
 /* crow's foot at P (entity boundary) pointing outward along unit (ux,uy) */
 static void card_mark(Buf *b, double px, double py, double ux, double uy, Card c) {
@@ -301,28 +316,52 @@ DIAG_FN(er_render) {
     uint32_t acc = 0;
     for (size_t v = 0; v < N; v++) { p.ei.v[v].a0 = acc; acc += p.ei.v[v].an; p.ei.v[v].an = 0; }
     for (size_t i = 0; i < M; i++) { EInfo *e = &p.ei.v[p.at.v[i].ent]; as[e->a0 + e->an++] = p.at.v[i]; }
-    double afs = 14, rh = afs * 1.5 + ROW_PAD, hh = fs * 1.5 + 2 * ROW_PAD;
+    /* mermaid 11.17 erBox (htmlLabels unset => PADDING = diagramPadding*1.25, TEXT_PADDING = entityPadding*1.25);
+     * every text box is one 16px line (24 tall). Entities without attributes are plain rects padded 20 x 30. */
+    double afs = fs, lh = fs * 1.5, epad = dcfg_num("er.diagramPadding", 20), tpad = dcfg_num("er.entityPadding", 15);
+    double PADX = epad * 1.25, rh = lh + tpad * 1.25, hh = rh;
+    double minw = dcfg_num("er.minEntityWidth", 100);
     for (size_t v = 0; v < N; v++) {
         EInfo *e = &p.ei.v[v];
+        double nmw = text_width(g->nlabel[v], fs);
+        if (!e->an) {
+            double w = nmw + 2 * epad;
+            e->cw[0] = w < minw ? minw : w;
+            dg_size(g, (int32_t)v, e->cw[0], lh + 3 * epad);
+            continue;
+        }
+        double maxt = nmw;
+        for (unsigned k = 0; k < 4; k++) e->cw[k] = PADX;
         for (uint32_t i = 0; i < e->an; i++) {
             const Attr *t = &as[e->a0 + i];
             Str cols[4] = {t->type, t->name, t->keys, t->comment};
             for (unsigned k = 0; k < 4; k++) {
-                double w = cols[k].n ? text_width(cols[k], afs) * 1.06 + 2 * ROW_PAD + 4 : 0;
-                if (w > e->cw[k]) e->cw[k] = w;
+                double tw = cols[k].n ? text_width(cols[k], afs) : 0;
+                if (tw > maxt) maxt = tw;
+                if (tw + PADX > e->cw[k]) e->cw[k] = tw + PADX;
             }
         }
-        double tw = e->cw[0] + e->cw[1] + e->cw[2] + e->cw[3], nw = text_width(g->nlabel[v], fs) + 30;
-        if (nw > tw) { double extra = nw - tw; e->cw[e->an ? 1 : 0] += extra; tw = nw; }
-        if (tw < 100) { e->cw[0] += 100 - tw; tw = 100; }
-        dg_size(g, (int32_t)v, tw, e->an ? hh + e->an * rh : 75);
+        unsigned sections = 4;
+        for (unsigned k = 2; k < 4; k++) if (e->cw[k] <= PADX) e->cw[k] = 0, sections--;
+        double tw = e->cw[0] + e->cw[1] + e->cw[2] + e->cw[3], diff = nmw + 2 * PADX - tw;
+        if (diff > 0) {
+            for (unsigned k = 0; k < 4; k++) if (e->cw[k] > 0) e->cw[k] += diff / sections;
+            tw += diff;
+        }
+        if (maxt + 2 * PADX > tw) { /* shape bbox wins: widen the last column */
+            unsigned last = e->cw[3] > 0 ? 3 : e->cw[2] > 0 ? 2 : 1;
+            e->cw[last] += maxt + 2 * PADX - tw;
+            tw = maxt + 2 * PADX;
+        }
+        dg_size(g, (int32_t)v, tw, hh + e->an * rh);
     }
     g->iso_toggle = true;
+    g->node_sep = dcfg_num("er.nodeSpacing", 140), g->rank_sep = dcfg_num("er.rankSpacing", 80); /* mermaid erRenderer */
     if ((st = flow_layout(g))) return st;
     BBox bb = dg_bbox(g);
     if (title.n) bb.y0 -= 30;
     if (!buf_reserve(out, 2048 + N * 400 + g->ne * 400 + M * 300)) return CMM_ERR_NOMEM;
-    DG_HEAD(out, bb, 12, "erDiagram", CSS);
+    DG_HEAD(out, bb, 8, "erDiagram", CSS);
     if (title.n) dg_text(out, title, 18, (bb.x0 + bb.x1) / 2, bb.y0 + 12, "middle", "name");
     for (size_t s = 0; s < g->ns; s++) {
         if (g->sw[s] <= 0) continue;
@@ -367,7 +406,7 @@ DIAG_FN(er_render) {
             for (unsigned k = 0; k < 4; k++) {
                 if (e->cw[k] <= 0) continue;
                 dg_rect(out, x, y, e->cw[k], rh, 0, i & 1 ? "row1" : "row0");
-                if (cols[k].n) dg_text(out, cols[k], afs, x + ROW_PAD, y + rh / 2, "start", "attr");
+                if (cols[k].n) dg_text(out, cols[k], afs, x + PADX / 2, y + rh / 2, "start", "attr");
                 x += e->cw[k];
             }
             y += rh;
