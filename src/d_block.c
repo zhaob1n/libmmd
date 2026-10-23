@@ -3,6 +3,7 @@
  * `id:span`, `space[:n]`, nested `block[:id["label"]][:span] ... end`, edges `a --> b`, `a -- "t" --> b`,
  * `a --- b`. Layout: bottom-up natural size (uniform cell per group), top-down stretch into cells. */
 #include <math.h>
+#include <stdlib.h>
 #include <stdio.h>
 
 #include "dgraph.h"
@@ -258,6 +259,122 @@ static void clip(const Blk *b, double ox, double oy, double *x, double *y) {
     *x = cx + dx * best, *y = cy + dy * best;
 }
 
+/* samples of the quadratic s->c->t that fall inside a block other than s and t (and groups), with a margin */
+static unsigned q_hits(const Blk *B, size_t nb, const Blk *s, const Blk *t, double x0, double y0, double cx, double cy, double x1, double y1) {
+    unsigned h = 0;
+    for (int i = 1; i < 24; i++) {
+        double u = i / 24.0, w0 = (1 - u) * (1 - u), w1 = 2 * u * (1 - u), w2 = u * u;
+        double px = w0 * x0 + w1 * cx + w2 * x1, py = w0 * y0 + w1 * cy + w2 * y1;
+        if (px < B[0].x || px > B[0].x + B[0].w || py < B[0].y || py > B[0].y + B[0].h) h += 2; /* would be clipped */
+        for (size_t j = 1; j < nb; j++) {
+            const Blk *o = &B[j];
+            if (o->group || o->w <= 0 || o == s || o == t) continue;
+            if (px > o->x - 4 && px < o->x + o->w + 4 && py > o->y - 4 && py < o->y + o->h + 4) h++;
+        }
+    }
+    return h;
+}
+
+static bool obstacle(const Blk *o, const Blk *s, const Blk *t) { return !o->group && !o->space && o->w > 0 && o != s && o != t; }
+static bool in_rect(const Blk *o, double x, double y, double m) { return x > o->x + m && x < o->x + o->w - m && y > o->y + m && y < o->y + o->h - m; }
+static int dcmp(const void *a, const void *b) { double x = *(const double *)a, y = *(const double *)b; return (x > y) - (x < y); }
+static size_t uniq(double *v, size_t n) {
+    qsort(v, n, sizeof *v, dcmp);
+    size_t k = 0;
+    for (size_t i = 0; i < n; i++) if (!k || v[i] - v[k - 1] > 0.5) v[k++] = v[i];
+    return k;
+}
+/* deviate from mermaid: an edge with no clear straight or bent path runs orthogonally along the gaps
+ * between blocks (Dijkstra over the gap centre lines, bends penalised). P gets up to 64 points, clipped
+ * to the rectangles of s and t; returns the count, 0 when there is no route */
+static size_t gap_route(Arena *a, const Blk *B, size_t nb, const Blk *s, const Blk *t, double *P) {
+    double *xs = ANEW(a, double, 2 * nb + 2), *ys = ANEW(a, double, 2 * nb + 2);
+    if (!xs || !ys) return 0;
+    size_t nx = 0, ny = 0;
+    for (size_t j = 1; j < nb; j++) {
+        const Blk *o = &B[j];
+        if (o->group || o->space || o->w <= 0) continue;
+        xs[nx++] = o->x - GAP / 2, xs[nx++] = o->x + o->w + GAP / 2, ys[ny++] = o->y - GAP / 2, ys[ny++] = o->y + o->h + GAP / 2;
+    }
+    double sx = s->x + s->w / 2, sy = s->y + s->h / 2, tx = t->x + t->w / 2, ty = t->y + t->h / 2;
+    xs[nx++] = sx, xs[nx++] = tx, ys[ny++] = sy, ys[ny++] = ty;
+    nx = uniq(xs, nx), ny = uniq(ys, ny);
+    size_t N = nx * ny, NS = 4 * N;
+    if (N > 40000) return 0;
+    double *dist = ANEW(a, double, NS);
+    uint32_t *prev = ANEW(a, uint32_t, NS), *hp = ANEW(a, uint32_t, 4 * NS + 4);
+    uint8_t *ok = ANEW(a, uint8_t, N);
+    if (!dist || !prev || !hp || !ok) return 0;
+    for (size_t i = 0; i < N; i++) {
+        double x = xs[i / ny], y = ys[i % ny];
+        ok[i] = 1;
+        for (size_t j = 1; j < nb && ok[i]; j++) if (obstacle(&B[j], s, t) && in_rect(&B[j], x, y, -1)) ok[i] = 0;
+    }
+    for (size_t i = 0; i < NS; i++) dist[i] = HUGE_VAL, prev[i] = UINT32_MAX;
+    size_t si = 0, ti = 0, hn = 0;
+    for (size_t i = 0; i < nx; i++) { if (fabs(xs[i] - sx) < 0.3) si = i * ny; if (fabs(xs[i] - tx) < 0.3) ti = i * ny; }
+    for (size_t j = 0; j < ny; j++) { if (fabs(ys[j] - sy) < 0.3) si += j; if (fabs(ys[j] - ty) < 0.3) ti += j; }
+    static const int DX[4] = {1, -1, 0, 0}, DY[4] = {0, 0, 1, -1};
+    /* binary heap of states keyed by dist (lazy deletion) */
+#define HPUSH(st) do { uint32_t _v = (uint32_t)(st); size_t _i = hn++; hp[_i] = _v; \
+        while (_i && dist[hp[(_i - 1) / 2]] > dist[hp[_i]]) { uint32_t _t = hp[_i]; hp[_i] = hp[(_i - 1) / 2]; hp[(_i - 1) / 2] = _t; _i = (_i - 1) / 2; } } while (0)
+    for (int d = 0; d < 4; d++) { dist[4 * si + d] = 0; if (hn < 4 * NS) HPUSH(4 * si + d); }
+    size_t goal = SIZE_MAX;
+    while (hn) {
+        uint32_t u = hp[0];
+        hp[0] = hp[--hn];
+        for (size_t i = 0;;) {
+            size_t l = 2 * i + 1, r = l + 1, m = i;
+            if (l < hn && dist[hp[l]] < dist[hp[m]]) m = l;
+            if (r < hn && dist[hp[r]] < dist[hp[m]]) m = r;
+            if (m == i) break;
+            uint32_t tmp = hp[i]; hp[i] = hp[m]; hp[m] = tmp; i = m;
+        }
+        size_t node = u / 4, d0 = u % 4;
+        if (node == ti) { goal = u; break; }
+        size_t xi = node / ny, yi = node % ny;
+        for (int d = 0; d < 4; d++) {
+            ptrdiff_t X = (ptrdiff_t)xi + DX[d], Y = (ptrdiff_t)yi + DY[d];
+            if (X < 0 || Y < 0 || (size_t)X >= nx || (size_t)Y >= ny) continue;
+            size_t v = (size_t)X * ny + (size_t)Y;
+            if (!ok[v] && v != ti) continue;
+            double mx = (xs[xi] + xs[X]) / 2, my = (ys[yi] + ys[Y]) / 2; /* segment midpoint must be free too */
+            bool blk = false;
+            for (size_t j = 1; j < nb && !blk; j++) if (obstacle(&B[j], s, t) && in_rect(&B[j], mx, my, -1)) blk = true;
+            if (blk) continue;
+            double nd = dist[u] + fabs(xs[X] - xs[xi]) + fabs(ys[Y] - ys[yi]) + ((size_t)d != d0 && node != si ? 30 : 0);
+            uint32_t w = (uint32_t)(4 * v + (size_t)d);
+            if (nd < dist[w] - 1e-9 && hn < 4 * NS) { dist[w] = nd, prev[w] = u; HPUSH(w); }
+        }
+    }
+#undef HPUSH
+    if (goal == SIZE_MAX) return 0;
+    /* walk back, keep the corners */
+    size_t k = 0;
+    double *Q = ANEW(a, double, 2 * N + 2);
+    if (!Q) return 0;
+    for (uint32_t u = (uint32_t)goal; u != UINT32_MAX; u = prev[u]) {
+        double x = xs[u / 4 / ny], y = ys[u / 4 % ny];
+        if (k >= 2 && fabs((Q[2 * k - 2] - Q[2 * k - 4]) * (y - Q[2 * k - 1]) - (Q[2 * k - 1] - Q[2 * k - 3]) * (x - Q[2 * k - 2])) < 1e-6) k--;
+        Q[2 * k] = x, Q[2 * k + 1] = y, k++;
+    }
+    /* Q runs t..s; reverse into P, trimming to the part outside s and t */
+    size_t a0 = 0, a1 = k - 1; /* indices in Q: last inside-t point near 0, last inside-s point near k-1 */
+    while (a0 + 1 < k && in_rect(t, Q[2 * (a0 + 1)], Q[2 * (a0 + 1) + 1], -0.01)) a0++;
+    while (a1 > a0 + 1 && in_rect(s, Q[2 * (a1 - 1)], Q[2 * (a1 - 1) + 1], -0.01)) a1--;
+    if (a1 <= a0 || a1 - a0 + 1 > 64) return 0;
+    size_t m = 0;
+    for (size_t i = a1 + 1; i-- > a0;) P[2 * m] = Q[2 * i], P[2 * m + 1] = Q[2 * i + 1], m++;
+    /* move the end points onto the rectangle borders along their segments */
+    for (int e = 0; e < 2; e++) {
+        const Blk *b = e ? t : s;
+        double *p = e ? P + 2 * (m - 1) : P, *q = e ? P + 2 * (m - 2) : P + 2;
+        if (fabs(p[0] - q[0]) < 1e-6) p[1] = q[1] > p[1] ? b->y + b->h : b->y;
+        else p[0] = q[0] > p[0] ? b->x + b->w : b->x;
+    }
+    return m;
+}
+
 DIAG_FN(block_render) {
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
@@ -478,6 +595,125 @@ DIAG_FN(block_render) {
         }
         if (y0 < y1) bb.y0 = y0 - top, bb.y1 = y1;
     }
+    /* edges go to their own buffer first: gap routes and their labels may widen the viewBox */
+    Buf ebuf = {}, *eb = &ebuf;
+    double *LBX = ANEW(a, double, 4 * ev.n + 4);
+    size_t nlb = 0;
+    if (!LBX) return CMM_ERR_NOMEM;
+    for (size_t e = 0; e < ev.n; e++) {
+        const Blk *s = &B[ev.v[e].a], *t = &B[ev.v[e].b];
+        double x0, y0, x1, y1;
+        if (s == t) { /* self edge: a loop on the right side, label right of it (room reserved in gx) */
+            double X = s->x + s->w, Y = s->y + s->h / 2, q = fmin(10, s->h / 4);
+            buf_lit(eb, "<path class=\"be\" fill=\"none\" d=\"M"); dg_pt(eb, X, Y - q); buf_ch(eb, 'C'); dg_pt(eb, X + 28, Y - q - 14);
+            buf_ch(eb, ' '); dg_pt(eb, X + 28, Y + q + 14); buf_ch(eb, ' '); dg_pt(eb, X, Y + q); buf_ch(eb, '"');
+            if (ev.v[e].arrow) buf_lit(eb, " marker-end=\"url(#blk-ae)\"");
+            buf_lit(eb, "/>");
+            if (ev.v[e].label.n) {
+                double tw = text_width(ev.v[e].label, fs * 0.875);
+                dg_rect(eb, X + 26, Y - fs * 0.6, tw + 4, fs * 1.2, 0, "bl");
+                dg_text(eb, ev.v[e].label, fs * 0.875, X + 28 + tw / 2, Y, "middle", "bt\" font-size=\"14");
+            }
+            continue;
+        }
+        clip(s, t->x + t->w / 2, t->y + t->h / 2, &x0, &y0);
+        clip(t, s->x + s->w / 2, s->y + s->h / 2, &x1, &y1);
+        /* deviate from mermaid: a straight edge through another block bends (quadratic, control point
+           stepped off the centre line either side) around it when some bend clears every block; otherwise it stays straight */
+        double qx = (x0 + x1) / 2, qy = (y0 + y1) / 2;
+        unsigned hit = q_hits(B, nb, s, t, x0, y0, qx, qy, x1, y1);
+        if (hit) {
+            double scx = s->x + s->w / 2, scy = s->y + s->h / 2, tcx = t->x + t->w / 2, tcy = t->y + t->h / 2;
+            double L = hypot(tcx - scx, tcy - scy), nx = L > 0 ? -(tcy - scy) / L : 0, ny = L > 0 ? (tcx - scx) / L : 1;
+            double bc = hit * 100.0;
+            for (int k = 1; k <= 16; k++) {
+                double off = ((k + 1) / 2) * 35.0 * (k % 2 ? 1 : -1), mx = (scx + tcx) / 2 + nx * off, my = (scy + tcy) / 2 + ny * off;
+                double a0, b0, a1, b1;
+                clip(s, mx, my, &a0, &b0), clip(t, mx, my, &a1, &b1);
+                double c2x = 2 * mx - (a0 + a1) / 2, c2y = 2 * my - (b0 + b1) / 2; /* curve passes through (mx, my) */
+                double c = q_hits(B, nb, s, t, a0, b0, c2x, c2y, a1, b1) * 100.0 + fabs(off);
+                if (c < 100 && c < bc) bc = c, x0 = a0, y0 = b0, x1 = a1, y1 = b1, qx = c2x, qy = c2y;
+            }
+        }
+        bool bent = fabs(qx - (x0 + x1) / 2) + fabs(qy - (y0 + y1) / 2) > 0.5;
+        double RP[128];
+        size_t rn = !bent && hit ? gap_route(a, B, nb, s, t, RP) : 0;
+        if (rn >= 2) { /* label on the longest run */
+            double bl = -1;
+            for (size_t i = 0; i + 1 < rn; i++) {
+                double l = fabs(RP[2 * i + 2] - RP[2 * i]) + fabs(RP[2 * i + 3] - RP[2 * i + 1]);
+                if (l > bl) bl = l, x0 = RP[2 * i], y0 = RP[2 * i + 1], x1 = RP[2 * i + 2], y1 = RP[2 * i + 3];
+            }
+            qx = (x0 + x1) / 2, qy = (y0 + y1) / 2;
+        }
+        buf_lit(eb, "<path class=\"be\" d=\"M");
+        if (rn >= 2) {
+            for (size_t i = 0; i < rn; i++)
+                bb.x0 = fmin(bb.x0, RP[2 * i] - 1), bb.x1 = fmax(bb.x1, RP[2 * i] + 1), bb.y0 = fmin(bb.y0, RP[2 * i + 1] - 1), bb.y1 = fmax(bb.y1, RP[2 * i + 1] + 1);
+            dg_pt(eb, RP[0], RP[1]);
+            for (size_t i = 1; i < rn; i++) { buf_ch(eb, 'L'); dg_pt(eb, RP[2 * i], RP[2 * i + 1]); }
+            buf_lit(eb, "\" fill=\"none");
+        } else {
+            dg_pt(eb, x0, y0);
+            if (bent) { buf_ch(eb, 'Q'); dg_pt(eb, qx, qy); buf_ch(eb, ' '); } else buf_ch(eb, 'L');
+            dg_pt(eb, x1, y1);
+        }
+        buf_ch(eb, '"');
+        if (bent) buf_lit(eb, " fill=\"none\"");
+        if (ev.v[e].arrow) buf_lit(eb, " marker-end=\"url(#blk-ae)\"");
+        if (ev.v[e].arrow_s) buf_lit(eb, " marker-start=\"url(#blk-as)\"");
+        buf_lit(eb, "/>");
+        if (ev.v[e].label.n) {
+            double tw = text_width(ev.v[e].label, fs * 0.875), mx = (x0 + 2 * qx + x1) / 4, my = (y0 + 2 * qy + y1) / 4;
+            /* the midpoint can land on a block crossed by the straight edge: slide the label along it to a free spot */
+            static constexpr double TS[] = {0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.12, 0.88};
+            double best = INFINITY;
+            for (size_t k = 0; k < countof(TS) && best > 0; k++) { /* least overlap with other blocks; first clear wins */
+                double u = TS[k], cx = (1 - u) * (1 - u) * x0 + 2 * u * (1 - u) * qx + u * u * x1, cy = (1 - u) * (1 - u) * y0 + 2 * u * (1 - u) * qy + u * u * y1, ov = 0;
+                for (size_t j = 1; j < nb; j++) {
+                    const Blk *o = &B[j];
+                    if (o->group || o->w <= 0 || o == s || o == t) continue;
+                    double ox = fmin(cx + tw / 2 + 2, o->x + o->w) - fmax(cx - tw / 2 - 2, o->x);
+                    double oy = fmin(cy + fs * 0.6, o->y + o->h) - fmax(cy - fs * 0.6, o->y);
+                    if (ox > 0 && oy > 0) ov += ox * oy;
+                }
+                for (size_t q = 0; q < nlb; q++) { /* and earlier edge labels */
+                    double ox = fmin(cx + tw / 2 + 2, LBX[4 * q + 2]) - fmax(cx - tw / 2 - 2, LBX[4 * q]);
+                    double oy = fmin(cy + fs * 0.6, LBX[4 * q + 3]) - fmax(cy - fs * 0.6, LBX[4 * q + 1]);
+                    if (ox > 0 && oy > 0) ov += 2 * ox * oy;
+                }
+                if (ov < best - 1e-9) best = ov, mx = cx, my = cy;
+            }
+            if (rn >= 2) { /* routed: try points along every run, scored against all blocks and earlier labels */
+                best = INFINITY;
+                for (size_t i = 0; i + 1 < rn; i++)
+                    for (int k = 1; k < 8; k++) {
+                        double u = k / 8.0, cx = RP[2 * i] + (RP[2 * i + 2] - RP[2 * i]) * u, cy = RP[2 * i + 1] + (RP[2 * i + 3] - RP[2 * i + 1]) * u;
+                        double ov = fabs(u - .5) * 4;
+                        for (size_t j = 1; j < nb; j++) {
+                            const Blk *o = &B[j];
+                            if (o->group || o->space || o->w <= 0) continue;
+                            double ox = fmin(cx + tw / 2 + 2, o->x + o->w) - fmax(cx - tw / 2 - 2, o->x);
+                            double oy = fmin(cy + fs * 0.6, o->y + o->h) - fmax(cy - fs * 0.6, o->y);
+                            if (ox > 0 && oy > 0) ov += ox * oy;
+                        }
+                        for (size_t q = 0; q < nlb; q++) {
+                            double ox = fmin(cx + tw / 2 + 2, LBX[4 * q + 2]) - fmax(cx - tw / 2 - 2, LBX[4 * q]);
+                            double oy = fmin(cy + fs * 0.6, LBX[4 * q + 3]) - fmax(cy - fs * 0.6, LBX[4 * q + 1]);
+                            if (ox > 0 && oy > 0) ov += 2 * ox * oy;
+                        }
+                        if (ov < best) best = ov, mx = cx, my = cy;
+                    }
+                bb.x0 = fmin(bb.x0, mx - tw / 2 - 2), bb.x1 = fmax(bb.x1, mx + tw / 2 + 2);
+                bb.y0 = fmin(bb.y0, my - fs * 0.6), bb.y1 = fmax(bb.y1, my + fs * 0.6);
+            }
+            double *lq = LBX + 4 * nlb++;
+            lq[0] = mx - tw / 2 - 2, lq[1] = my - fs * 0.6, lq[2] = mx + tw / 2 + 2, lq[3] = my + fs * 0.6;
+            dg_rect(eb, mx - tw / 2 - 2, my - fs * 0.6, tw + 4, fs * 1.2, 0, "bl");
+            dg_text(eb, ev.v[e].label, fs * 0.875, mx, my, "middle", "bt\" font-size=\"14");
+        }
+    }
+    if (eb->oom) { free(ebuf.p); return CMM_ERR_NOMEM; }
     if (!buf_reserve(out, 2048 + nb * 400 + ev.n * 300)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 5, "block", CSS);
     buf_lit(out, DEFS);
@@ -561,48 +797,8 @@ DIAG_FN(block_render) {
         dg_text(out, b->label, fs, cx, cy, "middle", "bt");
         buf_lit(out, "</g>");
     }
-    for (size_t e = 0; e < ev.n; e++) {
-        const Blk *s = &B[ev.v[e].a], *t = &B[ev.v[e].b];
-        double x0, y0, x1, y1;
-        if (s == t) { /* self edge: a loop on the right side, label right of it (room reserved in gx) */
-            double X = s->x + s->w, Y = s->y + s->h / 2, q = fmin(10, s->h / 4);
-            buf_lit(out, "<path class=\"be\" fill=\"none\" d=\"M"); dg_pt(out, X, Y - q); buf_ch(out, 'C'); dg_pt(out, X + 28, Y - q - 14);
-            buf_ch(out, ' '); dg_pt(out, X + 28, Y + q + 14); buf_ch(out, ' '); dg_pt(out, X, Y + q); buf_ch(out, '"');
-            if (ev.v[e].arrow) buf_lit(out, " marker-end=\"url(#blk-ae)\"");
-            buf_lit(out, "/>");
-            if (ev.v[e].label.n) {
-                double tw = text_width(ev.v[e].label, fs * 0.875);
-                dg_rect(out, X + 26, Y - fs * 0.6, tw + 4, fs * 1.2, 0, "bl");
-                dg_text(out, ev.v[e].label, fs * 0.875, X + 28 + tw / 2, Y, "middle", "bt\" font-size=\"14");
-            }
-            continue;
-        }
-        clip(s, t->x + t->w / 2, t->y + t->h / 2, &x0, &y0);
-        clip(t, s->x + s->w / 2, s->y + s->h / 2, &x1, &y1);
-        buf_lit(out, "<path class=\"be\" d=\"M"); dg_pt(out, x0, y0); buf_ch(out, 'L'); dg_pt(out, x1, y1); buf_ch(out, '"');
-        if (ev.v[e].arrow) buf_lit(out, " marker-end=\"url(#blk-ae)\"");
-        if (ev.v[e].arrow_s) buf_lit(out, " marker-start=\"url(#blk-as)\"");
-        buf_lit(out, "/>");
-        if (ev.v[e].label.n) {
-            double tw = text_width(ev.v[e].label, fs * 0.875), mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
-            /* the midpoint can land on a block crossed by the straight edge: slide the label along it to a free spot */
-            static constexpr double TS[] = {0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.12, 0.88};
-            double best = INFINITY;
-            for (size_t k = 0; k < countof(TS) && best > 0; k++) { /* least overlap with other blocks; first clear wins */
-                double cx = x0 + (x1 - x0) * TS[k], cy = y0 + (y1 - y0) * TS[k], ov = 0;
-                for (size_t j = 1; j < nb; j++) {
-                    const Blk *o = &B[j];
-                    if (o->group || o->w <= 0 || o == s || o == t) continue;
-                    double ox = fmin(cx + tw / 2 + 2, o->x + o->w) - fmax(cx - tw / 2 - 2, o->x);
-                    double oy = fmin(cy + fs * 0.6, o->y + o->h) - fmax(cy - fs * 0.6, o->y);
-                    if (ox > 0 && oy > 0) ov += ox * oy;
-                }
-                if (ov < best - 1e-9) best = ov, mx = cx, my = cy;
-            }
-            dg_rect(out, mx - tw / 2 - 2, my - fs * 0.6, tw + 4, fs * 1.2, 0, "bl");
-            dg_text(out, ev.v[e].label, fs * 0.875, mx, my, "middle", "bt\" font-size=\"14");
-        }
-    }
+    buf_put(out, ebuf.n, ebuf.p);
+    free(ebuf.p);
     buf_lit(out, "</svg>\n");
     return out->oom ? CMM_ERR_NOMEM : CMM_OK;
 }

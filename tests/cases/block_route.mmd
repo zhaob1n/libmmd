@@ -1,0 +1,14 @@
+block-beta
+  columns 2
+  b0["x"]:1
+  b1["db"]
+  b2["x"]
+  b3["gamma"]:2
+  b4["send mail"]
+  b5["alpha"]
+  b6["user"]:2
+  b7["parse input"]
+  b7 -- "validate" --> b5
+  b6 -- "db" --> b0
+  b5 -- "db" --> b7
+  b6 --> b4
