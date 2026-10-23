@@ -14,7 +14,7 @@ typedef enum : uint8_t { RM_NONE, RM_EXT, RM_COMP, RM_AGG, RM_ARROW, RM_LOLLI } 
 enum { MF_METHOD = 1, MF_STATIC = 2, MF_ABSTRACT = 4 };
 typedef struct Member { int32_t cls; Str text; uint8_t flags; } Member;
 typedef struct Rel { RMark ma, mb; bool dotted; Str ca, cb; } Rel; /* per edge */
-typedef struct CInfo { Str annot; uint32_t m0, mn; bool note; } CInfo;
+typedef struct CInfo { Str annot; uint32_t m0, mn; bool note, iface; } CInfo;
 
 typedef struct CP {
     Arena *A;
@@ -24,7 +24,7 @@ typedef struct CP {
     VEC(Rel) rel;
     int32_t ns_stack[32];
     unsigned ns_depth;
-    unsigned nnotes;
+    unsigned nnotes, niface;
     size_t *err_off;
     char *msg;
 } CP;
@@ -60,6 +60,19 @@ static Str generics(Arena *A, Str s, bool *ok) {
         p->g.nlabel[v] = generics(p->A, id, &ok);
         if (!ok) return NONE;
     }
+    return v;
+}
+
+[[nodiscard]] static int32_t iface(CP *p, Str label) {
+    char nm[32];
+    int k = snprintf(nm, sizeof nm, "\x1finterface%u", p->niface++);
+    char *id = arena_alloc(p->A, (size_t)k, 1);
+    if (!id) return NONE;
+    memcpy(id, nm, (size_t)k);
+    int32_t v = cls(p, (Str){.p = id, .n = (size_t)k});
+    if (v == NONE) return NONE;
+    p->ci.v[v].iface = true;
+    p->g.nlabel[v] = label;
     return v;
 }
 
@@ -351,7 +364,9 @@ static cmm_status parse(CP *p, LineIt *it) {
             if (c) { lab = (Str){.p = c + 1, .n = rhs.n - (size_t)(c + 1 - rhs.p)}; rhs.n = (size_t)(c - rhs.p); }
             Str la, lb, ia = class_ref(p, lhs, &la), ib = class_ref(p, rhs, &lb);
             if (!ia.n || !ib.n) return cfail(p, off, "relation needs two classes");
-            int32_t va = cls(p, ia), vb = cls(p, ib);
+            /* mermaid addRelation: a lollipop end (other end plain) is a bare interface label, one per relation */
+            bool lia = r.ma == RM_LOLLI && r.mb == RM_NONE, lib = !lia && r.mb == RM_LOLLI && r.ma == RM_NONE;
+            int32_t va = lia ? iface(p, ia) : cls(p, ia), vb = lib ? iface(p, ib) : cls(p, ib);
             if (va == NONE || vb == NONE) return CMM_ERR_NOMEM;
             ref_label(g, va, la), ref_label(g, vb, lb);
             bool ok;
@@ -462,6 +477,7 @@ DIAG_FN(class_render) {
         unsigned ln;
         label_measure(g->nlabel[v], fs, &tw, &ln);
         if (c->note) { dg_size(g, (int32_t)v, tw + 20, (ln ? ln : 1) * lh + 14); continue; }
+        if (c->iface) { dg_size(g, (int32_t)v, tw, (ln ? ln : 1) * lh); continue; }
         /* mermaid classBox/textHelper: label+annotation groups are centred,
          * member/method groups start at x=0, so bbox = max(half, mw) + half */
         tw *= CLS_BOLD;
@@ -527,6 +543,7 @@ DIAG_FN(class_render) {
             dg_text(out, g->nlabel[v], fs, g->nx[v], g->ny[v], "middle", nullptr);
             continue;
         }
+        if (c->iface) { dg_text(out, g->nlabel[v], fs, g->nx[v], g->ny[v], "middle", nullptr); continue; }
         dg_rect(out, x0, y, w, h, 0, "cls");
         double ltw;
         unsigned lln;
