@@ -570,7 +570,8 @@ DIAG_FN(gantt_render) {
             buf_lit(out, "\"/>");
         }
     }
-    if (title.n) dg_text(out, title, 18, W / 2, 25, "middle", "ttl");
+    /* top axis tick labels sit at TOP-12: keep the title's descenders clear of them */
+    if (title.n) dg_text(out, title, 18, W / 2, dcfg_bool("gantt.topAxis", false) ? fmax(fmin(25, TOP - 32), 16) : 25, "middle", "ttl");
     buf_lit(out, "</svg>\n");
     return out->oom ? CMM_ERR_NOMEM : CMM_OK;
 }

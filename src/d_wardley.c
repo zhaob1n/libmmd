@@ -189,6 +189,16 @@ static void text(Buf *b, double x, double y, const char *extra, Str s) {
 constexpr double PAD = 48;
 constexpr double NR = 6;
 constexpr double NLO = 8;
+/* hits of segment (x0,y0)-(x1,y1) with box b (x0 y0 x1 y1), sampled */
+static int seg_box_hits(double x0, double y0, double x1, double y1, const double b[static 4]) {
+    int h = 0;
+    for (int k = 0; k <= 24; k++) {
+        double x = x0 + (x1 - x0) * k / 24, y = y0 + (y1 - y0) * k / 24;
+        h += x > b[0] && x < b[2] && y > b[1] && y < b[3];
+    }
+    return h;
+}
+
 #define TXT "#131300"
 #define STK "#333333"
 
@@ -456,6 +466,44 @@ DIAG_FN(wardley_render) {
         line(&b, o->px, o->py, x2, y2, " class=\"wardley-trend\" stroke=\"#dc3545\" stroke-width=\"1\" stroke-dasharray=\"4 4\" marker-end=\"url(#mermaid-arrow)\"");
     }
     buf_lit(&b, "</g><g class=\"wardley-nodes\">");
+    /* component labels without a user offset: the default up-right spot, or the first of a few
+     * alternatives that keeps clear of links, trends, other nodes, earlier labels and the canvas */
+    double *lbo = ANEW(a, double, 6 * w.nodes.n + 1); /* ox, oy, box x0 y0 x1 y1 */
+    if (!lbo) { free(b.p); return CMM_ERR_NOMEM; }
+    for (size_t i = 0; i < w.nodes.n; i++) {
+        WNode *nd = &w.nodes.v[i];
+        double *L = lbo + 6 * i, r = NLO + (nd->ss ? 10 : 0), tw = text_width(nd->label, 10);
+        L[0] = r, L[1] = -r, L[2] = L[3] = L[4] = L[5] = 0;
+        if (nd->k == WK_ANCHOR || nd->has_lo) continue;
+        const double cand[][2] = {{r, -r}, {-r - tw, -r}, {r, r + 9}, {-r - tw, r + 9}, {r + 4, 3}, {-r - 4 - tw, 3}};
+        double bc = INFINITY;
+        for (size_t c = 0; c < countof(cand); c++) {
+            double bx[4] = {nd->px + cand[c][0], nd->py + cand[c][1] - 9, nd->px + cand[c][0] + tw, nd->py + cand[c][1] + 2};
+            double cost = c * 0.5;
+            if (bx[0] < 2 || bx[2] > W_ - 2 || bx[1] < 2 || bx[3] > H - 2) cost += 40;
+            for (size_t l = 0; l < w.links.n; l++) {
+                const WNode *s = &w.nodes.v[w.links.v[l].s], *t = &w.nodes.v[w.links.v[l].t];
+                cost += 4 * seg_box_hits(s->px, s->py, t->px, t->py, bx);
+            }
+            for (size_t k = 0; k < w.trends.n; k++) {
+                const WNode *o = &w.nodes.v[w.trends.v[k].num];
+                cost += 4 * seg_box_hits(o->px, o->py, PX(w.trends.v[k].x), PY(w.trends.v[k].y), bx);
+            }
+            for (size_t j = 0; j < w.nodes.n; j++) {
+                double rr = (w.nodes.v[j].ss ? 2 * NR : NR) + 1, qx = w.nodes.v[j].px, qy = w.nodes.v[j].py;
+                if (qx + rr > bx[0] && qx - rr < bx[2] && qy + rr > bx[1] && qy - rr < bx[3]) cost += 30;
+            }
+            for (size_t k = 0; k < w.notes.n; k++) {
+                double nx = PX(w.notes.v[k].x), ny = PY(w.notes.v[k].y), nw = text_width(w.notes.v[k].s, 11) * 1.05;
+                if (nx < bx[2] && bx[0] < nx + nw && ny - 11 < bx[3] && bx[1] < ny + 3) cost += 30;
+            }
+            for (size_t j = 0; j < i; j++) {
+                const double *M = lbo + 6 * j;
+                if (M[4] > M[2] && M[2] < bx[2] && bx[0] < M[4] && M[3] < bx[3] && bx[1] < M[5]) cost += 30;
+            }
+            if (cost < bc) bc = cost, L[0] = cand[c][0], L[1] = cand[c][1], memcpy(L + 2, bx, sizeof bx);
+        }
+    }
     const double tr = NR * 1.2, c6 = cos(M_PI / 6), s6 = sin(M_PI / 6);
     for (size_t i = 0; i < w.nodes.n; i++) {
         WNode *nd = &w.nodes.v[i];
@@ -491,7 +539,7 @@ DIAG_FN(wardley_render) {
             text(&b, x + (nd->has_lo ? nd->lox : 0), y + (nd->has_lo ? nd->loy : -3),
                  " class=\"wardley-node-label\" fill=\"#000\" font-size=\"10\" font-weight=\"bold\" text-anchor=\"middle\" dominant-baseline=\"middle\"", nd->label);
         else {
-            double ox = nd->has_lo ? nd->lox : NLO + (nd->ss ? 10 : 0), oy = nd->has_lo ? nd->loy : -NLO - (nd->ss ? 10 : 0);
+            double ox = nd->has_lo ? nd->lox : lbo[6 * i], oy = nd->has_lo ? nd->loy : lbo[6 * i + 1];
             text(&b, x + ox, y + oy, " class=\"wardley-node-label\" fill=\"" TXT "\" font-size=\"10\" font-weight=\"normal\" text-anchor=\"start\" dominant-baseline=\"auto\"", nd->label);
         }
         buf_lit(&b, "</g>");
@@ -545,7 +593,7 @@ DIAG_FN(wardley_render) {
     if (w.notes.n) {
         buf_lit(&b, "<g class=\"wardley-notes\">");
         for (size_t k = 0; k < w.notes.n; k++)
-            text(&b, PX(w.notes.v[k].x), PY(w.notes.v[k].y), " text-anchor=\"start\" font-size=\"11\" fill=\"" TXT "\" font-weight=\"bold\"", w.notes.v[k].s);
+            text(&b, fmax(2, fmin(PX(w.notes.v[k].x), W_ - 4 - text_width(w.notes.v[k].s, 11) * 1.05)), PY(w.notes.v[k].y), " text-anchor=\"start\" font-size=\"11\" fill=\"" TXT "\" font-weight=\"bold\"", w.notes.v[k].s);
         buf_lit(&b, "</g>");
     }
     for (int dir = 0; dir < 2; dir++) {
