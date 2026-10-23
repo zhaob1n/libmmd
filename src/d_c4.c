@@ -519,6 +519,11 @@ DIAG_FN(c4_render) {
                         double oy = fmin(ay1, g.ely[q] + qh) - fmax(ay0, g.ely[q] - qh);
                         if (ox > 0 && oy > 0) sc += 2 * ox * oy;
                     }
+                    for (size_t q = 0; q < g.ns; q++) { /* boundary title + [type] block */
+                        double qw = fmax(text_width(g.stitle[q], 14), 60) / 2 + 4, qx = g.sx[q] + g.sw[q] / 2;
+                        double ox = fmin(ax1, qx + qw) - fmax(ax0, qx - qw), oy = fmin(ay1, g.sy[q] + 38) - fmax(ay0, g.sy[q]);
+                        if (ox > 0 && oy > 0) sc += 2 * ox * oy;
+                    }
                     sc += (fabs(TS[ti] - .5) * 40 + fabs(OS[oi]) * 60); /* prefer the middle, on the line */
                     if (sc < best) best = sc, bx = cx, by = cy;
                 }
@@ -532,6 +537,18 @@ DIAG_FN(c4_render) {
                     double px = (dx < 0 ? -hx : hx) - dx, py = (dy < 0 ? -hy : hy) - dy;
                     if (fabs(px) < fabs(py)) g.elx[e] += px; else g.ely[e] += py;
                 }
+            for (int it = 0; it < 3 && rst[e]; it++) { /* ... and off boundary titles and earlier labels, vertically */
+                bool moved = false;
+                for (size_t q = 0; q < g.ns + e; q++) {
+                    double qx, qy, qw, qh;
+                    if (q < g.ns) qw = fmax(text_width(g.stitle[q], 14), 60) / 2 + 4, qh = 19, qx = g.sx[q] + g.sw[q] / 2, qy = g.sy[q] + 19;
+                    else qx = g.elx[q - g.ns], qy = g.ely[q - g.ns], qw = lbw[q - g.ns] / 2 + 3, qh = lbh[q - g.ns] / 2;
+                    double hx = qw + lw / 2 + 3, hy = qh + lh / 2 + 2, dx = g.elx[e] - qx, dy = g.ely[e] - qy;
+                    if (fabs(dx) >= hx || fabs(dy) >= hy) continue;
+                    g.ely[e] += (dy < 0 ? -hy : hy) - dy, moved = true;
+                }
+                if (!moved) break;
+            }
             /* deviate from mermaid: keep user-offset labels and bent edges inside the viewBox */
             bb_add(&bb, g.elx[e] - lw / 2, g.ely[e] - lh / 2 - 4, g.elx[e] + lw / 2, g.ely[e] + lh / 2);
             bb_add(&bb, (x0 + x1) / 4 + E[2] / 2, (y0 + y1) / 4 + E[3] / 2, (x0 + x1) / 4 + E[2] / 2, (y0 + y1) / 4 + E[3] / 2);
