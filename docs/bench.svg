@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="448" viewBox="0 0 900 448" font-family="Helvetica,Arial,sans-serif" font-size="12">
+<rect width="900" height="448" fill="white"/>
+<text x="450.0" y="20" text-anchor="middle" font-size="15" font-weight="bold" fill="#222">CLI time per diagram (log scale, lower is better)</text>
+<rect x="210" y="30" width="12" height="12" fill="#1f77b4"/><text x="227" y="40" fill="#222">libmmd</text>
+<rect x="340" y="30" width="12" height="12" fill="#ff7f0e"/><text x="357" y="40" fill="#222">mmdr</text>
+<rect x="470" y="30" width="12" height="12" fill="#d62728"/><text x="487" y="40" fill="#222">mermaid-cli</text>
+<line x1="278.1" y1="56" x2="278.1" y2="408" stroke="#bbb"/>
+<text x="278.1" y="423" text-anchor="middle" fill="#444">1 ms</text>
+<line x1="317.3" y1="56" x2="317.3" y2="408" stroke="#e6e6e6"/>
+<line x1="369.2" y1="56" x2="369.2" y2="408" stroke="#e6e6e6"/>
+<line x1="408.4" y1="56" x2="408.4" y2="408" stroke="#bbb"/>
+<text x="408.4" y="423" text-anchor="middle" fill="#444">10 ms</text>
+<line x1="447.6" y1="56" x2="447.6" y2="408" stroke="#e6e6e6"/>
+<line x1="499.5" y1="56" x2="499.5" y2="408" stroke="#e6e6e6"/>
+<line x1="538.7" y1="56" x2="538.7" y2="408" stroke="#bbb"/>
+<text x="538.7" y="423" text-anchor="middle" fill="#444">100 ms</text>
+<line x1="577.9" y1="56" x2="577.9" y2="408" stroke="#e6e6e6"/>
+<line x1="629.7" y1="56" x2="629.7" y2="408" stroke="#e6e6e6"/>
+<line x1="668.9" y1="56" x2="668.9" y2="408" stroke="#bbb"/>
+<text x="668.9" y="423" text-anchor="middle" fill="#444">1 s</text>
+<line x1="708.2" y1="56" x2="708.2" y2="408" stroke="#e6e6e6"/>
+<line x1="760.0" y1="56" x2="760.0" y2="408" stroke="#e6e6e6"/>
+<line x1="238.9" y1="56" x2="238.9" y2="408" stroke="#e6e6e6"/>
+<text x="202" y="81.0" text-anchor="end" fill="#222">flowchart_small</text>
+<rect x="210" y="57" width="38.3" height="12" fill="#1f77b4"/>
+<text x="252.3" y="67" font-size="11" fill="#222">0.59 ms</text>
+<rect x="210" y="71" width="258.8" height="12" fill="#ff7f0e"/>
+<text x="472.8" y="81" font-size="11" fill="#222">29.1 ms  (49× slower)</text>
+<rect x="210" y="85" width="454.0" height="12" fill="#d62728"/>
+<text x="668.0" y="95" font-size="11" fill="#222">917 ms  (1554× slower)</text>
+<text x="202" y="139.0" text-anchor="end" fill="#222">flowchart_medium</text>
+<rect x="210" y="115" width="54.1" height="12" fill="#1f77b4"/>
+<text x="268.1" y="125" font-size="11" fill="#222">0.78 ms</text>
+<rect x="210" y="129" width="346.4" height="12" fill="#ff7f0e"/>
+<text x="560.4" y="139" font-size="11" fill="#222">137 ms  (175× slower)</text>
+<rect x="210" y="143" width="462.5" height="12" fill="#d62728"/>
+<text x="676.5" y="153" font-size="11" fill="#222">1064 ms  (1364× slower)</text>
+<text x="202" y="197.0" text-anchor="end" fill="#222">flowchart_large</text>
+<rect x="210" y="173" width="93.3" height="12" fill="#1f77b4"/>
+<text x="307.3" y="183" font-size="11" fill="#222">1.56 ms</text>
+<rect x="210" y="187" width="412.1" height="12" fill="#ff7f0e"/>
+<text x="626.1" y="197" font-size="11" fill="#222">437 ms  (280× slower)</text>
+<rect x="210" y="201" width="484.9" height="12" fill="#d62728"/>
+<text x="698.9" y="211" font-size="11" fill="#222">1583 ms  (1015× slower)</text>
+<text x="202" y="255.0" text-anchor="end" fill="#222">flowchart_mega_event_mesh</text>
+<rect x="210" y="231" width="65.8" height="12" fill="#1f77b4"/>
+<text x="279.8" y="241" font-size="11" fill="#222">0.96 ms</text>
+<rect x="210" y="245" width="491.5" height="12" fill="#ff7f0e"/>
+<text x="705.5" y="255" font-size="11" fill="#222">1777 ms  (1851× slower)</text>
+<rect x="210" y="259" width="459.9" height="12" fill="#d62728"/>
+<text x="673.9" y="269" font-size="11" fill="#222">1017 ms  (1059× slower)</text>
+<text x="202" y="313.0" text-anchor="end" fill="#222">seq_full</text>
+<rect x="210" y="289" width="38.3" height="12" fill="#1f77b4"/>
+<text x="252.3" y="299" font-size="11" fill="#222">0.59 ms</text>
+<rect x="210" y="303" width="133.0" height="12" fill="#ff7f0e"/>
+<text x="347.0" y="313" font-size="11" fill="#222">3.15 ms  (5.3× slower)</text>
+<rect x="210" y="317" width="450.4" height="12" fill="#d62728"/>
+<text x="664.4" y="327" font-size="11" fill="#222">860 ms  (1458× slower)</text>
+<text x="202" y="371.0" text-anchor="end" fill="#222">class_full</text>
+<rect x="210" y="347" width="49.5" height="12" fill="#1f77b4"/>
+<text x="263.5" y="357" font-size="11" fill="#222">0.72 ms</text>
+<rect x="210" y="361" width="196.3" height="12" fill="#ff7f0e"/>
+<text x="410.3" y="371" font-size="11" fill="#222">9.64 ms  (13× slower)</text>
+<rect x="210" y="375" width="465.6" height="12" fill="#d62728"/>
+<text x="679.6" y="385" font-size="11" fill="#222">1124 ms  (1561× slower)</text>
+<text x="485.0" y="440" text-anchor="middle" fill="#444">wall-clock per process run, best of N; 8-vCPU Xeon VM</text></svg>

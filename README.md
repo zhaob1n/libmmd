@@ -125,14 +125,20 @@ The tools compared are:
 
 The run was made on 2026-10-23.
 
-| input | libmmd CLI | mmdr CLI | mermaid-cli |
+![CLI benchmark chart](docs/bench.svg)
+
+In brackets: how many times slower than libmmd. Data: [`bench/cli_times.csv`](bench/cli_times.csv); `python3 tools/bench_chart.py` regenerates the chart and this table.
+
+<!-- bench-table -->
+| input | libmmd | mmdr 0.3.1 | mermaid-cli 11.17 |
 |---|---:|---:|---:|
-| flowchart_small (mmdr fixture) | 0.59 ms | 29.1 ms | 917 ms |
-| flowchart_medium (mmdr fixture) | 0.78 ms | 136.9 ms | 1064 ms |
-| flowchart_large (mmdr fixture) | 1.56 ms | 436.6 ms | 1583 ms |
-| flowchart_mega_event_mesh (mmdr fixture) | 0.96 ms | 1777.1 ms | 1017 ms |
-| seq_full (tests/cases) | 0.59 ms | 3.2 ms | 860 ms |
-| class_full (tests/cases) | 0.72 ms | 9.6 ms | 1124 ms |
+| flowchart_small (mmdr fixture) | 0.59 ms | 29.1 ms (49×) | 917 ms (1554×) |
+| flowchart_medium (mmdr fixture) | 0.78 ms | 137 ms (175×) | 1064 ms (1364×) |
+| flowchart_large (mmdr fixture) | 1.56 ms | 437 ms (280×) | 1583 ms (1015×) |
+| flowchart_mega_event_mesh (mmdr fixture) | 0.96 ms | 1777 ms (1851×) | 1017 ms (1059×) |
+| seq_full (tests/cases) | 0.59 ms | 3.15 ms (5.3×) | 860 ms (1458×) |
+| class_full (tests/cases) | 0.72 ms | 9.64 ms (13×) | 1124 ms (1561×) |
+<!-- /bench-table -->
 
 Rendering in-process through the library, timed with `build/bench` (minimum over repeated renders, clang build, from [`bench/results_v14.txt`](bench/results_v14.txt) and [`bench/results_libmmd_inproc.txt`](bench/results_libmmd_inproc.txt)):
 

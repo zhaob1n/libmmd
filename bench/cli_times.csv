@@ -1,0 +1,8 @@
+# CLI wall-clock ms, best of N (libmmd 20, mmdr 5, mmdc 3); 8-vCPU Xeon VM, 2026-10-23
+input,source,libmmd,mmdr,mermaid-cli
+flowchart_small,mmdr fixture,0.59,29.11,917
+flowchart_medium,mmdr fixture,0.78,136.85,1064
+flowchart_large,mmdr fixture,1.56,436.57,1583
+flowchart_mega_event_mesh,mmdr fixture,0.96,1777.12,1017
+seq_full,tests/cases,0.59,3.15,860
+class_full,tests/cases,0.72,9.64,1124
