@@ -500,6 +500,11 @@ DIAG_FN(class_render) {
         dg_size(g, (int32_t)v, w + 2 * CPAD, h);
     }
     g->iso_toggle = true;
+    /* LR/RL: the label sits in a rank of its own width, leaving only ranksep/2 per side for
+     * the relation markers (diamond, triangle) and cardinalities; widen so they don't touch */
+    if (g->dir == DIR_LR || g->dir == DIR_RL)
+        for (size_t e = 0; e < g->ne; e++)
+            if (g->elabel[e].n) { g->rank_sep += 30; break; }
     if ((st = flow_layout(g))) return st;
     BBox bb = dg_bbox(g);
     if (title.n) bb.y0 -= 30;
