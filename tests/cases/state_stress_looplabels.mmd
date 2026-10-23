@@ -1,0 +1,33 @@
+stateDiagram-v2
+  [*] --> s0
+  s5 --> s9
+  s10 --> s10 : user
+  s6 --> s7
+  s11 --> s13 : delta
+  s4 --> s9 : ok
+  s12 --> s3
+  s13 --> s11 : gamma
+  s2 --> s5 : db
+  s3 --> s7
+  s5 --> s10 : validate
+  s7 --> s4 : gamma
+  s9 --> s6
+  s2 --> s5
+  s1 --> s5 : user
+  s12 --> s12
+  s13 --> s9 : retry later
+  s5 --> s2 : ok
+  s13 --> s9 : parse input
+  s3 --> s1
+  s14 --> s7
+  s3 --> s10
+  s14 --> s3 : ok
+  s11 --> s11 : x
+  s10 --> s10 : delta
+  s13 --> s12 : gamma
+  s10 --> s3 : validate
+  s3 --> s14 : alpha
+  s14 --> s13 : long label with words
+  s1 --> s11 : validate
+  s4 --> s4
+  s14 --> [*]

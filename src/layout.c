@@ -2965,6 +2965,18 @@ static cmm_status loops_collapse(Graph *g, const LoopSave *sv) {
     return CMM_OK;
 }
 
+/* is a self-loop label at (x, y) clear of other labels and of nodes other than its own? */
+static bool loop_lab_free(const Graph *g, size_t e, double x, double y) {
+    double hw = g->elw[e] / 2, hh = g->elh[e] / 2;
+    for (size_t q = 0; q < g->ne; q++)
+        if (q != e && g->elabel[q].n && fabs(x - g->elx[q]) * 2 < g->elw[e] + g->elw[q] + 4 && fabs(y - g->ely[q]) * 2 < g->elh[e] + g->elh[q] + 2) return false;
+    for (size_t u = 0; u < g->nn; u++) {
+        if ((int32_t)u == g->efrom[e] || (g->nflags[u] & NF_HIDDEN)) continue;
+        if (fabs(x - g->nx[u]) < hw + g->nw[u] / 2 + 2 && fabs(y - g->ny[u]) < hh + g->nh[u] / 2 + 2) return false;
+    }
+    return true;
+}
+
 /* self-loop labels are placed after the overlap pass: push one that lands on another label
  * further out from its node (away from the node centre on the dominant axis) */
 static void loop_labels_clear(Graph *g) {
@@ -2975,6 +2987,7 @@ static void loop_labels_clear(Graph *g) {
         int32_t v = g->efrom[e];
         double dx = g->elx[e] - g->nx[v], dy = g->ely[e] - g->ny[v];
         bool hz = fabs(dx) * g->nh[v] > fabs(dy) * g->nw[v];
+        double ox = g->elx[e], oy = g->ely[e]; /* by the loop: origin for the fallback search */
         for (int it = 0; it < 4; it++) {
             bool hit = false;
             for (size_t q = 0; q < E; q++) {
@@ -2985,6 +2998,25 @@ static void loop_labels_clear(Graph *g) {
             }
             if (!hit) break;
         }
+        if (loop_lab_free(g, e, g->elx[e], g->ely[e])) continue;
+        /* still on a label or a neighbour node: try both sides of the node, stacked along the cross axis */
+        double bx = g->elx[e], by = g->ely[e];
+        bool found = false;
+        for (int side = 1; side >= -1 && !found; side -= 2) /* own side first: the label stays by its loop */
+            for (int k = 0; k <= 4 && !found; k++)
+                for (int sg = 1; sg >= -1 && !found; sg -= 2) {
+                    if (!k && sg < 0) continue;
+                    double x = ox, y = oy;
+                    if (hz) {
+                        if (side < 0) x = 2 * g->nx[v] - ox;
+                        y = oy + sg * k * (g->elh[e] + 2);
+                    } else {
+                        if (side < 0) y = 2 * g->ny[v] - oy;
+                        x = ox + sg * k * (g->elw[e] / 2 + 4);
+                    }
+                    if (loop_lab_free(g, e, x, y)) bx = x, by = y, found = true;
+                }
+        g->elx[e] = bx, g->ely[e] = by;
     }
 }
 
