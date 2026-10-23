@@ -46,14 +46,14 @@ static double route_cost(const Graph *g, bool horiz, int32_t f, int32_t t, size_
                 double ru0 = horiz ? R[2 * j] : R[2 * j + 1], rw0 = horiz ? R[2 * j + 1] : R[2 * j];
                 double ru1 = horiz ? R[2 * j + 2] : R[2 * j + 3], rw1 = horiz ? R[2 * j + 3] : R[2 * j + 2];
                 bool hz = fabs(rw0 - rw1) < 0.5, mine_hz = w1 - w0 < 0.5;
-                if (hz && mine_hz && fabs(rw0 - w0) < 7 && fmax(ru0, ru1) > u0 + 1 && fmin(ru0, ru1) < u1 - 1) c += 50;
+                if (hz && mine_hz && fabs(rw0 - w0) < 12 && fmax(ru0, ru1) > u0 + 1 && fmin(ru0, ru1) < u1 - 1) c += 50;
                 /* perpendicular crossing of another edge (strictly inside both segments) */
                 if (hz != mine_hz) {
                     double a0 = hz ? fmin(ru0, ru1) : fmin(rw0, rw1), a1 = hz ? fmax(ru0, ru1) : fmax(rw0, rw1), aw = hz ? rw0 : ru0;
                     if (mine_hz ? (aw > u0 + 1 && aw < u1 - 1 && w0 > fmin(rw0, rw1) + 1 && w0 < fmax(rw0, rw1) - 1)
                                 : (aw > w0 + 1 && aw < w1 - 1 && u0 > a0 + 1 && u0 < a1 - 1)) c += 15;
                 }
-                if (!hz && !mine_hz && fabs(ru0 - u0) < 7 && fmax(rw0, rw1) > w0 + 1 && fmin(rw0, rw1) < w1 - 1) c += 50;
+                if (!hz && !mine_hz && fabs(ru0 - u0) < 12 && fmax(rw0, rw1) > w0 + 1 && fmin(rw0, rw1) < w1 - 1) c += 50;
             }
         }
     }
@@ -322,13 +322,13 @@ cmm_status swim_layout(Graph *g, Str **keep) {
         double tu = horiz ? g->nx[t] : g->ny[t], tw = horiz ? g->ny[t] : g->nx[t];
         double fm = (horiz ? g->nw[f] : g->nh[f]) / 2, fc = (horiz ? g->nh[f] : g->nw[f]) / 2;
         double tm = (horiz ? g->nw[t] : g->nh[t]) / 2, tc = (horiz ? g->nh[t] : g->nw[t]) / 2;
-        bool straight = fabs(fw - tw) < 0.5 || fabs(fu - tu) < 0.5;
+        bool straight = fabs(fw - tw) < 0.5 || fabs(fu - tu) < 2;
         if ((round == 0 && !straight) || (round == 1 && straight)) continue;
-        double best[10], bc = INFINITY;
+        double best[10], bc = INFINITY, sc = INFINITY; /* sc: cost of the straight same-rank line */
         uint32_t bn = 0;
         double C[10];
         /* offsets of the attachment legs, so parallel routes don't share a line */
-        static constexpr double OFF[] = {0, 10, -10, 20, -20};
+        static constexpr double OFF[] = {0, 6, -6, 10, -10, 20, -20};
         for (size_t oi = 0; oi < countof(OFF); oi++)
             for (size_t oj = 0; oj < countof(OFF); oj++) {
                 bool detour = fabs(fw - tw) < 0.5;
@@ -348,18 +348,17 @@ cmm_status swim_layout(Graph *g, Str **keep) {
                         double c = route_cost(g, horiz, f, t, e, 4, C) + 30 + pen;
                         if (c < bc) bc = c, bn = 4, memcpy(best, C, sizeof C);
                     }
-                } else if (fabs(fu - tu) < 0.5) {
-                    if (oj) continue;
+                } else if (fabs(fu - tu) < 2) {
                     double sg = tw >= fw ? 1 : -1;
-                    if (!oi) {
+                    if (!oi && !oj) {
                         C[0] = fu, C[1] = fw + sg * fc, C[2] = tu, C[3] = tw - sg * tc;
-                        double c = route_cost(g, horiz, f, t, e, 2, C);
+                        double c = sc = route_cost(g, horiz, f, t, e, 2, C);
                         if (c < bc) bc = c, bn = 2, memcpy(best, C, sizeof C);
                     }
-                    if (bc >= 100) for (int side = -1; side <= 1; side += 2) { /* same rank, blocked: loop past the nodes in between */
-                        double ud = fu + side * (fmax(fm, tm) + 20 + fabs(o1));
-                        C[0] = fu + side * fm, C[1] = fw, C[2] = ud, C[3] = fw, C[4] = ud, C[5] = tw, C[6] = tu + side * tm, C[7] = tw;
-                        double c = route_cost(g, horiz, f, t, e, 4, C) + 30 + fabs(o1) / 2;
+                    if (sc >= 100 && fabs(o1) < fc - 4 && fabs(o2) < tc - 4) for (int side = -1; side <= 1; side += 2) { /* same rank, blocked: loop past the nodes in between */
+                        double ud = fu + side * (fmax(fm, tm) + 20);
+                        C[0] = fu + side * fm, C[1] = fw + o1, C[2] = ud, C[3] = fw + o1, C[4] = ud, C[5] = tw + o2, C[6] = tu + side * tm, C[7] = tw + o2;
+                        double c = route_cost(g, horiz, f, t, e, 4, C) + 30 + pen;
                         if (c < bc) bc = c, bn = 4, memcpy(best, C, sizeof C);
                     }
                 } else {
