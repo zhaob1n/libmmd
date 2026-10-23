@@ -19,6 +19,15 @@ static bool boxy(const Graph *g, int32_t v) {
     return s == SH_RECT || s == SH_ROUND || s == SH_SUBROUTINE;
 }
 
+/* how far the outline reaches at fraction r (0 centre, 1 edge) across a side, for legs offset off-centre */
+static double reach(const Graph *g, int32_t v, double r) {
+    Shape s = g->nshape ? g->nshape[v] : SH_RECT;
+    r = fmin(fabs(r), 1);
+    if (s == SH_RHOMBUS) return 1 - r;
+    if (s == SH_CIRCLE || s == SH_DCIRCLE) return sqrt(1 - r * r);
+    return 1;
+}
+
 static double route_cost(const Graph *g, bool horiz, int32_t f, int32_t t, size_t ecur, uint32_t n, const double Q[static 2 * n]) {
     double c = 0;
     for (uint32_t k = 0; k + 1 < n; k++) {
@@ -37,8 +46,14 @@ static double route_cost(const Graph *g, bool horiz, int32_t f, int32_t t, size_
                 double ru0 = horiz ? R[2 * j] : R[2 * j + 1], rw0 = horiz ? R[2 * j + 1] : R[2 * j];
                 double ru1 = horiz ? R[2 * j + 2] : R[2 * j + 3], rw1 = horiz ? R[2 * j + 3] : R[2 * j + 2];
                 bool hz = fabs(rw0 - rw1) < 0.5, mine_hz = w1 - w0 < 0.5;
-                if (hz && mine_hz && fabs(rw0 - w0) < 3 && fmax(ru0, ru1) > u0 + 1 && fmin(ru0, ru1) < u1 - 1) c += 50;
-                if (!hz && !mine_hz && fabs(ru0 - u0) < 3 && fmax(rw0, rw1) > w0 + 1 && fmin(rw0, rw1) < w1 - 1) c += 50;
+                if (hz && mine_hz && fabs(rw0 - w0) < 7 && fmax(ru0, ru1) > u0 + 1 && fmin(ru0, ru1) < u1 - 1) c += 50;
+                /* perpendicular crossing of another edge (strictly inside both segments) */
+                if (hz != mine_hz) {
+                    double a0 = hz ? fmin(ru0, ru1) : fmin(rw0, rw1), a1 = hz ? fmax(ru0, ru1) : fmax(rw0, rw1), aw = hz ? rw0 : ru0;
+                    if (mine_hz ? (aw > u0 + 1 && aw < u1 - 1 && w0 > fmin(rw0, rw1) + 1 && w0 < fmax(rw0, rw1) - 1)
+                                : (aw > w0 + 1 && aw < w1 - 1 && u0 > a0 + 1 && u0 < a1 - 1)) c += 15;
+                }
+                if (!hz && !mine_hz && fabs(ru0 - u0) < 7 && fmax(rw0, rw1) > w0 + 1 && fmin(rw0, rw1) < w1 - 1) c += 50;
             }
         }
     }
@@ -317,7 +332,7 @@ cmm_status swim_layout(Graph *g, Str **keep) {
         for (size_t oi = 0; oi < countof(OFF); oi++)
             for (size_t oj = 0; oj < countof(OFF); oj++) {
                 bool detour = fabs(fw - tw) < 0.5;
-                if ((oi && !detour && !boxy(g, f)) || (oj && !boxy(g, t))) continue; /* offset ends only on flat sides */
+                if (detour ? false : ((oi && !boxy(g, f) && g->nshape[f] != SH_RHOMBUS) || (oj && !boxy(g, t) && g->nshape[t] != SH_RHOMBUS))) continue;
                 double o1 = OFF[oi], o2 = OFF[oj], pen = (fabs(o1) + fabs(o2)) / 2;
                 if (fabs(fw - tw) < 0.5) { /* same lane line: straight, or a detour beside the nodes */
                     double sg = tu >= fu ? 1 : -1;
@@ -342,12 +357,12 @@ cmm_status swim_layout(Graph *g, Str **keep) {
                 } else {
                     double sg = tu >= fu ? 1 : -1, sw = tw >= fw ? 1 : -1;
                     if (fabs(o1) < fc - 4 && fabs(o2) < tm - 4) { /* main-axis first */
-                        C[0] = fu + sg * fm, C[1] = fw + o1, C[2] = tu + o2, C[3] = fw + o1, C[4] = tu + o2, C[5] = tw - sw * tc;
+                        C[0] = fu + sg * fm * reach(g, f, o1 / fc), C[1] = fw + o1, C[2] = tu + o2, C[3] = fw + o1, C[4] = tu + o2, C[5] = tw - sw * tc * reach(g, t, o2 / tm);
                         double c = route_cost(g, horiz, f, t, e, 3, C) + pen;
                         if (c < bc) bc = c, bn = 3, memcpy(best, C, sizeof C);
                     }
                     if (fabs(o1) < fm - 4 && fabs(o2) < tc - 4) { /* cross-axis first */
-                        C[0] = fu + o1, C[1] = fw + sw * fc, C[2] = fu + o1, C[3] = tw + o2, C[4] = tu - sg * tm, C[5] = tw + o2;
+                        C[0] = fu + o1, C[1] = fw + sw * fc * reach(g, f, o1 / fm), C[2] = fu + o1, C[3] = tw + o2, C[4] = tu - sg * tm * reach(g, t, o2 / tc), C[5] = tw + o2;
                         double c = route_cost(g, horiz, f, t, e, 3, C) + pen + 0.5;
                         if (c < bc) bc = c, bn = 3, memcpy(best, C, sizeof C);
                     }
