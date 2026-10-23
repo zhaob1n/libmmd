@@ -2872,6 +2872,29 @@ static cmm_status loops_collapse(Graph *g, const LoopSave *sv) {
     return CMM_OK;
 }
 
+/* self-loop labels are placed after the overlap pass: push one that lands on another label
+ * further out from its node (away from the node centre on the dominant axis) */
+static void loop_labels_clear(Graph *g) {
+    size_t E = g->ne;
+    if (E > 4000) return;
+    for (size_t e = 0; e < E; e++) {
+        if (g->efrom[e] != g->eto[e] || !g->elabel[e].n) continue;
+        int32_t v = g->efrom[e];
+        double dx = g->elx[e] - g->nx[v], dy = g->ely[e] - g->ny[v];
+        bool hz = fabs(dx) * g->nh[v] > fabs(dy) * g->nw[v];
+        for (int it = 0; it < 4; it++) {
+            bool hit = false;
+            for (size_t q = 0; q < E; q++) {
+                if (q == e || !g->elabel[q].n || !lab_overlap(g, e, q)) continue;
+                if (hz) g->elx[e] += (dx < 0 ? -1 : 1) * ((g->elw[e] + g->elw[q]) / 2 + 4 - fabs(g->elx[e] - g->elx[q]) + 1);
+                else g->ely[e] += (dy < 0 ? -1 : 1) * ((g->elh[e] + g->elh[q]) / 2 + 2 - fabs(g->ely[e] - g->ely[q]) + 1);
+                hit = true;
+            }
+            if (!hit) break;
+        }
+    }
+}
+
 cmm_status flow_layout(Graph *g) {
     LoopSave sv;
     cmm_status st = loops_expand(g, &sv);
@@ -2889,6 +2912,7 @@ cmm_status flow_layout(Graph *g) {
     labels_on_curve(g);
     if (!place_titles(g)) return CMM_ERR_NOMEM;
     st = loops_collapse(g, &sv);
+    if (!st) loop_labels_clear(g);
     PROF("post");
     return st;
 }
