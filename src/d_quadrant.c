@@ -174,6 +174,8 @@ DIAG_FN(quadrant_render) {
             buf_num(out, cx); buf_ch(out, ','); buf_num(out, cy); buf_lit(out, ") rotate(-90)\">");
             buf_xml(out, ys[i]);
             buf_lit(out, "</text>");
+            double tw = text_width(ys[i], 16), *o = ob + 4 * no++; /* rotated: an obstacle for point labels */
+            o[0] = cx - 10, o[1] = cy - tw / 2, o[2] = cx + 10, o[3] = cy + tw / 2;
         }
     }
     for (size_t i = 0; i < pts.n; i++) {
