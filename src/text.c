@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "text.h"
 #include <math.h>
 
@@ -67,9 +68,19 @@ double text_width(Str s, double fs) {
         unsigned c = p[i];
         uint32_t cp = c;
         size_t len = 1;
+        if (c == '#') { /* mermaid entity #name; / #123; renders as one glyph */
+            size_t j = i + 1;
+            while (j < n && j - i < 12 && ((unsigned)((p[j] | 32) - 'a') < 26u || (unsigned)(p[j] - '0') < 10u)) j++;
+            if (j < n && p[j] == ';' && j > i + 1) {
+                uint32_t e = (unsigned)(p[i + 1] - '0') < 10u ? (uint32_t)strtoul((const char *)p + i + 1, nullptr, 10)
+                                                              : ent_lookup(j - i - 1, (const char *)p + i + 1);
+                if (e) { cp = e; len = j + 1 - i; goto have; }
+            }
+        }
         if (c >= 0xF0 && i + 3 < n) { cp = ((c & 7u) << 18) | ((p[i + 1] & 63u) << 12) | ((p[i + 2] & 63u) << 6) | (p[i + 3] & 63u); len = 4; }
         else if (c >= 0xE0 && i + 2 < n) { cp = ((c & 15u) << 12) | ((p[i + 1] & 63u) << 6) | (p[i + 2] & 63u); len = 3; }
         else if (c >= 0xC0 && i + 1 < n) { cp = ((c & 31u) << 6) | (p[i + 1] & 63u); len = 2; }
+    have:
         acc += cp_width(cp);
         if (cp >= 32 && cp < 127 && prev && KL[prev - 32]) acc += KT[KL[prev - 32] - 1][cp - 32];
         prev = cp >= 32 && cp < 127 ? cp : 0;

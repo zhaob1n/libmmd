@@ -4,6 +4,7 @@
 
 /* Width in px of a single line of UTF-8 text at font size fs. */
 [[nodiscard]] double text_width(Str s, double fs);
+[[nodiscard]] uint32_t ent_lookup(size_t n, const char s[static n]);
 /* Normalise a label: strip quotes/markdown markers, convert <br> to '\n'.
  * Returns a view into the source when no rewrite is needed. */
 [[nodiscard]] Str label_normalize(Arena *a, Str raw, bool *ok);
