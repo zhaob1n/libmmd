@@ -1,179 +1,214 @@
-# cmermaid — fast Mermaid renderer in modern C (phase 1)
+# cmermaid
 
-C23/C2y (`-std=gnu2y` on clang 23, `gnu23` on gcc 14, auto-detected), warning-free with
-`-Wall -Wextra -fms-extensions` on both compilers. No dependencies beyond libc + libm.
+A fast [Mermaid](https://mermaid.js.org) renderer written in C (`-std=gnu2y`).
+It turns Mermaid source into SVG. It works as a command-line tool (`mmdc-c`) and as a small C library (`libcmermaid`).
+It needs no browser, no Node.js, no JavaScript engine and no dependencies beyond libc and libm.
 
+- About **0.6–1.6 ms per diagram from the CLI**. mermaid-cli takes about 0.9–1.6 s for the same diagrams (see [Benchmarks](#benchmarks)).
+- Library renders take about **15 µs** for a small flowchart and about **0.5 ms** for a 4 KB one.
+- Flowchart layout follows dagre's algorithm, so node positions match mermaid's closely (mean node-centre error 1.6 px on the fixture set).
+- All 396 syntax examples from mermaid's documentation that mermaid itself can render also render here.
+
+> **Status:** this is a young project. Output is meant to look like mermaid-cli 11.17, not to match it pixel for pixel. See [Status and limitations](#status-and-limitations).
+
+## Supported diagram types
+
+| Family | Keywords |
+|---|---|
+| Flowchart | `flowchart`, `graph` (all directions, subgraphs, per-subgraph `direction`, every node shape, markdown strings, `fa:` icons, edge ids and animation, `classDef`/`style`/`linkStyle`) |
+| Sequence | `sequenceDiagram` (actors and participant types, boxes, activations, notes, loop/alt/opt/par/critical/break blocks, autonumber) |
+| Class | `classDiagram`, `classDiagram-v2` |
+| State | `stateDiagram`, `stateDiagram-v2` |
+| Entity relationship | `erDiagram` |
+| Gantt | `gantt` |
+| Pie | `pie` |
+| User journey | `journey` |
+| Timeline | `timeline` |
+| Mindmap | `mindmap` |
+| Quadrant | `quadrantChart` |
+| XY chart | `xychart`, `xychart-beta` |
+| Git graph | `gitGraph` |
+| C4 | `C4Context`, `C4Container`, `C4Component`, `C4Dynamic`, `C4Deployment` |
+| Requirement | `requirementDiagram` |
+| Architecture | `architecture`, `architecture-beta` |
+| Block | `block`, `block-beta` |
+| Sankey | `sankey`, `sankey-beta` |
+| Packet | `packet`, `packet-beta` |
+| Kanban | `kanban` |
+| Radar | `radar`, `radar-beta` |
+| Treemap | `treemap`, `treemap-beta` |
+| ZenUML | `zenuml` (native renderer in ZenUML's style) |
+| Ishikawa (fishbone) | `ishikawa`, `ishikawa-beta` |
+| Cynefin | `cynefin`, `cynefin-beta` |
+| Venn | `venn`, `venn-beta` |
+| Tree view | `treeView`, `treeView-beta` |
+| Swimlane | `swimlane-beta` |
+| Event modeling | `eventmodeling` |
+| Railroad | `railroad-beta`, `railroad-ebnf-beta`, `railroad-abnf-beta`, `railroad-peg-beta` |
+| Wardley map | `wardley-beta` |
+
+Every type also supports:
+- the `default`, `dark`, `forest` and `neutral` themes;
+- `%%{init}%%` and YAML front-matter config, with `themeVariables` values whitelisted;
+- `accTitle`/`accDescr`, which become `<title>`/`<desc>` plus ARIA attributes.
+
+Per-type feature notes are in [docs/INTERNALS.md](docs/INTERNALS.md).
+
+## Build
+
+You need a C compiler with C23 support:
+- **clang** (the default; tested with clang 23);
+- or **gcc 14**.
+
+The Makefile uses `-std=gnu2y` when the compiler accepts it and falls back to `gnu23` otherwise. You also need GNU make. Python 3 is needed only for the test and benchmark scripts.
+
+```sh
+make                      # -> build/mmdc-c, build/libcmermaid.{a,so}, build/cmermaid.pc, build/bench
+make CC=gcc-14            # build with gcc instead
+make MARCH=native LTO=1   # optional: tuned build
+make pgo                  # optional: profile-guided build in build-pgo/
+make install PREFIX=/usr/local   # header, static + shared lib, pkg-config file, mmdc-c
 ```
-make            # clang (default) -> build/{libcmermaid.a,mmdc-c,bench}
-make both       # clang -> build/, gcc -> build-gcc/
-make test       # golden/sanity tests (XML well-formedness, error line:col)
-make asan       # ASan+UBSan build in build-asan/ ; python3 tests/fuzz.py build-asan/mmdc-c 3000
-build/mmdc-c in.mmd -o out.svg      # or: cat in.mmd | build/mmdc-c > out.svg
-python3 bench/gen.py && build/bench bench/inputs/large.mmd 30
-python3 bench/compare.py bench/mmdr_fixtures/*.mmd   # vs mmdr (MMDR=..., MMDR_ARGS=--fastText)
+
+The build has zero warnings under `-Wall -Wextra` with both gcc 14 and clang.
+
+## CLI
+
+```sh
+build/mmdc-c in.mmd -o out.svg
+build/mmdc-c -i in.mmd -o out.svg -t dark      # themes: default | dark | forest | neutral
+cat in.mmd | build/mmdc-c > out.svg            # stdin -> stdout
+build/mmdc-c in.mmd -o out.svg --no-avoid      # flowchart: skip obstacle re-routing (fastest)
 ```
 
-API (`include/cmermaid.h`): `cmm_render_svg(n, src, opts, &buf, &err)`, `cmm_buffer_free`,
-`cmm_status_str`; errors carry `code`, `line`, `col`, `message`.
+On a syntax error the tool exits with a non-zero status and prints `line:col: message`.
 
-## Pipeline
-| stage | file | notes |
-|---|---|---|
-| arena + views | `src/base.[ch]` | chunked bump arena, in-place growth of last alloc, zero-copy `Str` views, typed `VEC` |
-| lexer/parser | `src/flow_parse.c` | single pass, table-driven char classes, open-addressing intern table |
-| ranking | `src/nsimplex.c` | greedy FAS (Eades) cycle removal; network simplex (dagre formulation) with graphviz-style incremental cut values / `dfs_range` |
-| ordering | `src/layout.c` | DFS init order, up/down barycenter sweeps (≤24, stop after 4 non-improving), Fenwick-tree crossing count, cluster-contiguous keys + dagre-style border chains |
-| x coords | `src/layout.c` | Brandes–Köpf: type-1 conflicts, 4 alignments, compaction, balance |
-| output | `src/flow_svg.c` | d3 `curveBasis` paths, boundary clipping per shape, markers, styles; fixed-point number formatting (no printf) |
-| sequence | `src/seq.c` | participants/actors, all arrows, activations, notes, blocks, autonumber, `A->>()B` / `A()->>B` central-connection dots |
-| diagram registry | `src/d_registry.c`, `src/diagrams.h` | keyword → renderer table; new types live in `src/d_*.c` |
-| shared helpers | `src/dgraph.[ch]` | graph building on top of `flow_layout`, line scanner, SVG primitives |
-| stateDiagram(-v2) | `src/d_state.c` | composites (recursive per-scope layout), `--` regions, `[*]`, fork/join/choice, notes, classDef |
-| classDiagram | `src/d_class.c` | members, `~generics~`, visibility/`$`/`*`, annotations, all relations + lollipop, cardinality, namespaces, notes |
-| erDiagram | `src/d_er.c` | attribute tables (type/name/keys/comment), aliases, all crow's-foot cardinalities (symbolic + word forms), `:::cls` / classDef / class / style, `subgraph` clusters (relations may target a subgraph id) |
-| pie | `src/d_pie.c` | slices, showData, title, legend |
-| gantt | `src/d_gantt.c` | dayjs-style dateFormat (incl. Z/ZZ offsets), todayMarker (CMM_TODAY override), weekday/weekend friday, strftime axisFormat, tickInterval, excludes (weekends/dates), after/until deps, done/active/crit/milestone/vert, invalid tickInterval ignored, `gantt.useWidth` |
-| journey | `src/d_journey.c` | sections, scored tasks with faces, actor legend/dots |
-| mindmap | `src/d_mindmap.c` | indentation tree, all node shapes, radial layout (tidy-tree opt-in), `::icon(fa ...)` drawn as real Font Awesome paths (badge fallback), `:::class`, section colours |
-| timeline | `src/d_timeline.c` | sections, periods, multi-event / continuation lines, wrapping |
-| quadrantChart | `src/d_quadrant.c` | axes, quadrant labels, points with inline style and classDef |
-| xychart(-beta) | `src/d_xychart.c` | vertical/horizontal, categories or numeric range, bar + line series, nice ticks, legend for titled series |
-| gitGraph | `src/d_gitgraph.c` | LR/TB/BT, branch order, merge, cherry-pick, tags, NORMAL/REVERSE/HIGHLIGHT, lane-routed merges, mermaid lane order (unordered branches = `0.<index>`), hashed auto ids |
-| sankey(-beta) | `src/d_sankey.c` | RFC-4180 CSV, longest-path columns (sinks justified), barycentric relaxation, value labels with collision avoidance |
-| block(-beta) | `src/d_block.c` | columns, spans, `space`, nested blocks, 10 shapes, labelled edges clipped to the true shape outline; grid layout |
-| requirementDiagram | `src/d_requirement.c` | 6 requirement kinds + element, all 7 relations (grey label plates), `direction`; layered layout |
-| C4* | `src/d_c4.c` | Context/Container/Component/Dynamic/Deployment, Person/System/Container/Component(+Db/Queue/_Ext), boundaries, Rel variants, `c4ShapeInRow`/`c4BoundaryInRow` grid, UpdateLayoutConfig/UpdateElementStyle/UpdateRelStyle (colours whitelisted), mermaid-11 person shape + `[Type: techn]` line |
-| architecture(-beta) | `src/d_architecture.c` | groups (nested), services, junctions, port-constraint grid, orthogonal edges, non-overlapping groups, built-in icons + embedded `logos:`/`fa:` subset (src/icons_data.h via tools/genicons.js: simple-icons CC0, FA Free CC-BY-4.0) |
-| packet(-beta) | `src/d_packet.c` | bit ranges, `+N`, row splitting, bit numbers, title below (as mermaid) |
-| radar(-beta) | `src/d_radar.c` | axes, positional/named curves, max/min/ticks, polygon graticule, legend |
-| treemap(-beta) | `src/d_treemap.c` | squarified layout, sections, classDef/`:::` |
-| kanban | `src/d_kanban.c` | columns, cards, `@{assigned, ticket, priority}`; named themes colour columns like mermaid (cScale[n+2] lightened/darkened 10%, cScaleLabel titles) |
-| ishikawa | `src/d_ishikawa.c` | fishbone port of mermaid's renderer: alternating up/down causes, nested sub-causes along bones, wrapped head |
-| cynefin | `src/d_cynefin.c` | five domains, items (confusion capped at 3 + overflow badge), transitions; seeded wavy boundaries match mermaid-cli byte-for-byte |
-| ZenUML | `src/d_zenuml.c` | native renderer in ZenUML's look: titled outer frame, boxed participant headers with `@Actor/@Database/@Boundary/@Control/@Entity/@Collections/@Queue` icons, unnamed starter column (or `@Starter(X)`), hierarchical message numbers (1, 2.1, 2.1.1), `// comments` above the next message, sync calls with `{}` bodies (activations, explicit `return` plus `x =` assignment return), `new X()` creating an `x:X` box mid-diagram, async `A->B: msg` / dashed `A-->B`, Alt/Loop/Opt/Par/Try/Critical/Section fragments (if/else if/else, while/for/forEach/loop, try/catch/finally) with numbered headers, ZenUML-style header icons and condition rows, title |
-| config / a11y | `src/d_cfg.c`, `src/dcfg.h` | `%%{init}%%` (relaxed JSON) + YAML frontmatter `config:` flattened to dotted keys; ~85 themeVariables mapped to CSS per type (values whitelisted, `url(` rejected); named themes `dark`/`forest`/`neutral` for every non-flowchart type (presets generated by `tools/gen_themes.mjs` from mermaid's own theme objects into `src/d_themes.h`, incl. pie1..12/cScale/git palettes; user themeVariables override); per-diagram keys (pie.textPosition, timeline.disableMulticolor, sankey.showValues, quadrantChart.chartHeight, gantt.axisFormat/tickInterval, gantt.barHeight/barGap/topPadding/leftPadding, quadrantChart.chartWidth, xyChart.width/height, sankey.width/height, packet.bitsPerRow); accTitle/accDescr (incl. `{}` block) → `<title>`/`<desc>` + aria-labelledby/describedby |
-| text metrics | `src/text.c` | embedded Helvetica-compatible advance table, CJK/emoji wide, 8-byte ASCII fast path |
-| venn | `src/d_venn.c` | sets, unions with sizes, indented `text` nodes, `style`; venn.js-style area-proportional layout (lens-area bisection + stress descent), labels at each region's deepest point |
-| treeView | `src/d_treeview.c` | indentation or box-drawing (`├──`/`└──`/`│`) trees, `:::highlight`, `icon(pack:name)` / showIcons file+folder icons, filename/extension icon maps, `## descriptions` |
-| swimlane-beta | `src/d_swimlanes.c` (+ flowchart parser/drawer) | full-width lanes from top-level subgraphs (LR/RL rows with rotated titles, TB/BT columns), lane-aware ranking (unlabelled cross-lane hops share a column), orthogonal edge routing, all flowchart node shapes/styles |
-| eventmodeling | `src/d_eventmodeling.c` | `tf`/`timeframe`, `rf`/`resetframe` frames (ui, cmd, evt, rmo, pcr + long names), `Ns.Name` stream/namespace lanes, `->> id` sources, inline `{ ... }` and `[[data]]` blocks, mermaid box sizing and relation geometry, `em*` theme variables |
-| railroad | `src/d_railroad.c` | `railroad-ebnf-beta` (`=`/`::=`, `\|`, `[ ]`, `{ }`, `?*+`, `-` exception, `? special ?`, `(* *)`), `railroad-abnf-beta` (`/`, `n*m` repeats, `%x` values), `railroad-peg-beta` (`<-`, `/`, `&`/`!` lookahead, `.`), `railroad-beta` function DSL; mermaid arc geometry |
-| wardley | `src/d_wardley.c` | `wardley-beta`: `title`, `size`, `evolution` stages (`@bounds`, `A / B` labels), `anchor`, `component` (`label [x, y]`, `(build\|buy\|outsource\|market\|inertia)`), `pipeline { }`, `evolve`, `note`, `(de)accelerator`, `annotation(s)`, links `->` `+>` `+<` `+<>` `-.->` `+'lbl'>` `; label` |
+## C library
 
-## Docs syntax corpus
+The API is in [`include/cmermaid.h`](include/cmermaid.h):
 
-`tests/docs/<doc>/NN.mmd`: all 432 ```` ```mermaid ```` examples from mermaid's `packages/mermaid/src/docs/syntax/*.md` (mermaid 6d8921f, extracted by `tools/extract_docs.py`). `python3 tools/docs_audit.py [-v] [--mmdc]` reports per-type pass counts against mermaid-cli (cached in `tests/docs/mermaid_status.txt`); `tools/docs_sbs.py` renders side-by-sides. Every type passes 100% of the examples mermaid itself renders (396/396; 36 examples mermaid itself rejects are excluded). `make test` runs the audit and fails on any regression.
+```c
+#include <stdio.h>
+#include <string.h>
+#include "cmermaid.h"
 
-## Fidelity vs mermaid-cli 11.17
+int main(void) {
+    const char *src = "flowchart LR\n  A[Start] --> B{Ok?}\n  B -- yes --> C[Done]\n";
+    cmm_buffer svg = {};
+    cmm_error err = {};
+    if (cmm_render_svg(strlen(src), src, nullptr, &svg, &err) != CMM_OK) {
+        fprintf(stderr, "%u:%u: %s\n", err.line, err.col, err.message);
+        return 1;
+    }
+    fwrite(svg.data, 1, svg.len, stdout);
+    cmm_buffer_free(&svg);
+}
+```
 
-Side-by-side renders (left: cmermaid, right: mermaid 11.17) live in `samples/sbs/*.png`.
-Already fixed:
-- C4: grid layout, person shape, centred boundary titles, relation labels placed to avoid boxes and other labels;
-- gitGraph: lane order, vivid palette, commit labels rotated -45 degrees;
-- treemap and radar: cScale palettes;
-- gantt: excluded days/weekends shaded, light grid;
-- kanban: mermaid column/card widths;
-- mindmap: compacted with a spring relaxation;
-- pie: declaration order and palette;
-- timeline: cScale section colours;
-- sequence: participant `@{type}` shapes;
-- packet: title position;
-- requirement: label plates.
+```sh
+cc -std=gnu2y -Iinclude example.c build/libcmermaid.a -lm      # or: $(pkg-config --cflags --libs cmermaid)
+```
 
-Known remaining differences:
-- mindmap: section colours, and the layout is still not cose-bilkent;
-- gantt: mermaid draws denser ticks;
-- state: concurrent regions are not drawn as grey boxes;
-- class: wide single-row layout, same as mermaid's;
-- journey: legend order;
-- quadrant: mermaid 11.17 renders points with a broken `hsl(NaN)` fill, so cmermaid keeps blue;
-- C4: arbitrary bgColor strings are rejected.
-mermaid itself fails to render `block_full` and `radar_full` (partial named curve).
+- `cmm_options` (which may be `nullptr`) sets node and rank spacing, font size, theme, and the `CMM_F_*` layout flags.
+- For batch rendering, `cmm_context_new()` / `cmm_context_render_svg()` / `cmm_context_free()` reuse the arena and output buffer between calls. Use one context per thread.
+- Errors come back as `cmm_status` together with `cmm_error` (code, 1-based line and column, message).
+- The shared library exports only `cmm_*` symbols.
 
-## Flowchart features (v2)
-- `direction` inside subgraphs: clusters with their own direction are laid out recursively and placed as
-  fixed-size proxy nodes; edges to a subgraph id attach to the cluster box; cluster titles are moved
-  sideways to avoid edges crossing the title band.
-- Crossing reduction: barycenter sweeps + keep-best + budgeted transpose polish (dirty-layer skipping).
-- Port ordering for fan-in/fan-out and parallel edges; nested multiple self-loops.
-- `mmdc-c --avoid` (`CMM_F_ROUTE_AVOID`): detours polyline segments around nodes they pass through.
-- Themes: `default`, `dark`, `forest`, `neutral` via `%%{init: {"theme": ...}}%%`, frontmatter, or `-t`.
-- Markdown strings (`"`**bold** *italic*`"`) with auto-wrap at 200px, `fa:fa-name` icons
-  (Font Awesome glyphs; needs the font installed to render), edge ids `A e1@--> B`, `e1@{ animate: true }`.
-- Golden tests in `tests/golden` (`UPDATE_GOLDEN=1 bash tests/run_tests.sh` to refresh).
-- Benchmarks: `bench/results_v2.txt`.
+## Benchmarks
 
-## v3: build options, batch API, routing
+All numbers below were measured on the same 8-vCPU Intel Xeon VM. Times are wall-clock for a whole process run, including process start-up. Each value is the best of N runs: N = 20 for cmermaid, 5 for mmdr and 3 for mmdc.
 
-- Build: `make` (portable `-O2`), opt-in `make MARCH=native`, `make LTO=1`, `make pgo [LTO=1 MARCH=native]` (output in `build-pgo/`).
-- Shared library: `build/libcmermaid.so.0.3.0` (soname `libcmermaid.so.0`, only `cmm_*` exported) plus `build/cmermaid.pc`; `make install PREFIX=/usr DESTDIR=...`.
-- Batch rendering: `cmm_context_new()` / `cmm_context_render_svg()` / `cmm_context_free()` reuse the arena and output buffer between calls.
-- Obstacle routing is on by default: edges that cross a non-endpoint node get a local visibility-graph (A*) detour. Use `--no-avoid` / `CMM_F_NO_AVOID` for the fastest layout. Edge labels sit on the rendered curve.
-- SVG: stroke widths and text anchoring are now CSS classes, and collinear points are dropped (about 20% smaller on medium, about 50% on large vs v1).
-- Numbers: `bench/results_v3.txt`.
+The tools compared are:
+- `mmdc-c`: this project;
+- **mermaid-rs-renderer** (`mmdr` 0.3.1, Rust);
+- **mermaid-cli** (`mmdc` 11.17.0, headless Chrome).
 
-## v4/v5: layout quality
+The run was made on 2026-10-23.
 
-- Subgraph boxes never overlap: ordering uses one global key per cluster (mean member slot over all
-  layers), so clusters stay contiguous in every layer; Brandes-Köpf keeps cluster border chains
-  rigid (borders always align with their chain partner, segments crossing a chain are conflicts).
-  Overlapping cluster pairs over the mmdr fixtures, bench inputs and tests: 12 → 0.
-- Router: corners buried in obstacles are pruned with a single grid-cell lookup, and side detours
-  are tested shortest-first (the first clear one wins).
-- Timings (µs, one core; v1 = original): medium 404 (v1) / 534 (avoid on) / 406 (`--no-avoid`),
-  xlarge 54862 / 54061 / 48932. Full numbers and the mmdr comparison: `bench/results_v4.txt`, `bench/results_v5.txt`.
-- Known gap: long edges between rectangular clusters can take wide detours around them
-  (e.g. `mega_event_mesh`); this comes from layout, not the router (`--no-avoid` shows the same).
+| input | cmermaid CLI | mmdr CLI | mermaid-cli |
+|---|---:|---:|---:|
+| flowchart_small (mmdr fixture) | 0.59 ms | 29.1 ms | 917 ms |
+| flowchart_medium (mmdr fixture) | 0.78 ms | 136.9 ms | 1064 ms |
+| flowchart_large (mmdr fixture) | 1.56 ms | 436.6 ms | 1583 ms |
+| flowchart_mega_event_mesh (mmdr fixture) | 0.96 ms | 1777.1 ms | 1017 ms |
+| seq_full (tests/cases) | 0.59 ms | 3.2 ms | 860 ms |
+| class_full (tests/cases) | 0.72 ms | 9.6 ms | 1124 ms |
 
-## v6: speed + flowchart config parity
-- Medium avoid-on 534 -> ~420 µs (v1 404); no-avoid 317 µs; large 8.3 ms (v1 8.9).
-- xlarge is ~200 ms vs v1 54 ms: the round-5 DFS feedback arc set (mermaid's default acyclicer) gives
-  far longer back-edge chains on the random xlarge input. Fidelity was chosen over speed here.
-- Flowcharts now honour `accTitle`/`accDescr` (svg `<title>`/`<desc>` + aria) and `%%{init}%%`/frontmatter
-  `themeVariables` (primaryColor, primaryBorderColor, primaryTextColor, lineColor, edgeLabelBackground,
-  clusterBkg, clusterBorder, titleColor, background, fontFamily, ...) through the same d_cfg system as the other diagrams.
-- Numbers and the mmdr comparison over all diagram types: `bench/results_v6.txt`.
+Rendering in-process through the library, timed with `build/bench` (minimum over repeated renders, clang build, from [`bench/results_v14.txt`](bench/results_v14.txt) and [`bench/results_cmermaid_inproc.txt`](bench/results_cmermaid_inproc.txt)):
 
-## v7
-- Hybrid cycle removal: DFS FAS by default, greedy (Eades) when N ≥ 1500 and DFS reverses ≥ N/20 edges.
-  `flowchart.cycleRemoval: dfs|greedy|auto`, flags `CMM_F_FAS_DFS`/`CMM_F_FAS_GREEDY`. xlarge 50.5 ms (v1 53.8).
-- `flowchart.nodeSpacing`, `flowchart.rankSpacing`, `flowchart.curve` (basis, linear, step, stepBefore, stepAfter, cardinal/catmullRom).
-- Self-loops reserve side room in BK placement; multiple loop labels stack outside the outermost loop.
-- Subgraph `direction` is ignored when member nodes link outside the subgraph (mermaid rule).
-- Numbers: bench/results_v7.txt.
+| input | size in → SVG out | time |
+|---|---|---:|
+| `bench/inputs/small.mmd` | 376 B → 9 KB | 14.9 µs |
+| `bench/inputs/medium.mmd` | 4.4 KB → 80 KB | 527 µs |
+| `bench/mmdr_fixtures/flowchart_large.mmd` | 6.4 KB → 75 KB | 214 µs |
+| `bench/inputs/large.mmd` | 44 KB → 1.2 MB | 9.3 ms |
+| `bench/inputs/xlarge.mmd` | 143 KB → 4.7 MB | 56 ms |
 
-## v8
-- Medium avoid-on 394.7 µs (v1 404.1): single ordering sweep for mid-size graphs (512 < segs ≤ 4096).
-- `tests/bounds.py`: every case and repo fixture must keep all geometry (path control points, exact arcs,
-  shapes, text anchors) inside the root viewBox; self-loop curves now included in the flowchart viewBox.
-- Compound ordering seeded with dagre's tie order; same-rank order agreement with mermaid 0.175 → 0.936.
-- Numbers: bench/results_v8.txt.
+[`bench/results_fixtures.txt`](bench/results_fixtures.txt) has library and CLI times against mmdr for all 31 mmdr flowchart fixtures. To reproduce:
 
-## v10
+```sh
+make && build/bench bench/inputs/medium.mmd 30
+MMDR=/path/to/mmdr python3 bench/compare.py bench/mmdr_fixtures/*.mmd
+```
 
-- Faithful dagre compound ranking in dagre mode (`src/drank.c`): nesting graph (border top/bottom nodes, nodeSep weights), network simplex (graphlib iteration order), label proxies, removeEmptyRanks, cleanup, border segments.
-- Ordering agreement with mermaid: 1051/1051. Rank-axis position ordering vs mermaid SVGs: 100%. Cross-axis: 99.1% (`bench/posagree.py`).
-- Small graphs use arena scratch in `dagre_order`. Small takes 16.9 µs in dagre mode, or 12.8 µs in fast mode. See `bench/results_v10.txt`.
+mermaid-cli spends most of its time starting Chrome. Its per-diagram cost is lower when it renders many diagrams in one process. The comparison is still useful for the common case of one CLI call per diagram.
 
-## v9
-- Faithful port of dagre's order step (`src/dorder.c`: initOrder DFS, layer graphs with cluster borders,
-  barycenter/sortSubgraph/resolveConflicts with subgraph constraints, biased down/up sweeps, keep best by
-  crossCount), reproducing graphlib key order. Default for graphs with V ≤ 512; the fast ordering is kept above.
-  Override: `flowchart.order: dagre|fast` or env `CMM_ORDER`.
-- Same-rank order agreement with mermaid 0.936 → 0.961 (macro 0.658 → 0.813). Numbers: bench/results_v9.txt.
+## Gallery: cmermaid vs mermaid-cli
 
-## v11
-Mermaid-exact text metrics (Liberation/Arial advances+kerning), mermaid node padding, self-loop helper nodes. See bench/results_v11.txt.
+Each image puts cmermaid on the left and mermaid-cli 11.17 on the right, rendered from the same source in `tests/cases/`. To regenerate them, run `python3 tools/gallery.py tests/cases/<name>.mmd`.
 
-## v12
+| | |
+|---|---|
+| Flowchart with subgraphs ![](docs/gallery/subgraphs.png) | Flowchart ![](docs/gallery/basic.png) |
+| Sequence ![](docs/gallery/seq_full.png) | Class ![](docs/gallery/class_full.png) |
+| State ![](docs/gallery/state_full.png) | ER ![](docs/gallery/er_full.png) |
+| Gantt ![](docs/gallery/gantt_full.png) | Git graph ![](docs/gallery/gitgraph_full.png) |
+| Mindmap ![](docs/gallery/mindmap_full.png) | Architecture ![](docs/gallery/architecture_full.png) |
+| C4 ![](docs/gallery/c4_full.png) | Sankey ![](docs/gallery/sankey_full.png) |
+| Pie ![](docs/gallery/pie_full.png) | Timeline ![](docs/gallery/timeline_full.png) |
+| XY chart ![](docs/gallery/xychart_full.png) | Quadrant ![](docs/gallery/quadrant_full.png) |
+| Journey ![](docs/gallery/journey_full.png) | |
 
-- Node-centre error vs mermaid: 67.7 px -> 1.61 px mean (median 0, p90 6.1). Sources fixed: double cluster
-  padding in dagre mode, dagre ordering threshold (now N<=256), exact edge-label bbox sizes, and dagre's
-  labelRank (proxy rank on nesting-graph ranks before removeEmptyRanks).
-- Small render 15.0 us (target 11.7 us not met); medium 590 us (dagre-exact ordering now applies).
-- bench/eq/: byte-identity harness. See bench/results_v12.txt.
+More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 
-## v13 (speed)
-Byte-identical output. medium 590.5 → 481.5 µs, small 15.1 → 14.6 µs (min, this box). v1 is at 407 / 11.9, so the targets are not met yet.
-Main gains came from incremental network simplex (rank cycles 449k → 231k) and from dorder sort/crossing shortcuts.
-Build with `-DCMM_PROFILE` to get per-phase cycle counters. See bench/results_v13.txt and bench/prof13/.
+## Testing and quality tooling
+
+| what | how |
+|---|---|
+| Golden + sanity tests (150 cases; XML well-formedness, error positions, viewBox bounds, mermaid docs corpus) | `make test` (`UPDATE_GOLDEN=1 make test` to refresh) |
+| Mermaid docs corpus: 432 examples from mermaid's syntax docs, 396/396 that mermaid itself renders | `python3 tools/docs_audit.py [-v]` |
+| ASan + UBSan build | `make asan` → `build-asan/mmdc-c` |
+| Fuzzing (mutational, under ASan) | `python3 tests/fuzz.py build-asan/mmdc-c 1000` |
+| Allocation-failure injection | `sh tests/poison.sh` |
+| Stress generator (every type, density 1×–5×) | `python3 tools/stress_gen.py OUT 2 SEED SCALE` |
+| Visual quality scanner (edges through nodes, label overlaps, labels on edges, out-of-bounds…) | `python3 tools/quality_scan.py files… [-v]` |
+| Layout agreement with mermaid (rank/cross-axis order, node-centre error) | `python3 bench/posagree.py` |
+| Side-by-side ranking against mermaid-cli renders | `python3 tools/sbs_rank.py`, `tools/sbs_pair.sh` |
+| Byte-identity check for perf work | `sh bench/eq/cmp.sh` |
+
+## Status and limitations
+
+- **Similar, not identical.** Output follows mermaid-cli 11.17 in style and, for flowcharts, in layout (mermaid/dagre ordering and ranking). Mermaid-generated CSS selectors and pixel-exact SVGs are not goals.
+- **Mindmap** does not use mermaid's cose-bilkent layout. It uses its own radial and spring layout, so mindmaps look different from mermaid's.
+- **Architecture** also has its own grid layout, not fcose.
+- **Text** is measured with built-in Helvetica/Arial-compatible advance tables, not a real font engine. Unusual fonts and complex scripts can be sized imperfectly. CJK and emoji are treated as wide characters.
+- **Very dense diagrams**, around 5× the stress generator's density, can still have label overlaps. This mostly affects Sankey, quadrant and Wardley charts on a fixed-size canvas.
+- **Known differences** from mermaid include gantt tick density, state concurrent-region styling and journey legend order. See [docs/INTERNALS.md](docs/INTERNALS.md).
+- **`fa:` icons** in flowcharts need the Font Awesome font where the SVG is viewed. Architecture and mindmap icons are embedded as paths.
+- **Not supported:** interactivity (`click` callbacks, tooltips) and PNG/PDF output. To get a raster image, convert the SVG with any SVG rasteriser.
+
+## License
+
+No license has been chosen yet.
+
+---
+
+## 中文简介
+
+cmermaid 是一个用 C 语言（gnu2y）编写的高速 Mermaid 渲染器，可作为命令行工具 `mmdc-c` 或 C 库 `libcmermaid` 使用。它把 Mermaid 源码直接渲染成 SVG，不需要浏览器、Node.js 或任何第三方依赖。
+
+- 支持上表列出的全部 30 多种图表类型。
+- 单个图表的命令行渲染约 1 毫秒，mermaid-cli 约 1 秒。
+- 流程图采用与 mermaid（dagre）一致的布局算法。
+
+构建只需 `make`，用法为 `build/mmdc-c in.mmd -o out.svg`。效果对比见上方 Gallery。
