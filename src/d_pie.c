@@ -115,6 +115,7 @@ DIAG_FN(pie_render) {
     double ty = -14; /* title baseline: above any outside label near 12 o'clock */
     for (size_t i = 0; i < sl.n; i++) if (LO[i] && fabs(LX[i] - CX) < 120) ty = fmin(ty, LY[i] - 22);
     if (title.n) bb.y0 = fmin(bb.y0, ty - 26);
+    bb.y0 = fmin(bb.y0, CY - sl.n * 22 / 2.0 - 4), bb.y1 = fmax(bb.y1, CY + sl.n * 22 / 2.0 + 4); /* tall legends */
     if (!buf_reserve(out, 2048 + sl.n * 600)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 8, "pie", CSS);
     if (title.n) dg_text(out, title, 25, CX, ty, "middle", "ttl");
