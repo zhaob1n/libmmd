@@ -104,6 +104,7 @@ typedef struct Lay {
     unsigned shape_row, box_row;
     double maxx, maxy; /* globalBoundaryMax */
     double *nx, *ny, *sx, *sy, *sw, *sh;
+    const double *gap; /* extra space before a shape whose row neighbour has a wide relation label (or nullptr) */
 } Lay;
 
 /* mermaid c4Renderer port: Bounds.insert / drawInsideBoundary (positions only) */
@@ -123,10 +124,10 @@ typedef struct Bnd {
 
 static void bnd_set(Bnd *b, double x, double y) { b->x0 = b->x1 = b->nx0 = b->nx1 = x, b->y0 = b->y1 = b->ny0 = b->ny1 = y; }
 
-static void bnd_insert(Bnd *b, unsigned shape_row, double w, double h, double *ox, double *oy) {
+static void bnd_insert(Bnd *b, unsigned shape_row, double w, double h, double gap, double *ox, double *oy) {
     constexpr double m = C4_SHAPE_MARGIN;
     b->cnt++;
-    double sx = b->nx0 == b->nx1 ? b->nx1 + m : b->nx1 + 2 * m, ex = sx + w, sy = b->ny0 + 2 * m, ey = sy + h;
+    double sx = b->nx0 == b->nx1 ? b->nx1 + m : b->nx1 + 2 * m + gap, ex = sx + w, sy = b->ny0 + 2 * m, ey = sy + h;
     if (sx >= b->lim || ex >= b->lim || b->cnt > shape_row) {
         sx = b->nx0 + m;
         sy = b->ny1 + 2 * m;
@@ -191,7 +192,7 @@ static void lay(Lay *L, Bnd *P, int32_t parent, unsigned depth) {
             Item it = L->items[i];
             if (it.box || g->nparent[it.idx] != s) continue;
             double x, y;
-            bnd_insert(&cur, L->shape_row, g->nw[it.idx], g->nh[it.idx], &x, &y);
+            bnd_insert(&cur, L->shape_row, g->nw[it.idx], g->nh[it.idx], L->gap ? L->gap[it.idx] : 0, &x, &y);
             L->nx[it.idx] = x + g->nw[it.idx] / 2, L->ny[it.idx] = y + g->nh[it.idx] / 2;
             any = true;
         }
@@ -438,7 +439,28 @@ DIAG_FN(c4_render) {
     g.sx = ANEW(a, double, g.ns + 1), g.sy = ANEW(a, double, g.ns + 1), g.sw = ANEW(a, double, g.ns + 1), g.sh = ANEW(a, double, g.ns + 1);
     g.elx = ANEW(a, double, g.ne + 1), g.ely = ANEW(a, double, g.ne + 1);
     if (!g.nx || !g.ny || !g.sx || !g.sy || !g.sw || !g.sh || !g.elx || !g.ely) return CMM_ERR_NOMEM;
-    Lay L = {.g = &g, .items = items.v, .nitems = items.n, .shape_row = shape_row, .box_row = box_row,
+    /* deviate from mermaid: a relation between consecutive shapes whose label is wider than the 100px
+       gap widens it, so the label sits between them instead of on a box */
+    double *gap = ANEW(a, double, g.nn + 1);
+    if (gap) {
+        int32_t prev = NONE;
+        for (size_t i = 0; i < items.n; i++) {
+            if (items.v[i].box) continue;
+            int32_t v = items.v[i].idx;
+            if (prev != NONE && g.nparent[prev] == g.nparent[v])
+                for (size_t e = 0; e < g.ne; e++) {
+                    if (!((g.efrom[e] == prev && g.eto[e] == v) || (g.efrom[e] == v && g.eto[e] == prev)) || !g.elabel[e].n) continue;
+                    double lw;
+                    unsigned ln;
+                    label_measure(g.elabel[e], 13, &lw, &ln);
+                    bool loop = false; /* the left shape's self-loop takes 40px off the right of the gap */
+                    for (size_t q = 0; q < g.ne; q++) loop |= g.efrom[q] == prev && g.eto[q] == prev;
+                    gap[v] = fmax(gap[v], lw + 24 + (loop ? 46 : 0) - 2 * C4_SHAPE_MARGIN);
+                }
+            prev = v;
+        }
+    }
+    Lay L = {.g = &g, .gap = gap, .items = items.v, .nitems = items.n, .shape_row = shape_row, .box_row = box_row,
              .nx = g.nx, .ny = g.ny, .sx = g.sx, .sy = g.sy, .sw = g.sw, .sh = g.sh};
     Bnd screen = {.lim = C4_SCREEN_W};
     bnd_set(&screen, C4_DMX, C4_DMY);
