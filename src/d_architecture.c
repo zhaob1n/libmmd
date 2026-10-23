@@ -452,11 +452,13 @@ DIAG_FN(architecture_render) {
             bool moved = false;
             for (size_t i = 0; i < ns; i++) {
                 const double *S = SG + 4 * i;
-                if (fabs(S[0] - S[2]) > 0.5) continue;
                 if (fmax(S[1], S[3]) < G->y0 + 1 || fmin(S[1], S[3]) > G->y0 + 29) continue;
-                if (S[0] < tx - 4 || S[0] > tx + tw + 4) continue;
-                if (S[0] + 8 + tw > G->x1 - 2) continue; /* no room: leave it */
-                tx = S[0] + 8, moved = true;
+                /* vertical crossings and horizontal runs inside the band: move past the segment's right end */
+                double lo = fmin(S[0], S[2]), hi = fmax(S[0], S[2]);
+                if (hi - lo > 0.5 && fabs(S[1] - S[3]) > 0.5) continue;
+                if (hi < tx - 4 || lo > tx + tw + 4) continue;
+                if (hi + 8 + tw > G->x1 - 2) continue; /* no room: leave it */
+                tx = hi + 8, moved = true;
             }
             if (!moved) break;
         }

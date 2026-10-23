@@ -1,0 +1,14 @@
+architecture-beta
+  group g0(cloud)[beta]
+  service s0(database)[alpha] in g0
+  service s1(disk)[gamma] in g0
+  service s2(disk)[gamma] in g0
+  service s3(database)[parse input]
+  service s4(database)[send mail] in g0
+  service s5(server)[long label with words]
+  s4:B -- B:s1
+  s5:T -- B:s1
+  s4:R --> L:s0
+  s2:T --> L:s0
+  s4:R -- T:s5
+  s2:L -- R:s4

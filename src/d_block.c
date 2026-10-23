@@ -637,7 +637,9 @@ DIAG_FN(block_render) {
                 double tw = text_width(ev.v[e].label, fs * 0.875);
                 dg_rect(eb, X + 26, Y - fs * 0.6, tw + 4, fs * 1.2, 0, "bl");
                 dg_text(eb, ev.v[e].label, fs * 0.875, X + 28 + tw / 2, Y, "middle", "bt\" font-size=\"14");
+                bb.x1 = fmax(bb.x1, X + 30 + tw + 2); /* last-column loops have no reserved gap: grow the viewBox */
             }
+            bb.x1 = fmax(bb.x1, X + 30);
             continue;
         }
         clip(s, t->x + t->w / 2, t->y + t->h / 2, &x0, &y0);
