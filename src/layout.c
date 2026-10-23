@@ -2985,37 +2985,33 @@ static void loop_labels_clear(Graph *g) {
     for (size_t e = 0; e < E; e++) {
         if (g->efrom[e] != g->eto[e] || !g->elabel[e].n) continue;
         int32_t v = g->efrom[e];
-        double dx = g->elx[e] - g->nx[v], dy = g->ely[e] - g->ny[v];
-        bool hz = fabs(dx) * g->nh[v] > fabs(dy) * g->nw[v];
-        double ox = g->elx[e], oy = g->ely[e]; /* by the loop: origin for the fallback search */
-        for (int it = 0; it < 4; it++) {
-            bool hit = false;
-            for (size_t q = 0; q < E; q++) {
-                if (q == e || !g->elabel[q].n || !lab_overlap(g, e, q)) continue;
-                if (hz) g->elx[e] += (dx < 0 ? -1 : 1) * ((g->elw[e] + g->elw[q]) / 2 + 4 - fabs(g->elx[e] - g->elx[q]) + 1);
-                else g->ely[e] += (dy < 0 ? -1 : 1) * ((g->elh[e] + g->elh[q]) / 2 + 2 - fabs(g->ely[e] - g->ely[q]) + 1);
-                hit = true;
+        double ox = g->elx[e], oy = g->ely[e]; /* by the loop */
+        if (loop_lab_free(g, e, ox, oy)) continue;
+        /* blocked: take the nearest free spot on a fine grid around the loop, off its own node */
+        double hw = g->elw[e] / 2, hh = g->elh[e] / 2, sx = fmax(6, hw / 2), sy = hh + 1;
+        double bx = ox, by = oy, bd = INFINITY;
+        for (int i = -8; i <= 8; i++)
+            for (int j = -8; j <= 8; j++) {
+                double x = ox + i * sx, y = oy + j * sy, d = hypot(i * sx, j * sy);
+                if (d >= bd) continue;
+                if (fabs(x - g->nx[v]) < hw + g->nw[v] / 2 + 2 && fabs(y - g->ny[v]) < hh + g->nh[v] / 2 + 2) continue;
+                if (loop_lab_free(g, e, x, y)) bx = x, by = y, bd = d;
             }
-            if (!hit) break;
-        }
-        if (loop_lab_free(g, e, g->elx[e], g->ely[e])) continue;
-        /* still on a label or a neighbour node: try both sides of the node, stacked along the cross axis */
-        double bx = g->elx[e], by = g->ely[e];
-        bool found = false;
-        for (int side = 1; side >= -1 && !found; side -= 2) /* own side first: the label stays by its loop */
-            for (int k = 0; k <= 4 && !found; k++)
-                for (int sg = 1; sg >= -1 && !found; sg -= 2) {
-                    if (!k && sg < 0) continue;
-                    double x = ox, y = oy;
-                    if (hz) {
-                        if (side < 0) x = 2 * g->nx[v] - ox;
-                        y = oy + sg * k * (g->elh[e] + 2);
-                    } else {
-                        if (side < 0) y = 2 * g->ny[v] - oy;
-                        x = ox + sg * k * (g->elw[e] / 2 + 4);
-                    }
-                    if (loop_lab_free(g, e, x, y)) bx = x, by = y, found = true;
+        if (bd == INFINITY) { /* nothing free nearby: the old push along the dominant axis */
+            double dx = ox - g->nx[v], dy = oy - g->ny[v];
+            bool hz = fabs(dx) * g->nh[v] > fabs(dy) * g->nw[v];
+            for (int it = 0; it < 4; it++) {
+                bool hit = false;
+                for (size_t q = 0; q < E; q++) {
+                    if (q == e || !g->elabel[q].n || !lab_overlap(g, e, q)) continue;
+                    if (hz) g->elx[e] += (dx < 0 ? -1 : 1) * ((g->elw[e] + g->elw[q]) / 2 + 4 - fabs(g->elx[e] - g->elx[q]) + 1);
+                    else g->ely[e] += (dy < 0 ? -1 : 1) * ((g->elh[e] + g->elh[q]) / 2 + 2 - fabs(g->ely[e] - g->ely[q]) + 1);
+                    hit = true;
                 }
+                if (!hit) break;
+            }
+            continue;
+        }
         g->elx[e] = bx, g->ely[e] = by;
     }
 }
