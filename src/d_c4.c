@@ -468,7 +468,13 @@ DIAG_FN(c4_render) {
         rclip(g.nx[t], g.ny[t], g.nw[t], g.nh[t], g.nx[f], g.ny[f], &sx1, &sy1);
         double sl = hypot(sx1 - sx0, sy1 - sy0), snx = sl > 0 ? -(sy1 - sy0) / sl : 0, sny = sl > 0 ? (sx1 - sx0) / sl : 1;
         double bestc = HUGE_VAL, *E = ep + 6 * e;
-        for (int k = 0; k <= 12; k++) {
+        if (f == t) { /* deviate from mermaid: a self relation is a loop off the right side, not a dot at the centre */
+            double rx = g.nx[f] + g.nw[f] / 2, q = fmin(g.nh[f] / 4, 20), k = 0;
+            for (size_t o = 0; o < e; o++) k += g.efrom[o] == f && g.eto[o] == f; /* nest repeated loops */
+            const double c[6] = {rx, g.ny[f] - q - 6 * k, rx + 70 + 40 * k, g.ny[f], rx, g.ny[f] + q + 6 * k};
+            memcpy(E, c, sizeof c), bestc = 0;
+        }
+        for (int k = 0; k <= 12 && f != t; k++) {
             double off = (k + 1) / 2 * 40.0 * (k % 2 ? 1 : -1) * (k ? 1 : 0);
             double qx = (g.nx[f] + g.nx[t]) / 2 + snx * off, qy = (g.ny[f] + g.ny[t]) / 2 + sny * off, c[6];
             rclip(g.nx[f], g.ny[f], g.nw[f], g.nh[f], k ? qx : g.nx[t], k ? qy : g.ny[t], &c[0], &c[1]);
@@ -527,6 +533,11 @@ DIAG_FN(c4_render) {
                     sc += (fabs(TS[ti] - .5) * 40 + fabs(OS[oi]) * 60); /* prefer the middle, on the line */
                     if (sc < best) best = sc, bx = cx, by = cy;
                 }
+            if (f == t) {
+                int k = 0;
+                for (size_t o = 0; o < e; o++) k += g.efrom[o] == f && g.eto[o] == f;
+                bx = (E[0] + E[2]) / 2 + 3 + lw / 2, by = E[3] + (k % 2 ? 1 : -1) * ((k + 1) / 2) * lh;
+            } /* beside the loop apex */
             lbw[e] = lw, lbh[e] = lh;
             g.elx[e] = bx + (rst[e] ? rst[e]->ox : 0), g.ely[e] = by + (rst[e] ? rst[e]->oy : 0);
             for (int it = 0; it < 3 && rst[e]; it++) /* a user offset that lands on a box: push the label clear */
@@ -551,7 +562,7 @@ DIAG_FN(c4_render) {
             }
             /* deviate from mermaid: keep user-offset labels and bent edges inside the viewBox */
             bb_add(&bb, g.elx[e] - lw / 2, g.ely[e] - lh / 2 - 4, g.elx[e] + lw / 2, g.ely[e] + lh / 2);
-            bb_add(&bb, (x0 + x1) / 4 + E[2] / 2, (y0 + y1) / 4 + E[3] / 2, (x0 + x1) / 4 + E[2] / 2, (y0 + y1) / 4 + E[3] / 2);
+            bb_add(&bb, E[2], E[3], E[2], E[3]); /* the control point too: the path's hull stays in view */
         }
         (void)lw; /* mermaid does not grow the viewBox for relation labels */
     }

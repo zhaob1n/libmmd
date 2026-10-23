@@ -1,0 +1,27 @@
+C4Context
+  title x
+  System(e0, "parse input 0", "db gamma")
+  SystemDb(e1, "long label with words 1", "gamma load config")
+  Person(e2, "gamma 2", "user user")
+  Person(e3, "x 3", "parse input db")
+  SystemDb(e4, "retry later 4", "retry later load config")
+  System_Ext(e5, "send mail 5", "user alpha")
+  System_Ext(e6, "send mail 6", "send mail db")
+  System_Ext(e7, "long label with words 7", "retry later beta")
+  System_Ext(e8, "load config 8", "validate x")
+  System_Ext(e9, "alpha 9", "parse input db")
+  Enterprise_Boundary(b0, "parse input") {
+    System(eb0, "send mail")
+    System(eb1, "alpha")
+    System(eb2, "load config")
+  }
+  Rel(e5, e4, "cache miss")
+  Rel(e7, e2, "ok")
+  Rel(e6, e0, "beta")
+  Rel(e3, e3, "alpha")
+  Rel(e2, e2, "load config")
+  Rel(e3, e3, "alpha")
+  Rel(e6, e4, "beta")
+  Rel(e1, e2, "send mail")
+  Rel(e8, e1, "db")
+  Rel(e2, e6, "cache miss")
