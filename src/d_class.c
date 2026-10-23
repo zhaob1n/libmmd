@@ -440,7 +440,11 @@ static const char *mark_id(RMark m, bool end) {
 }
 
 constexpr double CPAD = 12;   /* config.class.padding */
+constexpr double SECP = 6;   /* member section padding (CPAD/2) */
+constexpr double SECE = 8;   /* height of an empty member section */
 constexpr double CLS_BOLD = 1.0617; /* bolder label width factor */
+
+static double sec_h(unsigned k, double lh) { return k ? k * lh + 2 * SECP : SECE; }
 
 static void card_label(Buf *b, const double *P0, const double *P1, Str t, double fs) {
     double dx = P1[0] - P0[0], dy = P1[1] - P0[1], L = sqrt(dx * dx + dy * dy);
@@ -492,12 +496,8 @@ DIAG_FN(class_render) {
             if (m->flags & MF_METHOD) nm++; else na++;
         }
         double w = (na || nm) ? (mw > half ? mw : half) + half : 2 * half;
-        double MH = na ? na * lh : CPAD / 2, h = A + L;
-        if (na) h = A + L + 2 * CPAD + na * lh;
-        if (nm) h = A + L + MH + 4 * CPAD + nm * lh;
-        if (!na && !nm) h += hide_empty ? 0 : CPAD + 2 * CPAD; /* +GAP-PAD, or +GAP+renderExtraBox */
-        else if (!nm) h += 2 * CPAD;
-        dg_size(g, (int32_t)v, w + 2 * CPAD, h + 2 * CPAD);
+        double h = (!c->mn && hide_empty) ? CPAD + A + L + CPAD : CPAD + A + L + SECP + sec_h(na, lh) + sec_h(nm, lh);
+        dg_size(g, (int32_t)v, w + 2 * CPAD, h);
     }
     g->iso_toggle = true;
     if ((st = flow_layout(g))) return st;
@@ -558,9 +558,10 @@ DIAG_FN(class_render) {
         }
         dg_text(out, g->nlabel[v], fs, g->nx[v], O + A + L / 2, "middle", "title");
         if (!c->mn && hide_empty) continue;
-        dg_line(out, x0, O + A + L, x0 + w, O + A + L, "div");
-        dg_line(out, x0, O + A + L + na * lh + 2 * CPAD, x0 + w, O + A + L + na * lh + 2 * CPAD, "div");
-        double my[2] = {O + A + L + 2 * CPAD, O + A + L + (na ? na * lh : CPAD / 2) + 4 * CPAD};
+        double d1 = O + A + L + SECP, d2 = d1 + sec_h(na, lh);
+        dg_line(out, x0, d1, x0 + w, d1, "div");
+        dg_line(out, x0, d2, x0 + w, d2, "div");
+        double my[2] = {d1 + SECP, d2 + SECP};
         for (unsigned pass = 0; pass < 2; pass++) {
             double yy = my[pass];
             for (uint32_t i = 0; i < c->mn; i++) {
