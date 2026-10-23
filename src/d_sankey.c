@@ -221,25 +221,6 @@ DIAG_FN(sankey_render) {
         double w = text_width(N[i].name, 14) + text_width((Str){.p = nb, .n = strlen(nb)}, 14) + 8;
         if (N[i].x < W / 2) rw = fmax(rw, N[i].x + NW + w - W); else lw = fmax(lw, w - N[i].x);
     }
-    double top = title.n ? 40 : 0;
-    /* mermaid: viewBox = content bbox (nodes, link bands, labels ~ +-8px about the node centre) */
-    double ymin = 0, ymax = H;
-    for (size_t i = 0; i < nn; i++) {
-        double cy = N[i].y + N[i].h / 2;
-        ymin = fmin(ymin, fmin(N[i].y, cy - 8)), ymax = fmax(ymax, fmax(N[i].y + N[i].h, cy + 8));
-    }
-    BBox bb = {-fmax(lw, 0), ymin - top, W + fmax(rw, 0), ymax};
-    if (!buf_reserve(out, 1024 + nl * 300 + nn * 300)) return CMM_ERR_NOMEM;
-    DG_HEAD(out, bb, 0, "sankey", CSS);
-    for (size_t i = 0; i < nl; i++) {
-        const SLink *l = &L[i];
-        double x0 = N[l->s].x + NW, x1 = N[l->t].x, xm = (x0 + x1) / 2;
-        const char *col = PAL[l->s % countof(PAL)];
-        buf_lit(out, "<path class=\"sl\" stroke=\""); buf_put(out, strlen(col), col);
-        buf_lit(out, "\" stroke-width=\""); buf_num(out, fmax(1, l->v * ky)); buf_lit(out, "\" d=\"M");
-        dg_pt(out, x0, l->y0); buf_ch(out, 'C'); dg_pt(out, xm, l->y0); buf_ch(out, ' '); dg_pt(out, xm, l->y1);
-        buf_ch(out, ' '); dg_pt(out, x1, l->y1); buf_lit(out, "\"/>");
-    }
     /* label collision avoidance: boxes overlapping horizontally are pushed apart vertically */
     double *lx0 = ANEW(a, double, nn), *lx1 = ANEW(a, double, nn), *ly = ANEW(a, double, nn);
     uint32_t *lbo = ANEW(a, uint32_t, nn);
@@ -271,6 +252,25 @@ DIAG_FN(sankey_render) {
                 moved = true;
             }
         if (!moved) break;
+    }
+    double top = title.n ? 40 : 0;
+    /* mermaid: viewBox = content bbox (nodes, link bands, labels ~ +-8px about the node centre) */
+    double ymin = 0, ymax = H;
+    for (size_t i = 0; i < nn; i++) {
+        double cy = N[i].y + N[i].h / 2;
+        ymin = fmin(ymin, fmin(N[i].y, fmin(cy, ly[i]) - 8)), ymax = fmax(ymax, fmax(N[i].y + N[i].h, fmax(cy, ly[i]) + 8)); /* pushed labels too */
+    }
+    BBox bb = {-fmax(lw, 0), ymin - top, W + fmax(rw, 0), ymax};
+    if (!buf_reserve(out, 1024 + nl * 300 + nn * 300)) return CMM_ERR_NOMEM;
+    DG_HEAD(out, bb, 0, "sankey", CSS);
+    for (size_t i = 0; i < nl; i++) {
+        const SLink *l = &L[i];
+        double x0 = N[l->s].x + NW, x1 = N[l->t].x, xm = (x0 + x1) / 2;
+        const char *col = PAL[l->s % countof(PAL)];
+        buf_lit(out, "<path class=\"sl\" stroke=\""); buf_put(out, strlen(col), col);
+        buf_lit(out, "\" stroke-width=\""); buf_num(out, fmax(1, l->v * ky)); buf_lit(out, "\" d=\"M");
+        dg_pt(out, x0, l->y0); buf_ch(out, 'C'); dg_pt(out, xm, l->y0); buf_ch(out, ' '); dg_pt(out, xm, l->y1);
+        buf_ch(out, ' '); dg_pt(out, x1, l->y1); buf_lit(out, "\"/>");
     }
     for (size_t i = 0; i < nn; i++) {
         dg_rect_fill(out, N[i].x, N[i].y, NW, N[i].h, 0, "sn", PAL[i % countof(PAL)]);
