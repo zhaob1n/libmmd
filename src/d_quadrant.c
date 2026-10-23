@@ -139,11 +139,22 @@ DIAG_FN(quadrant_render) {
     /* quadrant-1 top-right, 2 top-left, 3 bottom-left, 4 bottom-right */
     const double qx[4] = {ox + h, ox, ox, ox + h}, qy[4] = {oy, oy, oy + v, oy + v};
     bool anypts = pts.n > 0;
+    double *ob = ANEW(a, double, 4 * (pts.n * 2 + 8)); /* obstacle rects x0 y0 x1 y1 for point labels */
+    if (!ob) return CMM_ERR_NOMEM;
+    size_t no = 0;
     for (int i = 0; i < 4; i++) {
         char c[3] = {'q', (char)('1' + i), 0};
         dg_rect(out, qx[i], qy[i], h, v, 0, c);
         /* labels sit at the top of each quadrant when points exist, centred otherwise */
-        if (q[i].n) dg_text(out, dg_wrap(a, q[i], 16, h - 10), 16, qx[i] + h / 2, anypts ? qy[i] + 20 : qy[i] + v / 2, "middle", "ql");
+        if (q[i].n) {
+            Str wq = dg_wrap(a, q[i], 16, h - 10);
+            double lw, ly = anypts ? qy[i] + 20 : qy[i] + v / 2;
+            unsigned ln;
+            label_measure(wq, 16, &lw, &ln);
+            dg_text(out, wq, 16, qx[i] + h / 2, ly, "middle", "ql");
+            double *o = ob + 4 * no++;
+            o[0] = qx[i] + h / 2 - lw / 2, o[1] = ly - 11 * ln, o[2] = qx[i] + h / 2 + lw / 2, o[3] = ly + 11 * ln;
+        }
     }
     dg_line(out, ox + h, oy, ox + h, oy + SH, "in");
     dg_line(out, ox, oy + v, ox + SW, oy + v, "in");
@@ -177,7 +188,32 @@ DIAG_FN(quadrant_render) {
             buf_lit(out, "\" stroke-width=\""); buf_num(out, p->st.sw);
         }
         buf_lit(out, "\"/>");
-        dg_text(out, p->name, 12, cx, cy + p->st.r + 10, "middle", "pl");
+        double *o = ob + 4 * no++;
+        o[0] = cx - p->st.r, o[1] = cy - p->st.r, o[2] = cx + p->st.r, o[3] = cy + p->st.r;
+    }
+    double axy = oy + SH + 20; /* x-axis labels */
+    if (xax) { double *o = ob + 4 * no++; o[0] = ox, o[1] = axy - 10, o[2] = ox + SW, o[3] = axy + 10; }
+    /* deviate from mermaid: point labels try below/above/right/left and take the spot that collides least
+       with quadrant titles, axis labels, points and earlier labels */
+    for (size_t i = 0; i < pts.n; i++) {
+        const QPt *p = &pts.v[i];
+        double cx = ox + p->x * SW, cy = oy + (1 - p->y) * SH, r = p->st.r + p->st.sw / 2, w = text_width(p->name, 12);
+        const double DX[4] = {0, 0, r + 4 + w / 2, -(r + 4 + w / 2)}, DY[4] = {r + 10, -(r + 10), 0, 0};
+        double best = HUGE_VAL, bx = cx, by = cy + r + 10;
+        for (int c = 0; c < 4; c++) {
+            double lx = cx + DX[c], ly = cy + DY[c], x0 = lx - w / 2 - 2, x1 = lx + w / 2 + 2, y0 = ly - 8, y1 = ly + 8;
+            double sc = c * 2.0;
+            if (x0 < 0 || x1 > ox + SW + 30) sc += 1e4;
+            for (size_t k = 0; k < no; k++) {
+                const double *o = ob + 4 * k;
+                double ix = fmin(x1, o[2]) - fmax(x0, o[0]), iy = fmin(y1, o[3]) - fmax(y0, o[1]);
+                if (ix > 0 && iy > 0) sc += ix * iy;
+            }
+            if (sc < best) best = sc, bx = lx, by = ly;
+        }
+        dg_text(out, p->name, 12, bx, by, "middle", "pl");
+        double *o = ob + 4 * no++;
+        o[0] = bx - w / 2 - 2, o[1] = by - 8, o[2] = bx + w / 2 + 2, o[3] = by + 8;
     }
     buf_lit(out, "</svg>\n");
     return out->oom ? CMM_ERR_NOMEM : CMM_OK;
