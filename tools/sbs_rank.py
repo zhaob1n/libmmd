@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """Rank docs examples by rendered-size mismatch vs cached mermaid-cli PNGs (run docs_sbs.py first)."""
 import glob, math, os, re, subprocess, sys
+import atexit as _ax, shutil as _sh, tempfile as _tf
+# chrome/puppeteer leave scoped_dir*/profile dirs in TMPDIR: confine them to one dir removed at exit
+if 'CMM_TMP' not in os.environ:
+    os.makedirs('/tmp/cmm-mmdc', exist_ok=True)
+    os.environ['CMM_TMP'] = os.environ['TMPDIR'] = _tf.mkdtemp(dir='/tmp/cmm-mmdc')
+    _tf.tempdir = None
+    _ax.register(_sh.rmtree, os.environ['CMM_TMP'], True)
 from PIL import Image
 rows = []
 for src in sorted(glob.glob('tests/docs/**/*.mmd', recursive=True)):

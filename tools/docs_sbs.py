@@ -2,6 +2,13 @@
 """Side-by-side (ours | mermaid-cli) PNGs for tests/docs files -> /tmp/dsbs/<doc>_<NN>.png (parallel).
 usage: docs_sbs.py tests/docs/x/01.mmd ...   (or a doc name: docs_sbs.py block)"""
 import subprocess, sys, os, re, glob, concurrent.futures as cf
+import atexit as _ax, shutil as _sh, tempfile as _tf
+# chrome/puppeteer leave scoped_dir*/profile dirs in TMPDIR: confine them to one dir removed at exit
+if 'CMM_TMP' not in os.environ:
+    os.makedirs('/tmp/cmm-mmdc', exist_ok=True)
+    os.environ['CMM_TMP'] = os.environ['TMPDIR'] = _tf.mkdtemp(dir='/tmp/cmm-mmdc')
+    _tf.tempdir = None
+    _ax.register(_sh.rmtree, os.environ['CMM_TMP'], True)
 from PIL import Image
 os.makedirs('/tmp/dsbs', exist_ok=True)
 def one(src):
