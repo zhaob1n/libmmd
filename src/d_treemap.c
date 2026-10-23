@@ -274,6 +274,13 @@ DIAG_FN(treemap_render) {
         buf_lit(out, "\"/>");
         /* header label: x+6, clipped/ellipsised to the space left of the value */
         double room = fmax(15, showv && t->v ? t->w - 10 - 30 - 10 - 6 : t->w - 12);
+        bool sv = showv && t->v; /* narrow header: the value keeps what's left after real room for the label */
+        if (sv) {
+            fmt_val(t->v, sizeof nb_, nb_, &nl);
+            double vw = text_width((Str){.p = nb_, .n = nl}, 10);
+            if (vw + 16 > t->w) sv = false;
+            else room = fmin(room, t->w - 6 - 10 - vw - 6);
+        }
         Str lab = t->label;
         char *ell = nullptr;
         if (text_width(lab, 12) > room) {
@@ -287,12 +294,11 @@ DIAG_FN(treemap_render) {
                 if (!m || text_width((Str){.p = ell, .n = m + 3}, 12) <= room) break;
             }
             lab = (Str){.p = ell, .n = m + 3};
-            if (!m && text_width(lab, 12) > room) lab = (Str){};
+            if (!m || text_width(lab, 12) > room) lab = (Str){}; /* "..." alone says nothing */
         }
         buf_lit(out, "<g fill=\""); put_c(out, "cScaleLabel", li); buf_lit(out, "\">");
         if (lab.n) dg_text(out, lab, 12, t->x + 6, t->y + HDR / 2, "start", "sh");
-        if (showv && t->v) {
-            fmt_val(t->v, sizeof nb_, nb_, &nl);
+        if (sv) {
             dg_text(out, (Str){.p = nb_, .n = nl}, 10, t->x + t->w - 10, t->y + HDR / 2, "end", "sv");
         }
         buf_lit(out, "</g>");
