@@ -131,9 +131,12 @@ BBox dg_bbox(const Graph *g) {
         if (g->nflags[v] & NF_HIDDEN) continue;
         bb_add(&bb, g->nx[v] - g->nw[v] / 2, g->ny[v] - g->nh[v] / 2, g->nx[v] + g->nw[v] / 2, g->ny[v] + g->nh[v] / 2);
     }
-    for (size_t i = 0; i + 1 < g->pts.n; i += 2) bb_add(&bb, g->pts.v[i], g->pts.v[i + 1], g->pts.v[i], g->pts.v[i + 1]);
+    for (size_t e = 0; e < g->ne; e++) { /* only points an edge still references (self-loop helpers leave stale ones) */
+        const double *P = g->pts.v + g->eptoff[e];
+        for (uint32_t i = 0; i < g->eptn[e]; i++) bb_add(&bb, P[2 * i], P[2 * i + 1], P[2 * i], P[2 * i + 1]);
+    }
     for (size_t e = 0; e < g->ne; e++) {
-        if (g->efrom[e] == g->eto[e] && g->efrom[e] != NONE) {
+        if (g->efrom[e] == g->eto[e] && g->efrom[e] != NONE && !(g->eflags && (g->eflags[e] & EF_LOOPPTS))) {
             int32_t v = g->efrom[e];
             bb_add(&bb, g->nx[v], g->ny[v], g->nx[v] + g->nw[v] / 2 + 50 + g->elw[e], g->ny[v]);
         }
@@ -180,7 +183,7 @@ void dg_basis(Buf *b, size_t n, const double P[static 2 * n]) {
 }
 
 void dg_edge_d(Buf *b, const Graph *g, size_t e) {
-    if (g->efrom[e] == g->eto[e] && g->efrom[e] != NONE) {
+    if (g->efrom[e] == g->eto[e] && g->efrom[e] != NONE && !(g->eflags && (g->eflags[e] & EF_LOOPPTS) && g->eptn[e] >= 2)) {
         int32_t v = g->efrom[e];
         double x = g->nx[v] + g->nw[v] / 2, y = g->ny[v], q = g->nh[v] / 4;
         buf_ch(b, 'M'); dg_pt(b, x, y - q);
