@@ -200,16 +200,16 @@ DIAG_FN(quadrant_render) {
     for (size_t i = 0; i < pts.n; i++) {
         const QPt *p = &pts.v[i];
         double cx = ox + p->x * SW, cy = oy + (1 - p->y) * SH, r = p->st.r + p->st.sw / 2, w = text_width(p->name, 12);
-        /* rings 0..2 of below/above/right/left/diagonals; farther rings get a leader line */
-        double DX[24], DY[24];
-        for (int k = 0; k < 3; k++) {
+        /* rings 0..4 of below/above/right/left/diagonals; farther rings get a leader line */
+        double DX[40], DY[40];
+        for (int k = 0; k < 5; k++) {
             double dy = r + 10 + 18 * k, dx = r + 4 + w / 2 + 12 * k, ex = w / 2 + r;
             const double X[8] = {0, 0, dx, -dx, ex, -ex, ex, -ex}, Y[8] = {dy, -dy, 0, 0, dy, dy, -dy, -dy};
             for (int c = 0; c < 8; c++) DX[8 * k + c] = X[c], DY[8 * k + c] = Y[c];
         }
         double best = HUGE_VAL, bx = cx, by = cy + r + 10;
         int bk = 0;
-        for (int c = 0; c < 24; c++) {
+        for (int c = 0; c < 40; c++) {
             if (c >= 4 && c < 8 && best == 0) break; /* unchanged first choice when the plain spots are free */
             double lx = cx + DX[c], ly = cy + DY[c], x0 = lx - w / 2 - 2, x1 = lx + w / 2 + 2, y0 = ly - 8, y1 = ly + 8;
             double sc = (c % 8) * 2.0 + (c / 8) * 40.0 + (c % 8 >= 4 ? 10 : 0);
