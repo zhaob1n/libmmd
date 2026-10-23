@@ -5,7 +5,8 @@ const EDGE=/edge|link|relation|transition|message|arrow|flowchart-link|branch|co
 const out=[];
 for(const wrap of document.querySelectorAll('div[data-f]')){
   const f=wrap.dataset.f, svg=wrap.querySelector('svg'); if(!svg) continue;
-  const res={f,ll:[],le:[],ov:[],ct:[]};
+  const res={f,ll:[],le:[],ov:[],ct:[],cl:[],en:[]};
+  let SB=R(svg); {const vb=svg.viewBox&&svg.viewBox.baseVal, m=svg.getScreenCTM(); if(vb&&vb.width&&m) SB=[m.a*vb.x+m.e, m.d*vb.y+m.f, m.a*(vb.x+vb.width)+m.e, m.d*(vb.y+vb.height)+m.f];}
   const texts=[];
   for(const t of svg.querySelectorAll('text')){
     if(t.closest('defs,marker')) continue;
@@ -55,6 +56,14 @@ for(const wrap of document.querySelectorAll('div[data-f]')){
     }
     if(best&&(t.b[0]<best[0]-2||t.b[2]>best[2]+2||t.b[1]<best[1]-3||t.b[3]>best[3]+3)) res.ov.push([t.s.slice(0,18),Math.round(Math.max(best[0]-t.b[0],t.b[2]-best[2],best[1]-t.b[1],t.b[3]-best[3]))]);
   }
-  if(res.ll.length||res.le.length||res.ov.length||res.ct.length) out.push(res);
+  // clipping: text outside the svg viewport
+  for(const t of texts) if(t.b[0]<SB[0]-1||t.b[1]<SB[1]-1||t.b[2]>SB[2]+1||t.b[3]>SB[3]+1) res.cl.push([t.s.slice(0,18),Math.round(Math.max(SB[0]-t.b[0],SB[1]-t.b[1],t.b[2]-SB[2],t.b[3]-SB[3]))]);
+  // edge through a node that is not one of its ends
+  const nodes=[...svg.querySelectorAll('.node,[class*=em-frame],.classGroup,.er.entityBox')].map(g=>({g,b:R(g)})).filter(n=>n.b[2]-n.b[0]>8&&n.b[3]-n.b[1]>8);
+  for(const e of edges){const a=e.pts[0],z=e.pts[e.pts.length-1];
+    for(const n of nodes){const B=n.b; const near=p=>p[0]>B[0]-10&&p[0]<B[2]+10&&p[1]>B[1]-10&&p[1]<B[3]+10;
+      if(near(a)||near(z)||n.g.contains(e.p)) continue;
+      if(e.pts.filter(p=>inside(p,B,4)).length>=3){res.en.push([e.id,(n.g.textContent||'').trim().slice(0,18)]);}}}
+  for(const k of ['ll','le','ov','ct','cl','en']) if(res[k].length){out.push(res);break;}
 }
 document.getElementById('out').textContent=JSON.stringify(out);
