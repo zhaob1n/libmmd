@@ -530,6 +530,13 @@ DIAG_FN(c4_render) {
                         double ox = fmin(ax1, qx + qw) - fmax(ax0, qx - qw), oy = fmin(ay1, g.sy[q] + 38) - fmax(ay0, g.sy[q]);
                         if (ox > 0 && oy > 0) sc += 2 * ox * oy;
                     }
+                    for (size_t q = 0; q < g.ne; q++) { /* self loops (placed or not yet) off the right side */
+                        if (g.efrom[q] != g.eto[q] || q == e) continue;
+                        int32_t v = g.efrom[q];
+                        double lx0 = g.nx[v] + g.nw[v] / 2, qq = fmin(g.nh[v] / 4, 20);
+                        double ox = fmin(ax1, lx0 + 40) - fmax(ax0, lx0), oy = fmin(ay1, g.ny[v] + qq + 4) - fmax(ay0, g.ny[v] - qq - 4);
+                        if (ox > 0 && oy > 0) sc += 2 * ox * oy;
+                    }
                     sc += (fabs(TS[ti] - .5) * 40 + fabs(OS[oi]) * 60); /* prefer the middle, on the line */
                     if (sc < best) best = sc, bx = cx, by = cy;
                 }
@@ -537,6 +544,24 @@ DIAG_FN(c4_render) {
                 int k = 0;
                 for (size_t o = 0; o < e; o++) k += g.efrom[o] == f && g.eto[o] == f;
                 bx = (E[0] + E[2]) / 2 + 3 + lw / 2, by = E[3] + (k % 2 ? 1 : -1) * ((k + 1) / 2) * lh;
+                /* deviate from mermaid: step along the apex column off earlier labels */
+                double oy0 = by, bs = HUGE_VAL, bby = by;
+                for (int j = 0; j <= 8; j++) {
+                    double cy = oy0 + (j % 2 ? 1 : -1) * ((j + 1) / 2) * (lh + 2), sc = ((j + 1) / 2) * 4.0;
+                    for (size_t q = 0; q < e; q++) {
+                        double qw = lbw[q] / 2 + 3, qh = lbh[q] / 2;
+                        double ox = fmin(bx + lw / 2 + 3, g.elx[q] + qw) - fmax(bx - lw / 2 - 3, g.elx[q] - qw);
+                        double oy = fmin(cy + lh / 2, g.ely[q] + qh) - fmax(cy - lh / 2, g.ely[q] - qh);
+                        if (ox > 0 && oy > 0) sc += 2 * ox * oy;
+                    }
+                    for (size_t v = 0; v < g.nn; v++) {
+                        double ox = fmin(bx + lw / 2 + 3, g.nx[v] + g.nw[v] / 2) - fmax(bx - lw / 2 - 3, g.nx[v] - g.nw[v] / 2);
+                        double oy = fmin(cy + lh / 2, g.ny[v] + g.nh[v] / 2) - fmax(cy - lh / 2, g.ny[v] - g.nh[v] / 2);
+                        if (ox > 0 && oy > 0) sc += ox * oy;
+                    }
+                    if (sc < bs) bs = sc, bby = cy;
+                }
+                by = bby;
             } /* beside the loop apex */
             lbw[e] = lw, lbh[e] = lh;
             g.elx[e] = bx + (rst[e] ? rst[e]->ox : 0), g.ely[e] = by + (rst[e] ? rst[e]->oy : 0);

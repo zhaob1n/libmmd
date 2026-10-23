@@ -1,0 +1,16 @@
+C4Context
+  title db
+  System_Ext(e0, "delta 0", "db load config")
+  SystemDb(e1, "user 1", "load config beta")
+  SystemDb(e2, "user 2", "db long label with words")
+  SystemDb(e3, "user 3", "x gamma")
+  Person(e4, "user 4", "validate alpha")
+  Enterprise_Boundary(b0, "parse input") {
+    System(eb0, "parse input")
+    System(eb1, "validate")
+  }
+  Rel(e1, e3, "cache miss")
+  Rel(e2, e3, "long label with words")
+  Rel(e0, e0, "delta")
+  Rel(e2, e2, "x")
+  Rel(e2, e0, "parse input")
