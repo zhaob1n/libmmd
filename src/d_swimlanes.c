@@ -349,11 +349,19 @@ cmm_status swim_layout(Graph *g, Str **keep) {
                         if (c < bc) bc = c, bn = 4, memcpy(best, C, sizeof C);
                     }
                 } else if (fabs(fu - tu) < 0.5) {
-                    if (oi || oj) continue;
+                    if (oj) continue;
                     double sg = tw >= fw ? 1 : -1;
-                    C[0] = fu, C[1] = fw + sg * fc, C[2] = tu, C[3] = tw - sg * tc;
-                    double c = route_cost(g, horiz, f, t, e, 2, C);
-                    if (c < bc) bc = c, bn = 2, memcpy(best, C, sizeof C);
+                    if (!oi) {
+                        C[0] = fu, C[1] = fw + sg * fc, C[2] = tu, C[3] = tw - sg * tc;
+                        double c = route_cost(g, horiz, f, t, e, 2, C);
+                        if (c < bc) bc = c, bn = 2, memcpy(best, C, sizeof C);
+                    }
+                    if (bc >= 100) for (int side = -1; side <= 1; side += 2) { /* same rank, blocked: loop past the nodes in between */
+                        double ud = fu + side * (fmax(fm, tm) + 20 + fabs(o1));
+                        C[0] = fu + side * fm, C[1] = fw, C[2] = ud, C[3] = fw, C[4] = ud, C[5] = tw, C[6] = tu + side * tm, C[7] = tw;
+                        double c = route_cost(g, horiz, f, t, e, 4, C) + 30 + fabs(o1) / 2;
+                        if (c < bc) bc = c, bn = 4, memcpy(best, C, sizeof C);
+                    }
                 } else {
                     double sg = tu >= fu ? 1 : -1, sw = tw >= fw ? 1 : -1;
                     if (fabs(o1) < fc - 4 && fabs(o2) < tm - 4) { /* main-axis first */
@@ -361,6 +369,14 @@ cmm_status swim_layout(Graph *g, Str **keep) {
                         double c = route_cost(g, horiz, f, t, e, 3, C) + pen;
                         if (c < bc) bc = c, bn = 3, memcpy(best, C, sizeof C);
                     }
+                    if (fabs(o1) < fm - 4 && fabs(o2) < tm - 4) /* Z through a free channel beside either end: side out, along, side in */
+                        for (int z = 0; z < 3; z++) {
+                            double wm = z == 0 ? fw + sw * (fc + 20) : z == 1 ? tw - sw * (tc + 20) : (fw + tw) / 2;
+                            C[0] = fu + o1, C[1] = fw + sw * fc * reach(g, f, o1 / fm), C[2] = fu + o1, C[3] = wm, C[4] = tu + o2, C[5] = wm, C[6] = tu + o2, C[7] = tw - sw * tc * reach(g, t, o2 / tm);
+                            if ((C[3] - C[1]) * sw < 0 || (C[7] - C[5]) * sw < 0) continue;
+                            double c = route_cost(g, horiz, f, t, e, 4, C) + 20 + pen;
+                            if (c < bc) bc = c, bn = 4, memcpy(best, C, sizeof C);
+                        }
                     if (fabs(o1) < fm - 4 && fabs(o2) < tc - 4) { /* cross-axis first */
                         C[0] = fu + o1, C[1] = fw + sw * fc * reach(g, f, o1 / fm), C[2] = fu + o1, C[3] = tw + o2, C[4] = tu - sg * tm * reach(g, t, o2 / tc), C[5] = tw + o2;
                         double c = route_cost(g, horiz, f, t, e, 3, C) + pen + 0.5;
