@@ -1,0 +1,18 @@
+Round 14 — library-time benchmark (same method as v13: build/bench, min µs, interleaved with v13 binary on same box)
+                 small     medium    Ir/render small  Ir/render medium
+v13 (24078ec)    14.3      478.2     236.1k*          3.96M
+v14 round start  14.9-15.1 ~600      -                ~4.9M
+v14 (this)       14.9      526.6     ~245k*           4.32M
+delta vs v13     +4.2%     +10.1%                      +9.2%
+(* Ir incl. startup amortised over 10 renders; raw callgrind totals small 2.588M->2.678M, medium 39.57M->43.19M)
+
+Cause of the medium regression (callgrind + ablation):
+  - tighten_curves spline-vs-node intersection test (new in v14 rounds) ~216k Ir/render; forcing it off -> ~496 µs.
+  - extra points on tightened edges flow into route/svg: ~+10 µs.
+  - other post-v13 quality features (title placement curve sampling, label work): ~+16 µs.
+Made cheaper with byte-identical output (bench/eq bad=0): grid replaced by sorted slab scan on the
+smaller-extent axis, edge-level then per-span Bezier-bbox candidate filtering, branchless inside tests,
+retries tested before pushing points, per-span above/below classification in place_titles, lazy edge bboxes.
+600 -> 527 µs. Remaining +10% is the inherent cost of the new curve-tightening check; not reducible further
+without changing output (tried: per-span binary-search windows, slower; exact-fraction constants, change output).
+Small is within the 5% budget.

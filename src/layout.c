@@ -2467,40 +2467,81 @@ static int side_path(Router *R, double sx, double sy, double tx, double ty, int3
 }
 
 
-/* does the rendered basis spline of polyline P enter a node other than a/b? */
-typedef struct { double x; int32_t v; } XV;
-static int cmp_xv(const void *a, const void *b) {
-    const XV *p = a, *q = b;
-    return (p->x > q->x) - (p->x < q->x) ?: (p->v > q->v) - (p->v < q->v);
+/* does the rendered basis spline of polyline P enter a node other than a/b? (9 samples per span;
+ * each sample looks up only the grid cell it falls in: a node containing it covers that cell) */
+typedef struct SBox { double x, y, hw, hh; int32_t v; } SBox; /* a node's shrunk half-box */
+static int cmp_sbox_y(const void *p, const void *q) {
+    const SBox *a = p, *b = q;
+    return (a->y > b->y) - (a->y < b->y);
 }
-typedef struct { const int32_t *ord; const double *xs; size_t n; double mhw; } XIdx;
-static size_t xidx_lb(const XIdx *X, double x) {
-    size_t lo = 0, hi = X->n;
-    while (lo < hi) { size_t m = (lo + hi) / 2; if (X->xs[m] < x) lo = m + 1; else hi = m; }
-    return lo;
+static int cmp_sbox_x(const void *p, const void *q) {
+    const SBox *a = p, *b = q;
+    return (a->x > b->x) - (a->x < b->x);
 }
-static bool spline_hits(const Graph *g, const XIdx *X, uint32_t np, const double *P, int32_t a, int32_t b) {
-    if (np < 3) return false;
+
+/* edge-level prefilter: nodes whose shrunk box meets the bbox of all control points are the only ones
+ * any span can enter; with few of them, test each span against that list instead of the grid */
+static size_t lower_x(const SBox *S, size_t n, double v) {
+    size_t lo = 0;
+    while (n > 1) { size_t h = n / 2; lo = S[lo + h - 1].x < v ? lo + h : lo; n -= h; }
+    return lo + (n && S[lo].x < v);
+}
+static size_t lower_y(const SBox *S, size_t n, double v) {
+    size_t lo = 0;
+    while (n > 1) { size_t h = n / 2; lo = S[lo + h - 1].y < v ? lo + h : lo; n -= h; }
+    return lo + (n && S[lo].y < v);
+}
+
+/* SX / SY hold the drawn nodes' shrunk half-boxes sorted by x / y; slot SX[n] has the x / y extents of
+ * the centres and the largest half-width and half-height. Nodes meeting the bbox of all control points are the only ones a span can enter. */
+static bool spline_hits(const SBox *SX, const SBox *SY /* nullable */, size_t n, const SBox **cand, const SBox **sc, const double (*BW)[4], uint32_t np, const double *P, int32_t a, int32_t b) {
+    if (np < 3 || !n) return false;
+    double lx = P[0], hx = P[0], ly = P[1], hy = P[1];
+    for (uint32_t i = 1; i < np; i++) {
+        double x = P[2 * i], y = P[2 * i + 1];
+        lx = x < lx ? x : lx, hx = x > hx ? x : hx, ly = y < ly ? y : ly, hy = y > hy ? y : hy;
+    }
+    const SBox *S = SX;
+    size_t from = 0, to = n;
+    if (SY) { /* sorted copies: scan only the slab of the narrower window */
+        double mhw = SX[n].hw, mhh = SX[n].hh; /* slab along the axis the edge's bbox spans less of */
+        if ((hy - ly + 2 * mhh) * SX[n].x < (hx - lx + 2 * mhw) * SX[n].y)
+            S = SY, from = lower_y(SY, n, ly - mhh), to = lower_y(SY, n, hy + mhh + 1e-9);
+        else from = lower_x(SX, n, lx - mhw), to = lower_x(SX, n, hx + mhw + 1e-9);
+    }
+    size_t nc = 0;
+    for (size_t i = from; i < to; i++) {
+        const SBox *B = &S[i];
+        cand[nc] = B;
+        nc += (B->v != a) & (B->v != b) & (B->x + B->hw >= lx) & (B->x - B->hw <= hx) & (B->y + B->hh >= ly) & (B->y - B->hh <= hy);
+    }
+    if (!nc) return false;
     for (uint32_t s = 0; s + 1 < np + 4; s++) {
-        double q[8], x0 = 1e300, y0 = 1e300, x1 = -1e300, y1 = -1e300;
+        double q[8];
         for (unsigned j = 0; j < 4; j++) {
             int64_t k = (int64_t)s + j - 2;
             if (k < 0) k = 0;
             if (k >= np) k = np - 1;
             q[2 * j] = P[2 * k], q[2 * j + 1] = P[2 * k + 1];
-            x0 = fmin(x0, q[2 * j]), x1 = fmax(x1, q[2 * j]), y0 = fmin(y0, q[2 * j + 1]), y1 = fmax(y1, q[2 * j + 1]);
         }
-        for (size_t ii = xidx_lb(X, x0 - X->mhw); ii < X->n && X->xs[ii] <= x1 + X->mhw; ii++) {
-            size_t v = (size_t)X->ord[ii];
-            double hw = g->nw[v] / 2 - 2, hh = g->nh[v] / 2 - 2;
-            if (g->nx[v] + hw < x0 || g->nx[v] - hw > x1 || g->ny[v] + hh < y0 || g->ny[v] - hh > y1) continue;
-            if ((int32_t)v == a || (int32_t)v == b || (g->nflags[v] & NF_HIDDEN) || hw <= 0 || hh <= 0) continue;
-            for (unsigned t8 = 0; t8 <= 8; t8++) {
-                double t = t8 / 8.0, it = 1 - t;
-                double b0 = it * it * it / 6, b1 = (3 * t * t * t - 6 * t * t + 4) / 6, b2 = (-3 * t * t * t + 3 * t * t + 3 * t + 1) / 6, b3 = t * t * t / 6;
-                double x = b0 * q[0] + b1 * q[2] + b2 * q[4] + b3 * q[6], y = b0 * q[1] + b1 * q[3] + b2 * q[5] + b3 * q[7];
-                if (fabs(x - g->nx[v]) < hw && fabs(y - g->ny[v]) < hh) return true;
-            }
+        /* the span is the Bezier b0..b3 below, so it lies in their bbox (padded for rounding in the samples) */
+        double bx0 = (q[0] + 4 * q[2] + q[4]) / 6, bx1 = (2 * q[2] + q[4]) / 3, bx2 = (q[2] + 2 * q[4]) / 3, bx3 = (q[2] + 4 * q[4] + q[6]) / 6;
+        double by0 = (q[1] + 4 * q[3] + q[5]) / 6, by1 = (2 * q[3] + q[5]) / 3, by2 = (q[3] + 2 * q[5]) / 3, by3 = (q[3] + 4 * q[5] + q[7]) / 6;
+        double sx0 = dmin(dmin(bx0, bx1), dmin(bx2, bx3)) - 1e-6, sx1 = dmax(dmax(bx0, bx1), dmax(bx2, bx3)) + 1e-6;
+        double sy0 = dmin(dmin(by0, by1), dmin(by2, by3)) - 1e-6, sy1 = dmax(dmax(by0, by1), dmax(by2, by3)) + 1e-6;
+        size_t ns = 0;
+        for (size_t c = 0; c < nc; c++) {
+            const SBox *B = cand[c];
+            sc[ns] = B;
+            ns += (B->x + B->hw >= sx0) & (B->x - B->hw <= sx1) & (B->y + B->hh >= sy0) & (B->y - B->hh <= sy1);
+        }
+        if (!ns) continue;
+        for (unsigned t8 = 0; t8 <= 8; t8++) {
+            const double *w = BW[t8];
+            double x = w[0] * q[0] + w[1] * q[2] + w[2] * q[4] + w[3] * q[6], y = w[0] * q[1] + w[1] * q[3] + w[2] * q[5] + w[3] * q[7];
+            bool hit = false;
+            for (size_t c = 0; c < ns; c++) hit |= (fabs(x - sc[c]->x) < sc[c]->hw) & (fabs(y - sc[c]->y) < sc[c]->hh);
+            if (hit) return true;
         }
     }
     return false;
@@ -2510,22 +2551,35 @@ static bool spline_hits(const Graph *g, const XIdx *X, uint32_t np, const double
 [[nodiscard]] static bool tighten_curves(Graph *g) {
     if (g->curve != CURVE_BASIS) return true;
     Arena *A = g->arena;
-    int32_t *ord = ANEW(A, int32_t, g->nn + 1);
-    double *xs = ANEW(A, double, g->nn + 1);
-    if (!ord || !xs) return false;
-    double mhw = 0;
+    SBox *S = ANEW(A, SBox, g->nn + 1);
+    const SBox **cand = ANEW(A, const SBox *, g->nn + 1), **sc = ANEW(A, const SBox *, g->nn + 1);
+    if (!S || !cand || !sc) return false;
+    size_t nS = 0;
     for (size_t v = 0; v < g->nn; v++) {
-        mhw = fmax(mhw, g->nw[v] / 2);
+        double hw = g->nw[v] / 2 - 2, hh = g->nh[v] / 2 - 2;
+        if (!(g->nflags[v] & NF_HIDDEN) && hw > 0 && hh > 0) S[nS++] = (SBox){g->nx[v], g->ny[v], hw, hh, (int32_t)v};
     }
-    XV *xv = ANEW(A, XV, g->nn + 1);
-    if (!xv) return false;
-    for (size_t v = 0; v < g->nn; v++) xv[v] = (XV){g->nx[v], (int32_t)v};
-    qsort(xv, g->nn, sizeof *xv, cmp_xv);
-    for (size_t i = 0; i < g->nn; i++) ord[i] = xv[i].v, xs[i] = xv[i].x;
-    XIdx X = {ord, xs, g->nn, mhw};
+    SBox *SY = nullptr; /* small graphs scan every node */
+    if (nS > 24) {
+        SY = ANEW(A, SBox, nS + 1);
+        if (!SY) return false;
+        memcpy(SY, S, nS * sizeof *S);
+        qsort(S, nS, sizeof *S, cmp_sbox_x);
+        qsort(SY, nS, sizeof *SY, cmp_sbox_y);
+    }
+    S[nS] = (SBox){0, 0, 0, 0, -1}; /* slot nS: layout width / height, largest half-width / height */
+    for (size_t i = 0; i < nS; i++) S[nS].hw = dmax(S[nS].hw, S[i].hw), S[nS].hh = dmax(S[nS].hh, S[i].hh);
+    if (SY) S[nS].x = S[nS - 1].x - S[0].x + 1, S[nS].y = SY[nS - 1].y - SY[0].y + 1;
+    double BW[9][4]; /* uniform cubic B-spline weights at t = k/8 */
+    for (unsigned t8 = 0; t8 <= 8; t8++) {
+        double t = t8 / 8.0, it = 1 - t;
+        BW[t8][0] = it * it * it / 6, BW[t8][1] = (3 * t * t * t - 6 * t * t + 4) / 6;
+        BW[t8][2] = (-3 * t * t * t + 3 * t * t + 3 * t + 1) / 6, BW[t8][3] = t * t * t / 6;
+    }
+    bool changed = false;
     for (size_t e = 0; e < g->ne; e++) {
         uint32_t np = g->eptn[e];
-        if (np < 3 || np > 200 || !spline_hits(g, &X, np, g->pts.v + g->eptoff[e], g->efrom[e], g->eto[e])) continue;
+        if (np < 3 || np > 200 || !spline_hits(S, SY, nS, cand, sc, BW, np, g->pts.v + g->eptoff[e], g->efrom[e], g->eto[e])) continue;
         for (double d = 14; d >= 3.5; d /= 2) {
             const double *P = g->pts.v + g->eptoff[e];
             double *Q = ANEW(A, double, 6 * (size_t)np);
@@ -2543,14 +2597,15 @@ static bool spline_hits(const Graph *g, const XIdx *X, uint32_t np, const double
             }
             Q[m++] = P[2 * np - 2], Q[m++] = P[2 * np - 1];
             uint32_t nq = (uint32_t)(m / 2);
+            bool ok = !spline_hits(S, SY, nS, cand, sc, BW, nq, Q, g->efrom[e], g->eto[e]);
+            if (!ok && d > 7) continue;
             size_t base = g->pts.n;
             for (size_t i = 0; i < m; i++) if (!VEC_PUSH(A, &g->pts, Q[i])) return false;
-            bool ok = !spline_hits(g, &X, nq, g->pts.v + base, g->efrom[e], g->eto[e]);
-            if (!ok && d > 7) { g->pts.n = base; continue; }
-            g->eptoff[e] = (uint32_t)base, g->eptn[e] = nq;
+            g->eptoff[e] = (uint32_t)base, g->eptn[e] = nq, changed = true;
             break;
         }
     }
+    if (!changed) return true;
     size_t tot = 0;
     for (size_t e = 0; e < g->ne; e++) tot += 2 * (size_t)g->eptn[e];
     double *nv = ANEW(A, double, tot + 1);
@@ -2645,6 +2700,7 @@ static void labels_on_curve(Graph *g) {
     size_t S = g->ns, E = g->ne;
     g->stx = ANEW(g->arena, double, S + 1);
     if (!g->stx) return false;
+    double *eb = nullptr; /* per-edge point bbox lx, hx, ly, hy; built on the first titled cluster */
     for (size_t s = 0; s < S; s++) {
         double mid = g->sx[s] + g->sw[s] / 2;
         g->stx[s] = mid;
@@ -2654,16 +2710,41 @@ static void labels_on_curve(Graph *g) {
         measure(g, &g->stitle[s], &tw, &tl);
         double half = tw / 2 + 6, lo = g->sx[s] + half, hi = g->sx[s] + g->sw[s] - half;
         if (hi < lo) continue;
+        if (!eb) {
+            eb = ANEW(g->arena, double, 4 * E + 4);
+            if (!eb) return false;
+            for (size_t e = 0; e < E; e++) {
+                const double *Q = g->pts.v + g->eptoff[e];
+                double lyy = INFINITY, hyy = -INFINITY, lxx = INFINITY, hxx = -INFINITY;
+                for (uint32_t i = 0; i < g->eptn[e]; i++)
+                    lxx = dmin(lxx, Q[2 * i]), hxx = dmax(hxx, Q[2 * i]), lyy = dmin(lyy, Q[2 * i + 1]), hyy = dmax(hyy, Q[2 * i + 1]);
+                eb[4 * e] = lxx, eb[4 * e + 1] = hxx, eb[4 * e + 2] = lyy, eb[4 * e + 3] = hyy;
+            }
+        }
         double y0 = g->sy[s] + 4, y1 = g->sy[s] + CLUSTER_TITLE + 8;
         double best = mid, bestd = INFINITY;
         /* crossing x-intervals; candidates: centred, then just beside each crossing */
         double cand[64];
         double iv[2 * 64];
+        int8_t sidebuf[256];
         size_t ni = 0, nc = 0;
         cand[nc++] = mid;
         for (size_t e = 0; e < E && ni < 64; e++) {
             /* test the polyline and its curveBasis rendering (which cuts corners): 8 samples per span */
             uint32_t np = g->eptn[e], ns = np > 2 ? 8 * (np - 1) + 1 : 0;
+            /* the polyline and its spline lie inside the points' hull: skip edges clear of the band */
+            if (eb[4 * e + 3] < y0 || eb[4 * e + 2] > y1 || eb[4 * e + 1] + 3 < g->sx[s] || eb[4 * e] - 3 > g->sx[s] + g->sw[s]) continue;
+            int8_t *side = nullptr; /* per span: -1 / +1 when its Bezier hull lies above / below the band */
+            if (ns && np - 1 <= countof(sidebuf)) {
+                side = sidebuf;
+                const double *Q = g->pts.v + g->eptoff[e];
+                for (uint32_t k = 0; k + 1 < np; k++) {
+                    double a = Q[2 * (k ? k - 1 : 0) + 1], b = Q[2 * k + 1], c = Q[2 * k + 3], d = Q[2 * (k + 2 < np ? k + 2 : np - 1) + 1];
+                    double b0 = (a + 4 * b + c) / 6, b1 = (2 * b + c) / 3, b2 = (b + 2 * c) / 3, b3 = (b + 4 * c + d) / 6;
+                    double lo_ = dmin(dmin(b0, b1), dmin(b2, b3)) - 1e-6, hi_ = dmax(dmax(b0, b1), dmax(b2, b3)) + 1e-6;
+                    side[k] = hi_ < y0 ? -1 : lo_ > y1 ? 1 : 0;
+                }
+            }
             for (uint32_t i = 0; i + 1 < np + ns && ni < 64; i++) {
                 double Pb[4];
                 const double *P = Pb;
@@ -2671,6 +2752,12 @@ static void labels_on_curve(Graph *g) {
                 else if (i == np - 1) continue;
                 else {
                     const double *Q = g->pts.v + g->eptoff[e];
+                    if (side) { /* both ends in spans wholly on one side of the band: the y test below rejects it */
+                        uint32_t k0 = (i - np) / 8, k1 = (i - np + 1) / 8;
+                        if (k0 > np - 2) k0 = np - 2;
+                        if (k1 > np - 2) k1 = np - 2;
+                        if (side[k0] && side[k0] == side[k1]) continue;
+                    }
                     for (int h = 0; h < 2; h++) {
                         double u = (double)(i - np + h) / 8; /* 0..np-1 */
                         uint32_t k = (uint32_t)u;
