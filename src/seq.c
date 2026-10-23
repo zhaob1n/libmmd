@@ -660,13 +660,21 @@ cmm_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
                 buf_xml(&back, c);
                 buf_lit(&back, "\"/>");
             } else {
-                rect(&mid, x0, bl.y0, x1 - x0, y1 - bl.y0, "block");
                 double tw = text_width(be->kw, 14) * 1.3 + 26; /* bold keyword (fallback fonts are wide) + slanted corner */
+                if (be->text.n) { /* room for the tab plus the condition text */
+                    double need = tw + text_width(be->text, fs) + text_width(S("[]"), fs) + 24;
+                    if (x1 - x0 < need) x1 = x0 + need;
+                    for (size_t q = 0; q < nblk; q++) if (x1 + 8 > blks[q].xr) blks[q].xr = x1 + 8;
+                }
+                rect(&mid, x0, bl.y0, x1 - x0, y1 - bl.y0, "block");
                 buf_lit(&mid, "<path class=\"block-tab\" d=\"M"); pt(&mid, x0, bl.y0); buf_lit(&mid, " h"); buf_num(&mid, tw);
                 buf_lit(&mid, " v14 l-8,8 H"); buf_num(&mid, x0); buf_lit(&mid, " Z\"/>");
                 text_(&front, be->kw, 14, x0 + 8, bl.y0 + 11, "start", "block-kw");
                 if (be->text.n) {
-                    buf_lit(&mid, "<text x=\""); buf_num(&mid, (x0 + x1) / 2); buf_lit(&mid, "\" y=\""); buf_num(&mid, bl.y0 + lh / 2 + 4);
+                    /* centred, but pushed right of the keyword tab when they would collide */
+                    double ctw = text_width(be->text, fs) + text_width(S("[]"), fs), cx = (x0 + x1) / 2;
+                    if (cx - ctw / 2 < x0 + tw + 6) cx = fmin(x0 + tw + 6 + ctw / 2, fmax(cx, x1 - 6 - ctw / 2));
+                    buf_lit(&mid, "<text x=\""); buf_num(&mid, cx); buf_lit(&mid, "\" y=\""); buf_num(&mid, bl.y0 + lh / 2 + 4);
                     buf_lit(&mid, "\" text-anchor=\"middle\" dominant-baseline=\"central\">[");
                     buf_xml(&mid, be->text);
                     buf_lit(&mid, "]</text>");
