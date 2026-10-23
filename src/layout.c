@@ -2468,23 +2468,38 @@ static int side_path(Router *R, double sx, double sy, double tx, double ty, int3
 
 
 /* does the rendered basis spline of polyline P enter a node other than a/b? */
-static bool spline_hits(const Graph *g, uint32_t np, const double *P, int32_t a, int32_t b) {
+typedef struct { double x; int32_t v; } XV;
+static int cmp_xv(const void *a, const void *b) {
+    const XV *p = a, *q = b;
+    return (p->x > q->x) - (p->x < q->x) ?: (p->v > q->v) - (p->v < q->v);
+}
+typedef struct { const int32_t *ord; const double *xs; size_t n; double mhw; } XIdx;
+static size_t xidx_lb(const XIdx *X, double x) {
+    size_t lo = 0, hi = X->n;
+    while (lo < hi) { size_t m = (lo + hi) / 2; if (X->xs[m] < x) lo = m + 1; else hi = m; }
+    return lo;
+}
+static bool spline_hits(const Graph *g, const XIdx *X, uint32_t np, const double *P, int32_t a, int32_t b) {
     if (np < 3) return false;
     for (uint32_t s = 0; s + 1 < np + 4; s++) {
-        double q[8];
+        double q[8], x0 = 1e300, y0 = 1e300, x1 = -1e300, y1 = -1e300;
         for (unsigned j = 0; j < 4; j++) {
             int64_t k = (int64_t)s + j - 2;
             if (k < 0) k = 0;
             if (k >= np) k = np - 1;
             q[2 * j] = P[2 * k], q[2 * j + 1] = P[2 * k + 1];
+            x0 = fmin(x0, q[2 * j]), x1 = fmax(x1, q[2 * j]), y0 = fmin(y0, q[2 * j + 1]), y1 = fmax(y1, q[2 * j + 1]);
         }
-        for (unsigned t8 = 0; t8 <= 8; t8++) {
-            double t = t8 / 8.0, it = 1 - t;
-            double b0 = it * it * it / 6, b1 = (3 * t * t * t - 6 * t * t + 4) / 6, b2 = (-3 * t * t * t + 3 * t * t + 3 * t + 1) / 6, b3 = t * t * t / 6;
-            double x = b0 * q[0] + b1 * q[2] + b2 * q[4] + b3 * q[6], y = b0 * q[1] + b1 * q[3] + b2 * q[5] + b3 * q[7];
-            for (size_t v = 0; v < g->nn; v++) {
-                if ((int32_t)v == a || (int32_t)v == b || (g->nflags[v] & NF_HIDDEN) || g->nw[v] <= 0 || g->nh[v] <= 0) continue;
-                if (fabs(x - g->nx[v]) < g->nw[v] / 2 - 2 && fabs(y - g->ny[v]) < g->nh[v] / 2 - 2) return true;
+        for (size_t ii = xidx_lb(X, x0 - X->mhw); ii < X->n && X->xs[ii] <= x1 + X->mhw; ii++) {
+            size_t v = (size_t)X->ord[ii];
+            double hw = g->nw[v] / 2 - 2, hh = g->nh[v] / 2 - 2;
+            if (g->nx[v] + hw < x0 || g->nx[v] - hw > x1 || g->ny[v] + hh < y0 || g->ny[v] - hh > y1) continue;
+            if ((int32_t)v == a || (int32_t)v == b || (g->nflags[v] & NF_HIDDEN) || hw <= 0 || hh <= 0) continue;
+            for (unsigned t8 = 0; t8 <= 8; t8++) {
+                double t = t8 / 8.0, it = 1 - t;
+                double b0 = it * it * it / 6, b1 = (3 * t * t * t - 6 * t * t + 4) / 6, b2 = (-3 * t * t * t + 3 * t * t + 3 * t + 1) / 6, b3 = t * t * t / 6;
+                double x = b0 * q[0] + b1 * q[2] + b2 * q[4] + b3 * q[6], y = b0 * q[1] + b1 * q[3] + b2 * q[5] + b3 * q[7];
+                if (fabs(x - g->nx[v]) < hw && fabs(y - g->ny[v]) < hh) return true;
             }
         }
     }
@@ -2495,9 +2510,22 @@ static bool spline_hits(const Graph *g, uint32_t np, const double *P, int32_t a,
 [[nodiscard]] static bool tighten_curves(Graph *g) {
     if (g->curve != CURVE_BASIS) return true;
     Arena *A = g->arena;
+    int32_t *ord = ANEW(A, int32_t, g->nn + 1);
+    double *xs = ANEW(A, double, g->nn + 1);
+    if (!ord || !xs) return false;
+    double mhw = 0;
+    for (size_t v = 0; v < g->nn; v++) {
+        mhw = fmax(mhw, g->nw[v] / 2);
+    }
+    XV *xv = ANEW(A, XV, g->nn + 1);
+    if (!xv) return false;
+    for (size_t v = 0; v < g->nn; v++) xv[v] = (XV){g->nx[v], (int32_t)v};
+    qsort(xv, g->nn, sizeof *xv, cmp_xv);
+    for (size_t i = 0; i < g->nn; i++) ord[i] = xv[i].v, xs[i] = xv[i].x;
+    XIdx X = {ord, xs, g->nn, mhw};
     for (size_t e = 0; e < g->ne; e++) {
         uint32_t np = g->eptn[e];
-        if (np < 3 || np > 200 || !spline_hits(g, np, g->pts.v + g->eptoff[e], g->efrom[e], g->eto[e])) continue;
+        if (np < 3 || np > 200 || !spline_hits(g, &X, np, g->pts.v + g->eptoff[e], g->efrom[e], g->eto[e])) continue;
         for (double d = 14; d >= 3.5; d /= 2) {
             const double *P = g->pts.v + g->eptoff[e];
             double *Q = ANEW(A, double, 6 * (size_t)np);
@@ -2517,7 +2545,7 @@ static bool spline_hits(const Graph *g, uint32_t np, const double *P, int32_t a,
             uint32_t nq = (uint32_t)(m / 2);
             size_t base = g->pts.n;
             for (size_t i = 0; i < m; i++) if (!VEC_PUSH(A, &g->pts, Q[i])) return false;
-            bool ok = !spline_hits(g, nq, g->pts.v + base, g->efrom[e], g->eto[e]);
+            bool ok = !spline_hits(g, &X, nq, g->pts.v + base, g->efrom[e], g->eto[e]);
             if (!ok && d > 7) { g->pts.n = base; continue; }
             g->eptoff[e] = (uint32_t)base, g->eptn[e] = nq;
             break;
