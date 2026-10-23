@@ -443,16 +443,16 @@ DIAG_FN(wardley_render) {
         double *L = lbo + 6 * i, r = NLO + (nd->ss ? 10 : 0), tw = text_width(nd->label, 10);
         L[0] = r, L[1] = -r, L[2] = L[3] = L[4] = L[5] = 0;
         if (nd->k == WK_ANCHOR || nd->has_lo) continue;
-        double cand[12 + 64][2] = {{r, -r}, {-r - tw, -r}, {r, r + 9}, {-r - tw, r + 9}, {r + 4, 3}, {-r - 4 - tw, 3},
+        double cand[12 + 80][2] = {{r, -r}, {-r - tw, -r}, {r, r + 9}, {-r - tw, r + 9}, {r + 4, 3}, {-r - 4 - tw, 3},
             {-tw / 2, -r - 3}, {-tw / 2, r + 12}, {2 * r, -2 * r}, {-2 * r - tw, -2 * r}, {2 * r, 2 * r + 9}, {-2 * r - tw, 2 * r + 9}};
-        for (int k = 0; k < 64; k++) { /* farther rings: label side faces the node; rings 3-4 get a leader */
-            double th = (k % 16) * M_PI / 8, R = (const double[]){3, 4.5, 6.5, 9}[k / 16] * r, ct = cos(th);
+        for (int k = 0; k < 80; k++) { /* farther rings: label side faces the node; rings 3-5 get a leader */
+            double th = (k % 16) * M_PI / 8, R = (const double[]){3, 4.5, 6.5, 9, 12}[k / 16] * r, ct = cos(th);
             cand[12 + k][0] = R * ct - (ct < -0.3 ? tw : ct > 0.3 ? 0 : tw / 2), cand[12 + k][1] = R * sin(th) + 4;
         }
         double bc = INFINITY;
         for (size_t c = 0; c < countof(cand); c++) {
             double bx[4] = {nd->px + cand[c][0], nd->py + cand[c][1] - 9, nd->px + cand[c][0] + tw, nd->py + cand[c][1] + 2};
-            double cost = c < 12 ? c * 0.5 : 6 + (c >= 28) * 3 + (c >= 44) * 9 + (c >= 60) * 6;
+            double cost = c < 12 ? c * 0.5 : 6 + (c >= 28) * 3 + (c >= 44) * 9 + (c >= 60) * 6 + (c >= 76) * 6;
             if (bx[0] < 2 || bx[2] > W_ - 2 || bx[1] < 2 || bx[3] > H - 2) cost += 40;
             for (size_t l = 0; l < w.links.n; l++) {
                 const WNode *s = &w.nodes.v[w.links.v[l].s], *t = &w.nodes.v[w.links.v[l].t];
@@ -472,7 +472,7 @@ DIAG_FN(wardley_render) {
             }
             for (size_t j = 0; j < i; j++) {
                 const double *M = lbo + 6 * j;
-                if (M[4] > M[2] && M[2] < bx[2] && bx[0] < M[4] && M[3] < bx[3] && bx[1] < M[5]) cost += 30;
+                if (M[4] > M[2] && M[2] < bx[2] && bx[0] < M[4] && M[3] < bx[3] && bx[1] < M[5]) cost += 60; /* text on text: worst */
             }
             if (cost < bc) bc = cost, L[0] = cand[c][0], L[1] = cand[c][1], memcpy(L + 2, bx, sizeof bx);
         }
