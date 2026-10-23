@@ -2652,6 +2652,35 @@ static bool lab_overlap(const Graph *g, size_t a, size_t b) {
            fabs(g->ely[a] - g->ely[b]) * 2 < g->elh[a] + g->elh[b] + 2;
 }
 
+/* slide label e along its own curve to the nearest sample clear of every other label */
+static bool slide_on_curve(Graph *g, const size_t *L, size_t nl, size_t e) {
+    uint32_t np = g->eptn[e];
+    if (np < 3) return false;
+    const double *P = g->pts.v + g->eptoff[e];
+    double lx = g->elx[e], ly = g->ely[e], bd = INFINITY, bx = lx, by = ly;
+    for (uint32_t i = 0; i + 2 < np; i++) {
+        const double *p0 = P + 2 * i, *p1 = p0 + 2, *p2 = p0 + 4;
+        double sx = i == 0 ? p0[0] : (p0[0] + p1[0]) / 2, sy = i == 0 ? p0[1] : (p0[1] + p1[1]) / 2;
+        double ex = i + 3 == np ? p2[0] : (p1[0] + p2[0]) / 2, ey = i + 3 == np ? p2[1] : (p1[1] + p2[1]) / 2;
+        for (unsigned s = 0; s <= 16; s++) {
+            double t = s / 16.0, u = 1 - t;
+            double x = u * u * sx + 2 * u * t * p1[0] + t * t * ex, y = u * u * sy + 2 * u * t * p1[1] + t * t * ey;
+            double d = (x - lx) * (x - lx) + (y - ly) * (y - ly);
+            if (d >= bd) continue;
+            /* keep clear of the endpoints' arrowheads */
+            if (edist(x - P[0], y - P[1]) < 18 || edist(x - P[2 * np - 2], y - P[2 * np - 1]) < 18) continue;
+            g->elx[e] = x, g->ely[e] = y;
+            bool ok = true;
+            for (size_t k = 0; k < nl && ok; k++) if (L[k] != e && lab_overlap(g, e, L[k])) ok = false;
+            for (size_t v = 0; v < g->nn && ok; v++) /* nor on a node */
+                if (fabs(x - g->nx[v]) * 2 < g->nw[v] + g->elw[e] && fabs(y - g->ny[v]) * 2 < g->nh[v] + g->elh[e]) ok = false;
+            if (ok) bd = d, bx = x, by = y;
+        }
+    }
+    g->elx[e] = bx, g->ely[e] = by;
+    return bd < INFINITY;
+}
+
 static void labels_on_curve(Graph *g) {
     size_t E = g->ne;
     double *ox = ANEW(g->arena, double, 2 * E + 2);
@@ -2686,6 +2715,7 @@ static void labels_on_curve(Graph *g) {
         for (size_t j = i + 1; j < nl; j++) {
             size_t a = L[i], b = L[j];
             if (!lab_overlap(g, a, b)) continue;
+            if (slide_on_curve(g, L, nl, b) || slide_on_curve(g, L, nl, a)) continue;
             g->elx[a] = ox[2 * a], g->ely[a] = ox[2 * a + 1];
             g->elx[b] = ox[2 * b], g->ely[b] = ox[2 * b + 1];
             if (!lab_overlap(g, a, b)) continue;
