@@ -2,6 +2,8 @@
 
 #include <stdckdint.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 
 constexpr size_t ARENA_MIN_BLOCK = 64 * 1024;
 
@@ -222,6 +224,220 @@ void buf_pt(Buf *b, double x, double y) {
     b->n += k;
 }
 
+typedef struct { char n[8]; uint32_t c; } Ent;
+static constexpr Ent ENTS[] = {
+    {"AElig", 198},
+    {"Aacute", 193},
+    {"Acirc", 194},
+    {"Agrave", 192},
+    {"Alpha", 913},
+    {"Aring", 197},
+    {"Atilde", 195},
+    {"Auml", 196},
+    {"Beta", 914},
+    {"Ccedil", 199},
+    {"Dagger", 8225},
+    {"Delta", 916},
+    {"Eacute", 201},
+    {"Ecirc", 202},
+    {"Egrave", 200},
+    {"Euml", 203},
+    {"Gamma", 915},
+    {"Iacute", 205},
+    {"Icirc", 206},
+    {"Igrave", 204},
+    {"Iuml", 207},
+    {"Lambda", 923},
+    {"Ntilde", 209},
+    {"Oacute", 211},
+    {"Ocirc", 212},
+    {"Ograve", 210},
+    {"Omega", 937},
+    {"Oslash", 216},
+    {"Otilde", 213},
+    {"Ouml", 214},
+    {"Phi", 934},
+    {"Pi", 928},
+    {"Prime", 8243},
+    {"Psi", 936},
+    {"Sigma", 931},
+    {"Theta", 920},
+    {"Uacute", 218},
+    {"Ucirc", 219},
+    {"Ugrave", 217},
+    {"Uuml", 220},
+    {"aacute", 225},
+    {"acirc", 226},
+    {"acute", 180},
+    {"aelig", 230},
+    {"agrave", 224},
+    {"alpha", 945},
+    {"amp", 38},
+    {"and", 8743},
+    {"apos", 39},
+    {"aring", 229},
+    {"asymp", 8776},
+    {"atilde", 227},
+    {"auml", 228},
+    {"beta", 946},
+    {"brvbar", 166},
+    {"bull", 8226},
+    {"cap", 8745},
+    {"ccedil", 231},
+    {"cedil", 184},
+    {"cent", 162},
+    {"check", 10003},
+    {"chi", 967},
+    {"clubs", 9827},
+    {"copy", 169},
+    {"cross", 10007},
+    {"cup", 8746},
+    {"curren", 164},
+    {"dArr", 8659},
+    {"dagger", 8224},
+    {"darr", 8595},
+    {"deg", 176},
+    {"delta", 948},
+    {"diams", 9830},
+    {"divide", 247},
+    {"eacute", 233},
+    {"ecirc", 234},
+    {"egrave", 232},
+    {"empty", 8709},
+    {"epsilon", 949},
+    {"equiv", 8801},
+    {"eta", 951},
+    {"euml", 235},
+    {"euro", 8364},
+    {"exist", 8707},
+    {"forall", 8704},
+    {"frac12", 189},
+    {"frac14", 188},
+    {"frac34", 190},
+    {"gamma", 947},
+    {"ge", 8805},
+    {"gt", 62},
+    {"hArr", 8660},
+    {"harr", 8596},
+    {"hearts", 9829},
+    {"hellip", 8230},
+    {"iacute", 237},
+    {"icirc", 238},
+    {"iexcl", 161},
+    {"igrave", 236},
+    {"infin", 8734},
+    {"int", 8747},
+    {"iota", 953},
+    {"iquest", 191},
+    {"isin", 8712},
+    {"iuml", 239},
+    {"kappa", 954},
+    {"lArr", 8656},
+    {"lambda", 955},
+    {"laquo", 171},
+    {"larr", 8592},
+    {"lceil", 8968},
+    {"ldquo", 8220},
+    {"le", 8804},
+    {"lfloor", 8970},
+    {"loz", 9674},
+    {"lsquo", 8216},
+    {"lt", 60},
+    {"macr", 175},
+    {"mdash", 8212},
+    {"micro", 181},
+    {"middot", 183},
+    {"minus", 8722},
+    {"mu", 956},
+    {"nabla", 8711},
+    {"nbsp", 160},
+    {"ndash", 8211},
+    {"ne", 8800},
+    {"not", 172},
+    {"notin", 8713},
+    {"ntilde", 241},
+    {"nu", 957},
+    {"num", 35},
+    {"oacute", 243},
+    {"ocirc", 244},
+    {"ograve", 242},
+    {"omega", 969},
+    {"omicron", 959},
+    {"oplus", 8853},
+    {"or", 8744},
+    {"ordf", 170},
+    {"ordm", 186},
+    {"oslash", 248},
+    {"otilde", 245},
+    {"otimes", 8855},
+    {"ouml", 246},
+    {"para", 182},
+    {"part", 8706},
+    {"permil", 8240},
+    {"perp", 8869},
+    {"phi", 966},
+    {"pi", 960},
+    {"plusmn", 177},
+    {"pound", 163},
+    {"prime", 8242},
+    {"psi", 968},
+    {"quot", 34},
+    {"rArr", 8658},
+    {"radic", 8730},
+    {"raquo", 187},
+    {"rarr", 8594},
+    {"rceil", 8969},
+    {"rdquo", 8221},
+    {"reg", 174},
+    {"rfloor", 8971},
+    {"rho", 961},
+    {"rsquo", 8217},
+    {"sdot", 8901},
+    {"sect", 167},
+    {"semi", 59},
+    {"shy", 173},
+    {"sigma", 963},
+    {"spades", 9824},
+    {"star", 9734},
+    {"starf", 9733},
+    {"sub", 8834},
+    {"sum", 8721},
+    {"sup", 8835},
+    {"sup1", 185},
+    {"sup2", 178},
+    {"sup3", 179},
+    {"szlig", 223},
+    {"tau", 964},
+    {"theta", 952},
+    {"times", 215},
+    {"trade", 8482},
+    {"uArr", 8657},
+    {"uacute", 250},
+    {"uarr", 8593},
+    {"ucirc", 251},
+    {"ugrave", 249},
+    {"uml", 168},
+    {"upsilon", 965},
+    {"uuml", 252},
+    {"xi", 958},
+    {"yen", 165},
+    {"yuml", 255},
+    {"zeta", 950}
+};
+
+/* HTML named entity -> code point (0 if unknown); names are case-sensitive */
+[[nodiscard]] static uint32_t ent_lookup(size_t n, const char s[static n]) {
+    size_t lo = 0, hi = countof(ENTS);
+    while (lo < hi) {
+        size_t m = (lo + hi) / 2;
+        int c = strncmp(ENTS[m].n, s, n);
+        if (!c && (n >= sizeof ENTS[m].n || ENTS[m].n[n])) c = n >= sizeof ENTS[m].n ? -1 : 1;
+        if (!c) return ENTS[m].c;
+        if (c < 0) lo = m + 1; else hi = m;
+    }
+    return 0;
+}
+
 void buf_xml(Buf *b, Str s) {
     size_t i = 0, run = 0;
     while (i < s.n) {
@@ -242,9 +458,16 @@ void buf_xml(Buf *b, Str s) {
                    ((unsigned)((s.p[j] | 32) - 'a') < 26u || (unsigned)(s.p[j] - '0') < 10u)) j++;
             if (j < s.n && s.p[j] == ';' && j > i + 1) {
                 buf_put(b, i - run, s.p + run);
-                buf_ch(b, '&');
-                if ((unsigned)(s.p[i + 1] - '0') < 10u) buf_ch(b, '#');
-                buf_put(b, j - i, s.p + i + 1);
+                if ((unsigned)(s.p[i + 1] - '0') < 10u) {
+                    buf_lit(b, "&#");
+                    buf_put(b, j - i, s.p + i + 1);
+                } else {
+                    uint32_t cp = ent_lookup(j - i - 1, s.p + i + 1);
+                    if (!cp) { buf_put(b, j - i + 1, s.p + i); i = j + 1; run = i; continue; } /* unknown: literal */
+                    char nb[16];
+                    int k = snprintf(nb, sizeof nb, "&#%u;", (unsigned)cp);
+                    buf_put(b, (size_t)k, nb);
+                }
                 i = j + 1;
                 run = i;
                 continue;
