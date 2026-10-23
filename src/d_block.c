@@ -379,6 +379,7 @@ DIAG_FN(block_render) {
     uint32_t *rc = ANEW(a, uint32_t, nb), *cc = ANEW(a, uint32_t, nb), *rows = ANEW(a, uint32_t, nb);
     double **gx = ANEW(a, double *, nb); /* per group: extra gap after column k (labelled side-by-side edges) */
     if (!rc || !cc || !rows || !gx) return CMM_ERR_NOMEM;
+    memset(gx, 0, nb * sizeof *gx); /* arena memory is not zeroed */
     /* bottom-up natural sizes (children always have larger indices) */
     for (size_t i = nb; i-- > 0;) {
         Blk *b = &B[i];
@@ -422,7 +423,7 @@ DIAG_FN(block_render) {
                 uint32_t k = cc[L] + (B[L].span < cols ? B[L].span : cols) - 1;
                 double need = 30 + (ev.v[e].label.n ? text_width(ev.v[e].label, fs * 0.875) + 8 : 0) - GAP;
                 if (k >= cols || need <= 0) continue;
-                if (!gx[i] && !(gx[i] = ANEW(a, double, cols))) return CMM_ERR_NOMEM;
+                if (!gx[i]) { if (!(gx[i] = ANEW(a, double, cols))) return CMM_ERR_NOMEM; memset(gx[i], 0, cols * sizeof *gx[i]); }
                 gx[i][k] = fmax(gx[i][k], need);
                 continue;
             }
@@ -432,7 +433,7 @@ DIAG_FN(block_render) {
             if (cc[R] != cc[L] + sL || !cc[R]) continue;
             double need = text_width(ev.v[e].label, fs) + 16 - GAP;
             if (need <= 0) continue;
-            if (!gx[i] && !(gx[i] = ANEW(a, double, cols))) return CMM_ERR_NOMEM;
+            if (!gx[i]) { if (!(gx[i] = ANEW(a, double, cols))) return CMM_ERR_NOMEM; memset(gx[i], 0, cols * sizeof *gx[i]); }
             gx[i][cc[R] - 1] = fmax(gx[i][cc[R] - 1], need);
         }
         if (gx[i]) for (uint32_t k = 0; k < cols; k++) S += gx[i][k];
