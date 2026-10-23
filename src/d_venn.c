@@ -112,6 +112,13 @@ static bool darken30(Str c, char out[static 8]) {
     return true;
 }
 
+static Str nl_next(Str t, size_t *i) { /* next '\n'-separated line from *i; *i past the end when done */
+    size_t s = *i, e = s;
+    while (e < t.n && t.p[e] != '\n') e++;
+    *i = e + 1;
+    return (Str){.p = t.p + s, .n = e - s};
+}
+
 DIAG_FN(venn_render) {
     (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
@@ -299,6 +306,41 @@ DIAG_FN(venn_render) {
             }
         LX[i] = bx, LY[i] = by, LD[i] = bd;
     }
+    /* deviate from mermaid: a label wider than its region wraps (and shrinks if one word is still too
+       wide); labels whose boxes still collide re-wrap narrower, the wider first */
+    Str *LB = ANEW(a, Str, ar.n + 1);
+    double *LF = ANEW(a, double, ar.n + 1), *LW = ANEW(a, double, ar.n + 1);
+    unsigned *LN = ANEW(a, unsigned, ar.n + 1);
+    if (!LB || !LF || !LW || !LN) return CMM_ERR_NOMEM;
+    for (size_t i = 0; i < ar.n; i++) LB[i] = ar.v[i].label, LF[i] = 48 * sc, LN[i] = 1, LW[i] = 0;
+    for (int pass = 0; pass < 4; pass++) {
+        bool again = false;
+        for (size_t i = 0; i < ar.n; i++) {
+            if (!ar.v[i].label.n || LD[i] <= -1e299) continue;
+            double avail = pass ? LW[i] : fmax(2 * LD[i] * 1.9, 60 * sc);
+            if (pass) {
+                bool hit = false;
+                for (size_t j = 0; j < ar.n && !hit; j++) {
+                    if (j == i || !ar.v[j].label.n || LD[j] <= -1e299 || LW[j] > LW[i]) continue;
+                    hit = fabs(LX[i] - LX[j]) < (LW[i] + LW[j]) / 2 && fabs(LY[i] - LY[j]) < 0.6 * (LN[i] * LF[i] + LN[j] * LF[j]);
+                }
+                if (!hit || LN[i] > 3) continue;
+                avail = LW[i] * 0.6, again = true;
+            }
+            double fz = 48 * sc;
+            Str lb = ar.v[i].label;
+            if (text_width(lb, fz) > avail) {
+                Str wl = dg_wrap(a, lb, fz, avail);
+                if (wl.p) lb = wl;
+            }
+            unsigned nl = 0;
+            double mw = 0;
+            for (size_t k = 0; k <= lb.n; nl++) mw = fmax(mw, text_width(nl_next(lb, &k), fz));
+            if (mw > avail && !pass) fz *= fmax(avail / mw, 0.5), mw *= fmax(avail / mw, 0.5);
+            LB[i] = lb, LF[i] = fz, LN[i] = nl, LW[i] = mw;
+        }
+        if (pass && !again) break;
+    }
     Buf b = {};
     BBox bb = {0, 0, W, H};
     if (title.n) {
@@ -345,10 +387,26 @@ DIAG_FN(venn_render) {
                 while (depthc--) buf_lit(&b, "</g>");
             }
             if (ar.v[i].label.n && LD[i] > -1e299) {
-                buf_lit(&b, "<text class=\"vl\" text-anchor=\"middle\" dy=\".35em\" x=\""); buf_num(&b, LX[i]); buf_lit(&b, "\" y=\""); buf_num(&b, LY[i]);
-                buf_lit(&b, "\" style=\"font-size:"); buf_num(&b, 48 * sc); buf_lit(&b, "px");
+                double fz = LF[i];
+                Str lb = LB[i];
+                unsigned nl = LN[i];
+                buf_lit(&b, "<text class=\"vl\" text-anchor=\"middle\"");
+                if (nl == 1) buf_lit(&b, " dy=\".35em\"");
+                buf_lit(&b, " x=\""); buf_num(&b, LX[i]); buf_lit(&b, "\" y=\""); buf_num(&b, LY[i]);
+                buf_lit(&b, "\" style=\"font-size:"); buf_num(&b, fz); buf_lit(&b, "px");
                 if (txt.n) { buf_lit(&b, ";fill:"); put_s(&b, txt); }
-                buf_lit(&b, "\">"); buf_xml(&b, ar.v[i].label); buf_lit(&b, "</text>");
+                buf_ch(&b, '"');
+                if (nl == 1) { buf_ch(&b, '>'); buf_xml(&b, lb); }
+                else {
+                    buf_ch(&b, '>');
+                    unsigned li = 0;
+                    for (size_t k = 0; k <= lb.n; li++) {
+                        Str ln = nl_next(lb, &k);
+                        buf_lit(&b, "<tspan x=\""); buf_num(&b, LX[i]); buf_lit(&b, "\" dy=\"");
+                        buf_num(&b, li ? 1.1 : 0.35 - 0.55 * (nl - 1)); buf_lit(&b, "em\">"); buf_xml(&b, ln); buf_lit(&b, "</tspan>");
+                    }
+                }
+                buf_lit(&b, "</text>");
             }
             buf_lit(&b, "</g>");
         }
