@@ -5,6 +5,6 @@ set -e
 R=$(cd "$(dirname "$0")/.." && pwd); cd "$R"; H=$(git rev-parse "${BASE:-HEAD}"); d=$(realpath "$2"); WT=${WT:-/tmp/cmm-wt}
 [ -d "$WT" ] || git worktree add -q --detach "$WT" "$H"
 (cd "$WT" && git switch -q --detach "$H" && make -s build/mmdc-c >/dev/null 2>&1)
-# ours|mermaid-cli pair when mermaid-cli renders it, else ours alone
-pair() { o=$(cd "$1" && python3 "$R/tools/docs_sbs.py" "$d" | tail -1); if [ -f "$o" ]; then cp "$o" "$2"; else "$R/tools/render_png.sh" "$d" "$2" "$1/build/mmdc-c"; fi; }
+# ours|mermaid-cli pair for tests/docs files that mermaid-cli renders, else ours alone
+pair() { o=; case "$d" in "$R"/tests/docs/*) o=$(cd "$1" && python3 "$R/tools/docs_sbs.py" "$d" | tail -1);; esac; if [ -f "$o" ]; then cp "$o" "$2"; else "$R/tools/render_png.sh" "$d" "$2" "$1/build/mmdc-c"; fi; }
 pair "$WT" "samples/sbs/$1_before.png"; pair "$R" "samples/sbs/$1_after.png"; echo samples/sbs/$1_{before,after}.png
