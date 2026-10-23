@@ -446,11 +446,29 @@ constexpr double CLS_BOLD = 1.0617; /* bolder label width factor */
 
 static double sec_h(unsigned k, double lh) { return k ? k * lh + 2 * SECP : SECE; }
 
-static void card_label(Buf *b, const double *P0, const double *P1, Str t, double fs) {
+/* cardinality near one end of a relation: 22px along the path (direction taken from the first point
+ * at least that far away, so a short first segment can't aim it into the node), 12px to the side;
+ * the side that keeps it off the relation label wins */
+static void card_label(Buf *b, const Graph *g, size_t e, const double *P, uint32_t np, bool end, Str t, double fs) {
+    const double *P0 = end ? P + 2 * (np - 1) : P, *P1 = P0;
+    for (uint32_t i = 1; i < np; i++) {
+        P1 = end ? P + 2 * (np - 1 - i) : P + 2 * i;
+        if (hypot(P1[0] - P0[0], P1[1] - P0[1]) >= 22) break;
+    }
     double dx = P1[0] - P0[0], dy = P1[1] - P0[1], L = sqrt(dx * dx + dy * dy);
     if (L < 1e-9) return;
     dx /= L, dy /= L;
-    double x = P0[0] + dx * 22 - dy * 12, y = P0[1] + dy * 22 + dx * 12;
+    double hw = (double)t.n * fs * 0.3 + 2, hh = fs * 0.6;
+    int32_t v = end ? g->eto[e] : g->efrom[e];
+    double x = 0, y = 0;
+    static const double C[][2] = {{22, 12}, {22, -12}, {14, 12}, {14, -12}, {30, 12}, {30, -12}};
+    for (unsigned c = 0; c < sizeof C / sizeof *C; c++) { /* first clear spot, else mermaid's default */
+        double cx = P0[0] + dx * C[c][0] - dy * C[c][1], cy = P0[1] + dy * C[c][0] + dx * C[c][1];
+        if (!c) x = cx, y = cy;
+        bool hit = g->elabel[e].n && fabs(cx - g->elx[e]) < hw + g->elw[e] / 2 && fabs(cy - g->ely[e]) < hh + g->elh[e] / 2;
+        hit = hit || (v >= 0 && fabs(cx - g->nx[v]) < hw + g->nw[v] / 2 && fabs(cy - g->ny[v]) < hh + g->nh[v] / 2);
+        if (!hit) { x = cx, y = cy; break; }
+    }
     dg_text(b, t, fs, x, y, "middle", "card");
 }
 
@@ -532,8 +550,8 @@ DIAG_FN(class_render) {
         uint32_t np = g->eptn[e];
         if (np >= 2) {
             const double *P = g->pts.v + g->eptoff[e];
-            if (r->ca.n) card_label(out, P, P + 2, r->ca, 13);
-            if (r->cb.n) card_label(out, P + 2 * (np - 1), P + 2 * (np - 2), r->cb, 13);
+            if (r->ca.n) card_label(out, g, e, P, np, false, r->ca, 13);
+            if (r->cb.n) card_label(out, g, e, P, np, true, r->cb, 13);
         }
         if (g->elabel[e].n) {
             dg_rect(out, g->elx[e] - g->elw[e] / 2, g->ely[e] - g->elh[e] / 2, g->elw[e], g->elh[e], 0, "lbl");
