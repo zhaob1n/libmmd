@@ -1,0 +1,176 @@
+flowchart LR
+  n0{"cache miss"}
+  n1{"parse input"}
+  n2["parse input"]
+  n3["send mail"]
+  n4["load config"]
+  n5{"parse input"}
+  n6["alpha"]
+  n7["user"]
+  n8{"retry later"}
+  n9{"long label with words"}
+  n10{"validate"}
+  n11{"x"}
+  n12{"retry later"}
+  n13["beta"]
+  n14{"gamma"}
+  n15["gamma"]
+  n16["beta"]
+  n17["retry later"]
+  n18["delta"]
+  n19["cache miss"]
+  n20["cache miss"]
+  n21["ok"]
+  n22["retry later"]
+  n23["validate"]
+  n24["db"]
+  n25{"load config"}
+  n26["parse input"]
+  n27["long label with words"]
+  n28{"gamma"}
+  n29["parse input"]
+  n30["validate"]
+  n31{"cache miss"}
+  n32["send mail"]
+  n33["db"]
+  n34["gamma"]
+  n35{"retry later"}
+  n36["validate"]
+  n37{"delta"}
+  n38{"send mail"}
+  n39{"beta"}
+  n40["load config"]
+  n41["long label with words"]
+  n42["cache miss"]
+  n43{"x"}
+  n44["x"]
+  n45["retry later"]
+  n46{"cache miss"}
+  n47["parse input"]
+  n48{"beta"}
+  n49{"delta"}
+  n50["validate"]
+  n51["alpha"]
+  n52{"ok"}
+  n53{"gamma"}
+  n54["ok"]
+  n55{"user"}
+  n56{"gamma"}
+  n57["validate"]
+  n58["long label with words"]
+  n59["long label with words"]
+  n60{"retry later"}
+  n61{"x"}
+  n62["cache miss"]
+  n63["ok"]
+  n64{"user"}
+  n65{"db"}
+  n66["alpha"]
+  n67{"gamma"}
+  n68{"cache miss"}
+  n69["alpha"]
+  n15 ==>|load config| n51
+  n33 -.->|cache miss| n7
+  n57 --- n15
+  n57 -.->|alpha| n44
+  n8 --- n4
+  n65 ---|load config| n66
+  n2 ==>|ok| n69
+  n57 ==> n18
+  n23 --- n28
+  n21 -.-> n64
+  n8 -.->|long label with words| n8
+  n27 --> n57
+  n36 -.-> n66
+  n4 -.-> n59
+  n42 ==> n56
+  n53 --> n6
+  n28 --> n34
+  n1 ==>|cache miss| n69
+  n33 ==> n59
+  n41 -.-> n24
+  n42 ==> n10
+  n30 --> n24
+  n16 --- n24
+  n34 -.->|x| n41
+  n21 -->|retry later| n50
+  n66 --> n35
+  n5 --> n47
+  n53 --> n67
+  n10 -->|long label with words| n51
+  n37 -.-> n8
+  n32 -.-> n24
+  n26 --- n55
+  n33 ==>|user| n14
+  n31 ==> n53
+  n48 -.-> n18
+  n27 -->|parse input| n32
+  n3 -.-> n50
+  n47 --> n11
+  n4 -.-> n53
+  n44 ==> n28
+  n23 --- n60
+  n48 ---|long label with words| n24
+  n54 -->|validate| n34
+  n44 --> n49
+  n28 -.-> n56
+  n7 --- n48
+  n44 -.-> n9
+  n22 --> n16
+  n30 ==> n41
+  n68 -.->|cache miss| n52
+  n16 --> n57
+  n68 -.-> n33
+  n37 --> n48
+  n52 --- n29
+  n36 -.->|user| n1
+  n25 -.-> n16
+  n52 ---|db| n22
+  n21 ==>|delta| n14
+  n60 -.-> n58
+  n1 -->|user| n3
+  n41 -.-> n22
+  n49 -.-> n15
+  n48 ---|x| n59
+  n63 --> n42
+  n64 --- n65
+  n10 --- n9
+  n26 --- n13
+  n1 --> n15
+  n60 -->|gamma| n34
+  n31 -->|beta| n7
+  n21 ==> n17
+  n67 ---|load config| n23
+  n61 ==>|load config| n61
+  n36 --- n26
+  n45 --- n56
+  n34 ---|retry later| n10
+  n8 -->|alpha| n32
+  n6 -->|db| n69
+  n2 --> n31
+  n68 --- n33
+  n15 ---|beta| n48
+  n64 -.->|load config| n14
+  n43 ==> n59
+  n23 --- n37
+  n7 ---|parse input| n6
+  n46 --> n10
+  n48 --> n26
+  n7 ==>|send mail| n56
+  n23 ==>|beta| n43
+  n53 --> n49
+  n10 ==>|alpha| n68
+  n36 -.->|alpha| n41
+  n64 --> n22
+  n9 -->|gamma| n43
+  n43 --> n29
+  n69 ==> n67
+  n31 -->|gamma| n53
+  n11 --- n69
+  subgraph S1 [group one]
+    n0
+    n1
+    n2
+    n3
+    n4
+  end

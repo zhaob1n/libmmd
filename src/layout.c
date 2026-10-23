@@ -2536,9 +2536,18 @@ static bool spline_hits(const SBox *SX, const SBox *SY /* nullable */, size_t n,
             ns += (B->x + B->hw >= sx0) & (B->x - B->hw <= sx1) & (B->y + B->hh >= sy0) & (B->y - B->hh <= sy1);
         }
         if (!ns) continue;
-        for (unsigned t8 = 0; t8 <= 16; t8++) {
-            const double *w = BW[t8];
-            double x = w[0] * q[0] + w[1] * q[2] + w[2] * q[4] + w[3] * q[6], y = w[0] * q[1] + w[1] * q[3] + w[2] * q[5] + w[3] * q[7];
+        /* long spans (wide layouts) need denser samples than 16: one every ~6px of control polygon */
+        double cl = hypot(bx1 - bx0, by1 - by0) + hypot(bx2 - bx1, by2 - by1) + hypot(bx3 - bx2, by3 - by2);
+        unsigned ns8 = cl > 96 ? (unsigned)fmin(cl / 6, 2048) : 16;
+        for (unsigned t8 = 0; t8 <= ns8; t8++) {
+            double x, y;
+            if (ns8 == 16) {
+                const double *w = BW[t8];
+                x = w[0] * q[0] + w[1] * q[2] + w[2] * q[4] + w[3] * q[6], y = w[0] * q[1] + w[1] * q[3] + w[2] * q[5] + w[3] * q[7];
+            } else {
+                double t = (double)t8 / ns8, it = 1 - t, c0 = it * it * it, c1 = 3 * it * it * t, c2 = 3 * it * t * t, c3 = t * t * t;
+                x = c0 * bx0 + c1 * bx1 + c2 * bx2 + c3 * bx3, y = c0 * by0 + c1 * by1 + c2 * by2 + c3 * by3;
+            }
             bool hit = false;
             for (size_t c = 0; c < ns; c++) hit |= (fabs(x - sc[c]->x) < sc[c]->hw) & (fabs(y - sc[c]->y) < sc[c]->hh);
             if (hit) return true;
@@ -2556,7 +2565,7 @@ static bool spline_hits(const SBox *SX, const SBox *SY /* nullable */, size_t n,
     if (!S || !cand || !sc) return false;
     size_t nS = 0;
     for (size_t v = 0; v < g->nn; v++) {
-        double hw = g->nw[v] / 2, hh = g->nh[v] / 2; /* full box: a curve grazing a corner reads as through it */
+        double hw = g->nw[v] / 2 + 4, hh = g->nh[v] / 2 + 4; /* full box + 4px: a curve grazing a corner reads as through it */
         if (!(g->nflags[v] & NF_HIDDEN) && hw > 0 && hh > 0) S[nS++] = (SBox){g->nx[v], g->ny[v], hw, hh, (int32_t)v};
     }
     SBox *SY = nullptr; /* small graphs scan every node */
@@ -2711,6 +2720,15 @@ static void labels_on_curve(Graph *g) {
     if (!L) return;
     for (size_t e = 0; e < E; e++) if (g->elabel[e].n) L[nl++] = e;
     if (nl > 4000) return;
+    for (size_t i = 0; i < nl; i++) { /* the snap can land a label on a node (dense LR ranks): slide it off */
+        size_t e = L[i];
+        bool hit = false;
+        for (size_t v = 0; v < g->nn && !hit; v++)
+            hit = !(g->nflags[v] & NF_HIDDEN) && g->nw[v] > 0 && fabs(g->elx[e] - g->nx[v]) * 2 < g->nw[v] + g->elw[e] && fabs(g->ely[e] - g->ny[v]) * 2 < g->nh[v] + g->elh[e];
+        if (!hit) continue;
+        double x0 = g->elx[e], y0 = g->ely[e];
+        if (!slide_on_curve(g, L, nl, e)) g->elx[e] = x0, g->ely[e] = y0;
+    }
     for (int pass = 0; pass < 4; pass++) { /* a push can land on a third label: repeat until clear */
       bool any = false;
       for (size_t i = 0; i < nl; i++)
