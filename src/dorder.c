@@ -5,7 +5,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef CMM_PROFILE
+#ifdef MMD_PROFILE
 #include <stdio.h>
 #include <time.h>
 static double dnow(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_sec * 1e6 + ts.tv_nsec / 1e3; }
@@ -447,7 +447,7 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
     }
     DT(t_init);
     PMARK("o-init");
-#ifdef CMM_PROFILE
+#ifdef MMD_PROFILE
     double t_sw = 0, t_cc = 0;
 #endif
     uint64_t bestcc = UINT64_MAX;
@@ -539,11 +539,11 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
             cc += pcc[r];
         }
         PMARK("o-cross");
-#ifdef CMM_PROFILE
+#ifdef MMD_PROFILE
         t_sw += t1 - t0, t_cc += dnow() - t1;
 #endif
-#ifdef CMM_PROFILE
-        if (getenv("CMM_PROFV")) fprintf(stderr, "  dsweep %u cc=%llu\n", it, (unsigned long long)cc);
+#ifdef MMD_PROFILE
+        if (getenv("MMD_PROFV")) fprintf(stderr, "  dsweep %u cc=%llu\n", it, (unsigned long long)cc);
 #endif
         if (cc < bestcc) { last = 0; bestcc = cc; memcpy(best, d->pos, V * sizeof *best); }
         if (bestcc == 0) break; /* dagre keeps sweeping, but nothing can beat 0 (strict <) */
@@ -551,8 +551,8 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
     memcpy(d->pos, best, V * sizeof *best);
     for (size_t v = 0; v < V; v++) if (d->rank[v] >= 0) d->lay[d->loff[d->rank[v]] + (uint32_t)d->pos[v]] = (int32_t)v;
     if (crossings) *crossings = bestcc;
-#ifdef CMM_PROFILE
-    if (getenv("CMM_PROFV")) fprintf(stderr, "  dtime init=%.1f sweeps=%.1f cc=%.1f us R=%zu V=%zu E=%u\n", t_init - t_start, t_sw, t_cc, R, V, d->soff[V]);
+#ifdef MMD_PROFILE
+    if (getenv("MMD_PROFV")) fprintf(stderr, "  dtime init=%.1f sweeps=%.1f cc=%.1f us R=%zu V=%zu E=%u\n", t_init - t_start, t_sw, t_cc, R, V, d->soff[V]);
 #endif
     ok = true;
 done:

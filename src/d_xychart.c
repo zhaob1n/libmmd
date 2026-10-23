@@ -118,7 +118,7 @@ DIAG_FN(xychart_render) {
             if (!rest.n) continue;
             if (isx && rest.p[0] == '[') {
                 cats.n = 0;
-                if (!list(a, rest, &cats, &oom)) return oom ? CMM_ERR_NOMEM : diag_fail(err_off, msg, lo, "bad category list");
+                if (!list(a, rest, &cats, &oom)) return oom ? MMD_ERR_NOMEM : diag_fail(err_off, msg, lo, "bad category list");
             } else if (range(rest, isx ? &xmin : &ymin, isx ? &xmax : &ymax)) {
                 if (isx) xr = true; else yr = true;
             } else return diag_fail(err_off, msg, (size_t)(rest.p - src), "expected [categories] or min --> max");
@@ -128,7 +128,7 @@ DIAG_FN(xychart_render) {
             Series s = {.line = w.p[0] == 'l', .v0 = (uint32_t)vals.n};
             s.name = take_title(&rest);
             VEC(Str) items = {};
-            if (!list(a, rest, &items, &oom)) return oom ? CMM_ERR_NOMEM : diag_fail(err_off, msg, lo, "expected [numbers]");
+            if (!list(a, rest, &items, &oom)) return oom ? MMD_ERR_NOMEM : diag_fail(err_off, msg, lo, "expected [numbers]");
             for (size_t i = 0; i < items.n; i++) {
                 double d;
                 Str it = items.v[i], lab = {};
@@ -138,12 +138,12 @@ DIAG_FN(xychart_render) {
                         items.v[i] = str_trim((Str){.p = it.p, .n = q});
                         break;
                     }
-                if (!VEC_PUSH(a, &labs, lab)) return CMM_ERR_NOMEM;
+                if (!VEC_PUSH(a, &labs, lab)) return MMD_ERR_NOMEM;
                 if (!dg_parse_num(items.v[i], &d)) return diag_fail(err_off, msg, (size_t)(items.v[i].p - src), "not a number");
-                if (!VEC_PUSH(a, &vals, d)) return CMM_ERR_NOMEM;
+                if (!VEC_PUSH(a, &vals, d)) return MMD_ERR_NOMEM;
             }
             s.nv = (uint32_t)items.n;
-            if (!VEC_PUSH(a, &ser, s)) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &ser, s)) return MMD_ERR_NOMEM;
             continue;
         }
         return diag_fail(err_off, msg, lo, "unknown xychart statement");
@@ -181,7 +181,7 @@ DIAG_FN(xychart_render) {
     double legw = 0;
     for (size_t s = 0; s < ser.n; s++) if (ser.v[s].name.n) legw = fmax(legw, text_width(ser.v[s].name, 14) + 40);
     BBox bb = {0, 0, ox + pw + 20 + legw, oy + ph + 60};
-    if (!buf_reserve(out, 4096 + vals.n * 200 + nc * 200)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 4096 + vals.n * 200 + nc * 200)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 4, "xychart", CSS);
     if (title.n) dg_text(out, title, 20, ox + pw / 2, 25, "middle", "ttl");
     /* value <-> pixel */
@@ -266,5 +266,5 @@ DIAG_FN(xychart_render) {
         buf_lit(out, "</text>");
     }
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

@@ -276,7 +276,7 @@ DIAG_FN(c4_render) {
             continue;
         }
         if (is(mac, "UpdateElementStyle")) {
-            if (na && !VEC_PUSH(a, &es, ((EStyle){A[0], named(raw, "bgColor"), named(raw, "fontColor"), named(raw, "borderColor")}))) return CMM_ERR_NOMEM;
+            if (na && !VEC_PUSH(a, &es, ((EStyle){A[0], named(raw, "bgColor"), named(raw, "fontColor"), named(raw, "borderColor")}))) return MMD_ERR_NOMEM;
             continue;
         }
         if (is(mac, "UpdateRelStyle")) {
@@ -284,7 +284,7 @@ DIAG_FN(c4_render) {
             Str sx_ = named(raw, "offsetX"), sy_ = named(raw, "offsetY");
             if (sx_.n && (!dg_parse_num(sx_, &ox) || fabs(ox) > 1e4)) ox = 0;
             if (sy_.n && (!dg_parse_num(sy_, &oy) || fabs(oy) > 1e4)) oy = 0;
-            if (na >= 2 && !VEC_PUSH(a, &rs, ((RStyle){A[0], A[1], named(raw, "textColor"), named(raw, "lineColor"), ox, oy}))) return CMM_ERR_NOMEM;
+            if (na >= 2 && !VEC_PUSH(a, &rs, ((RStyle){A[0], A[1], named(raw, "textColor"), named(raw, "lineColor"), ox, oy}))) return MMD_ERR_NOMEM;
             continue;
         }
         if (str_starts(mac, S("Update")) || is(mac, "AddElementTag") || is(mac, "AddRelTag") || is(mac, "AddBoundaryTag")) continue;
@@ -294,11 +294,11 @@ DIAG_FN(c4_render) {
             if (na < b0 + 3) return diag_fail(err_off, msg, lo, "Rel needs from, to, label");
             if (!A[b0].n || !A[b0 + 1].n) return diag_fail(err_off, msg, lo, "empty Rel endpoint");
             int32_t va = dg_node(&g, A[b0], nullptr), vb = va == NONE ? NONE : dg_node(&g, A[b0 + 1], nullptr);
-            if (vb == NONE) return CMM_ERR_NOMEM;
+            if (vb == NONE) return MMD_ERR_NOMEM;
             if (is(mac, "Rel_Back")) { int32_t t = va; va = vb; vb = t; }
-            if (dg_edge(&g, va, vb, A[b0 + 2]) == NONE) return CMM_ERR_NOMEM;
+            if (dg_edge(&g, va, vb, A[b0 + 2]) == NONE) return MMD_ERR_NOMEM;
             g.eend[g.ne - 1] = AH_NONE;
-            if (!VEC_PUSH(a, &cr, ((CRel){.techn = na > b0 + 3 ? A[b0 + 3] : (Str){}, .bi = is(mac, "BiRel")}))) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &cr, ((CRel){.techn = na > b0 + 3 ? A[b0 + 3] : (Str){}, .bi = is(mac, "BiRel")}))) return MMD_ERR_NOMEM;
             continue;
         }
         if (open) {
@@ -309,14 +309,14 @@ DIAG_FN(c4_render) {
             Str t2 = na > 1 ? A[1] : A[0];
             if (type.n) {
                 char *b = ANEW(a, char, t2.n + type.n + 4);
-                if (!b) return CMM_ERR_NOMEM;
+                if (!b) return MMD_ERR_NOMEM;
                 memcpy(b, t2.p, t2.n), memcpy(b + t2.n, "\n[", 2), memcpy(b + t2.n + 2, type.p, type.n), b[t2.n + 2 + type.n] = ']';
                 t2 = (Str){.p = b, .n = t2.n + type.n + 3};
             }
             int32_t c = dg_cluster(&g, A[0], t2, parent);
-            if (c == NONE) return CMM_ERR_NOMEM;
+            if (c == NONE) return MMD_ERR_NOMEM;
             stack[depth++] = c;
-            if (!VEC_PUSH(a, &items, ((Item){c, true}))) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &items, ((Item){c, true}))) return MMD_ERR_NOMEM;
             continue;
         }
         CInfo info = {};
@@ -337,7 +337,7 @@ DIAG_FN(c4_render) {
         if (!ok) return diag_fail(err_off, msg, lo, "unknown C4 element");
         if (info.ext) {
             char *s = ANEW(a, char, info.stereo.n + 9);
-            if (!s) return CMM_ERR_NOMEM;
+            if (!s) return MMD_ERR_NOMEM;
             memcpy(s, "external_", 9), memcpy(s + 9, info.stereo.p, info.stereo.n);
             info.stereo = (Str){.p = s, .n = info.stereo.n + 9};
         }
@@ -347,21 +347,21 @@ DIAG_FN(c4_render) {
         else info.descr = na > 2 ? A[2] : (Str){};
         bool fresh;
         int32_t v = dg_node(&g, A[0], &fresh);
-        if (v == NONE) return CMM_ERR_NOMEM;
+        if (v == NONE) return MMD_ERR_NOMEM;
         g.nlabel[v] = na > 1 ? A[1] : A[0];
         g.nparent[v] = parent;
-        if (!VEC_PUSH(a, &items, ((Item){v, false}))) return CMM_ERR_NOMEM;
-        while (ci.n < g.nn) if (!VEC_PUSH(a, &ci, (CInfo){.kind = K_SYSTEM, .stereo = S("system")})) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &items, ((Item){v, false}))) return MMD_ERR_NOMEM;
+        while (ci.n < g.nn) if (!VEC_PUSH(a, &ci, (CInfo){.kind = K_SYSTEM, .stereo = S("system")})) return MMD_ERR_NOMEM;
         ci.v[v] = info;
     }
     if (depth) return diag_fail(err_off, msg, n, "missing '}'");
     if (!g.nn) return diag_fail(err_off, msg, off, "C4 diagram has no elements");
-    while (ci.n < g.nn) if (!VEC_PUSH(a, &ci, (CInfo){.kind = K_SYSTEM, .stereo = S("system")})) return CMM_ERR_NOMEM;
+    while (ci.n < g.nn) if (!VEC_PUSH(a, &ci, (CInfo){.kind = K_SYSTEM, .stereo = S("system")})) return MMD_ERR_NOMEM;
     /* mermaid 11.17 c4LabelHelper: sections name (14px bold) / [type] (0.75em) / descr (0.82em) wrapped to
      * width - 2*padding (padding 20), stacked 3px apart; shapes pad the stack by 20 on each side. */
     Str *dw = ANEW(a, Str, g.nn), *dn = ANEW(a, Str, g.nn), *dt = ANEW(a, Str, g.nn);
     double *lab = ANEW(a, double, g.nn);
-    if (!dw || !dn || !dt || !lab) return CMM_ERR_NOMEM;
+    if (!dw || !dn || !dt || !lab) return MMD_ERR_NOMEM;
     for (size_t v = 0; v < g.nn; v++) {
         CInfo *c = &ci.v[v];
         double w = 216; /* mermaid: node.width = conf.width; the [type] line is not used for sizing */
@@ -369,7 +369,7 @@ DIAG_FN(c4_render) {
         double ww = w - 2 * C4_PAD - (c->form == F_DB ? C4_PAD : c->form == F_QUEUE ? C4_PAD / 2 : 0);
         dn[v] = dg_wrapf(a, g.nlabel[v], C4_NF, ww, text_width_os);
         dw[v] = c->descr.n ? dg_wrapf(a, c->descr, C4_DF, ww, text_width_os) : (Str){};
-        if (!dn[v].n && g.nlabel[v].n) return CMM_ERR_NOMEM;
+        if (!dn[v].n && g.nlabel[v].n) return MMD_ERR_NOMEM;
         double tw;
         unsigned nl = 0;
         label_measure_f(dn[v], C4_NF, text_width_os, &tw, &nl);
@@ -377,14 +377,14 @@ DIAG_FN(c4_render) {
         { /* mermaid 11 type line: [Person], [Software System], [Container: techn]; wrapped like the rest */
             size_t kl = strlen(C4_TY[c->kind]), n = kl + 3 + (c->techn.n ? c->techn.n + 2 : 0);
             char *t = ANEW(a, char, n);
-            if (!t) return CMM_ERR_NOMEM;
+            if (!t) return MMD_ERR_NOMEM;
             size_t k = 0;
             t[k++] = '[';
             memcpy(t + k, C4_TY[c->kind], kl), k += kl;
             if (c->techn.n) t[k++] = ':', t[k++] = ' ', memcpy(t + k, c->techn.p, c->techn.n), k += c->techn.n;
             t[k++] = ']';
             dt[v] = dg_wrapf(a, (Str){.p = t, .n = k}, C4_TF, ww, text_width_os);
-            if (!dt[v].n) return CMM_ERR_NOMEM;
+            if (!dt[v].n) return MMD_ERR_NOMEM;
         }
         double twid;
         unsigned tl;
@@ -412,7 +412,7 @@ DIAG_FN(c4_render) {
     for (size_t e = 0; e < g.ne; e++) {
         if (cr.v[e].techn.n) {
             char *b = ANEW(a, char, g.elabel[e].n + cr.v[e].techn.n + 3);
-            if (!b) return CMM_ERR_NOMEM;
+            if (!b) return MMD_ERR_NOMEM;
             memcpy(b, g.elabel[e].p, g.elabel[e].n), memcpy(b + g.elabel[e].n, "\n[", 2);
             memcpy(b + g.elabel[e].n + 2, cr.v[e].techn.p, cr.v[e].techn.n), b[g.elabel[e].n + 2 + cr.v[e].techn.n] = ']';
             g.elabel[e] = (Str){.p = b, .n = g.elabel[e].n + cr.v[e].techn.n + 3};
@@ -421,7 +421,7 @@ DIAG_FN(c4_render) {
     /* nodes only referenced by Rel (never declared) go to the root in first-use order */
     {
         bool *seen = ANEW(a, bool, g.nn);
-        if (!seen) return CMM_ERR_NOMEM;
+        if (!seen) return MMD_ERR_NOMEM;
         for (size_t v = 0; v < g.nn; v++) seen[v] = false; /* arena memory is not zeroed */
         size_t k = 0;
         for (size_t i = 0; i < items.n; i++) { /* keep the first declaration of each element */
@@ -432,13 +432,13 @@ DIAG_FN(c4_render) {
         }
         items.n = k;
         for (size_t v = 0; v < g.nn; v++)
-            if (!seen[v] && !VEC_PUSH(a, &items, ((Item){(int32_t)v, false}))) return CMM_ERR_NOMEM;
+            if (!seen[v] && !VEC_PUSH(a, &items, ((Item){(int32_t)v, false}))) return MMD_ERR_NOMEM;
     }
     /* layout output arrays (flow_layout normally allocates these) */
     g.nx = ANEW(a, double, g.nn), g.ny = ANEW(a, double, g.nn);
     g.sx = ANEW(a, double, g.ns + 1), g.sy = ANEW(a, double, g.ns + 1), g.sw = ANEW(a, double, g.ns + 1), g.sh = ANEW(a, double, g.ns + 1);
     g.elx = ANEW(a, double, g.ne + 1), g.ely = ANEW(a, double, g.ne + 1);
-    if (!g.nx || !g.ny || !g.sx || !g.sy || !g.sw || !g.sh || !g.elx || !g.ely) return CMM_ERR_NOMEM;
+    if (!g.nx || !g.ny || !g.sx || !g.sy || !g.sw || !g.sh || !g.elx || !g.ely) return MMD_ERR_NOMEM;
     /* deviate from mermaid: a relation between consecutive shapes whose label is wider than the 100px
        gap widens it, so the label sits between them instead of on a box */
     double *gap = ANEW(a, double, g.nn + 1);
@@ -471,7 +471,7 @@ DIAG_FN(c4_render) {
     /* resolve style overrides */
     const EStyle **nst = ANEW(a, const EStyle *, g.nn);
     const RStyle **rst = ANEW(a, const RStyle *, g.ne + 1);
-    if (!nst || !rst) return CMM_ERR_NOMEM;
+    if (!nst || !rst) return MMD_ERR_NOMEM;
     for (size_t v = 0; v < g.nn; v++) nst[v] = nullptr;
     for (size_t e = 0; e <= g.ne; e++) rst[e] = nullptr;
     for (size_t i = 0; i < es.n; i++) { int32_t v = dg_find(&g, es.v[i].alias); if (v != NONE) nst[v] = &es.v[i]; }
@@ -482,7 +482,7 @@ DIAG_FN(c4_render) {
         }
     double *lbw = ANEW(a, double, g.ne + 1), *lbh = ANEW(a, double, g.ne + 1);
     double *ep = ANEW(a, double, 6 * (g.ne + 1)); /* x0 y0 qx qy x1 y1: quadratic bend that clears other boxes */
-    if (!lbw || !lbh || !ep) return CMM_ERR_NOMEM;
+    if (!lbw || !lbh || !ep) return MMD_ERR_NOMEM;
     for (size_t e = 0; e < g.ne; e++) {
         int32_t f = g.efrom[e], t = g.eto[e];
         double sx0, sy0, sx1, sy1;
@@ -613,7 +613,7 @@ DIAG_FN(c4_render) {
         }
         (void)lw; /* mermaid does not grow the viewBox for relation labels */
     }
-    if (!buf_reserve(out, 2048 + g.nn * 900 + g.ne * 500 + g.ns * 300)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 2048 + g.nn * 900 + g.ne * 500 + g.ns * 300)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 0, "c4", CSS);
     /* mermaid: plain 16px text, start-anchored at (boxWidth/2 - 4*marginX, starty + marginY), baseline */
     if (ttl.n) dg_text(out, ttl, 16, (L.maxx - C4_DMX) / 2 - 4 * C4_DMX, 20 - 0.35 * 16, "start", "cn");
@@ -724,5 +724,5 @@ DIAG_FN(c4_render) {
         if (tc) buf_lit(out, "</g>");
     }
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

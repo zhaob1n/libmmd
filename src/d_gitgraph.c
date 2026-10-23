@@ -85,7 +85,7 @@ DIAG_FN(gitgraph_render) {
     VEC(Branch) br = {};
     Str mainb = dcfg_get("gitGraph.mainBranchName");
     if (!mainb.n) mainb = S("main");
-    if (!VEC_PUSH(a, &br, ((Branch){.name = mainb}))) return CMM_ERR_NOMEM;
+    if (!VEC_PUSH(a, &br, ((Branch){.name = mainb}))) return MMD_ERR_NOMEM;
     uint32_t cur = 0;
     while (dg_next_line(&it, &line, &lo)) {
         Str rest = line, w = dg_word(&rest);
@@ -114,19 +114,19 @@ DIAG_FN(gitgraph_render) {
                 if (!c.tag.n) { /* mermaid default tag: cherry-pick:<src>[|parent:<p>] */
                     size_t tl = at.id.n + at.parent.n + 24;
                     char *t2 = arena_alloc(a, tl, 1);
-                    if (!t2) return CMM_ERR_NOMEM;
+                    if (!t2) return MMD_ERR_NOMEM;
                     int l2 = cm.v[k].type == C_MERGE ? snprintf(t2, tl, "cherry-pick:%.*s|parent:%.*s", (int)at.id.n, at.id.p, (int)at.parent.n, at.parent.p)
                                                      : snprintf(t2, tl, "cherry-pick:%.*s", (int)at.id.n, at.id.p);
                     c.tag = (Str){.p = t2, .n = (size_t)l2};
                 }
                 char *t = arena_alloc(a, at.id.n + 16, 1);
-                if (!t) return CMM_ERR_NOMEM;
+                if (!t) return MMD_ERR_NOMEM;
                 int len = snprintf(t, at.id.n + 16, "cherry:%.*s", (int)at.id.n, at.id.p);
                 at.id = (Str){.p = t, .n = (size_t)len};
             } else if (at.has_type && c.type != C_MERGE) c.type = at.type;
             if (!at.id.n) {
                 char *idbuf = arena_alloc(a, 16, 1);
-                if (!idbuf) return CMM_ERR_NOMEM;
+                if (!idbuf) return MMD_ERR_NOMEM;
                 /* mermaid: "<seq>-<7 hex>"; deterministic FNV-1a over seq, branch and parent */
                 uint64_t h = 1469598103934665603u;
                 const uint64_t mix[3] = {cm.n, cur, c.p1};
@@ -137,7 +137,7 @@ DIAG_FN(gitgraph_render) {
             }
             /* mermaid only warns on duplicate ids */
             c.id = at.id, c.tag = at.tag, c.msg = at.msg;
-            if (!VEC_PUSH(a, &cm, c)) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &cm, c)) return MMD_ERR_NOMEM;
             br.v[cur].head = (uint32_t)cm.n - 1, br.v[cur].has_head = true;
             continue;
         }
@@ -150,7 +150,7 @@ DIAG_FN(gitgraph_render) {
             if (!attrs(rest, &at)) return diag_fail(err_off, msg, (size_t)(rest.p - src), "bad branch attributes");
             Branch b = {.name = bn, .order = at.has_order ? at.order : mm_order(br.n), .head = br.v[cur].head,
                         .has_head = br.v[cur].has_head, .idx = (uint32_t)br.n};
-            if (!VEC_PUSH(a, &br, b)) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &br, b)) return MMD_ERR_NOMEM;
             cur = (uint32_t)br.n - 1;
             continue;
         }
@@ -168,7 +168,7 @@ DIAG_FN(gitgraph_render) {
     /* lane order: by `order`, then declaration */
     uint32_t *lane = ANEW(a, uint32_t, br.n);
     uint32_t *ord = ANEW(a, uint32_t, br.n);
-    if (!lane || !ord) return CMM_ERR_NOMEM;
+    if (!lane || !ord) return MMD_ERR_NOMEM;
     for (size_t i = 0; i < br.n; i++) {
         size_t k = i;
         while (k > 0 && br.v[ord[k - 1]].order > br.v[i].order) { ord[k] = ord[k - 1]; k--; }
@@ -185,7 +185,7 @@ DIAG_FN(gitgraph_render) {
     double q0 = dir == 0 ? 50 : bnw / 2 + 30;
     /* parallelCommits: a commit sits one step after its furthest parent instead of at its sequence index */
     double *col = ANEW(a, double, cm.n ? cm.n : 1);
-    if (!col) return CMM_ERR_NOMEM;
+    if (!col) return MMD_ERR_NOMEM;
     const bool par_c = dcfg_bool("gitGraph.parallelCommits", false);
     double ncol = 0;
     for (size_t i = 0; i < cm.n; i++) {
@@ -199,7 +199,7 @@ DIAG_FN(gitgraph_render) {
     }
     if (dir == 0 && !rot && !par_c && cm.n) { /* deviate from mermaid: horizontal labels never overlap their lane neighbour */
         double *lx = ANEW(a, double, 2 * br.n + 2);
-        if (!lx) return CMM_ERR_NOMEM;
+        if (!lx) return MMD_ERR_NOMEM;
         for (size_t l = 0; l < br.n; l++) lx[2 * l] = -HUGE_VAL, lx[2 * l + 1] = 0;
         double x = 0;
         for (size_t i = 0; i < cm.n; i++) {
@@ -217,10 +217,10 @@ DIAG_FN(gitgraph_render) {
     /* lane offsets: a lane whose rotated commit labels hang deeper than the default gap pushes the
      * lanes below it down so the labels clear the next branch line */
     double *lq = ANEW(a, double, br.n + 1);
-    if (!lq) return CMM_ERR_NOMEM;
+    if (!lq) return MMD_ERR_NOMEM;
     {
         double *drop = ANEW(a, double, br.n + 1);
-        if (!drop) return CMM_ERR_NOMEM;
+        if (!drop) return MMD_ERR_NOMEM;
         if (dir == 0 && rot)
             for (size_t i = 0; i < cm.n; i++) {
                 if (cm.v[i].type == C_CHERRY) continue;
@@ -257,7 +257,7 @@ DIAG_FN(gitgraph_render) {
             }
         }
     BBox bb = dir == 0 ? (BBox){left - 4, top - 4, plen - 6, bot + 4} : (BBox){0, title.n ? -40 : 0, qlen, plen};
-    if (!buf_reserve(out, 4096 + cm.n * 900)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 4096 + cm.n * 900)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 4, "gitGraph", CSS);
     if (title.n) dg_text(out, title, 18, dir == 0 ? plen / 2 : qlen / 2, dir == 0 ? q0 - 31.3 : -20, "middle", "ttl");
     /* branch lines + labels */
@@ -379,5 +379,5 @@ DIAG_FN(gitgraph_render) {
 #undef PX
 #undef PY
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

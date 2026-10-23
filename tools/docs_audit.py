@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Render every tests/docs/*/*.mmd with ours (and, with --mmdc, mermaid-cli) and print per-doc pass rates.
-Usage: docs_audit.py [-v] [-q] [--mmdc] [mmdc-c binary]; exits 1 if any mermaid-ok example fails.
+Usage: docs_audit.py [-v] [-q] [--mmdc] [mmd binary]; exits 1 if any mermaid-ok example fails.
 Mermaid results are cached in tests/docs/mermaid_status.txt (path ok|fail) so runs without --mmdc are fast."""
 import os, sys, glob, subprocess, concurrent.futures as cf
 files = sorted(glob.glob('tests/docs/*/*.mmd'))
 cache = 'tests/docs/mermaid_status.txt'
-exe = next((a for a in sys.argv[1:] if not a.startswith('-')), 'build/mmdc-c')
+exe = next((a for a in sys.argv[1:] if not a.startswith('-')), 'build/mmd')
 ms = dict(l.split() for l in open(cache)) if os.path.exists(cache) else {}
 def ours(f):
     r = subprocess.run([exe, f, '-o', '/dev/null'], capture_output=True, timeout=20)

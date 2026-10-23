@@ -138,7 +138,7 @@ static bool parse_rel(Str l, Str *a, Str *b, ERel *r, Str *label) {
     return false;
 }
 
-static cmm_status parse(EP *p, LineIt *it) {
+static mmd_status parse(EP *p, LineIt *it) {
     Graph *g = &p->g;
     Str line;
     size_t off;
@@ -156,7 +156,7 @@ static cmm_status parse(EP *p, LineIt *it) {
             Attr a = {.ent = body, .type = type, .name = name, .keys = keys, .comment = comment};
             bool ok;
             a.type = label_normalize(p->A, type, &ok); /* keep raw ~generic~ markers readable */
-            if (!ok || !VEC_PUSH(p->A, &p->at, a)) return CMM_ERR_NOMEM;
+            if (!ok || !VEC_PUSH(p->A, &p->at, a)) return MMD_ERR_NOMEM;
             continue;
         }
         Str rest = line, w = dg_word(&rest);
@@ -172,7 +172,7 @@ static cmm_status parse(EP *p, LineIt *it) {
             if (!id.n) return diag_fail(p->err_off, p->msg, off, "subgraph needs a name");
             if (p->sgn >= countof(p->sg)) return diag_fail(p->err_off, p->msg, off, "subgraphs nested too deeply");
             int32_t c = dg_cluster(g, id, t, p->sgn ? p->sg[p->sgn - 1] : NONE);
-            if (c == NONE) return CMM_ERR_NOMEM;
+            if (c == NONE) return MMD_ERR_NOMEM;
             p->sg[p->sgn++] = c;
             continue;
         }
@@ -194,7 +194,7 @@ static cmm_status parse(EP *p, LineIt *it) {
             while (name.n) { /* classDef a,b css */
                 const char *c = memchr(name.p, ',', name.n);
                 Str one = {.p = name.p, .n = c ? (size_t)(c - name.p) : name.n};
-                if (!VEC_PUSH(p->A, &p->cdefs, ((CDef){.name = one, .css = str_trim(rest)}))) return CMM_ERR_NOMEM;
+                if (!VEC_PUSH(p->A, &p->cdefs, ((CDef){.name = one, .css = str_trim(rest)}))) return MMD_ERR_NOMEM;
                 name = c ? (Str){.p = c + 1, .n = name.n - one.n - 1} : (Str){};
             }
             continue;
@@ -206,7 +206,7 @@ static cmm_status parse(EP *p, LineIt *it) {
                 const char *c = memchr(ids.p, ',', ids.n);
                 Str id = {.p = ids.p, .n = c ? (size_t)(c - ids.p) : ids.n};
                 int32_t v = ent(p, id);
-                if (v == NONE) return CMM_ERR_NOMEM;
+                if (v == NONE) return MMD_ERR_NOMEM;
                 if (v >= 0) { if (sty) g->nstyle[v] = val; else g->nclass[v] = val; }
                 ids = c ? (Str){.p = c + 1, .n = ids.n - id.n - 1} : (Str){};
             }
@@ -216,9 +216,9 @@ static cmm_status parse(EP *p, LineIt *it) {
         ERel r;
         if (parse_rel(line, &a, &b, &r, &label)) {
             int32_t va = ent(p, a), vb = ent(p, b);
-            if (va == NONE || vb == NONE) return CMM_ERR_NOMEM;
+            if (va == NONE || vb == NONE) return MMD_ERR_NOMEM;
             if (va < 0 || vb < 0) return diag_fail(p->err_off, p->msg, off, "relationship needs two entities");
-            if (dg_edge(g, va, vb, label) == NONE || !VEC_PUSH(p->A, &p->rel, r)) return CMM_ERR_NOMEM;
+            if (dg_edge(g, va, vb, label) == NONE || !VEC_PUSH(p->A, &p->rel, r)) return MMD_ERR_NOMEM;
             g->eend[g->ne - 1] = AH_NONE;
             continue;
         }
@@ -235,12 +235,12 @@ static cmm_status parse(EP *p, LineIt *it) {
             else if (ref.p[k] == ':' || ref.p[k] == '{' || ref.p[k] == '}' || ref.p[k] == '|')
                 return diag_fail(p->err_off, p->msg, off + k, "unrecognised statement in ER diagram");
         int32_t v = ent(p, ref);
-        if (v == NONE) return CMM_ERR_NOMEM;
+        if (v == NONE) return MMD_ERR_NOMEM;
         if (v < 0) return diag_fail(p->err_off, p->msg, off, "expected entity name");
         if (open && !close_inline) body = v;
     }
     if (body != NONE) return diag_fail(p->err_off, p->msg, it->n, "unterminated entity (missing '}')");
-    return CMM_OK;
+    return MMD_OK;
 }
 
 /* re-open the just-written <rect .../> and add classDef / style css (later wins, as in mermaid) */
@@ -298,7 +298,7 @@ DIAG_FN(er_render) {
     Str hdr;
     size_t ho;
     if (!dg_next_line(&it, &hdr, &ho)) return diag_fail(err_off, msg, off, "empty ER diagram");
-    cmm_status st = parse(&p, &it);
+    mmd_status st = parse(&p, &it);
     if (st) return st;
     Graph *g = &p.g;
     if (p.sgn) return diag_fail(err_off, msg, it.i, "unterminated subgraph (missing 'end')");
@@ -308,7 +308,7 @@ DIAG_FN(er_render) {
     if (!g->nn) return diag_fail(err_off, msg, off, "ER diagram has no entities");
     size_t N = g->nn, M = p.at.n;
     Attr *as = ANEW(a, Attr, M + 1);
-    if (!as) return CMM_ERR_NOMEM;
+    if (!as) return MMD_ERR_NOMEM;
     for (size_t i = 0; i < M; i++) p.ei.v[p.at.v[i].ent].an++;
     uint32_t acc = 0;
     for (size_t v = 0; v < N; v++) { p.ei.v[v].a0 = acc; acc += p.ei.v[v].an; p.ei.v[v].an = 0; }
@@ -359,7 +359,7 @@ DIAG_FN(er_render) {
     if ((st = flow_layout(g))) return st;
     BBox bb = dg_bbox(g);
     if (title.n) bb.y0 -= 30;
-    if (!buf_reserve(out, 2048 + N * 400 + g->ne * 400 + M * 300)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 2048 + N * 400 + g->ne * 400 + M * 300)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 8, "erDiagram", CSS);
     if (title.n) dg_text(out, title, 18, (bb.x0 + bb.x1) / 2, bb.y0 + 12, "middle", "name");
     for (size_t s = 0; s < g->ns; s++) {
@@ -412,5 +412,5 @@ DIAG_FN(er_render) {
         }
     }
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

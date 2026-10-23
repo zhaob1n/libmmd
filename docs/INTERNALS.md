@@ -1,4 +1,4 @@
-# cmermaid internals, per-type feature notes and version history
+# libmmd internals, per-type feature notes and version history
 
 Moved from the old README. Numbers here are historical; see bench/results_v*.txt.
 
@@ -18,7 +18,7 @@ Moved from the old README. Numbers here are historical; see bench/results_v*.txt
 | classDiagram | `src/d_class.c` | members, `~generics~`, visibility/`$`/`*`, annotations, all relations + lollipop, cardinality, namespaces, notes |
 | erDiagram | `src/d_er.c` | attribute tables (type/name/keys/comment), aliases, all crow's-foot cardinalities (symbolic + word forms), `:::cls` / classDef / class / style, `subgraph` clusters (relations may target a subgraph id) |
 | pie | `src/d_pie.c` | slices, showData, title, legend |
-| gantt | `src/d_gantt.c` | dayjs-style dateFormat (incl. Z/ZZ offsets), todayMarker (CMM_TODAY override), weekday/weekend friday, strftime axisFormat, tickInterval, excludes (weekends/dates), after/until deps, done/active/crit/milestone/vert, invalid tickInterval ignored, `gantt.useWidth` |
+| gantt | `src/d_gantt.c` | dayjs-style dateFormat (incl. Z/ZZ offsets), todayMarker (MMD_TODAY override), weekday/weekend friday, strftime axisFormat, tickInterval, excludes (weekends/dates), after/until deps, done/active/crit/milestone/vert, invalid tickInterval ignored, `gantt.useWidth` |
 | journey | `src/d_journey.c` | sections, scored tasks with faces, actor legend/dots |
 | mindmap | `src/d_mindmap.c` | indentation tree, all node shapes, radial layout (tidy-tree opt-in), `::icon(fa ...)` drawn as real Font Awesome paths (badge fallback), `:::class`, section colours |
 | timeline | `src/d_timeline.c` | sections, periods, multi-event / continuation lines, wrapping |
@@ -52,7 +52,7 @@ Moved from the old README. Numbers here are historical; see bench/results_v*.txt
 
 ## Fidelity vs mermaid-cli 11.17
 
-Side-by-side renders (left: cmermaid, right: mermaid 11.17) live in `samples/sbs/*.png`.
+Side-by-side renders (left: libmmd, right: mermaid 11.17) live in `samples/sbs/*.png`.
 Already fixed:
 - C4: grid layout, person shape, centred boundary titles, relation labels placed to avoid boxes and other labels;
 - gitGraph: lane order, vivid palette, commit labels rotated -45 degrees;
@@ -72,7 +72,7 @@ Known remaining differences:
 - state: concurrent regions are not drawn as grey boxes;
 - class: wide single-row layout, same as mermaid's;
 - journey: legend order;
-- quadrant: mermaid 11.17 renders points with a broken `hsl(NaN)` fill, so cmermaid keeps blue;
+- quadrant: mermaid 11.17 renders points with a broken `hsl(NaN)` fill, so libmmd keeps blue;
 - C4: arbitrary bgColor strings are rejected.
 mermaid itself fails to render `block_full` and `radar_full` (partial named curve).
 
@@ -82,7 +82,7 @@ mermaid itself fails to render `block_full` and `radar_full` (partial named curv
   sideways to avoid edges crossing the title band.
 - Crossing reduction: barycenter sweeps + keep-best + budgeted transpose polish (dirty-layer skipping).
 - Port ordering for fan-in/fan-out and parallel edges; nested multiple self-loops.
-- `mmdc-c --avoid` (`CMM_F_ROUTE_AVOID`): detours polyline segments around nodes they pass through.
+- `mmd --avoid` (`MMD_F_ROUTE_AVOID`): detours polyline segments around nodes they pass through.
 - Themes: `default`, `dark`, `forest`, `neutral` via `%%{init: {"theme": ...}}%%`, frontmatter, or `-t`.
 - Markdown strings (`"`**bold** *italic*`"`) with auto-wrap at 200px, `fa:fa-name` icons
   (Font Awesome glyphs; needs the font installed to render), edge ids `A e1@--> B`, `e1@{ animate: true }`.
@@ -92,9 +92,9 @@ mermaid itself fails to render `block_full` and `radar_full` (partial named curv
 ## v3: build options, batch API, routing
 
 - Build: `make` (portable `-O2`), opt-in `make MARCH=native`, `make LTO=1`, `make pgo [LTO=1 MARCH=native]` (output in `build-pgo/`).
-- Shared library: `build/libcmermaid.so.0.3.0` (soname `libcmermaid.so.0`, only `cmm_*` exported) plus `build/cmermaid.pc`; `make install PREFIX=/usr DESTDIR=...`.
-- Batch rendering: `cmm_context_new()` / `cmm_context_render_svg()` / `cmm_context_free()` reuse the arena and output buffer between calls.
-- Obstacle routing is on by default: edges that cross a non-endpoint node get a local visibility-graph (A*) detour. Use `--no-avoid` / `CMM_F_NO_AVOID` for the fastest layout. Edge labels sit on the rendered curve.
+- Shared library: `build/libmmd.so.0.3.0` (soname `libmmd.so.0`, only `mmd_*` exported) plus `build/mmd.pc`; `make install PREFIX=/usr DESTDIR=...`.
+- Batch rendering: `mmd_context_new()` / `mmd_context_render_svg()` / `mmd_context_free()` reuse the arena and output buffer between calls.
+- Obstacle routing is on by default: edges that cross a non-endpoint node get a local visibility-graph (A*) detour. Use `--no-avoid` / `MMD_F_NO_AVOID` for the fastest layout. Edge labels sit on the rendered curve.
 - SVG: stroke widths and text anchoring are now CSS classes, and collinear points are dropped (about 20% smaller on medium, about 50% on large vs v1).
 - Numbers: `bench/results_v3.txt`.
 
@@ -122,7 +122,7 @@ mermaid itself fails to render `block_full` and `radar_full` (partial named curv
 
 ## v7
 - Hybrid cycle removal: DFS FAS by default, greedy (Eades) when N ≥ 1500 and DFS reverses ≥ N/20 edges.
-  `flowchart.cycleRemoval: dfs|greedy|auto`, flags `CMM_F_FAS_DFS`/`CMM_F_FAS_GREEDY`. xlarge 50.5 ms (v1 53.8).
+  `flowchart.cycleRemoval: dfs|greedy|auto`, flags `MMD_F_FAS_DFS`/`MMD_F_FAS_GREEDY`. xlarge 50.5 ms (v1 53.8).
 - `flowchart.nodeSpacing`, `flowchart.rankSpacing`, `flowchart.curve` (basis, linear, step, stepBefore, stepAfter, cardinal/catmullRom).
 - Self-loops reserve side room in BK placement; multiple loop labels stack outside the outermost loop.
 - Subgraph `direction` is ignored when member nodes link outside the subgraph (mermaid rule).
@@ -145,7 +145,7 @@ mermaid itself fails to render `block_full` and `radar_full` (partial named curv
 - Faithful port of dagre's order step (`src/dorder.c`: initOrder DFS, layer graphs with cluster borders,
   barycenter/sortSubgraph/resolveConflicts with subgraph constraints, biased down/up sweeps, keep best by
   crossCount), reproducing graphlib key order. Default for graphs with V ≤ 512; the fast ordering is kept above.
-  Override: `flowchart.order: dagre|fast` or env `CMM_ORDER`.
+  Override: `flowchart.order: dagre|fast` or env `MMD_ORDER`.
 - Same-rank order agreement with mermaid 0.936 → 0.961 (macro 0.658 → 0.813). Numbers: bench/results_v9.txt.
 
 ## v11
@@ -162,4 +162,4 @@ Mermaid-exact text metrics (Liberation/Arial advances+kerning), mermaid node pad
 ## v13 (speed)
 Byte-identical output. medium 590.5 → 481.5 µs, small 15.1 → 14.6 µs (min, this box). v1 is at 407 / 11.9, so the targets are not met yet.
 Main gains came from incremental network simplex (rank cycles 449k → 231k) and from dorder sort/crossing shortcuts.
-Build with `-DCMM_PROFILE` to get per-phase cycle counters. See bench/results_v13.txt and bench/prof13/.
+Build with `-DMMD_PROFILE` to get per-phase cycle counters. See bench/results_v13.txt and bench/prof13/.

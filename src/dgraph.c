@@ -442,7 +442,7 @@ Str dg_wrapc(Arena *a, Str s, size_t maxc) {
     return (Str){.p = o, .n = n};
 }
 
-cmm_status dg_finish(Buf *out, Buf *body, BBox bb, double m, const char *kind, size_t ncss, const char css[static ncss]) {
+mmd_status dg_finish(Buf *out, Buf *body, BBox bb, double m, const char *kind, size_t ncss, const char css[static ncss]) {
     if (bb.x0 > bb.x1) bb = (BBox){0, 0, 100, 100};
     if (!body->oom && buf_reserve(out, body->n + ncss + 1024)) {
         dg_head(out, bb, m, kind, ncss, css);
@@ -452,5 +452,5 @@ cmm_status dg_finish(Buf *out, Buf *body, BBox bb, double m, const char *kind, s
     bool oom = body->oom || out->oom;
     free(body->p);
     *body = (Buf){};
-    return oom ? CMM_ERR_NOMEM : CMM_OK;
+    return oom ? MMD_ERR_NOMEM : MMD_OK;
 }

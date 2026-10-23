@@ -1,5 +1,5 @@
-#ifndef CMM_TEXT_H
-#define CMM_TEXT_H
+#ifndef MMD_TEXT_H
+#define MMD_TEXT_H
 #include "base.h"
 
 /* Width in px of a single line of UTF-8 text at font size fs. */

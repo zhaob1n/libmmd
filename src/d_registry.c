@@ -2,10 +2,10 @@
 
 #include "diagrams.h"
 
-cmm_status diag_fail(size_t *err_off, char msg[static 160], size_t off, const char *m) {
+mmd_status diag_fail(size_t *err_off, char msg[static 160], size_t off, const char *m) {
     *err_off = off;
     snprintf(msg, 160, "%s", m);
-    return CMM_ERR_SYNTAX;
+    return MMD_ERR_SYNTAX;
 }
 
 typedef struct DiagEnt { Str kw; DiagFn fn; } DiagEnt;

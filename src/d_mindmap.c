@@ -266,7 +266,7 @@ DIAG_FN(mindmap_render) {
         if (!parse_node(line, &m.label, &m.shape)) return diag_fail(err_off, msg, lo, "bad node");
         bool ok;
         m.label = label_normalize(a, m.label, &ok); /* "quoted", "`markdown`", <br> */
-        if (!ok) return CMM_ERR_NOMEM;
+        if (!ok) return MMD_ERR_NOMEM;
         if (v.n) {
             if (in <= ind.v[0]) return diag_fail(err_off, msg, lo, "mindmap can only have one root");
             uint32_t p = (uint32_t)v.n - 1;
@@ -274,7 +274,7 @@ DIAG_FN(mindmap_render) {
             m.parent = p;
             m.depth = v.v[p].depth + 1;
         }
-        if (!VEC_PUSH(a, &v, m) || !VEC_PUSH(a, &ind, (uint32_t)in)) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &v, m) || !VEC_PUSH(a, &ind, (uint32_t)in)) return MMD_ERR_NOMEM;
         uint32_t me = (uint32_t)v.n - 1;
         if (m.parent != UINT32_MAX) { /* append as last child */
             uint32_t *pp = &v.v[m.parent].first;
@@ -286,7 +286,7 @@ DIAG_FN(mindmap_render) {
     MNode *V = v.v;
     for (size_t i = 0; i < v.n; i++) {
         Str lab = dg_wrap(a, V[i].label, 16, 200);
-        if (!lab.p && V[i].label.n) return CMM_ERR_NOMEM;
+        if (!lab.p && V[i].label.n) return MMD_ERR_NOMEM;
         V[i].label = lab;
         double w;
         unsigned nl;
@@ -319,7 +319,7 @@ DIAG_FN(mindmap_render) {
     for (size_t i = 0; i + 9 <= off && !tidy; i++) tidy = !memcmp(src + i, "tidy-tree", 9);
     if (!tidy) {
         double *leaves = ANEW(a, double, v.n), *ang = ANEW(a, double, v.n), *wedge = ANEW(a, double, v.n);
-        if (!leaves || !ang || !wedge) return CMM_ERR_NOMEM;
+        if (!leaves || !ang || !wedge) return MMD_ERR_NOMEM;
         for (size_t i = 0; i < v.n; i++) leaves[i] = V[i].first == UINT32_MAX; /* arena memory is not zeroed */
         for (size_t i = v.n; i-- > 0;) { /* children come after parents */
             if (i) leaves[V[i].parent] += leaves[i];
@@ -339,7 +339,7 @@ DIAG_FN(mindmap_render) {
         }
         /* per-node radius: just past the parent, but far enough out that its chord fits its wedge */
         double *rad = ANEW(a, double, v.n);
-        if (!rad) return CMM_ERR_NOMEM;
+        if (!rad) return MMD_ERR_NOMEM;
         rad[0] = 0;
         for (size_t i = 1; i < v.n; i++) { /* parents precede children */
             uint32_t p = V[i].parent;
@@ -354,7 +354,7 @@ DIAG_FN(mindmap_render) {
             rad[i] = r;
         }
         for (size_t i = 1; i < v.n; i++) V[i].x = rad[i] * cos(ang[i]), V[i].y = rad[i] * sin(ang[i]);
-        if (!mm_relax(a, v.n, V)) return CMM_ERR_NOMEM;
+        if (!mm_relax(a, v.n, V)) return MMD_ERR_NOMEM;
     }
     for (int side = -1; side <= 1 && tidy; side += 2) {
         double tot = side > 0 ? hr : hl, y = -tot / 2;
@@ -369,7 +369,7 @@ DIAG_FN(mindmap_render) {
         if (V[i].shape == M_CLOUD || V[i].shape == M_BANG) scallop(nullptr, &bb, &V[i]);
         else bb_add(&bb, V[i].x - V[i].w / 2, V[i].y - V[i].h / 2, V[i].x + V[i].w / 2, V[i].y + V[i].h / 2);
     }
-    if (!buf_reserve(out, 2048 + v.n * 600)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 2048 + v.n * 600)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 10, "mindmap", CSS);
     for (size_t i = 1; i < v.n; i++) { /* edges: cubic from parent side to child side, thinner with depth */
         const MNode *p = &V[V[i].parent], *c = &V[i];
@@ -424,5 +424,5 @@ DIAG_FN(mindmap_render) {
         dg_text(out, m->label, 16, tx, m->y, "middle", tcls);
     }
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

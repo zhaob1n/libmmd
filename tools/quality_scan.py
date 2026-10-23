@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Render .mmd files with mmdc-c, load the SVGs in headless chrome and report geometric defects
+"""Render .mmd files with mmd, load the SVGs in headless chrome and report geometric defects
 (ll label/label overlap, le label/edge overlap, ct cluster-title hits, ...) via quality_scan.js.
 usage: tools/quality_scan.py [files...]   (default: tests/docs, tests/cases, bench/mmdr_fixtures)
-env BIN=path/to/mmdc-c"""
+env BIN=path/to/mmd"""
 import sys,subprocess,os,json,tempfile,html,re,glob
 ROOT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BIN=os.environ.get('BIN',os.path.join(ROOT,'build/mmdc-c'))
+BIN=os.environ.get('BIN',os.path.join(ROOT,'build/mmd'))
 files=[x for x in sys.argv[1:] if x!='-a'] or sorted(glob.glob(os.path.join(ROOT,'tests/docs/**/*.mmd'),recursive=True)+glob.glob(os.path.join(ROOT,'tests/cases/*.mmd'))+glob.glob(os.path.join(ROOT,'bench/mmdr_fixtures/*.mmd')))
 js=open(os.path.join(ROOT,'tools/quality_scan.js')).read()
 allr=[]
@@ -20,7 +20,7 @@ for i in range(0,len(files),40):
             sid=m0.group(1); u=f'{sid}-q{len(parts)}'
             s=s.replace(f'id="{sid}"',f'id="{u}"').replace('#'+sid,'#'+u)
         parts.append(f'<div data-f="{html.escape(f)}" style="position:relative">{s}</div>')
-    T=tempfile.mkdtemp(prefix='cmm-scan-')
+    T=tempfile.mkdtemp(prefix='mmd-scan-')
     p=os.path.join(T,'p.html')
     open(p,'w').write('<html><body style="margin:0">'+''.join(parts)+'<pre id="out"></pre><script>'+js+'</script></body></html>')
     r=subprocess.run(['google-chrome','--headless','--no-sandbox','--disable-gpu','--virtual-time-budget=5000','--dump-dom','file://'+p],capture_output=True,env=dict(os.environ,TMPDIR=T),timeout=300)

@@ -11,16 +11,16 @@ typedef struct Theme {
 } Theme;
 /* colours follow mermaid's built-in themes (flowchart subset) */
 static const Theme THEMES[] = {
-    [CMM_THEME_DEFAULT] = {"white", "\"trebuchet ms\",verdana,arial,sans-serif", "#333", "#ECECFF", "#9370DB",
+    [MMD_THEME_DEFAULT] = {"white", "\"trebuchet ms\",verdana,arial,sans-serif", "#333", "#ECECFF", "#9370DB",
                            "#333333", "#ffffde", "#aaaa33", "rgba(232,232,232,0.8)", "#333333"},
-    [CMM_THEME_DARK] = {"#333", "\"trebuchet ms\",verdana,arial,sans-serif", "#ccc", "#1f2020", "#cccccc",
+    [MMD_THEME_DARK] = {"#333", "\"trebuchet ms\",verdana,arial,sans-serif", "#ccc", "#1f2020", "#cccccc",
                         "lightgrey", "#474949", "rgba(255,255,255,0.25)", "rgba(88,88,88,0.85)", "lightgrey"},
-    [CMM_THEME_FOREST] = {"white", "\"trebuchet ms\",verdana,arial,sans-serif", "#333", "#cde498", "#13540c",
+    [MMD_THEME_FOREST] = {"white", "\"trebuchet ms\",verdana,arial,sans-serif", "#333", "#cde498", "#13540c",
                           "#000000", "#cdffb2", "#6eaa49", "rgba(232,232,232,0.8)", "#000000"},
-    [CMM_THEME_NEUTRAL] = {"white", "\"trebuchet ms\",verdana,arial,sans-serif", "#333", "#eee", "#999",
+    [MMD_THEME_NEUTRAL] = {"white", "\"trebuchet ms\",verdana,arial,sans-serif", "#333", "#eee", "#999",
                            "#666", "#ffffde", "#999", "rgba(255,255,255,0.8)", "#666"},
 };
-static_assert(countof(THEMES) == CMM_THEME_NEUTRAL + 1, "theme table covers cmm_theme");
+static_assert(countof(THEMES) == MMD_THEME_NEUTRAL + 1, "theme table covers mmd_theme");
 
 static void put_cstr(Buf *b, const char *s) { buf_put(b, strlen(s), s); }
 
@@ -287,7 +287,7 @@ static inline void bb_add(BBox *bb, double x0, double y0, double x1, double y1) 
     if (y1 > bb->y1) bb->y1 = y1;
 }
 
-cmm_status flow_svg(const Graph *g, Buf *b) {
+mmd_status flow_svg(const Graph *g, Buf *b) {
     double fs = g->font_size;
     BBox bb = {INFINITY, INFINITY, -INFINITY, -INFINITY};
     for (size_t v = 0; v < g->nn; v++) {
@@ -320,7 +320,7 @@ cmm_status flow_svg(const Graph *g, Buf *b) {
     buf_lit(b, "\" role=\"graphics-document document\" aria-roledescription=\"flowchart-v2");
     dcfg_svg_aria(b); /* closes the tag; <title>/<desc> from accTitle/accDescr */
     buf_lit(b, "<style>");
-    const Theme *th = &THEMES[g->theme <= CMM_THEME_NEUTRAL && g->theme ? g->theme : CMM_THEME_DEFAULT];
+    const Theme *th = &THEMES[g->theme <= MMD_THEME_NEUTRAL && g->theme ? g->theme : MMD_THEME_DEFAULT];
     emit_css(b, th);
     dcfg_theme_css(b, "flowchart"); /* themeVariables overrides, same table as the other diagrams */
     for (size_t e = 0; e < g->ne; e++) if (g->eflags[e] & EF_ANIM) { buf_lit(b, ANIM_CSS); break; }
@@ -416,10 +416,10 @@ cmm_status flow_svg(const Graph *g, Buf *b) {
         if (b->n > mark) {
             Buf tmp = {};
             style_attr(&tmp, g, g->nclass[v], g->nstyle[v], true, true);
-            if (tmp.oom) { free(tmp.p); return CMM_ERR_NOMEM; }
+            if (tmp.oom) { free(tmp.p); return MMD_ERR_NOMEM; }
             if (tmp.n) {
                 /* insert after "<text" */
-                if (!buf_reserve(b, tmp.n)) { free(tmp.p); return CMM_ERR_NOMEM; }
+                if (!buf_reserve(b, tmp.n)) { free(tmp.p); return MMD_ERR_NOMEM; }
                 memmove(b->p + mark + 5 + tmp.n, b->p + mark + 5, b->n - mark - 5);
                 memcpy(b->p + mark + 5, tmp.p, tmp.n);
                 b->n += tmp.n;
@@ -429,5 +429,5 @@ cmm_status flow_svg(const Graph *g, Buf *b) {
         buf_lit(b, "</g>");
     }
     buf_lit(b, "</g></g></svg>\n");
-    return b->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return b->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

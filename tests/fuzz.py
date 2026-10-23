@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Mutation fuzzer: feeds mutated test cases to an (ASAN) binary, reports crashes."""
 import random, subprocess, sys, glob
-BIN = sys.argv[1] if len(sys.argv) > 1 else 'build-asan/mmdc-c'
+BIN = sys.argv[1] if len(sys.argv) > 1 else 'build-asan/mmd'
 N = int(sys.argv[2]) if len(sys.argv) > 2 else 1000
 import os
 seeds = [open(f, 'rb').read() for f in glob.glob(os.environ.get('FUZZ_GLOB', 'tests/cases/*.mmd'))]

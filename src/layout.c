@@ -4,7 +4,7 @@
  *   5. Brandes-Köpf coordinate assignment (4 alignments + balancing)
  *   6. rank-axis placement, direction transform, edge polyline + clipping, cluster boxes */
 #include <math.h>
-#ifdef CMM_PROFILE
+#ifdef MMD_PROFILE
 #include <stdio.h>
 #include <time.h>
 
@@ -765,7 +765,7 @@ static void succ_del(SuccSim *s, int32_t u, int32_t w) {
 
 /* dagre (mermaid) order step on our ranks: reconstruct dagre's node order, dummy parents
  * (parentDummyChains) and successor order, then run the faithful order() port. */
-static cmm_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32_t *ef, const int32_t *et,
+static mmd_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32_t *ef, const int32_t *et,
                                    const uint8_t *rev, const uint32_t *revord, size_t nrevord, const int32_t *esub,
                                    const int32_t *rank, const uint32_t *choff, const int32_t *cmin,
                                    const int32_t *cmax, const uint32_t *bbase, const int32_t *sdepth,
@@ -781,7 +781,7 @@ static cmm_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
     uint32_t *doff = ANEW(A, uint32_t, V + 2), *kid = ANEW(A, uint32_t, S + 1), *stk = ANEW(A, uint32_t, S + 1);
     int32_t *path = ANEW(A, int32_t, 2 * S + 4);
     uint8_t *inseq = ANEW(A, uint8_t, E + 1);
-    if (!ikey || !par || !nord || !eseq || !doff || !kid || !stk || !path || !inseq) return CMM_ERR_NOMEM;
+    if (!ikey || !par || !nord || !eseq || !doff || !kid || !stk || !path || !inseq) return MMD_ERR_NOMEM;
     for (size_t x = 0; x < NS; x++) ikey[x] = -1, par[x] = NONE;
     for (size_t v = 0; v < N; v++) ikey[v] = js_ikey(g->nid[v]), par[v] = g->nparent[v];
     for (size_t c = 0; c < S; c++) ikey[V + c] = js_ikey(g->sid[c]), par[V + c] = g->sparent[c];
@@ -802,7 +802,7 @@ static cmm_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
         uint32_t *post = kid; /* reuse */
         size_t np = 0;
         uint8_t *done = ANEW(A, uint8_t, S + 1);
-        if (!done) return CMM_ERR_NOMEM;
+        if (!done) return MMD_ERR_NOMEM;
         memset(done, 0, S + 1);
         for (size_t r = 0; r < S; r++) {
             if (g->sparent[r] != NONE) continue;
@@ -824,7 +824,7 @@ static cmm_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
     { /* stable: integer-like keys first, ascending */
         size_t a = 0;
         uint32_t *tmp = ANEW(A, uint32_t, nn + 1);
-        if (!tmp) return CMM_ERR_NOMEM;
+        if (!tmp) return MMD_ERR_NOMEM;
         for (size_t i = 0; i < nn; i++) if (ikey[nord[i]] >= 0) tmp[a++] = nord[i];
         for (size_t i = 1; i < a; i++) {
             uint32_t x = tmp[i];
@@ -883,26 +883,26 @@ static cmm_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
             }
     /* successor order (graphlib _sucs key order) of real nodes */
     SuccSim sim = {.A = A, .head = ANEW(A, int32_t, N + 1)};
-    if (!sim.head) return CMM_ERR_NOMEM;
+    if (!sim.head) return MMD_ERR_NOMEM;
     for (size_t v = 0; v < N; v++) sim.head[v] = -1;
     for (unsigned pass = 0; pass < 2; pass++)
         for (size_t e = 0; e < E; e++) {
             if (!DV(e)) continue;
             bool sub = esub[2 * e] != NONE || esub[2 * e + 1] != NONE;
-            if (sub == (pass == 1) && !succ_add(&sim, ef[e], et[e])) return CMM_ERR_NOMEM;
+            if (sub == (pass == 1) && !succ_add(&sim, ef[e], et[e])) return MMD_ERR_NOMEM;
         }
     for (size_t i = 0; i < nrevord; i++) {
         uint32_t e = revord[i];
         if (!DV(e)) continue;
         succ_del(&sim, ef[e], et[e]);
-        if (!succ_add(&sim, et[e], ef[e])) return CMM_ERR_NOMEM;
+        if (!succ_add(&sim, et[e], ef[e])) return MMD_ERR_NOMEM;
     }
     for (size_t q = 0; q < ne; q++) {
         size_t e = eseq[q];
         int32_t u = DU(e), w = DW(e);
         if (rank[w] - rank[u] < 2) continue;
         succ_del(&sim, u, w);
-        if (!succ_add(&sim, u, (int32_t)(N + choff[e]))) return CMM_ERR_NOMEM;
+        if (!succ_add(&sim, u, (int32_t)(N + choff[e]))) return MMD_ERR_NOMEM;
     }
     size_t tot = 0;
     for (size_t v = 0; v < V; v++) {
@@ -912,7 +912,7 @@ static cmm_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
     }
     doff[V] = (uint32_t)tot;
     uint32_t *didx = ANEW(A, uint32_t, tot + 1);
-    if (!didx) return CMM_ERR_NOMEM;
+    if (!didx) return MMD_ERR_NOMEM;
     for (size_t v = 0; v < V; v++) {
         uint32_t o = doff[v], n = doff[v + 1] - o;
         if (v >= N) { memcpy(didx + o, L->sidx + L->soff[v], n * sizeof *didx); continue; }
@@ -936,15 +936,15 @@ static cmm_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
                 .poff = L->poff, .pidx = L->pidx, .soff = L->soff, .sidx = L->sidx, .doff = doff, .didx = didx,
                 .cmin = cmin, .cmax = cmax, .bbase = bbase, .loff = L->loff, .lay = L->lay, .pos = L->pos};
     PROF("dprep");
-    if (!dagre_order(A, &d, bestc)) return CMM_ERR_NOMEM;
+    if (!dagre_order(A, &d, bestc)) return MMD_ERR_NOMEM;
 #undef DV
 #undef DU
 #undef DW
-    return CMM_OK;
+    return MMD_OK;
 }
 
 /* dagre ranking on the nesting graph: node/children/edge orders as mermaid feeds dagre */
-static cmm_status dagre_rank_graph(Arena *A, const Graph *g, size_t N, size_t E, size_t S, const int32_t *ef,
+static mmd_status dagre_rank_graph(Arena *A, const Graph *g, size_t N, size_t E, size_t S, const int32_t *ef,
                                    const int32_t *et, const uint8_t *rev, const uint32_t *revord, size_t nrevord,
                                    const int32_t *esub, const int32_t *mlen, int32_t *rank, int32_t **ctop,
                                    int32_t **cbot, int32_t **corder, int32_t *elrank) {
@@ -956,13 +956,13 @@ static cmm_status dagre_rank_graph(Arena *A, const Graph *g, size_t N, size_t E,
     uint8_t *done = ANEW(A, uint8_t, S + 1), *inseq = ANEW(A, uint8_t, E + 1), *lab = ANEW(A, uint8_t, E + 1);
     int32_t *lr = ANEW(A, int32_t, E + 1);
     uint32_t *emap = ANEW(A, uint32_t, E + 1);
-    if (!lr || !emap) return CMM_ERR_NOMEM;
+    if (!lr || !emap) return MMD_ERR_NOMEM;
     for (size_t e = 0; e < E; e++) elrank[e] = -1;
     int32_t *eu = ANEW(A, int32_t, E + 1), *ev = ANEW(A, int32_t, E + 1), *ml = ANEW(A, int32_t, E + 1);
     *ctop = ANEW(A, int32_t, S + 1), *cbot = ANEW(A, int32_t, S + 1), *corder = ANEW(A, int32_t, S + 1);
     if (!ikey || !ins || !real || !koff || !kid || !stk || !done || !inseq || !lab || !eu || !ev || !ml || !*ctop ||
         !*cbot || !*corder)
-        return CMM_ERR_NOMEM;
+        return MMD_ERR_NOMEM;
     for (size_t v = 0; v < N; v++) ikey[v] = js_ikey(g->nid[v]), ins[v] = (uint32_t)(S + v);
     for (size_t c = 0; c < S; c++) ikey[N + c] = js_ikey(g->sid[c]);
     { /* clusters are inserted in reverse closing (post-order) order */
@@ -986,7 +986,7 @@ static cmm_status dagre_rank_graph(Arena *A, const Graph *g, size_t N, size_t E,
     /* items ordered by g.nodes(): integer keys ascending first, then insertion */
     size_t NI = N + S, ni = 0;
     uint32_t *items = ANEW(A, uint32_t, NI + 1), *tmp = ANEW(A, uint32_t, NI + 1);
-    if (!items || !tmp) return CMM_ERR_NOMEM;
+    if (!items || !tmp) return MMD_ERR_NOMEM;
     for (size_t x = 0; x < NI; x++) {
         if (x < N && (g->nflags[x] & NF_HIDDEN)) continue;
         items[ni++] = (uint32_t)x;
@@ -1047,13 +1047,13 @@ static cmm_status dagre_rank_graph(Arena *A, const Graph *g, size_t N, size_t E,
     }
     DRankIn in = {.N = N, .S = S, .nreal = nreal, .real = real, .ikey = ikey, .id = g->nid, .koff = koff,
                   .kid = kid, .E = ne, .eu = eu, .ev = ev, .minlen = ml, .lab = lab, .lrank = lr};
-    if (!dagre_rank(A, &in, rank, *ctop, *cbot, *corder)) return CMM_ERR_NOMEM;
+    if (!dagre_rank(A, &in, rank, *ctop, *cbot, *corder)) return MMD_ERR_NOMEM;
     for (size_t q = 0; q < ne; q++) elrank[emap[q]] = lr[q];
 #undef DV
-    return CMM_OK;
+    return MMD_OK;
 }
 
-static cmm_status layout_core(Graph *g) {
+static mmd_status layout_core(Graph *g) {
     Arena *A = g->arena;
     size_t N = g->nn, E = g->ne, S = g->ns;
     bool horiz = g->dir == DIR_LR || g->dir == DIR_RL;
@@ -1069,10 +1069,10 @@ static cmm_status layout_core(Graph *g) {
     uint8_t *rev = ANEW(A, uint8_t, E);
     uint32_t *revord = ANEW(A, uint32_t, E + 1);
     size_t nrevord = 0;
-    if (!revord) return CMM_ERR_NOMEM;
+    if (!revord) return MMD_ERR_NOMEM;
     if (!g->nw || !g->nh || !g->nx || !g->ny || !g->eptoff || !g->eptn || !g->elx || !g->ely || !g->elw ||
         !g->elh || !g->sx || !g->sy || !g->sw || !g->sh || !sdepth || !srep || !ef || !et || !mlen || !rev)
-        return CMM_ERR_NOMEM;
+        return MMD_ERR_NOMEM;
 
     PROF("");
     for (size_t v = 0; v < N; v++) node_size(g, v);
@@ -1104,7 +1104,7 @@ static cmm_status layout_core(Graph *g) {
     }
     bool has_labels = false;
     int32_t *esub = ANEW(A, int32_t, 2 * E + 1);
-    if (!esub) return CMM_ERR_NOMEM;
+    if (!esub) return MMD_ERR_NOMEM;
     for (size_t e = 0; e < E; e++) {
         int32_t a = g->efrom[e], b = g->eto[e];
         for (unsigned k = 0; k < 2; k++) {
@@ -1125,10 +1125,10 @@ static cmm_status layout_core(Graph *g) {
         g->elh[e] = ln ? ln * g->font_size * 1.5 : 0;
         if (ln && a != NONE && b != NONE && a != b) has_labels = true;
     }
-#ifdef CMM_RANKDUMP
-    if (getenv("CMM_DUMPGRAPH")) {
+#ifdef MMD_RANKDUMP
+    if (getenv("MMD_DUMPGRAPH")) {
         static const char *DN[] = {"TB", "BT", "LR", "RL"};
-        FILE *F = fopen(getenv("CMM_DUMPGRAPH"), "w");
+        FILE *F = fopen(getenv("MMD_DUMPGRAPH"), "w");
         fprintf(F, "{\"dir\":\"%s\",\"nodesep\":%g,\"ranksep\":%g,\"clusters\":[", DN[g->dir], g->node_sep, g->rank_sep);
         for (size_t s = 0; s < S; s++) fprintf(F, "%s{\"id\":\"%.*s\",\"parent\":%s%.*s%s}", s ? "," : "", (int)g->sid[s].n, g->sid[s].p,
             g->sparent[s] == NONE ? "null" : "\"", g->sparent[s] == NONE ? 0 : (int)g->sid[g->sparent[s]].n, g->sparent[s] == NONE ? "" : g->sid[g->sparent[s]].p, g->sparent[s] == NONE ? "" : "\"");
@@ -1150,8 +1150,8 @@ static cmm_status layout_core(Graph *g) {
     }
 #endif
     /* dagre-faithful path (makeSpaceForEdgeLabels always doubles minlen, nesting-graph ranking, dagre order) */
-    const bool drank = g->order_mode != CMM_ORDER_FAST && S <= DAGRE_ORDER_MAX_S &&
-                       (g->order_mode == CMM_ORDER_DAGRE || N <= DAGRE_RANK_MAX_N);
+    const bool drank = g->order_mode != MMD_ORDER_FAST && S <= DAGRE_ORDER_MAX_S &&
+                       (g->order_mode == MMD_ORDER_DAGRE || N <= DAGRE_RANK_MAX_N);
     for (size_t e = 0; e < E; e++) mlen[e] = g->elen[e] * (has_labels || drank ? 2 : 1);
     double ranksep = has_labels || drank ? g->rank_sep / 2 : g->rank_sep;
 
@@ -1165,7 +1165,7 @@ static cmm_status layout_core(Graph *g) {
     int32_t *rank = ANEW(A, int32_t, N);
     uint32_t *stk = ANEW(A, uint32_t, N + 1), *it = ANEW(A, uint32_t, N + 1), *indeg = ANEW(A, uint32_t, N + 1);
     uint8_t *state = ANEW(A, uint8_t, N + 1);
-    if (!ooff || !oidx || !rank || !stk || !it || !indeg || !state) return CMM_ERR_NOMEM;
+    if (!ooff || !oidx || !rank || !stk || !it || !indeg || !state) return MMD_ERR_NOMEM;
     #define EVALID(e) (ef[e] != NONE && et[e] != NONE && ef[e] != et[e])
     memset(ooff, 0, (N + 1) * sizeof *ooff);
     for (size_t e = 0; e < E; e++) if (EVALID(e)) ooff[ef[e] + 1]++;
@@ -1175,7 +1175,7 @@ static cmm_status layout_core(Graph *g) {
     /* cycle removal: greedy feedback arc set */
     {
         uint8_t *valid = ANEW(A, uint8_t, E + 1), *hid = ANEW(A, uint8_t, N + 1);
-        if (!valid || !hid) return CMM_ERR_NOMEM;
+        if (!valid || !hid) return MMD_ERR_NOMEM;
         for (size_t e = 0; e < E; e++) valid[e] = EVALID(e);
         for (size_t v = 0; v < N; v++) hid[v] = (g->nflags[v] & NF_HIDDEN) ? 1 : 0;
         /* dagre default (mermaid): DFS feedback arc set in node/edge insertion order */
@@ -1198,12 +1198,12 @@ static cmm_status layout_core(Graph *g) {
         }
         /* hybrid: DFS reverses arbitrary back edges, which on big cyclic graphs stretches the ranking
          * (xlarge: 335 -> 1277 ranks, 8x dummies). Above the threshold use greedy Eades FAS instead. */
-        bool greedy = g->acyclicer == CMM_ACYC_GREEDY ||
-                      (g->acyclicer == CMM_ACYC_AUTO && N >= ACYC_GREEDY_MIN_N && nrev * ACYC_GREEDY_REV_DIV >= N);
-#ifdef CMM_PROFILE
-        if (getenv("CMM_PROFV")) fprintf(stderr, "  fas: N=%zu dfs_rev=%zu -> %s\n", N, nrev, greedy ? "greedy" : "dfs");
+        bool greedy = g->acyclicer == MMD_ACYC_GREEDY ||
+                      (g->acyclicer == MMD_ACYC_AUTO && N >= ACYC_GREEDY_MIN_N && nrev * ACYC_GREEDY_REV_DIV >= N);
+#ifdef MMD_PROFILE
+        if (getenv("MMD_PROFV")) fprintf(stderr, "  fas: N=%zu dfs_rev=%zu -> %s\n", N, nrev, greedy ? "greedy" : "dfs");
 #endif
-        if (greedy && !greedy_fas(A, N, E, ef, et, valid, hid, rev)) return CMM_ERR_NOMEM;
+        if (greedy && !greedy_fas(A, N, E, ef, et, valid, hid, rev)) return MMD_ERR_NOMEM;
         if (greedy) { nrevord = 0; for (size_t e = 0; e < E; e++) if (rev[e]) revord[nrevord++] = (uint32_t)e; }
     }
     /* effective DAG CSR */
@@ -1235,14 +1235,14 @@ static cmm_status layout_core(Graph *g) {
     {
         int32_t *eu = ANEW(A, int32_t, E + 1), *ev = ANEW(A, int32_t, E + 1);
         uint8_t *valid = ANEW(A, uint8_t, E + 1), *hid = ANEW(A, uint8_t, N + 1);
-        if (!eu || !ev || !valid || !hid) return CMM_ERR_NOMEM;
+        if (!eu || !ev || !valid || !hid) return MMD_ERR_NOMEM;
         for (size_t e = 0; e < E; e++) {
             valid[e] = EVALID(e);
             eu[e] = valid[e] ? EU(e) : 0;
             ev[e] = valid[e] ? EV(e) : 0;
         }
         for (size_t v = 0; v < N; v++) hid[v] = (g->nflags[v] & NF_HIDDEN) ? 1 : 0;
-        if (!drank && !network_simplex(A, N, E, eu, ev, mlen, valid, hid, rank, 20 * N + 100)) return CMM_ERR_NOMEM;
+        if (!drank && !network_simplex(A, N, E, eu, ev, mlen, valid, hid, rank, 20 * N + 100)) return MMD_ERR_NOMEM;
     }
     PMARK("acyc");
     int32_t *ctop = nullptr, *cbot = nullptr, *corder = nullptr;
@@ -1250,9 +1250,9 @@ static cmm_status layout_core(Graph *g) {
     size_t nco = 0;
     if (drank) {
         elrank = ANEW(A, int32_t, E + 1);
-        if (!elrank) return CMM_ERR_NOMEM;
-        cmm_status st = dagre_rank_graph(A, g, N, E, S, ef, et, rev, revord, nrevord, esub, mlen, rank, &ctop, &cbot, &corder, elrank);
-        if (st != CMM_OK) return st;
+        if (!elrank) return MMD_ERR_NOMEM;
+        mmd_status st = dagre_rank_graph(A, g, N, E, S, ef, et, rev, revord, nrevord, esub, mlen, rank, &ctop, &cbot, &corder, elrank);
+        if (st != MMD_OK) return st;
         while (nco < S && corder[nco] >= 0) nco++;
     }
     int32_t minr = INT32_MAX, maxr = 0;
@@ -1268,7 +1268,7 @@ static cmm_status layout_core(Graph *g) {
     /* ---- normalisation: dummies ---- */
     size_t D = 0;
     uint32_t *choff = ANEW(A, uint32_t, E + 1);
-    if (!choff) return CMM_ERR_NOMEM;
+    if (!choff) return MMD_ERR_NOMEM;
     for (size_t e = 0; e < E; e++) {
         choff[e] = (uint32_t)D;
         if (EVALID(e)) D += (size_t)(rank[EV(e)] - rank[EU(e)] - 1);
@@ -1277,7 +1277,7 @@ static cmm_status layout_core(Graph *g) {
     /* cluster rank spans (over real members) and border-node budget */
     int32_t *cmin = ANEW(A, int32_t, S + 1), *cmax = ANEW(A, int32_t, S + 1);
     uint32_t *bbase = ANEW(A, uint32_t, S + 1);
-    if (!cmin || !cmax || !bbase) return CMM_ERR_NOMEM;
+    if (!cmin || !cmax || !bbase) return MMD_ERR_NOMEM;
     for (size_t s = 0; s < S; s++) cmin[s] = INT32_MAX, cmax[s] = -1;
     for (size_t v = 0; v < N; v++) {
         if (g->nflags[v] & NF_HIDDEN) continue;
@@ -1288,8 +1288,8 @@ static cmm_status layout_core(Graph *g) {
     }
     if (drank)
         for (size_t s = 0; s < S; s++) cmin[s] = ctop[s], cmax[s] = cbot[s];
-#ifdef CMM_RANKDUMP
-    if (getenv("CMM_DUMPRANK")) {
+#ifdef MMD_RANKDUMP
+    if (getenv("MMD_DUMPRANK")) {
         for (size_t v = 0; v < N; v++)
             if (!(g->nflags[v] & NF_HIDDEN)) fprintf(stderr, "R %.*s %d\n", (int)g->nid[v].n, g->nid[v].p, rank[v]);
         for (size_t s = 0; s < S; s++) fprintf(stderr, "C %.*s %d %d\n", (int)g->sid[s].n, g->sid[s].p, cmin[s], cmax[s]);
@@ -1310,7 +1310,7 @@ static cmm_status layout_core(Graph *g) {
     int32_t *dedge = ANEW(A, int32_t, D + 1);
     if (!L.rank || !L.cl || !L.pos || !L.lay || !L.loff || !L.dummy || !L.w || !L.h || !L.x || !L.bc ||
         !L.poff || !L.soff || !dedge)
-        return CMM_ERR_NOMEM;
+        return MMD_ERR_NOMEM;
     for (size_t v = 0; v < N; v++) {
         bool hid = g->nflags[v] & NF_HIDDEN;
         L.rank[v] = hid ? -1 : rank[v];
@@ -1329,7 +1329,7 @@ static cmm_status layout_core(Graph *g) {
             if (!L.rpad) {
                 L.rpad = ANEW(A, double, V);
                 nl = ANEW(A, unsigned, N);
-                if (!L.rpad || !nl) return CMM_ERR_NOMEM;
+                if (!L.rpad || !nl) return MMD_ERR_NOMEM;
                 memset(L.rpad, 0, V * sizeof *L.rpad);
                 memset(nl, 0, N * sizeof *nl);
             }
@@ -1356,7 +1356,7 @@ static cmm_status layout_core(Graph *g) {
         nseg += (size_t)span;
     }
     L.border = ANEW(A, uint8_t, V + 1);
-    if (!L.border) return CMM_ERR_NOMEM;
+    if (!L.border) return MMD_ERR_NOMEM;
     memset(L.border, 0, V + 1);
     for (size_t c = 0; c < S; c++) {
         if (cmax[c] < cmin[c]) continue;
@@ -1382,7 +1382,7 @@ static cmm_status layout_core(Graph *g) {
     L.pidx = ANEW(A, uint32_t, nseg + 1);
     L.sidx = ANEW(A, uint32_t, nseg + 1);
     uint32_t *pfill = ANEW(A, uint32_t, V + 1), *sfill = ANEW(A, uint32_t, V + 1);
-    if (!L.pidx || !L.sidx || !pfill || !sfill) return CMM_ERR_NOMEM;
+    if (!L.pidx || !L.sidx || !pfill || !sfill) return MMD_ERR_NOMEM;
     memset(L.poff, 0, (V + 2) * sizeof *L.poff);
     memset(L.soff, 0, (V + 2) * sizeof *L.soff);
     #define CHAIN(e, k, span) ((k) == 0 ? EU(e) : (k) == (span) ? EV(e) : (int32_t)(N + choff[e] + (size_t)(k) - 1))
@@ -1428,7 +1428,7 @@ static cmm_status layout_core(Graph *g) {
     uint32_t *cnt = ANEW(A, uint32_t, R + 1), *byrank = ANEW(A, uint32_t, V + 1);
     uint32_t *dstk = ANEW(A, uint32_t, V + 1), *dit = ANEW(A, uint32_t, V + 1);
     uint8_t *vis = ANEW(A, uint8_t, V + 1);
-    if (!cnt || !byrank || !dstk || !dit || !vis) return CMM_ERR_NOMEM;
+    if (!cnt || !byrank || !dstk || !dit || !vis) return MMD_ERR_NOMEM;
     memset(cnt, 0, (R + 1) * sizeof *cnt);
     for (size_t v = 0; v < V; v++) if (L.rank[v] >= 0) cnt[L.rank[v] + 1]++;
     for (size_t r = 0; r < R; r++) cnt[r + 1] += cnt[r];
@@ -1468,7 +1468,7 @@ static cmm_status layout_core(Graph *g) {
         uint32_t *post = ANEW(A, uint32_t, S + 1), *cst = ANEW(A, uint32_t, S + 1), *kc = ANEW(A, uint32_t, 2 * S + 3);
         int32_t *kid = ANEW(A, int32_t, S + 1), *sib = ANEW(A, int32_t, S + 1), *tmpl = ANEW(A, int32_t, placed + 1);
         uint8_t *done = ANEW(A, uint8_t, S + 1);
-        if (!post || !cst || !kc || !kid || !sib || !tmpl || !done) return CMM_ERR_NOMEM;
+        if (!post || !cst || !kc || !kid || !sib || !tmpl || !done) return MMD_ERR_NOMEM;
         int32_t rootk = NONE;
         for (size_t c = 0; c < S; c++) kid[c] = NONE;
         for (size_t c = 0; c < S; c++) { /* prepend in increasing index -> lists end up in decreasing order */
@@ -1521,13 +1521,13 @@ static cmm_status layout_core(Graph *g) {
     double *csum = ANEW(A, double, S + 1);
     uint32_t *ccnt = ANEW(A, uint32_t, S + 1);
     int32_t *best = ANEW(A, int32_t, V + 1);
-    if (!keys || !idx || !tmp || !cbuf || !fen || !csum || !ccnt || !best) return CMM_ERR_NOMEM;
+    if (!keys || !idx || !tmp || !cbuf || !fen || !csum || !ccnt || !best) return MMD_ERR_NOMEM;
     L.lsum = ANEW(A, double, S + 1), L.lval = ANEW(A, double, S + 1);
     L.lcnt = ANEW(A, uint32_t, S + 1), L.plist = ANEW(A, int32_t, S + 1);
     L.S = S;
     L.items = ANEW(A, BcItem, 2 * (maxw + S + 1));
     L.bstart = ANEW(A, uint32_t, S + 2), L.bcur = ANEW(A, uint32_t, S + 2), L.bstk = ANEW(A, uint32_t, S + 2);
-    if (!L.lsum || !L.lval || !L.lcnt || !L.plist || !L.items || !L.bstart || !L.bcur || !L.bstk) return CMM_ERR_NOMEM;
+    if (!L.lsum || !L.lval || !L.lcnt || !L.plist || !L.items || !L.bstart || !L.bcur || !L.bstk) return MMD_ERR_NOMEM;
     memset(L.lsum, 0, (S + 1) * sizeof *L.lsum);
     memset(L.lcnt, 0, (S + 1) * sizeof *L.lcnt);
     memset(csum, 0, (S + 1) * sizeof *csum);
@@ -1546,12 +1546,12 @@ static cmm_status layout_core(Graph *g) {
      * budget: generous for small graphs, bounded (~linear) for big ones */
     int64_t tbudget = 2000000 + 40 * (int64_t)nseg;
     uint8_t *tdirty = ANEW(A, uint8_t, R + 2);
-    if (!tdirty) return CMM_ERR_NOMEM;
+    if (!tdirty) return MMD_ERR_NOMEM;
     /* mid-size graphs (medium bench and up to a few thousand segments): the up-sweep after the first
      * down-sweep measured non-improving (medium 485 -> 508) while costing ~45 µs; large ones need it */
     if (use_dagre) tbudget = 0;
-#ifdef CMM_PROFILE
-    if (getenv("CMM_PROFV")) fprintf(stderr, "  order: V=%zu nseg=%zu S=%zu -> %s\n", V, nseg, S, use_dagre ? "dagre" : "fast");
+#ifdef MMD_PROFILE
+    if (getenv("MMD_PROFV")) fprintf(stderr, "  order: V=%zu nseg=%zu S=%zu -> %s\n", V, nseg, S, use_dagre ? "dagre" : "fast");
 #endif
     const unsigned maxit = use_dagre ? 0 : (nseg > ORDER_ONE_SWEEP_MIN && nseg <= ORDER_ONE_SWEEP_MAX) ? 1 : 24;
     for (unsigned iter = 0; iter < maxit && since < patience && bestc > 0; iter++) {
@@ -1562,8 +1562,8 @@ static cmm_status layout_core(Graph *g) {
         uint64_t c = cross_all(&L, cbuf, fen);
         if (c < bestc) { bestc = c; memcpy(best, L.lay, placed * sizeof *best); since = 0; }
         else since++;
-#ifdef CMM_PROFILE
-        if (getenv("CMM_PROFV")) fprintf(stderr, "  iter %u c=%llu\n", iter, (unsigned long long)c);
+#ifdef MMD_PROFILE
+        if (getenv("MMD_PROFV")) fprintf(stderr, "  iter %u c=%llu\n", iter, (unsigned long long)c);
 #endif
     }
     if (!use_dagre) {
@@ -1573,23 +1573,23 @@ static cmm_status layout_core(Graph *g) {
     }
     if (bestc > 0 && tbudget > 0) { /* final polish on the kept-best order */
         uint64_t gn = transpose(&L, &tbudget, tdirty);
-#ifdef CMM_PROFILE
-        if (getenv("CMM_PROFV")) fprintf(stderr, "  transpose gain=%llu\n", (unsigned long long)gn);
+#ifdef MMD_PROFILE
+        if (getenv("MMD_PROFV")) fprintf(stderr, "  transpose gain=%llu\n", (unsigned long long)gn);
 #endif
         bestc = gn <= bestc ? bestc - gn : 0;
     }
 
-#ifdef CMM_PROFILE
-    if (getenv("CMM_PROFV")) fprintf(stderr, "  crossings=%llu tbudget_left=%lld\n", (unsigned long long)bestc, (long long)tbudget);
+#ifdef MMD_PROFILE
+    if (getenv("MMD_PROFV")) fprintf(stderr, "  crossings=%llu tbudget_left=%lld\n", (unsigned long long)bestc, (long long)tbudget);
 #endif
     if (use_dagre) {
         PROF("oldseed");
-        cmm_status dr = dagre_prep_order(&L, g, E, ef, et, rev, revord, nrevord, esub, rank, choff, cmin, cmax, bbase, sdepth, &bestc);
+        mmd_status dr = dagre_prep_order(&L, g, E, ef, et, rev, revord, nrevord, esub, rank, choff, cmin, cmax, bbase, sdepth, &bestc);
         if (dr) return dr;
     }
     PROF("order");
     /* ---- x via Brandes-Köpf ---- */
-    if (!bk(&L)) return CMM_ERR_NOMEM;
+    if (!bk(&L)) return MMD_ERR_NOMEM;
     /* pull long-edge dummy chains (as a rigid block) toward the endpoints' mean x, order-preserving */
     for (size_t e = 0; e < E; e++) {
         if (!EVALID(e)) continue;
@@ -1611,7 +1611,7 @@ static cmm_status layout_core(Graph *g) {
     }
 
     PROF("bk");
-#ifdef CMM_PROFILE
+#ifdef MMD_PROFILE
     for (size_t c = 0; c < S; c++) {
         if (cmax[c] < cmin[c]) continue;
         double mn[2] = {1e18, 1e18}, mx[2] = {-1e18, -1e18};
@@ -1620,13 +1620,13 @@ static cmm_status layout_core(Graph *g) {
                 double x = L.x[bbase[c] + 2 * (size_t)(r - cmin[c]) + side];
                 mn[side] = dmin(mn[side], x), mx[side] = dmax(mx[side], x);
             }
-        if (getenv("CMM_PROFV")) fprintf(stderr, "cl %zu ranks %d-%d left %.0f..%.0f right %.0f..%.0f\n", c, cmin[c], cmax[c], mn[0], mx[0], mn[1], mx[1]);
+        if (getenv("MMD_PROFV")) fprintf(stderr, "cl %zu ranks %d-%d left %.0f..%.0f right %.0f..%.0f\n", c, cmin[c], cmax[c], mn[0], mx[0], mn[1], mx[1]);
     }
 #endif
     /* ---- rank axis ---- */
     double *ry = ANEW(A, double, R + 1), *rh = ANEW(A, double, R + 1);
     double *gtop = ANEW(A, double, R + 1), *gbot = ANEW(A, double, R + 1);
-    if (!ry || !rh || !gtop || !gbot) return CMM_ERR_NOMEM;
+    if (!ry || !rh || !gtop || !gbot) return MMD_ERR_NOMEM;
     for (size_t r = 0; r <= R; r++) rh[r] = 0, gtop[r] = 0, gbot[r] = 0;
     for (size_t v = 0; v < V; v++) {
         if (L.rank[v] < 0) continue;
@@ -1702,7 +1702,7 @@ static cmm_status layout_core(Graph *g) {
     /* ---- ports: spread attachment points of fan-outs/fan-ins (and parallel edges) ---- */
     double *eport = ANEW(A, double, 2 * E + 1);
     uint32_t *ioff = ANEW(A, uint32_t, N + 1), *iidx = ANEW(A, uint32_t, E + 1);
-    if (!eport || !ioff || !iidx) return CMM_ERR_NOMEM;
+    if (!eport || !ioff || !iidx) return MMD_ERR_NOMEM;
     for (size_t i = 0; i < 2 * E; i++) eport[i] = NAN;
     memset(ioff, 0, (N + 1) * sizeof *ioff);
     for (size_t e = 0; e < E; e++) if (EVALID(e)) ioff[EV(e) + 1]++;
@@ -1716,7 +1716,7 @@ static cmm_status layout_core(Graph *g) {
             if (ioff[v + 1] - ioff[v] > maxk) maxk = ioff[v + 1] - ioff[v];
         }
         PortKey *pk = ANEW(A, PortKey, maxk + 1);
-        if (!pk) return CMM_ERR_NOMEM;
+        if (!pk) return MMD_ERR_NOMEM;
         for (unsigned side = 0; side < 2; side++)
             for (size_t u = 0; u < N; u++) {
                 const uint32_t *off = side ? ioff : ooff, *lst = side ? iidx : oidx;
@@ -1769,7 +1769,7 @@ static cmm_status layout_core(Graph *g) {
                 if (k) fixed1 = true; else fixed0 = true;
             }
             if (k > 0 && k < span && has_labels && g->elw[e] > 0 && k == LABK(e, span)) { lx = px; ly = py; labset = true; }
-            if (!VEC_PUSH(A, &g->pts, px) || !VEC_PUSH(A, &g->pts, py)) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(A, &g->pts, px) || !VEC_PUSH(A, &g->pts, py)) return MMD_ERR_NOMEM;
         }
         size_t np = (size_t)span + 1;
         double *P = g->pts.v + base;
@@ -1794,10 +1794,10 @@ static cmm_status layout_core(Graph *g) {
         g->eptn[e] = (uint32_t)np;
     }
     PROF("edges");
-#ifdef CMM_PROFILE
-    if (getenv("CMM_PROFV")) fprintf(stderr, "  V=%zu N=%zu D=%zu R=%zu segs=%zu\n", V, N, D, R, nseg);
+#ifdef MMD_PROFILE
+    if (getenv("MMD_PROFV")) fprintf(stderr, "  V=%zu N=%zu D=%zu R=%zu segs=%zu\n", V, N, D, R, nseg);
 #endif
-    return CMM_OK;
+    return MMD_OK;
 }
 
 /* ---------- recursive cluster layout: subgraphs with their own `direction` ----------
@@ -1870,16 +1870,16 @@ static inline double iso_pad_cross(const Graph *g) { return (g->node_sep + 20) /
            g->sx && g->sy && g->sw && g->sh;
 }
 
-static cmm_status layout_rec(Graph *g, unsigned depth) {
+static mmd_status layout_rec(Graph *g, unsigned depth) {
     size_t N = g->nn, E = g->ne, S = g->ns;
     if (!S || depth > 16) return layout_core(g);
     Arena *A = g->arena;
     int32_t *cand = ANEW(A, int32_t, S + 1), *gix = ANEW(A, int32_t, S + 1);
-    if (!cand || !gix) return CMM_ERR_NOMEM;
+    if (!cand || !gix) return MMD_ERR_NOMEM;
     /* mermaid: "if any of a subgraph's nodes are linked to the outside, subgraph direction is ignored"
      * (edges to the subgraph id itself are fine). ext[s]: some member node links outside s's subtree. */
     uint8_t *ext = ANEW(A, uint8_t, S + 1);
-    if (!ext) return CMM_ERR_NOMEM;
+    if (!ext) return MMD_ERR_NOMEM;
     memset(ext, 0, S + 1);
     for (size_t e = 0; e < E; e++) {
         int32_t a = g->efrom[e], b = g->eto[e];
@@ -1917,7 +1917,7 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
     int32_t *cands = ANEW(A, int32_t, K + 1);
     size_t *cn = ANEW(A, size_t, K + 1), *ce = ANEW(A, size_t, K + 1), *cs = ANEW(A, size_t, K + 1);
     Graph *G = ANEW(A, Graph, K + 1);
-    if (!owner || !sref || !nmap || !smap || !eown || !emap || !cands || !cn || !ce || !cs || !G) return CMM_ERR_NOMEM;
+    if (!owner || !sref || !nmap || !smap || !eown || !emap || !cands || !cn || !ce || !cs || !G) return MMD_ERR_NOMEM;
     for (size_t k = 0; k <= K; k++) cn[k] = ce[k] = cs[k] = 0;
     for (size_t s = 0; s < S; s++) if (gix[s] != NONE) cands[gix[s]] = (int32_t)s;
     for (size_t v = 0; v < N; v++) {
@@ -1951,7 +1951,7 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
         if (eown[e] != NONE) emap[e] = (int32_t)ce[eown[e]]++;
     }
     for (size_t k = 0; k <= K; k++)
-        if (!gsub_alloc(&G[k], g, k ? g->sdir[cands[k]] : g->dir, cn[k], ce[k], cs[k])) return CMM_ERR_NOMEM;
+        if (!gsub_alloc(&G[k], g, k ? g->sdir[cands[k]] : g->dir, cn[k], ce[k], cs[k])) return MMD_ERR_NOMEM;
     if (g->iso_toggle)
         for (size_t k = 1; k <= K; k++) G[k].rank_sep += ISO_RANK_EXTRA;
     for (size_t v = 0; v < N; v++) {
@@ -1966,7 +1966,7 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
     size_t *pfill = cn; /* proxies go after the outer graph's real nodes */
     pfill[0] -= K;
     int32_t *proxy = ANEW(A, int32_t, K + 1);
-    if (!proxy) return CMM_ERR_NOMEM;
+    if (!proxy) return MMD_ERR_NOMEM;
     for (size_t k = 1; k <= K; k++) {
         int32_t s = cands[k], i = g->iso_toggle ? (int32_t)(K - k) : (int32_t)pfill[0]++, p = g->sparent[s];
         Graph *d = &G[0];
@@ -1995,10 +1995,10 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
     /* inner layouts first: they size the proxies */
     Box *cb = ANEW(A, Box, K + 1);
     double *ipx = ANEW(A, double, K + 1), *ipy = ANEW(A, double, K + 1);
-    if (!cb || !ipx || !ipy) return CMM_ERR_NOMEM;
+    if (!cb || !ipx || !ipy) return MMD_ERR_NOMEM;
     for (size_t k = 0; k <= K; k++) ipx[k] = ipy[k] = 0;
     for (size_t k = 1; k <= K; k++) {
-        cmm_status st = layout_rec(&G[k], depth + 1);
+        mmd_status st = layout_rec(&G[k], depth + 1);
         if (st) return st;
         int32_t s = cands[k];
         Box b = content_box(&G[k]);
@@ -2018,13 +2018,13 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
         G[0].nw[proxy[k]] = w;
         G[0].nh[proxy[k]] = h;
     }
-    cmm_status st = layout_core(&G[0]);
+    mmd_status st = layout_core(&G[0]);
     if (st) return st;
 
     /* merge back */
-    if (!alloc_outputs(g)) return CMM_ERR_NOMEM;
+    if (!alloc_outputs(g)) return MMD_ERR_NOMEM;
     double *ox = ANEW(A, double, K + 1), *oy = ANEW(A, double, K + 1);
-    if (!ox || !oy) return CMM_ERR_NOMEM;
+    if (!ox || !oy) return MMD_ERR_NOMEM;
     ox[0] = oy[0] = 0;
     for (size_t k = 1; k <= K; k++) {
         int32_t s = cands[k], p = proxy[k];
@@ -2070,20 +2070,20 @@ static cmm_status layout_rec(Graph *g, unsigned depth) {
         if (exta) {
             double px, py;
             clip_to_node(g, a, P[0], P[1], &px, &py);
-            if (!VEC_PUSH(A, &g->pts, px) || !VEC_PUSH(A, &g->pts, py)) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(A, &g->pts, px) || !VEC_PUSH(A, &g->pts, py)) return MMD_ERR_NOMEM;
         }
         for (uint32_t j = 0; j < np; j++)
-            if (!VEC_PUSH(A, &g->pts, P[2 * j] + ox[k]) || !VEC_PUSH(A, &g->pts, P[2 * j + 1] + oy[k])) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(A, &g->pts, P[2 * j] + ox[k]) || !VEC_PUSH(A, &g->pts, P[2 * j + 1] + oy[k])) return MMD_ERR_NOMEM;
         if (extb) {
             double px, py;
             clip_to_node(g, b, P[2 * np - 2], P[2 * np - 1], &px, &py);
-            if (!VEC_PUSH(A, &g->pts, px) || !VEC_PUSH(A, &g->pts, py)) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(A, &g->pts, px) || !VEC_PUSH(A, &g->pts, py)) return MMD_ERR_NOMEM;
         }
         g->eptn[e] = (uint32_t)((g->pts.n - g->eptoff[e]) / 2);
     }
     #undef GOF
     #undef INNER
-    return CMM_OK;
+    return MMD_OK;
 }
 
 /* ---------- post passes on the final geometry ---------- */
@@ -2101,7 +2101,7 @@ static double seg_box(double px, double py, double qx, double qy, const Box *b) 
     return t0;
 }
 
-/* ---- obstacle-avoiding re-route (default on; CMM_F_NO_AVOID disables) ----
+/* ---- obstacle-avoiding re-route (default on; MMD_F_NO_AVOID disables) ----
  * Edges whose polyline passes through a non-incident node get the offending stretch replaced by a
  * shortest path in a local visibility graph over inflated node corners. A uniform grid indexes the
  * boxes; total work is budgeted so huge graphs degrade to the plain layout route. */
@@ -2873,8 +2873,8 @@ typedef struct LoopSave {
 } LoopSave;
 
 static bool loop_dagre(const Graph *g) {
-    return g->order_mode != CMM_ORDER_FAST && g->ns <= DAGRE_ORDER_MAX_S &&
-           (g->order_mode == CMM_ORDER_DAGRE || g->nn <= DAGRE_RANK_MAX_N);
+    return g->order_mode != MMD_ORDER_FAST && g->ns <= DAGRE_ORDER_MAX_S &&
+           (g->order_mode == MMD_ORDER_DAGRE || g->nn <= DAGRE_RANK_MAX_N);
 }
 
 static bool is_loop(const Graph *g, size_t e) {
@@ -2882,20 +2882,20 @@ static bool is_loop(const Graph *g, size_t e) {
     return a != NONE && a == g->eto[e] && !(g->nflags[a] & (NF_HIDDEN | NF_SUBREF));
 }
 
-#define LGROW(T, f, n) do { T *t_ = ANEW(A, T, (n) + 1); if (!t_) return CMM_ERR_NOMEM; memcpy(t_, sv->f, N * sizeof *t_); g->f = t_; } while (0)
-static cmm_status loops_expand(Graph *g, LoopSave *sv) {
+#define LGROW(T, f, n) do { T *t_ = ANEW(A, T, (n) + 1); if (!t_) return MMD_ERR_NOMEM; memcpy(t_, sv->f, N * sizeof *t_); g->f = t_; } while (0)
+static mmd_status loops_expand(Graph *g, LoopSave *sv) {
     *sv = (LoopSave){};
-    if (!loop_dagre(g)) return CMM_OK;
+    if (!loop_dagre(g)) return MMD_OK;
     size_t K = 0, N = g->nn, E = g->ne;
     for (size_t e = 0; e < E; e++) K += is_loop(g, e);
-    if (!K) return CMM_OK;
+    if (!K) return MMD_OK;
     Arena *A = g->arena;
     *sv = (LoopSave){.N = N, .E = E, .K = K, .efrom = g->efrom, .eto = g->eto, .elabel = g->elabel, .eid = g->eid,
                      .nid = g->nid, .nlabel = g->nlabel, .nclass = g->nclass, .nstyle = g->nstyle, .estroke = g->estroke,
                      .estart = g->estart, .eend = g->eend, .elen = g->elen, .eflags = g->eflags, .nflags = g->nflags,
                      .nshape = g->nshape, .nparent = g->nparent};
     sv->map = ANEW(A, int32_t, E + 1);
-    if (!sv->map) return CMM_ERR_NOMEM;
+    if (!sv->map) return MMD_ERR_NOMEM;
     size_t N2 = N + 2 * K, E2 = E + 2 * K;
     LGROW(Str, nid, N2); LGROW(Str, nlabel, N2); LGROW(Str, nclass, N2); LGROW(Str, nstyle, N2);
     LGROW(Shape, nshape, N2); LGROW(int32_t, nparent, N2); LGROW(uint8_t, nflags, N2);
@@ -2906,7 +2906,7 @@ static cmm_status loops_expand(Graph *g, LoopSave *sv) {
     Arrow *ea = ANEW(A, Arrow, E2 + 1), *eb = ANEW(A, Arrow, E2 + 1);
     uint16_t *eln = ANEW(A, uint16_t, E2 + 1);
     uint8_t *efl = ANEW(A, uint8_t, E2 + 1);
-    if (!nw || !nh || !ef || !et || !el || !ei || !es || !ea || !eb || !eln || !efl) return CMM_ERR_NOMEM;
+    if (!nw || !nh || !ef || !et || !el || !ei || !es || !ea || !eb || !eln || !efl) return MMD_ERR_NOMEM;
     if (g->nw) memcpy(nw, g->nw, N * sizeof *nw); /* preset sizes (ER/class dg_size) must survive */
     if (g->nh) memcpy(nh, g->nh, N * sizeof *nh);
     size_t v2 = N, k2 = 0;
@@ -2949,18 +2949,18 @@ static cmm_status loops_expand(Graph *g, LoopSave *sv) {
     g->nn = N2, g->ne = E2;
     g->efrom = ef, g->eto = et, g->elabel = el, g->eid = ei, g->estroke = es, g->estart = ea, g->eend = eb;
     g->elen = eln, g->eflags = efl;
-    return CMM_OK;
+    return MMD_OK;
 }
 #undef LGROW
 
-static cmm_status loops_collapse(Graph *g, const LoopSave *sv) {
-    if (!sv->K) return CMM_OK;
+static mmd_status loops_collapse(Graph *g, const LoopSave *sv) {
+    if (!sv->K) return MMD_OK;
     Arena *A = g->arena;
     size_t E = sv->E;
     uint32_t *po = ANEW(A, uint32_t, E + 1), *pn = ANEW(A, uint32_t, E + 1);
     double *lx = ANEW(A, double, E + 1), *ly = ANEW(A, double, E + 1), *lw = ANEW(A, double, E + 1), *lh = ANEW(A, double, E + 1);
     uint8_t *efl = ANEW(A, uint8_t, E + 1);
-    if (!po || !pn || !lx || !ly || !lw || !lh || !efl) return CMM_ERR_NOMEM;
+    if (!po || !pn || !lx || !ly || !lw || !lh || !efl) return MMD_ERR_NOMEM;
     bool horiz = g->dir == DIR_LR || g->dir == DIR_RL;
     for (size_t e = 0; e < E; e++) {
         size_t k = (size_t)sv->map[e];
@@ -3001,7 +3001,7 @@ static cmm_status loops_collapse(Graph *g, const LoopSave *sv) {
                  P[4] = x + span / 2, P[5] = y - hh - depth, P[6] = x + span / 2, P[7] = y - hh; break;
         }
         po[e] = (uint32_t)g->pts.n, pn[e] = 4;
-        for (unsigned i = 0; i < 8; i++) if (!VEC_PUSH(A, &g->pts, P[i])) return CMM_ERR_NOMEM;
+        for (unsigned i = 0; i < 8; i++) if (!VEC_PUSH(A, &g->pts, P[i])) return MMD_ERR_NOMEM;
         constexpr double GAP = 4;
         lw[e] = labw, lh[e] = labh;
         switch (side) {
@@ -3018,7 +3018,7 @@ static cmm_status loops_collapse(Graph *g, const LoopSave *sv) {
     g->efrom = sv->efrom, g->eto = sv->eto, g->elabel = sv->elabel, g->eid = sv->eid, g->estroke = sv->estroke;
     g->estart = sv->estart, g->eend = sv->eend, g->elen = sv->elen, g->eflags = efl;
     g->eptoff = po, g->eptn = pn, g->elx = lx, g->ely = ly, g->elw = lw, g->elh = lh;
-    return CMM_OK;
+    return MMD_OK;
 }
 
 /* is a self-loop label at (x, y) clear of other labels and of nodes other than its own? */
@@ -3072,22 +3072,22 @@ static void loop_labels_clear(Graph *g) {
     }
 }
 
-cmm_status flow_layout(Graph *g) {
+mmd_status flow_layout(Graph *g) {
     LoopSave sv;
-    cmm_status st = loops_expand(g, &sv);
+    mmd_status st = loops_expand(g, &sv);
     if (st) return st;
     st = layout_rec(g, 0);
     if (st) return st;
     PROF("");
     simplify_pts(g); /* fewer segments for the obstacle test */
-    if (!(g->flags & CMM_F_NO_AVOID)) {
-        if (!route_avoid(g)) return CMM_ERR_NOMEM;
+    if (!(g->flags & MMD_F_NO_AVOID)) {
+        if (!route_avoid(g)) return MMD_ERR_NOMEM;
         PROF("route");
         simplify_pts(g);
-        if (!tighten_curves(g)) return CMM_ERR_NOMEM;
+        if (!tighten_curves(g)) return MMD_ERR_NOMEM;
     }
     labels_on_curve(g);
-    if (!place_titles(g)) return CMM_ERR_NOMEM;
+    if (!place_titles(g)) return MMD_ERR_NOMEM;
     st = loops_collapse(g, &sv);
     if (!st) loop_labels_clear(g);
     PROF("post");

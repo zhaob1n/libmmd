@@ -34,10 +34,10 @@ static inline bool at_eos(const P *p) {
     return c == 0 || c == '\n' || c == ';' || (c == '%' && pk(p, 1) == '%');
 }
 
-static cmm_status fail(P *p, const char *m) {
+static mmd_status fail(P *p, const char *m) {
     p->err = p->i;
     snprintf(p->msg, 160, "%s", m);
-    return CMM_ERR_SYNTAX;
+    return MMD_ERR_SYNTAX;
 }
 
 static Str read_word(P *p) {
@@ -195,15 +195,15 @@ static constexpr ShapeTok SHAPES[] = {
     ST("{{", "}}", SH_HEXAGON), ST("{", "}", SH_RHOMBUS),     ST(">", "]", SH_ASYM),
 };
 
-static cmm_status parse_shape_text(P *p, Graph *g, int32_t v) {
+static mmd_status parse_shape_text(P *p, Graph *g, int32_t v) {
     char c0 = pk(p, 0);
-    if (c0 != '(' && c0 != '[' && c0 != '{' && c0 != '>') return CMM_OK;
+    if (c0 != '(' && c0 != '[' && c0 != '{' && c0 != '>') return MMD_OK;
     const ShapeTok *t = nullptr;
     for (size_t k = 0; k < countof(SHAPES); k++) {
         size_t ol = SHAPES[k].ol;
         if (p->s[p->i] == SHAPES[k].open[0] && p->i + ol <= p->n && memcmp(p->s + p->i, SHAPES[k].open, ol) == 0) { t = &SHAPES[k]; break; }
     }
-    if (!t) return CMM_OK;
+    if (!t) return MMD_OK;
     size_t ol = t->ol;
     p->i += ol;
     size_t st = p->i;
@@ -228,11 +228,11 @@ static cmm_status parse_shape_text(P *p, Graph *g, int32_t v) {
     p->i += cl;
     bool ok;
     Str lab = rich_normalize(g->arena, raw, &ok);
-    if (!ok) return CMM_ERR_NOMEM;
+    if (!ok) return MMD_ERR_NOMEM;
     g->nlabel[v] = lab;
     g->nshape[v] = sh;
     g->nflags[v] |= NF_DEFINED;
-    return CMM_OK;
+    return MMD_OK;
 }
 
 typedef struct NamedShape { Str name; Shape sh; } NamedShape;
@@ -252,7 +252,7 @@ static Shape shape_by_name(Str n) {
 }
 
 /* A@{ shape: x, label: "y" } (v11 syntax, basic) */
-static cmm_status parse_at_shape(P *p, Graph *g, int32_t v) {
+static mmd_status parse_at_shape(P *p, Graph *g, int32_t v) {
     p->i += 2;
     size_t st = p->i;
     const char *e = memchr(p->s + st, '}', p->n - st);
@@ -281,21 +281,21 @@ static cmm_status parse_at_shape(P *p, Graph *g, int32_t v) {
         else if (str_eq(key, S("label"))) {
             bool ok;
             g->nlabel[v] = rich_normalize(g->arena, val, &ok);
-            if (!ok) return CMM_ERR_NOMEM;
+            if (!ok) return MMD_ERR_NOMEM;
         }
     }
     g->nflags[v] |= NF_DEFINED;
-    return CMM_OK;
+    return MMD_OK;
 }
 
-static cmm_status parse_node(P *p, int32_t *out) {
+static mmd_status parse_node(P *p, int32_t *out) {
     Graph *g = p->g;
     Str id = read_word(p);
     if (!id.n) return fail(p, "expected node identifier");
     int32_t v = intern(g, id);
-    if (v == NONE) return CMM_ERR_NOMEM;
+    if (v == NONE) return MMD_ERR_NOMEM;
     if (p->sgd && g->nparent[v] == NONE) g->nparent[v] = p->sg[p->sgd - 1];
-    cmm_status st = CMM_OK;
+    mmd_status st = MMD_OK;
     if (pk(p, 0) == '@' && pk(p, 1) == '{') st = parse_at_shape(p, g, v);
     else st = parse_shape_text(p, g, v);
     if (st) return st;
@@ -303,24 +303,24 @@ static cmm_status parse_node(P *p, int32_t *out) {
         p->i += 3;
         Str cls = read_word(p);
         if (!cls.n) return fail(p, "expected class name after :::");
-        if (!append_class(g->arena, &g->nclass[v], cls)) return CMM_ERR_NOMEM;
+        if (!append_class(g->arena, &g->nclass[v], cls)) return MMD_ERR_NOMEM;
     }
     *out = v;
-    return CMM_OK;
+    return MMD_OK;
 }
 
 typedef VEC(int32_t) I32Vec;
 
-static cmm_status parse_group(P *p, I32Vec *grp) {
+static mmd_status parse_group(P *p, I32Vec *grp) {
     grp->n = 0;
     for (;;) {
         skip_sp(p);
         int32_t v;
-        cmm_status st = parse_node(p, &v);
+        mmd_status st = parse_node(p, &v);
         if (st) return st;
-        if (!VEC_PUSH(p->g->arena, grp, v)) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(p->g->arena, grp, v)) return MMD_ERR_NOMEM;
         skip_sp(p);
-        if (pk(p, 0) != '&') return CMM_OK;
+        if (pk(p, 0) != '&') return MMD_OK;
         p->i++;
     }
 }
@@ -373,7 +373,7 @@ static uint16_t link_len(Stroke s, bool head, size_t nd, size_t ne, size_t ndot,
     return (uint16_t)L;
 }
 
-static cmm_status parse_link(P *p, Link *l) {
+static mmd_status parse_link(P *p, Link *l) {
     *l = (Link){};
     char c = pk(p, 0);
     if (c == '<') { l->a0 = AH_ARROW; p->i++; }
@@ -401,7 +401,7 @@ static cmm_status parse_link(P *p, Link *l) {
         l->a1 = l2.a1;
         bool ok;
         l->label = rich_normalize(p->g->arena, raw, &ok);
-        if (!ok) return CMM_ERR_NOMEM;
+        if (!ok) return MMD_ERR_NOMEM;
         if (l->st == ST_DOTTED && ndot == 0) ndot = 1;
         if (l->st == ST_DOTTED) ndot = ndot ? ndot : 1;
         if (l->st == ST_NORMAL) nd = nd + 0;
@@ -415,10 +415,10 @@ static cmm_status parse_link(P *p, Link *l) {
         if (pk(p, 0) != '|') return fail(p, "unterminated |edge label|");
         bool ok;
         l->label = rich_normalize(p->g->arena, (Str){.p = p->s + ls, .n = p->i - ls}, &ok);
-        if (!ok) return CMM_ERR_NOMEM;
+        if (!ok) return MMD_ERR_NOMEM;
         p->i++;
     }
-    return CMM_OK;
+    return MMD_OK;
 }
 
 [[nodiscard]] static bool add_edge(Graph *g, int32_t a, int32_t b, const Link *l) {
@@ -443,7 +443,7 @@ static int32_t find_edge_id(const Graph *g, Str id) {
 }
 
 /* e1@{ animate: true, animation: slow } */
-static cmm_status parse_edge_props(P *p, int32_t e) {
+static mmd_status parse_edge_props(P *p, int32_t e) {
     p->i += 2;
     const char *end = memchr(p->s + p->i, '}', p->n - p->i);
     if (!end) return fail(p, "unterminated @{ }");
@@ -459,7 +459,7 @@ static cmm_status parse_edge_props(P *p, int32_t e) {
         if (!memcmp(body.p + i, "slow", 4)) g->eflags[e] |= EF_ANIM | EF_ANIM_SLOW;
         if (!memcmp(body.p + i, "fast", 4)) g->eflags[e] |= EF_ANIM;
     }
-    return CMM_OK;
+    return MMD_OK;
 }
 
 /* "id@" immediately followed by a link: edge id. Returns id (empty if none), consumes it. */
@@ -474,7 +474,7 @@ static Str edge_id_prefix(P *p) {
     return (Str){};
 }
 
-static cmm_status parse_chain(P *p) {
+static mmd_status parse_chain(P *p) {
     I32Vec a = {}, b = {};
     {   /* edge property statement: e1@{ ... } */
         size_t save = p->i;
@@ -485,11 +485,11 @@ static cmm_status parse_chain(P *p) {
         }
         p->i = save;
     }
-    cmm_status st = parse_group(p, &a);
+    mmd_status st = parse_group(p, &a);
     if (st) return st;
     for (;;) {
         skip_sp(p);
-        if (at_eos(p)) return CMM_OK;
+        if (at_eos(p)) return MMD_OK;
         Str eid = edge_id_prefix(p);
         if (!link_start(p)) return fail(p, "unexpected character, expected link or end of statement");
         Link l;
@@ -498,7 +498,7 @@ static cmm_status parse_chain(P *p) {
         if ((st = parse_group(p, &b))) return st;
         for (size_t i = 0; i < a.n; i++)
             for (size_t j = 0; j < b.n; j++)
-                if (!add_edge(p->g, a.v[i], b.v[j], &l)) return CMM_ERR_NOMEM;
+                if (!add_edge(p->g, a.v[i], b.v[j], &l)) return MMD_ERR_NOMEM;
         I32Vec t = a; a = b; b = t;
     }
 }
@@ -521,7 +521,7 @@ static bool list_next(Str *list, Str *item) {
     return true;
 }
 
-static cmm_status parse_subgraph(P *p) {
+static mmd_status parse_subgraph(P *p) {
     Graph *g = p->g;
     skip_sp(p);
     Str id = {}, title = {};
@@ -532,7 +532,7 @@ static cmm_status parse_subgraph(P *p) {
         if (!q) return fail(p, "unterminated subgraph title");
         p->i = (size_t)(q - p->s) + 1;
         title = rich_normalize(g->arena, (Str){.p = p->s + st, .n = p->i - st}, &ok);
-        if (!ok) return CMM_ERR_NOMEM;
+        if (!ok) return MMD_ERR_NOMEM;
         id = title;
     } else {
         id = read_word(p);
@@ -546,7 +546,7 @@ static cmm_status parse_subgraph(P *p) {
             while (p->i < p->n && p->s[p->i] != ']' && p->s[p->i] != '\n') p->i++;
             if (pk(p, 0) != ']') return fail(p, "unterminated subgraph title");
             title = rich_normalize(g->arena, (Str){.p = p->s + st, .n = p->i - st}, &ok);
-            if (!ok) return CMM_ERR_NOMEM;
+            if (!ok) return MMD_ERR_NOMEM;
             p->i++;
         } else {
             size_t st = id.p - p->s;
@@ -561,7 +561,7 @@ static cmm_status parse_subgraph(P *p) {
         }
     }
     if (p->sgd >= countof(p->sg)) return fail(p, "subgraphs nested too deeply");
-    if (g->ns == g->scap && !sg_grow(g)) return CMM_ERR_NOMEM;
+    if (g->ns == g->scap && !sg_grow(g)) return MMD_ERR_NOMEM;
     size_t s = g->ns++;
     g->sid[s] = id;
     g->stitle[s] = title;
@@ -571,16 +571,16 @@ static cmm_status parse_subgraph(P *p) {
     g->sdir[s] = g->dir;
     g->sflags[s] = 0;
     p->sg[p->sgd++] = (int32_t)s;
-    return CMM_OK;
+    return MMD_OK;
 }
 
-static cmm_status parse_stmt(P *p, Str w) {
+static mmd_status parse_stmt(P *p, Str w) {
     Graph *g = p->g;
     if (str_eq(w, S("subgraph"))) return parse_subgraph(p);
     if (str_eq(w, S("end"))) {
         if (!p->sgd) return fail(p, "'end' without subgraph");
         p->sgd--;
-        return CMM_OK;
+        return MMD_OK;
     }
     if (str_eq(w, S("direction"))) {
         skip_sp(p);
@@ -588,17 +588,17 @@ static cmm_status parse_stmt(P *p, Str w) {
         if (!parse_dir(read_list(p), &d)) return fail(p, "invalid direction");
         if (p->sgd) { int32_t s = p->sg[p->sgd - 1]; g->sdir[s] = d; g->sflags[s] |= SF_DIRSET; }
         else g->dir = d;
-        return CMM_OK;
+        return MMD_OK;
     }
     if (str_eq(w, S("classDef"))) {
         Str names = read_list(p);
         Str css = rest_of_line(p), item;
         while (list_next(&names, &item)) {
             ClassDef cd = {.name = item};
-            if (!append_css(g->arena, &cd.css, css)) return CMM_ERR_NOMEM;
-            if (!VEC_PUSH(g->arena, &g->classdefs, cd)) return CMM_ERR_NOMEM;
+            if (!append_css(g->arena, &cd.css, css)) return MMD_ERR_NOMEM;
+            if (!VEC_PUSH(g->arena, &g->classdefs, cd)) return MMD_ERR_NOMEM;
         }
-        return CMM_OK;
+        return MMD_OK;
     }
     if (str_eq(w, S("class"))) {
         Str ids = read_list(p);
@@ -607,12 +607,12 @@ static cmm_status parse_stmt(P *p, Str w) {
         if (!cls.n) return fail(p, "expected class name");
         while (list_next(&ids, &item)) {
             int32_t s = find_sg(g, item);
-            if (s != NONE) { if (!append_class(g->arena, &g->sclass[s], cls)) return CMM_ERR_NOMEM; continue; }
+            if (s != NONE) { if (!append_class(g->arena, &g->sclass[s], cls)) return MMD_ERR_NOMEM; continue; }
             int32_t v = intern(g, item);
-            if (v == NONE) return CMM_ERR_NOMEM;
-            if (!append_class(g->arena, &g->nclass[v], cls)) return CMM_ERR_NOMEM;
+            if (v == NONE) return MMD_ERR_NOMEM;
+            if (!append_class(g->arena, &g->nclass[v], cls)) return MMD_ERR_NOMEM;
         }
-        return CMM_OK;
+        return MMD_OK;
     }
     if (str_eq(w, S("style"))) {
         skip_sp(p);
@@ -620,10 +620,10 @@ static cmm_status parse_stmt(P *p, Str w) {
         if (!id.n) return fail(p, "expected id after style");
         Str css = rest_of_line(p);
         int32_t s = find_sg(g, id);
-        if (s != NONE) return append_css(g->arena, &g->sstyle[s], css) ? CMM_OK : CMM_ERR_NOMEM;
+        if (s != NONE) return append_css(g->arena, &g->sstyle[s], css) ? MMD_OK : MMD_ERR_NOMEM;
         int32_t v = intern(g, id);
-        if (v == NONE) return CMM_ERR_NOMEM;
-        return append_css(g->arena, &g->nstyle[v], css) ? CMM_OK : CMM_ERR_NOMEM;
+        if (v == NONE) return MMD_ERR_NOMEM;
+        return append_css(g->arena, &g->nstyle[v], css) ? MMD_OK : MMD_ERR_NOMEM;
     }
     if (str_eq(w, S("linkStyle"))) {
         Str idx = read_list(p), item;
@@ -639,14 +639,14 @@ static cmm_status parse_stmt(P *p, Str w) {
                 }
                 ls.idx = (int32_t)v;
             }
-            if (!append_css(g->arena, &ls.css, css)) return CMM_ERR_NOMEM;
-            if (!VEC_PUSH(g->arena, &g->linkstyles, ls)) return CMM_ERR_NOMEM;
+            if (!append_css(g->arena, &ls.css, css)) return MMD_ERR_NOMEM;
+            if (!VEC_PUSH(g->arena, &g->linkstyles, ls)) return MMD_ERR_NOMEM;
         }
-        return CMM_OK;
+        return MMD_OK;
     }
     if (str_eq(w, S("click")) || str_eq(w, S("accTitle")) || str_eq(w, S("href")) || str_eq(w, S("callback"))) {
         (void)rest_of_line(p);
-        return CMM_OK;
+        return MMD_OK;
     }
     if (str_eq(w, S("accDescr"))) {
         skip_sp(p);
@@ -654,7 +654,7 @@ static cmm_status parse_stmt(P *p, Str w) {
             const char *e = memchr(p->s + p->i, '}', p->n - p->i);
             p->i = e ? (size_t)(e - p->s) + 1 : p->n;
         } else (void)rest_of_line(p);
-        return CMM_OK;
+        return MMD_OK;
     }
     return fail(p, "unknown statement");
 }
@@ -667,10 +667,10 @@ static bool is_keyword(Str w) {
     return false;
 }
 
-cmm_status flow_parse(Graph *g, size_t n, const char src[static n], size_t off, size_t *err_off,
+mmd_status flow_parse(Graph *g, size_t n, const char src[static n], size_t off, size_t *err_off,
                       char msg[static 160]) {
     P p = {.g = g, .s = src, .n = n, .i = off, .msg = msg};
-    cmm_status st = CMM_OK;
+    mmd_status st = MMD_OK;
     /* header */
     Str kw = read_word(&p);
     if (str_eq(kw, S("swimlane")) && p.n - p.i >= 5 && !memcmp(src + p.i, "-beta", 5)) p.i += 5, kw = S("flowchart");

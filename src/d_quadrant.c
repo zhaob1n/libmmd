@@ -82,7 +82,7 @@ DIAG_FN(quadrant_render) {
             Str nm = dg_word(&rest);
             QCls c = {.name = nm};
             parse_style(rest, &c.st);
-            if (!VEC_PUSH(a, &cls, c)) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &cls, c)) return MMD_ERR_NOMEM;
             continue;
         }
         const char *br = memchr(line.p, '[', line.n);
@@ -107,10 +107,10 @@ DIAG_FN(quadrant_render) {
             p.y < 0 || p.y > 1)
             return diag_fail(err_off, msg, (size_t)(br - src), "point coordinates must be in [0, 1]");
         Str tail = str_trim((Str){.p = ke + 1, .n = line.n - (size_t)(ke + 1 - line.p)});
-        if (!VEC_PUSH(a, &pcls, cn)) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &pcls, cn)) return MMD_ERR_NOMEM;
         p.st.r = -1, p.st.sw = -1;
         parse_style(tail, &p.st);
-        if (!VEC_PUSH(a, &pts, p)) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &pts, p)) return MMD_ERR_NOMEM;
     }
     for (size_t i = 0; i < pts.n; i++) { /* class defaults under inline style */
         QStyle *s = &pts.v[i].st;
@@ -132,7 +132,7 @@ DIAG_FN(quadrant_render) {
     bool yax = yl.n || yh.n, xax = xl.n || xh.n;
     double ox = X0 + (yax ? 30 : 0), oy = Y0 + (title.n ? 20 : 0);
     BBox bb = {0, 0, ox + SW + 30, oy + SH + (xax ? 40 : 10)};
-    if (!buf_reserve(out, 4096 + pts.n * 400)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 4096 + pts.n * 400)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 4, "quadrantChart", CSS);
     if (title.n) dg_text(out, title, 20, ox + SW / 2, 30, "middle", "ttl");
     double h = SW / 2, v = SH / 2;
@@ -140,7 +140,7 @@ DIAG_FN(quadrant_render) {
     const double qx[4] = {ox + h, ox, ox, ox + h}, qy[4] = {oy, oy, oy + v, oy + v};
     bool anypts = pts.n > 0;
     double *ob = ANEW(a, double, 4 * (pts.n * 2 + 8)); /* obstacle rects x0 y0 x1 y1 for point labels */
-    if (!ob) return CMM_ERR_NOMEM;
+    if (!ob) return MMD_ERR_NOMEM;
     size_t no = 0;
     for (int i = 0; i < 4; i++) {
         char c[3] = {'q', (char)('1' + i), 0};
@@ -238,5 +238,5 @@ DIAG_FN(quadrant_render) {
         o[0] = bx - w / 2 - 2, o[1] = by - 8, o[2] = bx + w / 2 + 2, o[3] = by + 8;
     }
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

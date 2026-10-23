@@ -34,4 +34,4 @@ xlarge pgo+ctx,no-avoid min_us=52343.4 svg_bytes=1869349
 xlarge O2,no-avoid min_us=53311.2 svg_bytes=1869349
 
 # CLI vs mmdr (bench/compare.py)
-small: cmm cli 0.82ms vs mmdr 137.08ms (166x); medium: 1.92ms vs 20157ms (10504x); large: cmm 14.92ms, mmdr timeout >120s
+small: mmd cli 0.82ms vs mmdr 137.08ms (166x); medium: 1.92ms vs 20157ms (10504x); large: mmd 14.92ms, mmdr timeout >120s

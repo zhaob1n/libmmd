@@ -61,7 +61,7 @@ DIAG_FN(kanban_render) {
         Str meta;
         Str lab = node_label(line, &meta);
         if (in <= base) {
-            if (!VEC_PUSH(a, &cols, lab)) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &cols, lab)) return MMD_ERR_NOMEM;
             continue;
         }
         if (!cols.n) return diag_fail(err_off, msg, lo, "card before any column");
@@ -78,7 +78,7 @@ DIAG_FN(kanban_render) {
             else if (str_eq(key, S("ticket"))) k.ticket = val;
             else if (str_eq(key, S("priority"))) k.priority = val;
         }
-        if (!VEC_PUSH(a, &items, k)) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &items, k)) return MMD_ERR_NOMEM;
     }
     if (!cols.n) return diag_fail(err_off, msg, off, "kanban has no columns");
     constexpr double CW = 200;
@@ -86,12 +86,12 @@ DIAG_FN(kanban_render) {
     constexpr double PADC = 7.5;
     double top = title.n ? 40 : 0, colh = 0;
     double *ch = ANEW(a, double, cols.n);
-    if (!ch) return CMM_ERR_NOMEM;
+    if (!ch) return MMD_ERR_NOMEM;
     for (size_t c = 0; c < cols.n; c++) ch[c] = 30;
     for (size_t i = 0; i < items.n; i++) {
         KItem *k = &items.v[i];
         Str w = dg_wrap(a, k->label, 16, 175);
-        if (!w.p && k->label.n) return CMM_ERR_NOMEM;
+        if (!w.p && k->label.n) return MMD_ERR_NOMEM;
         k->label = w;
         double tw;
         unsigned nl;
@@ -102,10 +102,10 @@ DIAG_FN(kanban_render) {
     for (size_t c = 0; c < cols.n; c++) if (ch[c] > colh) colh = ch[c];
     double W = (double)cols.n * (CW + GAP) - GAP;
     BBox bb = {0, 0, W, top + colh + 10};
-    if (!buf_reserve(out, 1024 + cols.n * 300 + items.n * 600)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 1024 + cols.n * 300 + items.n * 600)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 6, "kanban", CSS);
     double *cy = ANEW(a, double, cols.n);
-    if (!cy) return CMM_ERR_NOMEM;
+    if (!cy) return MMD_ERR_NOMEM;
     for (size_t c = 0; c < cols.n; c++) {
         double x = (double)c * (CW + GAP);
         /* mermaid: .section-N fill = cScale[N+1] lightened (darkened in dark mode) by 10; columns are N = c+1 */
@@ -143,5 +143,5 @@ DIAG_FN(kanban_render) {
     }
     if (title.n) dg_text(out, title, 18, W / 2, 18, "middle", "kt");
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

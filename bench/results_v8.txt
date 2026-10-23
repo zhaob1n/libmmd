@@ -1,4 +1,4 @@
-cmermaid round 8 — min of 3 runs, taskset -c 2, µs per render (v1 = /workspace/cmm-v1/build/bench)
+libmmd round 8 — min of 3 runs, taskset -c 2, µs per render (v1 = /workspace/mmd-v1/build/bench)
 size     v1 avoid   v8 avoid   v1 no-avoid  v8 no-avoid
 small      11.7       12.6        11.7         11.6
 medium    404.1      394.7       404.4        293.8

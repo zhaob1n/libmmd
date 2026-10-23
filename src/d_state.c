@@ -28,7 +28,7 @@ typedef struct StP {
     char *msg;
 } StP;
 
-static cmm_status sfail(StP *p, size_t off, const char *m) { return diag_fail(p->err_off, p->msg, off, m); }
+static mmd_status sfail(StP *p, size_t off, const char *m) { return diag_fail(p->err_off, p->msg, off, m); }
 
 static int32_t cur_scope(const StP *p) { return p->depth ? p->stk[p->depth - 1].region : NONE; }
 
@@ -79,7 +79,7 @@ static Str cat3(Arena *A, Str a, Str b, Str c) {
     return v;
 }
 
-static cmm_status open_composite(StP *p, int32_t v, size_t off) {
+static mmd_status open_composite(StP *p, int32_t v, size_t off) {
     if (p->depth >= countof(p->stk)) return sfail(p, off, "states nested too deeply");
     Graph *g = &p->g;
     p->kind.v[v] = SK_COMPOSITE;
@@ -88,14 +88,14 @@ static cmm_status open_composite(StP *p, int32_t v, size_t off) {
     for (size_t s = 0; s < g->ns; s++) if (str_eq(g->sid[s], g->nid[v])) { c = (int32_t)s; break; }
     if (c == NONE) {
         c = dg_cluster(g, g->nid[v], g->nlabel[v], g->nparent[v]);
-        if (c == NONE) return CMM_ERR_NOMEM;
+        if (c == NONE) return MMD_ERR_NOMEM;
     }
     p->ccl.v[v] = c;
     p->stk[p->depth++] = (Frame){.comp = c, .region = c, .nregions = 1};
-    return CMM_OK;
+    return MMD_OK;
 }
 
-static cmm_status new_region(StP *p, size_t off) {
+static mmd_status new_region(StP *p, size_t off) {
     if (!p->depth) return sfail(p, off, "'--' outside a composite state");
     Graph *g = &p->g;
     Frame *f = &p->stk[p->depth - 1];
@@ -103,7 +103,7 @@ static cmm_status new_region(StP *p, size_t off) {
     if (f->nregions == 1) { /* move existing children into region 0 */
         Str id = cat3(p->A, g->sid[f->comp], S("\x02r0"), S(""));
         int32_t r0 = id.n ? dg_cluster(g, id, (Str){}, f->comp) : NONE;
-        if (r0 == NONE) return CMM_ERR_NOMEM;
+        if (r0 == NONE) return MMD_ERR_NOMEM;
         g->sclass[r0] = S("region");
         for (size_t v = 0; v < g->nn; v++) if (g->nparent[v] == f->comp) g->nparent[v] = r0;
         for (size_t s = 0; s < g->ns; s++) if ((int32_t)s != r0 && g->sparent[s] == f->comp) g->sparent[s] = r0;
@@ -111,24 +111,24 @@ static cmm_status new_region(StP *p, size_t off) {
     int len = snprintf(buf, sizeof buf, "\x02r%u", f->nregions++);
     Str id = cat3(p->A, g->sid[f->comp], (Str){.p = buf, .n = (size_t)len}, S(""));
     int32_t r = id.n ? dg_cluster(g, id, (Str){}, f->comp) : NONE;
-    if (r == NONE) return CMM_ERR_NOMEM;
+    if (r == NONE) return MMD_ERR_NOMEM;
     g->sclass[r] = S("region");
     f->region = r;
-    return CMM_OK;
+    return MMD_OK;
 }
 
-static cmm_status add_desc(StP *p, int32_t v, Str d) {
+static mmd_status add_desc(StP *p, int32_t v, Str d) {
     bool ok;
     d = label_normalize(p->A, d, &ok);
-    if (!ok) return CMM_ERR_NOMEM;
-    if (!d.n) return CMM_OK;
+    if (!ok) return MMD_ERR_NOMEM;
+    if (!d.n) return MMD_OK;
     Str *dst = &p->desc.v[v];
     /* mermaid: a lone description replaces the id as the label (plain state); a second one, or one
        on an aliased state, gives the title + divider shape */
-    if (!dst->n && str_eq(p->g.nlabel[v], p->g.nid[v])) { p->g.nlabel[v] = d; return CMM_OK; }
-    if (!dst->n) { *dst = d; return CMM_OK; }
+    if (!dst->n && str_eq(p->g.nlabel[v], p->g.nid[v])) { p->g.nlabel[v] = d; return MMD_OK; }
+    if (!dst->n) { *dst = d; return MMD_OK; }
     *dst = cat3(p->A, *dst, S("\n"), d);
-    return dst->n ? CMM_OK : CMM_ERR_NOMEM;
+    return dst->n ? MMD_OK : MMD_ERR_NOMEM;
 }
 
 static const char *find_sub(Str s, Str needle) {
@@ -137,7 +137,7 @@ static const char *find_sub(Str s, Str needle) {
     return nullptr;
 }
 
-static cmm_status parse(StP *p, LineIt *it) {
+static mmd_status parse(StP *p, LineIt *it) {
     Str line;
     size_t off;
     Graph *g = &p->g;
@@ -160,14 +160,14 @@ static cmm_status parse(StP *p, LineIt *it) {
             p->depth--;
             continue;
         }
-        if (str_eq(line, S("--"))) { cmm_status st = new_region(p, off); if (st) return st; continue; }
+        if (str_eq(line, S("--"))) { mmd_status st = new_region(p, off); if (st) return st; continue; }
         if (str_starts(w, S("accTitle")) || str_starts(w, S("accDescr")) || str_eq(w, S("hide")) ||
             str_eq(w, S("scale")) || str_eq(w, S("style")) || str_eq(w, S("click")))
             continue;
         if (str_eq(w, S("classDef"))) {
             Str name = dg_word(&rest);
             if (!name.n) return sfail(p, off, "classDef needs a name");
-            if (!VEC_PUSH(p->A, &p->cdefs, ((CDef){.name = name, .css = rest}))) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(p->A, &p->cdefs, ((CDef){.name = name, .css = rest}))) return MMD_ERR_NOMEM;
             continue;
         }
         if (str_eq(w, S("class"))) {
@@ -176,7 +176,7 @@ static cmm_status parse(StP *p, LineIt *it) {
                 const char *c = memchr(ids.p, ',', ids.n);
                 Str id = {.p = ids.p, .n = c ? (size_t)(c - ids.p) : ids.n};
                 int32_t v = state(p, str_trim(id), SK_STATE);
-                if (v == NONE) return CMM_ERR_NOMEM;
+                if (v == NONE) return MMD_ERR_NOMEM;
                 g->nclass[v] = cls;
                 ids = c ? (Str){.p = c + 1, .n = ids.n - id.n - 1} : (Str){};
             }
@@ -189,7 +189,7 @@ static cmm_status parse(StP *p, LineIt *it) {
             const char *c = memchr(rest.p, ':', rest.n);
             Str who = str_trim((Str){.p = rest.p, .n = c ? (size_t)(c - rest.p) : rest.n});
             int32_t v = state(p, who, SK_STATE);
-            if (v == NONE) return CMM_ERR_NOMEM;
+            if (v == NONE) return MMD_ERR_NOMEM;
             Str text;
             if (c) text = (Str){.p = c + 1, .n = rest.n - (size_t)(c + 1 - rest.p)};
             else { /* multi-line until "end note" */
@@ -206,11 +206,11 @@ static cmm_status parse(StP *p, LineIt *it) {
             }
             bool ok;
             Str nt = label_normalize(p->A, text, &ok);
-            if (!ok) return CMM_ERR_NOMEM;
+            if (!ok) return MMD_ERR_NOMEM;
             /* collapse indentation of multi-line notes */
             if (memchr(nt.p, '\n', nt.n)) {
                 char *o = arena_alloc(p->A, nt.n + 1, 1);
-                if (!o) return CMM_ERR_NOMEM;
+                if (!o) return MMD_ERR_NOMEM;
                 size_t k = 0;
                 bool bol = true;
                 for (size_t i = 0; i < nt.n; i++) {
@@ -220,7 +220,7 @@ static cmm_status parse(StP *p, LineIt *it) {
                 }
                 nt = (Str){.p = o, .n = k};
             }
-            if (!VEC_PUSH(p->A, &p->notes, ((Note){.v = v, .left = side.n == 4, .text = nt}))) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(p->A, &p->notes, ((Note){.v = v, .left = side.n == 4, .text = nt}))) return MMD_ERR_NOMEM;
             continue;
         }
         if (str_eq(w, S("state"))) {
@@ -250,15 +250,15 @@ static cmm_status parse(StP *p, LineIt *it) {
             else if (r.n && r.p[0] == ':') desc = (Str){.p = r.p + 1, .n = r.n - 1};
             if (!id.n) return sfail(p, off, "expected state name");
             int32_t v = endpoint(p, id, true);
-            if (v == NONE) return CMM_ERR_NOMEM;
+            if (v == NONE) return MMD_ERR_NOMEM;
             if (k != SK_STATE) p->kind.v[v] = (uint8_t)k;
             if (label.n) {
                 bool ok;
                 g->nlabel[v] = label_normalize(p->A, label, &ok);
-                if (!ok) return CMM_ERR_NOMEM;
+                if (!ok) return MMD_ERR_NOMEM;
             }
-            if (desc.n) { cmm_status st = add_desc(p, v, desc); if (st) return st; }
-            if (open) { cmm_status st = open_composite(p, v, off); if (st) return st; }
+            if (desc.n) { mmd_status st = add_desc(p, v, desc); if (st) return st; }
+            if (open) { mmd_status st = open_composite(p, v, off); if (st) return st; }
             continue;
         }
         const char *arr = find_sub(line, S("-->"));
@@ -272,10 +272,10 @@ static cmm_status parse(StP *p, LineIt *it) {
             Str lab = c ? (Str){.p = c + 1, .n = r.n - (size_t)(c + 1 - r.p)} : (Str){};
             if (!a.n || !b.n) return sfail(p, off, "transition needs two states");
             int32_t va = endpoint(p, a, true), vb = endpoint(p, b, false);
-            if (va == NONE || vb == NONE) return CMM_ERR_NOMEM;
+            if (va == NONE || vb == NONE) return MMD_ERR_NOMEM;
             bool ok;
             lab = label_normalize(p->A, lab, &ok);
-            if (!ok || dg_edge(g, va, vb, lab) == NONE) return CMM_ERR_NOMEM;
+            if (!ok || dg_edge(g, va, vb, lab) == NONE) return MMD_ERR_NOMEM;
             continue;
         }
         /* "Id : description" or bare "Id" */
@@ -287,14 +287,14 @@ static cmm_status parse(StP *p, LineIt *it) {
                 return sfail(p, off + k, "unrecognised statement in state diagram");
         if (!id.n) return sfail(p, off, "unrecognised statement in state diagram");
         int32_t v = endpoint(p, id, true);
-        if (v == NONE) return CMM_ERR_NOMEM;
+        if (v == NONE) return MMD_ERR_NOMEM;
         if (c) {
-            cmm_status st = add_desc(p, v, (Str){.p = c + 1, .n = line.n - (size_t)(c + 1 - line.p)});
+            mmd_status st = add_desc(p, v, (Str){.p = c + 1, .n = line.n - (size_t)(c + 1 - line.p)});
             if (st) return st;
         }
     }
     if (p->depth) return sfail(p, it->n, "unterminated composite state (missing '}')");
-    return CMM_OK;
+    return MMD_OK;
 }
 
 static constexpr char CSS[] =
@@ -377,7 +377,7 @@ typedef struct Ctx {
     double fs;
 } Ctx;
 
-static cmm_status layout_scope(Ctx *c, int32_t cl) {
+static mmd_status layout_scope(Ctx *c, int32_t cl) {
     StP *p = c->p;
     Graph *g = &p->g;
     Scope *s = &c->sc[sc_ix(cl)];
@@ -397,21 +397,21 @@ static cmm_status layout_scope(Ctx *c, int32_t cl) {
             s->w = x, s->h = h, s->bx0 = s->by0 = 0;
             for (size_t r = 0; r < g->ns; r++)
                 if (g->sparent[r] == cl && g->sclass[r].n) c->ch[r] = h;
-            return CMM_OK;
+            return MMD_OK;
         }
     }
     Graph *lg = &s->lg;
     dg_init(lg, p->A, cl == NONE ? g->dir : g->sdir[cl], c->fs);
     size_t cap = 16, cnt = 0;
     s->elem = ANEW(p->A, int32_t, cap);
-    if (!s->elem) return CMM_ERR_NOMEM;
+    if (!s->elem) return MMD_ERR_NOMEM;
     #define ADD_ELEM(E, ID, W, H, SH)                                                     \
         do {                                                                              \
             int32_t lv_ = dg_node(lg, (ID), nullptr);                                     \
-            if (lv_ == NONE) return CMM_ERR_NOMEM;                                        \
+            if (lv_ == NONE) return MMD_ERR_NOMEM;                                        \
             if (cnt == cap) {                                                             \
                 int32_t *ne_ = arena_grow(p->A, s->elem, &cap, sizeof(int32_t), alignof(int32_t)); \
-                if (!ne_) return CMM_ERR_NOMEM;                                           \
+                if (!ne_) return MMD_ERR_NOMEM;                                           \
                 s->elem = ne_;                                                            \
             }                                                                             \
             s->elem[cnt++] = (E);                                                         \
@@ -426,7 +426,7 @@ static cmm_status layout_scope(Ctx *c, int32_t cl) {
             char tag[24];                                                                     \
             int len = snprintf(tag, sizeof tag, "----note-%zu", i);                           \
             Str nid = cat3(p->A, (R) == NONE ? g->nid[nv_] : g->sid[R], (Str){.p = tag, .n = (size_t)len}, S("")); \
-            if (!nid.n) return CMM_ERR_NOMEM;                                                 \
+            if (!nid.n) return MMD_ERR_NOMEM;                                                 \
             ADD_ELEM(NOTE_EL0 + (int32_t)i, nid, c->ntw[i], c->nth[i], SH_RECT);              \
         }
     for (size_t v = 0; v < g->nn; v++)
@@ -455,11 +455,11 @@ static cmm_status layout_scope(Ctx *c, int32_t cl) {
         if (sv == NONE) continue;
         { /* mermaid wraps each note in its own (invisible) noteGroup cluster */
             int32_t gc = dg_cluster(lg, cat3(p->A, lg->nid[lv], S("----parent"), S("")), (Str){}, NONE);
-            if (gc == NONE) return CMM_ERR_NOMEM;
+            if (gc == NONE) return MMD_ERR_NOMEM;
             lg->nparent[lv] = gc;
         }
         bool left = p->notes.v[i].left; /* mermaid: right of = state -> note, left of = note -> state */
-        if (dg_edge(lg, left ? (int32_t)lv : sv, left ? sv : (int32_t)lv, (Str){}) == NONE) return CMM_ERR_NOMEM;
+        if (dg_edge(lg, left ? (int32_t)lv : sv, left ? sv : (int32_t)lv, (Str){}) == NONE) return MMD_ERR_NOMEM;
     }
     s->nreal = lg->ne;
     for (size_t e = 0; e < g->ne; e++) {
@@ -468,10 +468,10 @@ static cmm_status layout_scope(Ctx *c, int32_t cl) {
         Str ia = L->ra >= 0 ? g->nid[L->ra] : g->sid[-L->ra - 2], ib = L->rb >= 0 ? g->nid[L->rb] : g->sid[-L->rb - 2];
         int32_t la = dg_find(lg, ia), lb = dg_find(lg, ib);
         if (la == NONE || lb == NONE) continue;
-        if (dg_edge(lg, la, lb, g->elabel[e]) == NONE) return CMM_ERR_NOMEM;
+        if (dg_edge(lg, la, lb, g->elabel[e]) == NONE) return MMD_ERR_NOMEM;
     }
-    if (!lg->nn) { s->w = s->h = 0; s->bx0 = s->by0 = 0; return CMM_OK; }
-    cmm_status st = flow_layout(lg);
+    if (!lg->nn) { s->w = s->h = 0; s->bx0 = s->by0 = 0; return MMD_OK; }
+    mmd_status st = flow_layout(lg);
     if (st) return st;
     /* re-clip edge ends at the true box of elements widened to reserve note space */
     for (size_t e = 0; e < lg->ne; e++) {
@@ -493,7 +493,7 @@ static cmm_status layout_scope(Ctx *c, int32_t cl) {
     }
     BBox bb = dg_bbox(lg);
     s->bx0 = bb.x0, s->by0 = bb.y0, s->w = bb.x1 - bb.x0, s->h = bb.y1 - bb.y0;
-    return CMM_OK;
+    return MMD_OK;
 }
 
 static void translate(Graph *lg, double dx, double dy) {
@@ -540,7 +540,7 @@ DIAG_FN(state_render) {
     Str hdr;
     size_t ho;
     if (!dg_next_line(&it, &hdr, &ho)) return diag_fail(err_off, msg, off, "empty state diagram");
-    cmm_status st = parse(&p, &it);
+    mmd_status st = parse(&p, &it);
     if (st) return st;
     Graph *g = &p.g;
     if (!g->nn) return diag_fail(err_off, msg, off, "state diagram has no states");
@@ -583,7 +583,7 @@ DIAG_FN(state_render) {
     c.cx = ANEW(a, double, S + 1); c.cy = ANEW(a, double, S + 1);
     c.cw = ANEW(a, double, S + 1); c.ch = ANEW(a, double, S + 1); c.relx = ANEW(a, double, S + 1);
     int32_t *sdep = ANEW(a, int32_t, S + 1);
-    if (!c.sc || !c.eloc || !c.ax || !c.ay || !c.cx || !c.cy || !c.cw || !c.ch || !c.relx || !sdep) return CMM_ERR_NOMEM;
+    if (!c.sc || !c.eloc || !c.ax || !c.ay || !c.cx || !c.cy || !c.cw || !c.ch || !c.relx || !sdep) return MMD_ERR_NOMEM;
     memset(c.sc, 0, (S + 1) * sizeof *c.sc);
     memset(c.ax, 0, N * sizeof *c.ax);
     memset(c.ay, 0, N * sizeof *c.ay);
@@ -612,12 +612,12 @@ DIAG_FN(state_render) {
     c.cpad = ANEW(a, double, S + 1); c.cph = ANEW(a, double, S + 1);
     double *nx = ANEW(a, double, p.notes.n + 1), *ny = ANEW(a, double, p.notes.n + 1),
            *nw = ANEW(a, double, p.notes.n + 1), *nh = ANEW(a, double, p.notes.n + 1);
-    if (!c.npad || !c.nph || !c.cpad || !c.cph || !nx || !ny || !nw || !nh) return CMM_ERR_NOMEM;
+    if (!c.npad || !c.nph || !c.cpad || !c.cph || !nx || !ny || !nw || !nh) return MMD_ERR_NOMEM;
     for (size_t v = 0; v < N; v++) c.npad[v] = c.nph[v] = 0;
     for (size_t r = 0; r <= S; r++) c.cpad[r] = c.cph[r] = 0;
     c.ntx = ANEW(a, double, p.notes.n + 1), c.nty = ANEW(a, double, p.notes.n + 1);
     c.ntw = nw, c.nth = nh;
-    if (!c.ntx || !c.nty) return CMM_ERR_NOMEM;
+    if (!c.ntx || !c.nty) return MMD_ERR_NOMEM;
     for (size_t i = 0; i < p.notes.n; i++) { /* mermaid note: text wrapped at 200px, padding 15 */
         Note *no = &p.notes.v[i];
         no->text = dg_wrap(a, no->text, fs, 200);
@@ -646,7 +646,7 @@ DIAG_FN(state_render) {
     for (size_t i = 0; i < p.notes.n; i++) nx[i] = c.ntx[i] - nw[i] / 2, ny[i] = c.nty[i] - nh[i] / 2;
     if (bb.x0 > bb.x1) bb = (BBox){0, 0, 100, 100};
     if (title.n) bb.y0 -= 30;
-    if (!buf_reserve(out, 1024 + N * 300 + E * 250)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 1024 + N * 300 + E * 250)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 8, "statediagram", CSS);
     buf_lit(out, "<defs><marker id=\"st-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"8\" "
                  "markerHeight=\"8\" orient=\"auto\"><path d=\"M0,0 L10,5 L0,10 z\" fill=\"#333\"/></marker></defs>");
@@ -725,5 +725,5 @@ DIAG_FN(state_render) {
         dg_text(out, p.notes.v[i].text, fs, nx[i] + nw[i] / 2, ny[i] + nh[i] / 2, "middle", nullptr);
     }
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Compare mmdc-c vs mmdr on the same inputs.
+"""Compare mmd vs mmdr on the same inputs.
 Columns: process wall-clock median (both CLIs, SVG to file), plus in-library time
-(mmdc-c: bench harness median; mmdr: its own --timing total_us)."""
+(mmd: bench harness median; mmdr: its own --timing total_us)."""
 import subprocess, sys, time, statistics, os, json, re
-CMM = os.environ.get('CMM', 'build/mmdc-c')
+MMD = os.environ.get('MMD', 'build/mmd')
 BENCH = os.environ.get('BENCH', 'build/bench')
 MMDR = os.environ.get('MMDR', '/workspace/mmdr/target/release/mmdr')
 TIMEOUT = float(os.environ.get('TIMEOUT', '120'))
@@ -25,13 +25,13 @@ def ms(x): return f'{x*1000:9.2f}' if x is not None else '        -'
 # library times are often a few microseconds: report them in us (ms with 2dp rounded them to 0.00)
 def us(x): return f'{x*1e6:9.1f}' if x is not None else '        -'
 files = sys.argv[1:]
-print(f"{'input':44} {'cmm lib us':>10} {'cmm cli ms':>10} {'mmdr lib us':>11} {'mmdr cli ms':>11} {'lib x':>7} {'cli x':>7}")
+print(f"{'input':44} {'mmd lib us':>10} {'mmd cli ms':>10} {'mmdr lib us':>11} {'mmdr cli ms':>11} {'lib x':>7} {'cli x':>7}")
 for f in files:
     n = 15
     b = subprocess.run([BENCH, f, '30'], capture_output=True, text=True).stdout
     m = re.search(r'median=([\d.]+)us', b)
     clib = float(m.group(1)) / 1e6 if m else None
-    c, _ = wall([CMM, f, '-o', '/tmp/_cmm.svg'], n)
+    c, _ = wall([MMD, f, '-o', '/tmp/_mmd.svg'], n)
     d, err = wall([MMDR, *EXTRA, '--timing', '-i', f, '-o', '/tmp/_mmdr.svg'], n)
     dlib = None
     if d is not None:

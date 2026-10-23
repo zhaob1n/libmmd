@@ -102,7 +102,7 @@ static Str cat_key(Arena *a, Str p0, Str p1, Str p2, Str p3) {
     return (Str){s, k};
 }
 
-cmm_status swim_layout(Graph *g, Str **keep) {
+mmd_status swim_layout(Graph *g, Str **keep) {
     Arena *a = g->arena;
     size_t nn = g->nn, ns = g->ns, ne = g->ne;
     bool horiz = g->dir == DIR_LR || g->dir == DIR_RL; /* lanes are rows */
@@ -113,7 +113,7 @@ cmm_status swim_layout(Graph *g, Str **keep) {
     int32_t *es = ANEW(a, int32_t, 2 * ne + 1), *ed = ANEW(a, int32_t, 2 * ne + 1);
     double *iw = ANEW(a, double, cap), *ih = ANEW(a, double, cap), *ix = ANEW(a, double, cap), *iy = ANEW(a, double, cap);
     Str *ikey = ANEW(a, Str, cap);
-    if (!lix || !inode || !iof || !ilane || !rank || !base || !es || !ed || !iw || !ih || !ix || !iy || !ikey) return CMM_ERR_NOMEM;
+    if (!lix || !inode || !iof || !ilane || !rank || !base || !es || !ed || !iw || !ih || !ix || !iy || !ikey) return MMD_ERR_NOMEM;
     int32_t nl = 0;
     for (size_t s = 0; s < ns; s++) lix[s] = g->sparent[s] == NONE ? nl++ : -1;
     size_t m = 0;
@@ -132,14 +132,14 @@ cmm_status swim_layout(Graph *g, Str **keep) {
         int32_t lf = ilane[iof[f]], lt = ilane[iof[t]];
         inode[m] = -1, ilane[m] = lf != lt ? lt : lf, iw[m] = g->elw[e], ih[m] = g->elh[e];
         ikey[m] = cat_key(a, S("edge-label-"), g->nid[f], g->nid[t], g->eid[e].n ? g->eid[e] : S("L"));
-        if (!ikey[m].p) return CMM_ERR_NOMEM;
+        if (!ikey[m].p) return MMD_ERR_NOMEM;
         es[me] = iof[f], ed[me++] = (int32_t)m, es[me] = (int32_t)m, ed[me++] = iof[t], m++;
     }
     /* CSR adjacency (successors sorted by key) */
     int32_t *off = ANEW(a, int32_t, m + 2), *adj = ANEW(a, int32_t, me + 1), *aed = ANEW(a, int32_t, me + 1);
     int32_t *perm = ANEW(a, int32_t, m + 1), *pos = ANEW(a, int32_t, m + 1), *stk = ANEW(a, int32_t, m + 1), *it = ANEW(a, int32_t, m + 1);
     uint8_t *col = ANEW(a, uint8_t, m + 1);
-    if (!off || !adj || !aed || !perm || !pos || !stk || !it || !col) return CMM_ERR_NOMEM;
+    if (!off || !adj || !aed || !perm || !pos || !stk || !it || !col) return MMD_ERR_NOMEM;
     for (size_t i = 0; i < m; i++) perm[i] = (int32_t)i;
     if (m) sort_idx(m, perm, ikey);
     for (size_t i = 0; i < m; i++) pos[perm[i]] = (int32_t)i;
@@ -177,7 +177,7 @@ cmm_status swim_layout(Graph *g, Str **keep) {
     /* topological order: generations for LR/RL, a key-ordered queue otherwise; then lane-aware compact
      * layering (rank = max(pred + same-lane?1:0, next free slot of the lane)) */
     int32_t *indeg = it, *order = stk, *nextfree = ANEW(a, int32_t, (size_t)nl + 1);
-    if (!nextfree) return CMM_ERR_NOMEM;
+    if (!nextfree) return MMD_ERR_NOMEM;
     memset(indeg, 0, (m + 1) * sizeof *indeg), memset(nextfree, 0, ((size_t)nl + 1) * sizeof *nextfree);
     memset(base, 0, m * sizeof *base);
     for (size_t k = 0; k < me; k++) if (es[k] >= 0) indeg[ed[k]]++;
@@ -215,7 +215,7 @@ cmm_status swim_layout(Graph *g, Str **keep) {
     double *lh = ANEW(a, double, (size_t)nr), *lw = ANEW(a, double, (size_t)nr), *ly = ANEW(a, double, (size_t)nr);
     double *slice = ANEW(a, double, NL * (size_t)nr), *colw = ANEW(a, double, NL), *colc = ANEW(a, double, NL);
     int32_t *scnt = ANEW(a, int32_t, NL * (size_t)nr);
-    if (!lh || !lw || !ly || !slice || !colw || !colc || !scnt) return CMM_ERR_NOMEM;
+    if (!lh || !lw || !ly || !slice || !colw || !colc || !scnt) return MMD_ERR_NOMEM;
     memset(lh, 0, (size_t)nr * sizeof *lh), memset(lw, 0, (size_t)nr * sizeof *lw);
     memset(slice, 0, NL * (size_t)nr * sizeof *slice), memset(colw, 0, NL * sizeof *colw);
     memset(scnt, 0, NL * (size_t)nr * sizeof *scnt);
@@ -257,7 +257,7 @@ cmm_status swim_layout(Graph *g, Str **keep) {
         if (th > 0) sc = fmax(1, tw / th);
     }
     double *ext_lo = ANEW(a, double, NL), *ext_hi = ANEW(a, double, NL);
-    if (!ext_lo || !ext_hi) return CMM_ERR_NOMEM;
+    if (!ext_lo || !ext_hi) return MMD_ERR_NOMEM;
     double flo0 = INFINITY, fhi0 = -INFINITY;
     for (size_t c = 0; c < NL; c++) ext_lo[c] = INFINITY, ext_hi[c] = -INFINITY;
     for (size_t i = 0; i < m; i++) {
@@ -275,7 +275,7 @@ cmm_status swim_layout(Graph *g, Str **keep) {
     constexpr double SW_BAND = 36;
     constexpr double SW_MARG = 10;
     double *b0 = ANEW(a, double, NL), *b1 = ANEW(a, double, NL);
-    if (!b0 || !b1) return CMM_ERR_NOMEM;
+    if (!b0 || !b1) return MMD_ERR_NOMEM;
     double prev_hi = NAN, minc = INFINITY;
     int32_t prev = -1;
     for (size_t c = 1; c < NL; c++) {
@@ -312,7 +312,7 @@ cmm_status swim_layout(Graph *g, Str **keep) {
     /* each edge owns a fixed 5-point slot so later rounds can re-route it against all the others */
     for (size_t e = 0; e < g->ne; e++) {
         g->eptn[e] = 0, g->eptoff[e] = (uint32_t)g->pts.n;
-        for (int k = 0; k < 10; k++) if (!VEC_PUSH(a, &g->pts, 0.0)) return CMM_ERR_NOMEM;
+        for (int k = 0; k < 10; k++) if (!VEC_PUSH(a, &g->pts, 0.0)) return MMD_ERR_NOMEM;
     }
     for (size_t pe = 0; pe < 4 * g->ne; pe++) { /* round 0: straight, 1: L, 2-3: refine all */
         size_t e = pe % g->ne, round = pe / g->ne;
@@ -396,19 +396,19 @@ cmm_status swim_layout(Graph *g, Str **keep) {
     }
     /* titles are drawn by swim_titles (rotated for row lanes) */
     Str *k = ANEW(a, Str, ns + 1);
-    if (!k) return CMM_ERR_NOMEM;
+    if (!k) return MMD_ERR_NOMEM;
     for (size_t s = 0; s < ns; s++) {
         k[s] = g->stitle[s];
         if (lix[s] >= 0 && horiz) g->stitle[s] = (Str){};
     }
     *keep = k;
-    return CMM_OK;
+    return MMD_OK;
 }
 
 /* Insert the rotated lane titles of row lanes before </svg>. */
-cmm_status swim_titles(const Graph *g, const Str *keep, Buf *b) {
+mmd_status swim_titles(const Graph *g, const Str *keep, Buf *b) {
     bool horiz = g->dir == DIR_LR || g->dir == DIR_RL;
-    if (!horiz || b->n < 6) return CMM_OK;
+    if (!horiz || b->n < 6) return MMD_OK;
     Buf t = {};
     for (size_t s = 0; s < g->ns; s++) {
         if (g->sparent[s] != NONE || g->sw[s] <= 0) continue;
@@ -431,5 +431,5 @@ cmm_status swim_titles(const Graph *g, const Str *keep, Buf *b) {
         b->n += t.n;
     } else if (t.n) oom = true;
     free(t.p);
-    return oom ? CMM_ERR_NOMEM : CMM_OK;
+    return oom ? MMD_ERR_NOMEM : MMD_OK;
 }

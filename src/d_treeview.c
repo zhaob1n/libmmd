@@ -69,7 +69,7 @@ DIAG_FN(treeview_render) {
         if (!segw) segw = 4;
     }
     VEC(TNode) v = {};
-    if (!VEC_PUSH(a, &v, ((TNode){.name = S("/"), .dir = true, .level = -1, .parent = -1, .last_child = -1}))) return CMM_ERR_NOMEM;
+    if (!VEC_PUSH(a, &v, ((TNode){.name = S("/"), .dir = true, .level = -1, .parent = -1, .last_child = -1}))) return MMD_ERR_NOMEM;
     int32_t stack[256];
     unsigned sp = 0;
     stack[sp++] = 0;
@@ -136,7 +136,7 @@ DIAG_FN(treeview_render) {
         if (sp >= countof(stack)) return diag_fail(err_off, msg, lo, "tree too deep");
         TNode t = {.name = name, .cls = cls, .icon = icon, .desc = desc, .dir = dir, .has_icon = has_icon, .level = level,
                    .parent = stack[sp - 1], .last_child = -1, .depth = v.v[stack[sp - 1]].depth + 1};
-        if (!VEC_PUSH(a, &v, t)) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &v, t)) return MMD_ERR_NOMEM;
         v.v[t.parent].last_child = (int32_t)(v.n - 1);
         stack[sp++] = (int32_t)(v.n - 1);
     }
@@ -257,7 +257,7 @@ DIAG_FN(treeview_render) {
     buf_lit(&body, "</g>");
     bool oom = hb.oom || b.oom;
     free(hb.p), free(b.p);
-    if (oom) { free(body.p); return CMM_ERR_NOMEM; }
+    if (oom) { free(body.p); return MMD_ERR_NOMEM; }
     char css[640];
     Str lc = css_ok(lcol) ? lcol : S("black"), nc = css_ok(lncol) ? lncol : S("black");
     snprintf(css, sizeof css,

@@ -4,7 +4,7 @@ os.makedirs('samples/sbs',exist_ok=True)
 for name,case in [a.split('=') for a in sys.argv[1:]]:
     src=f'tests/cases/{case}.mmd'
     cs,cp=f'/tmp/sb_c_{name}_{os.getpid()}.svg',f'/tmp/sb_c_{name}_{os.getpid()}.png'  # unique: chrome caches file:// URLs
-    subprocess.run(['build/mmdc-c',src,'-o',cs],check=True)
+    subprocess.run(['build/mmd',src,'-o',cs],check=True)
     import re;hd=open(cs).read(600);w,h=[int(float(x))+2 for x in re.search(r'width="([\d.]+)" height="([\d.]+)"',hd).groups()]
     subprocess.run(['google-chrome','--headless','--no-sandbox','--disable-gpu','--hide-scrollbars',f'--window-size={w},{h}','--screenshot='+cp,'file://'+cs+''],check=True,timeout=60,capture_output=True)
     subprocess.run([os.path.expanduser('~/node_modules/.bin/mmdc'),'-p',os.path.expanduser('~/pptr.json'),'-i',src,'-o','/tmp/sb_m.png','-b','#333' if 'dark' in name else 'white'],check=True,timeout=90,capture_output=True)

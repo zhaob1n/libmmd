@@ -148,7 +148,7 @@ DIAG_FN(treemap_render) {
     VEC(TCls) cls = {};
     /* virtual root holds all top-level nodes */
     if (!VEC_PUSH(a, &v, ((TNode){.parent = UINT32_MAX, .first = UINT32_MAX, .next = UINT32_MAX})) || !VEC_PUSH(a, &ind, 0))
-        return CMM_ERR_NOMEM;
+        return MMD_ERR_NOMEM;
     while (dg_next_line(&it, &line, &lo)) {
         Str rest = line, w = dg_word(&rest);
         if (str_eq(w, S("title"))) { title = str_trim(rest); continue; }
@@ -168,7 +168,7 @@ DIAG_FN(treemap_render) {
                 else if (str_eq(key, S("stroke"))) c.stroke = val;
                 else if (str_eq(key, S("color"))) c.color = val;
             }
-            if (!VEC_PUSH(a, &cls, c)) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &cls, c)) return MMD_ERR_NOMEM;
             continue;
         }
         unsigned in = dg_indent(&it, lo) + 1;
@@ -197,7 +197,7 @@ DIAG_FN(treemap_render) {
         uint32_t p = (uint32_t)v.n - 1;
         while (p && ind.v[p] >= in) p = v.v[p].parent;
         t.parent = p, t.depth = v.v[p].depth + 1;
-        if (!VEC_PUSH(a, &v, t) || !VEC_PUSH(a, &ind, in)) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &v, t) || !VEC_PUSH(a, &ind, in)) return MMD_ERR_NOMEM;
         uint32_t me = (uint32_t)v.n - 1, *pp = &v.v[p].first;
         while (*pp != UINT32_MAX) pp = &v.v[*pp].next;
         *pp = me;
@@ -216,7 +216,7 @@ DIAG_FN(treemap_render) {
     double W = dcfg_num("treemap.nodeWidth", 100) * SPAD, H = dcfg_num("treemap.nodeHeight", 40) * SPAD;
     double top = title.n ? 30 : 0;
     uint32_t *scratch = ANEW(a, uint32_t, v.n + 1), *bfs = ANEW(a, uint32_t, v.n), *leaves = ANEW(a, uint32_t, v.n);
-    if (!scratch || !bfs || !leaves) return CMM_ERR_NOMEM;
+    if (!scratch || !bfs || !leaves) return MMD_ERR_NOMEM;
     for (size_t i = 0; i < v.n; i++) sort_kids(V, (uint32_t)i, scratch);
     V[0].x = 0, V[0].y = 0, V[0].w = W, V[0].h = H;
     position(V, scratch, 0, 0, inner);
@@ -242,7 +242,7 @@ DIAG_FN(treemap_render) {
     }
     /* d3 scaleOrdinal: domain grows in first-use order; fill/peer see the root ("") first, labels do not */
     Str *dom_f = ANEW(a, Str, v.n + 1), *dom_l = ANEW(a, Str, v.n + 1);
-    if (!dom_f || !dom_l) return CMM_ERR_NOMEM;
+    if (!dom_f || !dom_l) return MMD_ERR_NOMEM;
     size_t nf = 0, nlab = 0;
     BBox bb = {INFINITY, INFINITY, -INFINITY, -INFINITY};
     if (title.n) bb_add(&bb, W / 2 - text_width(title, 16) / 2, 15 - 8, W / 2 + text_width(title, 16) / 2, 15 + 8);
@@ -253,7 +253,7 @@ DIAG_FN(treemap_render) {
     }
     for (size_t k = 0; k < nlv; k++) { const TNode *t = &V[leaves[k]]; bb_add(&bb, t->x, t->y, t->x + t->w, t->y + t->h); }
     if (!(bb.x1 > bb.x0)) bb = (BBox){0, 0, W, H + top};
-    if (!buf_reserve(out, 2048 + v.n * 600)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 2048 + v.n * 600)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, dcfg_num("treemap.diagramPadding", 8), "treemap", CSS);
     bool showv = !str_eq(dcfg_get("treemap.showValues"), S("false"));
     char nb_[40];
@@ -285,7 +285,7 @@ DIAG_FN(treemap_render) {
         char *ell = nullptr;
         if (text_width(lab, 12) > room) {
             ell = ANEW(a, char, lab.n + 4);
-            if (!ell) return CMM_ERR_NOMEM;
+            if (!ell) return MMD_ERR_NOMEM;
             size_t m = lab.n;
             while (m > 0) {
                 m--;
@@ -348,5 +348,5 @@ DIAG_FN(treemap_render) {
     }
     if (title.n) dg_text(out, title, 16, W / 2, 15, "middle", "ttl");
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

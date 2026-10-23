@@ -126,10 +126,10 @@ DIAG_FN(ishikawa_render) {
     while (dg_next_line(&it, &line_, &lo)) {
         bool ok;
         Str t = label_normalize(a, line_, &ok);
-        if (!ok) return CMM_ERR_NOMEM;
+        if (!ok) return MMD_ERR_NOMEM;
         INode nd = {.text = t, .par = NONE};
         if (!nv.n) {
-            if (!VEC_PUSH(a, &nv, nd)) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &nv, nd)) return MMD_ERR_NOMEM;
             stk[0] = 0, lev[0] = 0, sn = 1;
             continue;
         }
@@ -138,7 +138,7 @@ DIAG_FN(ishikawa_render) {
         unsigned l = raw > base ? raw - base + 1 : 1;
         while (sn > 1 && lev[sn - 1] >= l) sn--;
         nd.par = stk[sn - 1];
-        if (!VEC_PUSH(a, &nv, nd)) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &nv, nd)) return MMD_ERR_NOMEM;
         if (sn < MAXD) stk[sn] = (int32_t)(nv.n - 1), lev[sn++] = l;
     }
     if (!nv.n) return diag_fail(err_off, msg, off, "ishikawa needs an effect line");
@@ -149,7 +149,7 @@ DIAG_FN(ishikawa_render) {
     s.kids = ANEW(a, uint32_t, N + 1);
     s.ent = ANEW(a, IEnt, N + 1);
     s.yorder = ANEW(a, uint32_t, N + 1);
-    if (!s.kids || !s.ent || !s.yorder) return CMM_ERR_NOMEM;
+    if (!s.kids || !s.ent || !s.yorder) return MMD_ERR_NOMEM;
     for (size_t v = 1; v < N; v++) s.nd[s.nd[v].par].nc++;
     uint32_t acc = 0;
     for (size_t v = 0; v < N; v++) s.nd[v].c0 = acc, acc += s.nd[v].nc, s.nd[v].nc = 0;
@@ -175,7 +175,7 @@ DIAG_FN(ishikawa_render) {
     double sy = fmax(ul, SPINE), sx = root->nc ? -20 : 0;
     /* head */
     Str hl = dg_wrapc(a, root->text, (size_t)fmax(6, floor(110 / (s.fs * 0.6))));
-    if (!hl.p && root->text.n) return CMM_ERR_NOMEM;
+    if (!hl.p && root->text.n) return MMD_ERR_NOMEM;
     BBox ht = dg_tbox(hl, 14, s.lh, 0, 0, true, "start", TB_MIDDLE);
     double tw = (ht.x1 - ht.x0) * 1.05, th = ht.y1 - ht.y0, hw = fmax(60, tw + 6), hh = fmax(40, th * 2 + 40);
     for (uint32_t p = 0; p < (root->nc + 1) / 2; p++) {

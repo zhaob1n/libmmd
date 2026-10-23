@@ -220,7 +220,7 @@ DIAG_FN(wardley_render) {
     W w = {.a = a, .width = 900, .height = 600};
     Str ttl = title;
     ptrdiff_t pipe = -1; /* index into w.pipes while inside pipeline { } */
-#define FAIL(m) return (strcmp((m), "out of memory") ? diag_fail(err_off, msg, lo, (m)) : CMM_ERR_NOMEM)
+#define FAIL(m) return (strcmp((m), "out of memory") ? diag_fail(err_off, msg, lo, (m)) : MMD_ERR_NOMEM)
     while (dg_next_line(&it, &ln, &lo)) {
         /* strip trailing %% comments */
         for (size_t i = 0; i + 1 < ln.n; i++) if (ln.p[i] == '%' && ln.p[i + 1] == '%') { ln.n = i; break; }
@@ -243,7 +243,7 @@ DIAG_FN(wardley_render) {
             if (err) FAIL(err);
             Str pid = w.nodes.v[w.pipes.v[pipe].parent].id;
             char *idb = arena_alloc_array(a, pid.n + name.n + 1, 1, 1);
-            if (!idb) return CMM_ERR_NOMEM;
+            if (!idb) return MMD_ERR_NOMEM;
             memcpy(idb, pid.p, pid.n), idb[pid.n] = '_', memcpy(idb + pid.n + 1, name.p, name.n);
             nd.id = (Str){.p = idb, .n = pid.n + 1 + name.n};
             if ((err = add_node(&w, nd))) FAIL(err);
@@ -267,7 +267,7 @@ DIAG_FN(wardley_render) {
                 for (size_t k = 0; k < st.n; k++) if (st.p[k] == '@') {
                     double bv;
                     if (!dg_parse_num(str_trim((Str){.p = st.p + k + 1, .n = st.n - k - 1}), &bv)) FAIL("bad stage boundary");
-                    if (!VEC_PUSH(a, &w.bounds, bv)) return CMM_ERR_NOMEM;
+                    if (!VEC_PUSH(a, &w.bounds, bv)) return MMD_ERR_NOMEM;
                     st = str_trim((Str){.p = st.p, .n = k});
                     break;
                 }
@@ -275,13 +275,13 @@ DIAG_FN(wardley_render) {
                 for (size_t k = 0; k < st.n; k++) if (st.p[k] == '/') {
                     Str l = str_trim((Str){.p = st.p, .n = k}), rr = str_trim((Str){.p = st.p + k + 1, .n = st.n - k - 1});
                     char *o = arena_alloc_array(a, l.n + rr.n + 3, 1, 1);
-                    if (!o) return CMM_ERR_NOMEM;
+                    if (!o) return MMD_ERR_NOMEM;
                     memcpy(o, l.p, l.n), memcpy(o + l.n, " / ", 3), memcpy(o + l.n + 3, rr.p, rr.n);
                     st = (Str){.p = o, .n = l.n + 3 + rr.n};
                     break;
                 }
                 if (!st.n) FAIL("empty evolution stage");
-                if (!VEC_PUSH(a, &w.stages, st)) return CMM_ERR_NOMEM;
+                if (!VEC_PUSH(a, &w.stages, st)) return MMD_ERR_NOMEM;
                 if (e >= s.n) break;
                 s = (Str){.p = s.p + e + 2, .n = s.n - e - 2};
             }
@@ -307,7 +307,7 @@ DIAG_FN(wardley_render) {
             ptrdiff_t pi = node_find(&w, nm);
             if (pi < 0) FAIL("pipeline must reference an existing component");
             w.nodes.v[pi].pparent = true;
-            if (!VEC_PUSH(a, &w.pipes, ((WPipe){.parent = (size_t)pi, .first = w.nodes.n}))) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &w.pipes, ((WPipe){.parent = (size_t)pi, .first = w.nodes.n}))) return MMD_ERR_NOMEM;
             pipe = (ptrdiff_t)w.pipes.n - 1;
             continue;
         }
@@ -321,7 +321,7 @@ DIAG_FN(wardley_render) {
             if (ni >= 0) {
                 bool dup = false;
                 for (size_t k = 0; k < w.trends.n; k++) if (w.trends.v[k].num == (unsigned)ni) w.trends.v[k].x = tp, dup = true;
-                if (!dup && !VEC_PUSH(a, &w.trends, ((WPt){.num = (unsigned)ni, .x = tp, .y = w.nodes.v[ni].y}))) return CMM_ERR_NOMEM;
+                if (!dup && !VEC_PUSH(a, &w.trends, ((WPt){.num = (unsigned)ni, .x = tp, .y = w.nodes.v[ni].y}))) return MMD_ERR_NOMEM;
             }
             continue;
         }
@@ -332,7 +332,7 @@ DIAG_FN(wardley_render) {
             double v, e;
             WPt p = {.s = name};
             if (brack(&rest, &v, &e) != 2 || !pct(e, &p.x) || !pct(v, &p.y)) FAIL("expected \"text\" [visibility, evolution]");
-            if (!VEC_PUSH(a, kw.p[0] == 'n' ? &w.notes : kw.p[0] == 'a' ? &w.acc : &w.dec, p)) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, kw.p[0] == 'n' ? &w.notes : kw.p[0] == 'a' ? &w.acc : &w.dec, p)) return MMD_ERR_NOMEM;
             continue;
         }
         if (str_eq(kw, S("annotations"))) {
@@ -352,7 +352,7 @@ DIAG_FN(wardley_render) {
             WPt p = {.num = (unsigned)num};
             if (brack(&rest, &v, &e) != 2 || !pct(e, &p.x) || !pct(v, &p.y)) FAIL("expected annotation N,[x, y] \"text\"");
             p.s = unq(rest);
-            if (!VEC_PUSH(a, &w.ann, p)) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &w.ann, p)) return MMD_ERR_NOMEM;
             continue;
         }
         bool m;
@@ -364,7 +364,7 @@ DIAG_FN(wardley_render) {
         ptrdiff_t si = node_find(&w, fa), ti = node_find(&w, ta);
         if (si < 0 || ti < 0) continue; /* mermaid drops links to unknown nodes */
         lk.s = (size_t)si, lk.t = (size_t)ti;
-        if (!VEC_PUSH(a, &w.links, lk)) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &w.links, lk)) return MMD_ERR_NOMEM;
     }
 #undef FAIL
     if (pipe >= 0) return diag_fail(err_off, msg, n, "unclosed pipeline");
@@ -412,7 +412,7 @@ DIAG_FN(wardley_render) {
             if (!pp->n) continue;
             /* sort component indices by x (insertion sort, small) */
             size_t *ord = ANEW(a, size_t, pp->n);
-            if (!ord) { free(b.p), free(pl.p); return CMM_ERR_NOMEM; }
+            if (!ord) { free(b.p), free(pl.p); return MMD_ERR_NOMEM; }
             for (size_t k = 0; k < pp->n; k++) {
                 size_t v = pp->first + k, j = k;
                 while (j > 0 && w.nodes.v[ord[j - 1]].x > w.nodes.v[v].x) ord[j] = ord[j - 1], j--;
@@ -438,7 +438,7 @@ DIAG_FN(wardley_render) {
      * alternatives that keeps clear of links, trends, other nodes, earlier labels and the canvas */
     double *lbo = ANEW(a, double, 6 * w.nodes.n + 1); /* ox, oy, box x0 y0 x1 y1 */
     uint8_t *halo = ANEW(a, uint8_t, w.nodes.n + 1); /* label still crosses a line: white halo behind the text */
-    if (!lbo || !halo) { free(b.p); return CMM_ERR_NOMEM; }
+    if (!lbo || !halo) { free(b.p); return MMD_ERR_NOMEM; }
     memset(halo, 0, w.nodes.n + 1);
     for (size_t i = 0; i < w.nodes.n; i++) {
         WNode *nd = &w.nodes.v[i];
@@ -483,7 +483,7 @@ DIAG_FN(wardley_render) {
     /* links */
     double *LL = ANEW(a, double, 4 * w.links.n + 4); /* placed link-label boxes */
     size_t nll = 0;
-    if (!LL) { free(b.p); return CMM_ERR_NOMEM; }
+    if (!LL) { free(b.p); return MMD_ERR_NOMEM; }
     buf_lit(&b, "<g class=\"wardley-links\">");
     for (size_t pass = 0; pass < 2; pass++)
         for (size_t l = 0; l < w.links.n; l++) {
@@ -617,7 +617,7 @@ DIAG_FN(wardley_render) {
         if (w.has_box) {
             /* sorted (stable) by number, only those with text */
             size_t *ord = ANEW(a, size_t, w.ann.n), m = 0;
-            if (!ord) { free(b.p); return CMM_ERR_NOMEM; }
+            if (!ord) { free(b.p); return MMD_ERR_NOMEM; }
             for (size_t k = 0; k < w.ann.n; k++) {
                 if (!w.ann.v[k].s.n) continue;
                 size_t j = m++;
@@ -627,11 +627,11 @@ DIAG_FN(wardley_render) {
             if (m) {
                 double maxw = 0;
                 Str *lines = ANEW(a, Str, m);
-                if (!lines) { free(b.p); return CMM_ERR_NOMEM; }
+                if (!lines) { free(b.p); return MMD_ERR_NOMEM; }
                 for (size_t k = 0; k < m; k++) {
                     WPt *p = &w.ann.v[ord[k]];
                     char *o = arena_alloc_array(a, p->s.n + 16, 1, 1);
-                    if (!o) { free(b.p); return CMM_ERR_NOMEM; }
+                    if (!o) { free(b.p); return MMD_ERR_NOMEM; }
                     int pl = snprintf(o, 16, "%u. ", p->num);
                     memcpy(o + pl, p->s.p, p->s.n);
                     lines[k] = (Str){.p = o, .n = (size_t)pl + p->s.n};

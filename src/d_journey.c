@@ -55,7 +55,7 @@ DIAG_FN(journey_render) {
         rest = str_trim(rest);
         if (str_eq(w, S("title"))) { title = rest; continue; }
         if (str_starts(w, S("acc"))) continue;
-        if (str_eq(w, S("section"))) { if (!VEC_PUSH(a, &secs, rest)) return CMM_ERR_NOMEM; continue; }
+        if (str_eq(w, S("section"))) { if (!VEC_PUSH(a, &secs, rest)) return MMD_ERR_NOMEM; continue; }
         const char *c1 = memchr(line.p, ':', line.n);
         if (!c1) return diag_fail(err_off, msg, lo, "expected 'task : score : actors'");
         Str tail = {.p = c1 + 1, .n = line.n - (size_t)(c1 + 1 - line.p)};
@@ -74,17 +74,17 @@ DIAG_FN(journey_render) {
                 if (!nm.n) continue;
                 size_t ai = 0;
                 while (ai < actors.n && !str_eq(actors.v[ai], nm)) ai++;
-                if (ai == actors.n && !VEC_PUSH(a, &actors, nm)) return CMM_ERR_NOMEM;
-                if (!VEC_PUSH(a, &refs, (uint32_t)ai)) return CMM_ERR_NOMEM;
+                if (ai == actors.n && !VEC_PUSH(a, &actors, nm)) return MMD_ERR_NOMEM;
+                if (!VEC_PUSH(a, &refs, (uint32_t)ai)) return MMD_ERR_NOMEM;
             }
         }
         t.na = (uint32_t)refs.n - t.a0;
-        if (!VEC_PUSH(a, &tk, t)) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &tk, t)) return MMD_ERR_NOMEM;
     }
     if (!tk.n) return diag_fail(err_off, msg, off, "journey has no tasks");
     { /* mermaid lists (and colours) actors in sorted order: insertion sort, then remap task refs */
         uint32_t *rank = ANEW(a, uint32_t, actors.n + 1), *inv = ANEW(a, uint32_t, actors.n + 1);
-        if (!rank || !inv) return CMM_ERR_NOMEM;
+        if (!rank || !inv) return MMD_ERR_NOMEM;
         for (size_t i = 0; i < actors.n; i++) rank[i] = (uint32_t)i;
         for (size_t i = 1; i < actors.n; i++)
             for (size_t j = i; j > 0 && jr_less(actors.v[j], actors.v[j - 1]); j--) {
@@ -113,7 +113,7 @@ DIAG_FN(journey_render) {
     double stopx = tk.n ? left + (double)(tk.n - 1) * (TW + TM) + 100 : left;
     double W = left + stopx + 100, H = fmax(LINE_END, (double)actors.n * 50) + 20 + (title.n ? 70 : 0);
     BBox bb = {0, -25, W, H - 25};
-    if (!buf_reserve(out, 4096 + tk.n * 1500)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 4096 + tk.n * 1500)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 0, "journey", CSS);
     if (title.n) dg_text(out, title, 20, left, 25, "start", "ttl");
     for (size_t i = 0; i < actors.n; i++) {
@@ -157,5 +157,5 @@ DIAG_FN(journey_render) {
     buf_lit(out, "\" y1=\""); buf_num(out, AX); buf_lit(out, "\" x2=\""); buf_num(out, W - left - 4);
     buf_lit(out, "\" y2=\""); buf_num(out, AX); buf_lit(out, "\"/>");
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

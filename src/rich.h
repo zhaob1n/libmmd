@@ -1,5 +1,5 @@
-#ifndef CMM_RICH_H
-#define CMM_RICH_H
+#ifndef MMD_RICH_H
+#define MMD_RICH_H
 /* Rich flowchart labels: markdown emphasis, auto-wrap, fa: icons.
  * Encoded label format (all in-band, never reaches XML raw):
  *   RICH_MD   leading byte: label came from a markdown string ("`...`"), auto-wraps

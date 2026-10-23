@@ -288,14 +288,14 @@ DIAG_FN(gantt_render) {
                     Str y = dg_word(&ww);
                     if (!y.n) break;
                     if (str_eq(y, S("weekends"))) c.ex_weekends = true;
-                    else if (!VEC_PUSH(a, &exraw, y)) return CMM_ERR_NOMEM;
+                    else if (!VEC_PUSH(a, &exraw, y)) return MMD_ERR_NOMEM;
                 }
             }
             continue;
         }
         if (str_eq(w, S("todayMarker"))) { /* mermaid accepts comma-separated declarations */
             char *st = ANEW(a, char, rest.n + 1);
-            if (!st) return CMM_ERR_NOMEM;
+            if (!st) return MMD_ERR_NOMEM;
             for (size_t k = 0; k < rest.n; k++) st[k] = rest.p[k] == ',' ? ';' : rest.p[k];
             today_style = (Str){.p = st, .n = rest.n};
             continue;
@@ -315,7 +315,7 @@ DIAG_FN(gantt_render) {
             continue;
         }
         if (str_eq(w, S("click")) || str_starts(w, S("acc"))) continue;
-        if (str_eq(w, S("section"))) { if (!VEC_PUSH(a, &secs, rest)) return CMM_ERR_NOMEM; continue; }
+        if (str_eq(w, S("section"))) { if (!VEC_PUSH(a, &secs, rest)) return MMD_ERR_NOMEM; continue; }
         const char *col = memchr(line.p, ':', line.n);
         if (!col) return diag_fail(err_off, msg, lo, "expected 'task name : spec'");
         Task t = {.name = str_trim((Str){.p = line.p, .n = (size_t)(col - line.p)}),
@@ -341,19 +341,19 @@ DIAG_FN(gantt_render) {
         else if (np == 2) t.start = parts[0], t.end = parts[1];
         else t.id = parts[0], t.start = parts[1], t.end = parts[2];
         if (!t.name.n) return diag_fail(err_off, msg, lo, "empty task name");
-        if (!VEC_PUSH(a, &tv, t)) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &tv, t)) return MMD_ERR_NOMEM;
     }
     if (!tv.n) { /* mermaid draws an empty 784x100 canvas (title only) */
-        if (!buf_reserve(out, 2048 + title.n)) return CMM_ERR_NOMEM;
+        if (!buf_reserve(out, 2048 + title.n)) return MMD_ERR_NOMEM;
         DG_HEAD(out, ((BBox){0, 0, 776, 92}), 4, "gantt", CSS);
         if (title.n) dg_text(out, title, 18, 388, 21, "middle", "title");
         buf_lit(out, "</svg>\n");
-        return CMM_OK;
+        return MMD_OK;
     }
     for (size_t i = 0; i < exraw.n; i++) {
         double t;
         if (parse_date(c.fmt, exraw.v[i], &t) || parse_date(S("YYYY-MM-DD"), exraw.v[i], &t))
-            if (!VEC_PUSH(a, &c.exdays, floor(t / DAY))) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &c.exdays, floor(t / DAY))) return MMD_ERR_NOMEM;
     }
     c.t = tv.v, c.nt = tv.n;
     for (size_t i = 0; i < tv.n; i++)
@@ -378,7 +378,7 @@ DIAG_FN(gantt_render) {
     /* rows: vert markers take none; compact mode packs a section's tasks into the first free row */
     uint32_t *row = ANEW(a, uint32_t, tv.n + 1);
     double *rend = ANEW(a, double, tv.n + 1);
-    if (!row || !rend) return CMM_ERR_NOMEM;
+    if (!row || !rend) return MMD_ERR_NOMEM;
     size_t nrows = 0;
     for (size_t i = 0; i < tv.n;) {
         size_t j = i, base = nrows, used = 0;
@@ -493,7 +493,7 @@ DIAG_FN(gantt_render) {
     }
     double plot = W - left - 75, sc = plot / (hi_t - lo_t);
     BBox bb = {0, 0, W, nrows * (BH + GAP) + 2 * TOP}; /* ganttRenderer: viewBox 0 0 w (tasks*(barHeight+barGap) + 2*topPadding) */
-    if (!buf_reserve(out, 4096 + tv.n * 700)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 4096 + tv.n * 700)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 0, "gantt", CSS);
     /* section stripes */
     for (size_t i = 0; i < tv.n;) {
@@ -564,10 +564,10 @@ DIAG_FN(gantt_render) {
         else if (x1 + 5 + tw <= W) dg_text(out, t->name, 11, x1 + 5, y + BH / 2, "start", "tout");
         else dg_text(out, t->name, 11, x0 - 5, y + BH / 2, "end", "tout");
     }
-    /* today marker: CMM_TODAY=YYYY-MM-DD overrides the clock (reproducible output) */
+    /* today marker: MMD_TODAY=YYYY-MM-DD overrides the clock (reproducible output) */
     if (!str_eq(today_style, S("off"))) {
         double now = (double)time(nullptr) * 1000;
-        const char *env = getenv("CMM_TODAY");
+        const char *env = getenv("MMD_TODAY");
         if (env) parse_date(S("YYYY-MM-DD"), (Str){.p = env, .n = strlen(env)}, &now);
         if (now >= lo_t && now <= hi_t) {
             double x = left + (now - lo_t) * sc;
@@ -580,5 +580,5 @@ DIAG_FN(gantt_render) {
     /* top axis tick labels sit at TOP-12: keep the title's descenders clear of them */
     if (title.n) dg_text(out, title, 18, W / 2, dcfg_bool("gantt.topAxis", false) ? fmax(fmin(25, TOP - 32), 16) : 25, "middle", "ttl");
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

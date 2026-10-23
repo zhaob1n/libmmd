@@ -87,8 +87,8 @@ DIAG_FN(requirement_render) {
             if (!name.n) return diag_fail(err_off, msg, lo, "expected requirement name");
             bool fresh;
             int32_t v = dg_node(&g, name, &fresh);
-            if (v == NONE) return CMM_ERR_NOMEM;
-            while (ri.n <= (size_t)v) if (!VEC_PUSH(a, &ri, (RInfo){})) return CMM_ERR_NOMEM;
+            if (v == NONE) return MMD_ERR_NOMEM;
+            while (ri.n <= (size_t)v) if (!VEC_PUSH(a, &ri, (RInfo){})) return MMD_ERR_NOMEM;
             ri.v[v].kind = (Str){.p = KINDS[kind].disp, .n = strlen(KINDS[kind].disp)};
             ri.v[v].elem = kind == countof(KINDS) - 1;
             body = v;
@@ -113,14 +113,14 @@ DIAG_FN(requirement_render) {
         if (!A.n || !B.n) return diag_fail(err_off, msg, lo, "relation needs two ends");
         if (rev) { Str t = A; A = B; B = t; }
         int32_t va = dg_node(&g, A, nullptr), vb = va == NONE ? NONE : dg_node(&g, B, nullptr);
-        if (vb == NONE) return CMM_ERR_NOMEM;
-        while (ri.n < g.nn) if (!VEC_PUSH(a, &ri, (RInfo){})) return CMM_ERR_NOMEM;
+        if (vb == NONE) return MMD_ERR_NOMEM;
+        while (ri.n < g.nn) if (!VEC_PUSH(a, &ri, (RInfo){})) return MMD_ERR_NOMEM;
         char *lab = ANEW(a, char, rel.n + 4);
-        if (!lab) return CMM_ERR_NOMEM;
+        if (!lab) return MMD_ERR_NOMEM;
         memcpy(lab, "<<", 2), memcpy(lab + 2, rel.p, rel.n), memcpy(lab + 2 + rel.n, ">>", 2);
-        if (dg_edge(&g, va, vb, (Str){.p = lab, .n = rel.n + 4}) == NONE) return CMM_ERR_NOMEM;
+        if (dg_edge(&g, va, vb, (Str){.p = lab, .n = rel.n + 4}) == NONE) return MMD_ERR_NOMEM;
         g.eend[g.ne - 1] = AH_NONE;
-        if (!VEC_PUSH(a, &rr, ((RRel){.type = rel}))) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &rr, ((RRel){.type = rel}))) return MMD_ERR_NOMEM;
     }
     if (body != NONE) return diag_fail(err_off, msg, n, "unterminated block (missing '}')");
     if (!g.nn) return diag_fail(err_off, msg, off, "requirement diagram is empty");
@@ -140,11 +140,11 @@ DIAG_FN(requirement_render) {
         }
         dg_size(&g, (int32_t)v, fmax(w + 30, 140), 2 * lh + fs * 0.5 + 16 + rows * lh + (rows ? 10 : 0));
     }
-    cmm_status st = flow_layout(&g);
+    mmd_status st = flow_layout(&g);
     if (st) return st;
     BBox bb = dg_bbox(&g);
     if (title.n) bb.y0 -= 30;
-    if (!buf_reserve(out, 2048 + g.nn * 700 + g.ne * 400)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 2048 + g.nn * 700 + g.ne * 400)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 12, "requirementDiagram", CSS);
     if (title.n) dg_text(out, title, 18, (bb.x0 + bb.x1) / 2, bb.y0 + 12, "middle", "rn");
     for (size_t e = 0; e < g.ne; e++) {
@@ -202,5 +202,5 @@ DIAG_FN(requirement_render) {
         buf_lit(out, "</g>");
     }
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

@@ -106,7 +106,7 @@ DIAG_FN(cynefin_render) {
             int da = dom_of(sa), db = dom_of(sb);
             if (da < 0 || db < 0) return diag_fail(err_off, msg, lo, "transition needs two domain names");
             Str lab = c ? unq((Str){.p = c + 1, .n = rest.n - (size_t)(c + 1 - rest.p)}) : (Str){};
-            if (da != db && !VEC_PUSH(a, &trs, ((CTr){(unsigned)da, (unsigned)db, lab}))) return CMM_ERR_NOMEM;
+            if (da != db && !VEC_PUSH(a, &trs, ((CTr){(unsigned)da, (unsigned)db, lab}))) return MMD_ERR_NOMEM;
             continue;
         }
         int d = !r.n ? dom_of(w) : -1;
@@ -114,8 +114,8 @@ DIAG_FN(cynefin_render) {
         if (cur < 0) return diag_fail(err_off, msg, lo, "item outside a domain block");
         bool ok;
         Str lab = label_normalize(a, unq(ln), &ok);
-        if (!ok) return CMM_ERR_NOMEM;
-        if (!VEC_PUSH(a, &items, ((CItem){(unsigned)cur, lab}))) return CMM_ERR_NOMEM;
+        if (!ok) return MMD_ERR_NOMEM;
+        if (!VEC_PUSH(a, &items, ((CItem){(unsigned)cur, lab}))) return MMD_ERR_NOMEM;
     }
     double W = dcfg_num("cynefin.width", 800), H = dcfg_num("cynefin.height", 600), P = dcfg_num("cynefin.padding", 40);
     W = fmin(fmax(W, 100), 10000), H = fmin(fmax(H, 100), 10000), P = fmin(fmax(P, 0), 1000);
@@ -131,7 +131,7 @@ DIAG_FN(cynefin_render) {
         bg[d] = BG[d];
         if (v.n && v.n < 40 && v.p[0] == '#') {
             char *c = arena_alloc(a, v.n + 1, 1);
-            if (!c) return CMM_ERR_NOMEM;
+            if (!c) return MMD_ERR_NOMEM;
             memcpy(c, v.p, v.n), c[v.n] = 0, bg[d] = c;
         }
     }

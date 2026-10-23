@@ -13,7 +13,7 @@ typedef struct DCfg {
 /* parse preamble src[0..off) and scan the body for acc lines; state lives until dcfg_end() */
 void dcfg_begin(Arena *a, size_t n, const char src[static n], size_t off);
 void dcfg_end(void);
-void dcfg_set_theme(int theme); /* CMM_THEME_* */
+void dcfg_set_theme(int theme); /* MMD_THEME_* */
 Str dcfg_tv(const char *var);
 /* palette entry <prefix><i> (pie1.., cScale0.., git0..) from themeVariables / named theme, else def */
 /* i-th (mod count) item of a comma-separated colour list, e.g. xyChart.plotColorPalette, else def */

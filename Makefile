@@ -50,42 +50,42 @@ CFLAGS += -std=$(STD) -fms-extensions -fPIC -fvisibility=hidden $(WARN) -Iinclud
 LDLIBS = -lm
 BUILD ?= build
 DIAG_SRCS := $(wildcard src/d_*.c)
-SRCS := src/base.c src/text.c src/flow_parse.c src/layout.c src/nsimplex.c src/dorder.c src/drank.c src/flow_svg.c src/seq.c src/rich.c src/dgraph.c $(DIAG_SRCS) src/cmermaid.c
+SRCS := src/base.c src/text.c src/flow_parse.c src/layout.c src/nsimplex.c src/dorder.c src/drank.c src/flow_svg.c src/seq.c src/rich.c src/dgraph.c $(DIAG_SRCS) src/mmd.c
 OBJS := $(SRCS:src/%.c=$(BUILD)/%.o)
 
-SONAME := libcmermaid.so.$(SOMAJOR)
+SONAME := libmmd.so.$(SOMAJOR)
 
-all: $(BUILD)/libcmermaid.a $(BUILD)/libcmermaid.so $(BUILD)/mmdc-c $(BUILD)/bench $(BUILD)/cmermaid.pc
+all: $(BUILD)/libmmd.a $(BUILD)/libmmd.so $(BUILD)/mmd $(BUILD)/bench $(BUILD)/mmd.pc
 
-$(BUILD)/%.o: src/%.c $(wildcard src/*.h) include/cmermaid.h | $(BUILD)
+$(BUILD)/%.o: src/%.c $(wildcard src/*.h) include/mmd.h | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD):
 	mkdir -p $@
-$(BUILD)/libcmermaid.a: $(OBJS)
+$(BUILD)/libmmd.a: $(OBJS)
 	$(AR) rcs $@ $^
-$(BUILD)/libcmermaid.so.$(VERSION): $(OBJS)
+$(BUILD)/libmmd.so.$(VERSION): $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -shared -Wl,-soname,$(SONAME) $^ $(LDLIBS) -o $@
-$(BUILD)/libcmermaid.so: $(BUILD)/libcmermaid.so.$(VERSION)
-	ln -sf libcmermaid.so.$(VERSION) $(BUILD)/$(SONAME)
-	ln -sf libcmermaid.so.$(VERSION) $@
-$(BUILD)/cmermaid.pc: cmermaid.pc.in Makefile | $(BUILD)
+$(BUILD)/libmmd.so: $(BUILD)/libmmd.so.$(VERSION)
+	ln -sf libmmd.so.$(VERSION) $(BUILD)/$(SONAME)
+	ln -sf libmmd.so.$(VERSION) $@
+$(BUILD)/mmd.pc: mmd.pc.in Makefile | $(BUILD)
 	sed -e 's|@PREFIX@|$(PREFIX)|' -e 's|@LIBDIR@|$(LIBDIR)|' -e 's|@INCDIR@|$(INCDIR)|' -e 's|@VERSION@|$(VERSION)|' $< > $@
-$(BUILD)/mmdc-c: tools/mmdc.c $(BUILD)/libcmermaid.a
-	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libcmermaid.a $(LDLIBS) -o $@
-$(BUILD)/bench: bench/bench.c $(BUILD)/libcmermaid.a
-	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libcmermaid.a $(LDLIBS) -o $@
-$(BUILD)/test-shared: tests/shared_test.c $(BUILD)/libcmermaid.so $(BUILD)/cmermaid.pc
-	$(CC) $(CFLAGS) $< -L$(BUILD) -lcmermaid -Wl,-rpath,'$$ORIGIN' -o $@
+$(BUILD)/mmd: tools/mmd.c $(BUILD)/libmmd.a
+	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
+$(BUILD)/bench: bench/bench.c $(BUILD)/libmmd.a
+	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
+$(BUILD)/test-shared: tests/shared_test.c $(BUILD)/libmmd.so $(BUILD)/mmd.pc
+	$(CC) $(CFLAGS) $< -L$(BUILD) -lmmd -Wl,-rpath,'$$ORIGIN' -o $@
 
 install: all
 	install -d $(DESTDIR)$(LIBDIR)/pkgconfig $(DESTDIR)$(INCDIR) $(DESTDIR)$(BINDIR)
-	install -m644 include/cmermaid.h $(DESTDIR)$(INCDIR)/
-	install -m644 $(BUILD)/libcmermaid.a $(DESTDIR)$(LIBDIR)/
-	install -m755 $(BUILD)/libcmermaid.so.$(VERSION) $(DESTDIR)$(LIBDIR)/
-	ln -sf libcmermaid.so.$(VERSION) $(DESTDIR)$(LIBDIR)/$(SONAME)
-	ln -sf $(SONAME) $(DESTDIR)$(LIBDIR)/libcmermaid.so
-	install -m644 $(BUILD)/cmermaid.pc $(DESTDIR)$(LIBDIR)/pkgconfig/
-	install -m755 $(BUILD)/mmdc-c $(DESTDIR)$(BINDIR)/
+	install -m644 include/mmd.h $(DESTDIR)$(INCDIR)/
+	install -m644 $(BUILD)/libmmd.a $(DESTDIR)$(LIBDIR)/
+	install -m755 $(BUILD)/libmmd.so.$(VERSION) $(DESTDIR)$(LIBDIR)/
+	ln -sf libmmd.so.$(VERSION) $(DESTDIR)$(LIBDIR)/$(SONAME)
+	ln -sf $(SONAME) $(DESTDIR)$(LIBDIR)/libmmd.so
+	install -m644 $(BUILD)/mmd.pc $(DESTDIR)$(LIBDIR)/pkgconfig/
+	install -m755 $(BUILD)/mmd $(DESTDIR)$(BINDIR)/
 
 # Profile-guided build: train on bench inputs, then rebuild into build-pgo.
 PGO_DIR := $(CURDIR)/build-pgo-prof
@@ -97,9 +97,9 @@ pgo:
 	$(MAKE) BUILD=build-pgo PGO_USE=$(PGO_DIR) LTO=$(LTO) MARCH=$(MARCH)
 
 test: all $(BUILD)/test-shared
-	./tests/run_tests.sh $(BUILD)/mmdc-c
+	./tests/run_tests.sh $(BUILD)/mmd
 	$(BUILD)/test-shared
-	python3 tools/docs_audit.py -q -v $(BUILD)/mmdc-c
+	python3 tools/docs_audit.py -q -v $(BUILD)/mmd
 
 both:
 	$(MAKE) CC=$(HOME)/.local/bin/clang BUILD=build

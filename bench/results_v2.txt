@@ -6,7 +6,7 @@ medium    404.8us    460.7us
 large     8.93ms     9.54ms
 xlarge    53.9ms     57.7ms
 # vs mmdr (bench/compare.py)
-input                                        cmm lib ms cmm cli ms mmdr lib ms mmdr cli ms   cli x
+input                                        mmd lib ms mmd cli ms mmdr lib ms mmdr cli ms   cli x
 flowchart.mmd                                      0.01       0.68       54.47       53.43   78.1x
 flowchart_direction_conflict.mmd                   0.03       0.96      226.03      225.04  234.0x
 flowchart_nested_clusters.mmd                      0.02       0.74      206.78      190.05  258.5x

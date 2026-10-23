@@ -151,17 +151,17 @@ DIAG_FN(architecture_render) {
             }
             if (isg) {
                 for (size_t k = 0; k < gv.n; k++) if (str_eq(gv.v[k].id, id)) return diag_fail(err_off, msg, lo, "duplicate group id");
-                if (!VEC_PUSH(a, &gv, ((AGroup){.id = id, .icon = icon, .label = label, .parent = par}))) return CMM_ERR_NOMEM;
+                if (!VEC_PUSH(a, &gv, ((AGroup){.id = id, .icon = icon, .label = label, .parent = par}))) return MMD_ERR_NOMEM;
             } else {
                 for (size_t k = 0; k < nv.n; k++) if (str_eq(nv.v[k].id, id)) return diag_fail(err_off, msg, lo, "duplicate service id");
-                if (!VEC_PUSH(a, &nv, ((ANode){.id = id, .icon = icon, .label = label, .group = par, .junction = isj}))) return CMM_ERR_NOMEM;
+                if (!VEC_PUSH(a, &nv, ((ANode){.id = id, .icon = icon, .label = label, .group = par, .junction = isj}))) return MMD_ERR_NOMEM;
             }
             continue;
         }
         if (str_eq(w, S("align"))) { /* align row|column a b c (v11.16) */
             Str ax = dg_word(&l);
             if (!str_eq(ax, S("row")) && !str_eq(ax, S("column"))) return diag_fail(err_off, msg, lo, "expected 'align row' or 'align column'");
-            if (!VEC_PUSH(a, &alv, ((AAlign){.col = ax.p[0] == 'c', .ids = str_trim(l), .off = lo}))) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &alv, ((AAlign){.col = ax.p[0] == 'c', .ids = str_trim(l), .off = lo}))) return MMD_ERR_NOMEM;
             continue;
         }
         /* edge: id[{group}]:P <?--[label]--? >? P:id[{group}] */
@@ -194,13 +194,13 @@ DIAG_FN(architecture_render) {
         uint32_t A = UINT32_MAX, B = UINT32_MAX;
         for (size_t k = 0; k < nv.n; k++) { if (str_eq(nv.v[k].id, ia)) A = (uint32_t)k; if (str_eq(nv.v[k].id, ib)) B = (uint32_t)k; }
         if (A == UINT32_MAX || B == UINT32_MAX) return diag_fail(err_off, msg, lo, "edge references unknown service");
-        if (!VEC_PUSH(a, &ev, ((AEdge){.a = A, .b = B, .pa = pa, .pb = pb, .arr_a = arr_a, .arr_b = arr_b, .label = lab}))) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &ev, ((AEdge){.a = A, .b = B, .pa = pa, .pb = pb, .arr_a = arr_a, .arr_b = arr_b, .label = lab}))) return MMD_ERR_NOMEM;
     }
     if (!nv.n) return diag_fail(err_off, msg, off, "architecture diagram has no services");
     ANode *N = nv.v;
     size_t nn = nv.n;
     uint32_t *q = ANEW(a, uint32_t, nn);
-    if (!q) return CMM_ERR_NOMEM;
+    if (!q) return MMD_ERR_NOMEM;
     int32_t xoff = 0;
     for (size_t root = 0; root < nn; root++) {
         if (N[root].placed) continue;
@@ -254,7 +254,7 @@ DIAG_FN(architecture_render) {
      * later group and everything beyond the earlier one shifts clear; relative placement is preserved */
     if (gv.n > 1) {
         int32_t *bx0 = ANEW(a, int32_t, gv.n), *bx1 = ANEW(a, int32_t, gv.n), *by0 = ANEW(a, int32_t, gv.n), *by1 = ANEW(a, int32_t, gv.n);
-        if (!bx0 || !bx1 || !by0 || !by1) return CMM_ERR_NOMEM;
+        if (!bx0 || !bx1 || !by0 || !by1) return MMD_ERR_NOMEM;
         for (size_t iter = 0; iter < 4 * gv.n * gv.n + 8; iter++) {
             for (size_t g = 0; g < gv.n; g++) bx0[g] = by0[g] = INT32_MAX, bx1[g] = by1[g] = INT32_MIN;
             for (size_t i = 0; i < nn; i++)
@@ -294,7 +294,7 @@ DIAG_FN(architecture_render) {
      * it; push it (and everything beyond it that isn't in that group) past the box on the cheaper axis */
     if (gv.n) {
         int32_t *bx0 = ANEW(a, int32_t, gv.n), *bx1 = ANEW(a, int32_t, gv.n), *by0 = ANEW(a, int32_t, gv.n), *by1 = ANEW(a, int32_t, gv.n);
-        if (!bx0 || !bx1 || !by0 || !by1) return CMM_ERR_NOMEM;
+        if (!bx0 || !bx1 || !by0 || !by1) return MMD_ERR_NOMEM;
         for (size_t iter = 0; iter < 4 * nn + 8; iter++) {
             for (size_t g = 0; g < gv.n; g++) bx0[g] = by0[g] = INT32_MAX, bx1[g] = by1[g] = INT32_MIN;
             for (size_t i = 0; i < nn; i++)
@@ -326,7 +326,7 @@ DIAG_FN(architecture_render) {
     int32_t my = INT32_MAX;
     for (size_t i = 0; i < nn; i++) if (N[i].gy < my) my = N[i].gy;
     double *cx = ANEW(a, double, nn), *cy = ANEW(a, double, nn);
-    if (!cx || !cy) return CMM_ERR_NOMEM;
+    if (!cx || !cy) return MMD_ERR_NOMEM;
     for (size_t i = 0; i < nn; i++) cx[i] = (N[i].gx) * PITCH_X, cy[i] = (N[i].gy - my) * PITCH_Y;
     /* groups: bbox of members, then parents absorb children (children have larger indices) */
     for (size_t i = 0; i < nn; i++) {
@@ -357,10 +357,10 @@ DIAG_FN(architecture_render) {
     for (size_t g = 0; g < gv.n; g++) bb_add(&bb, gv.v[g].x0, gv.v[g].y0, gv.v[g].x1, gv.v[g].y1);
     if (title.n) bb.y0 -= 34;
     double *HW = ANEW(a, double, nn + 1); /* service half-widths (icon or label) */
-    if (!HW) return CMM_ERR_NOMEM;
+    if (!HW) return MMD_ERR_NOMEM;
     for (size_t i = 0; i < nn; i++) HW[i] = fmax(IS / 2, text_width(N[i].label.n ? N[i].label : N[i].id, fs) / 2 + 4);
     double *SG = ANEW(a, double, 4 * 8 * (ev.n + 1)); /* routed segments, for de-bundling detours */
-    if (!SG) return CMM_ERR_NOMEM;
+    if (!SG) return MMD_ERR_NOMEM;
     size_t ns = 0;
     Buf eb = {}; /* edges first: detours may grow the bbox */
     for (size_t e = 0; e < ev.n; e++) {
@@ -438,8 +438,8 @@ DIAG_FN(architecture_render) {
             dg_text(&eb, E->label, 14, lx, ly, "middle", "ael");
         }
     }
-    if (eb.oom) { free(eb.p); return CMM_ERR_NOMEM; }
-    if (!buf_reserve(out, 4096 + nn * 1500 + eb.n + gv.n * 1200)) { free(eb.p); return CMM_ERR_NOMEM; }
+    if (eb.oom) { free(eb.p); return MMD_ERR_NOMEM; }
+    if (!buf_reserve(out, 4096 + nn * 1500 + eb.n + gv.n * 1200)) { free(eb.p); return MMD_ERR_NOMEM; }
     DG_HEAD(out, bb, 16, "architecture", CSS);
     if (title.n) dg_text(out, title, 18, (bb.x0 + bb.x1) / 2, bb.y0 + 14, "middle", "agl");
     for (size_t g = 0; g < gv.n; g++) {
@@ -494,5 +494,5 @@ DIAG_FN(architecture_render) {
         buf_lit(out, "</g>");
     }
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

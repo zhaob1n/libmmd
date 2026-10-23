@@ -1,6 +1,6 @@
 #!/bin/sh
-# usage: tools/render_png.sh in.mmd out.png [mmdc-c binary]  -> headless-chrome screenshot at the SVG size
-b=${3:-build/mmdc-c}; T=$(mktemp -d /tmp/cmm-png.XXXXXX) || exit 1
+# usage: tools/render_png.sh in.mmd out.png [mmd binary]  -> headless-chrome screenshot at the SVG size
+b=${3:-build/mmd}; T=$(mktemp -d /tmp/mmd-png.XXXXXX) || exit 1
 trap 'rm -rf "$T"' EXIT
 $b "$1" -o "$T/r.svg" || exit 1
 # size from the root viewBox (width/height attributes may be 100% or belong to a marker)

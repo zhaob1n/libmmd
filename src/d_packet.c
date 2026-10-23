@@ -61,13 +61,13 @@ DIAG_FN(packet_render) {
         f.label = s;
         next = f.e + 1;
         if (next > (1u << 20)) return diag_fail(err_off, msg, lo, "packet too large");
-        if (!VEC_PUSH(a, &fv, f)) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &fv, f)) return MMD_ERR_NOMEM;
     }
     if (!fv.n) return diag_fail(err_off, msg, off, "packet has no fields");
     uint32_t rows = (next + BPR - 1) / BPR;
     double top = 0, W = BPR * BW + 2 * PX, H = rows * (RH + PY + 14) + PY + (title.n ? 30 : 0); /* mermaid puts the title below */
     BBox bb = {0, 0, W, H};
-    if (!buf_reserve(out, 1024 + fv.n * 400)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 1024 + fv.n * 400)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 4, "packet", CSS);
     char nb[16];
     for (size_t i = 0; i < fv.n; i++) {
@@ -85,5 +85,5 @@ DIAG_FN(packet_render) {
     }
     if (title.n) dg_text(out, title, 14, W / 2, H - 16, "middle", "ttl");
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

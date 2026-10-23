@@ -3,18 +3,18 @@
 import glob, math, os, re, subprocess, sys
 import atexit as _ax, shutil as _sh, tempfile as _tf
 # chrome/puppeteer leave scoped_dir*/profile dirs in TMPDIR: confine them to one dir removed at exit
-if 'CMM_TMP' not in os.environ:
-    os.makedirs('/tmp/cmm-mmdc', exist_ok=True)
-    os.environ['CMM_TMP'] = os.environ['TMPDIR'] = _tf.mkdtemp(dir='/tmp/cmm-mmdc')
+if 'MMD_TMP' not in os.environ:
+    os.makedirs('/tmp/mmd-mmdc', exist_ok=True)
+    os.environ['MMD_TMP'] = os.environ['TMPDIR'] = _tf.mkdtemp(dir='/tmp/mmd-mmdc')
     _tf.tempdir = None
-    _ax.register(_sh.rmtree, os.environ['CMM_TMP'], True)
+    _ax.register(_sh.rmtree, os.environ['MMD_TMP'], True)
 from PIL import Image
 rows = []
 for src in sorted(glob.glob('tests/docs/**/*.mmd', recursive=True)):
     tag = os.path.relpath(src, 'tests/docs')[:-4].replace('/', '_')
     mp = f'/tmp/dsbs/m_{tag}.png'
     if not os.path.exists(mp): continue
-    r = subprocess.run(['build/mmdc-c', src, '-o', '/tmp/rank.svg'], capture_output=True)
+    r = subprocess.run(['build/mmd', src, '-o', '/tmp/rank.svg'], capture_output=True)
     if r.returncode: rows.append((99, tag, 'ERR')); continue
     m = re.search(r'viewBox="([-\d.e ]+)"', open('/tmp/rank.svg').read())
     if not m: continue

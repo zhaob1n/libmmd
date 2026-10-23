@@ -1,5 +1,5 @@
-#ifndef CMM_BASE_H
-#define CMM_BASE_H
+#ifndef MMD_BASE_H
+#define MMD_BASE_H
 #include <stdalign.h>
 #include <stdckdint.h>
 #include <stdbool.h>
@@ -8,8 +8,8 @@
 #include <string.h>
 
 #define countof(a) (sizeof(a) / sizeof((a)[0]))
-#define CMM_LIKELY(x) __builtin_expect(!!(x), 1)
-#define CMM_UNLIKELY(x) __builtin_expect(!!(x), 0)
+#define MMD_LIKELY(x) __builtin_expect(!!(x), 1)
+#define MMD_UNLIKELY(x) __builtin_expect(!!(x), 0)
 
 /* ---- zero-copy string view ---- */
 typedef struct Str {
@@ -160,7 +160,7 @@ typedef struct Buf {
 
 bool buf_reserve_slow(Buf *b, size_t extra);
 static inline bool buf_reserve(Buf *b, size_t extra) {
-    if (CMM_LIKELY(b->cap - b->n > extra)) return true;
+    if (MMD_LIKELY(b->cap - b->n > extra)) return true;
     return buf_reserve_slow(b, extra);
 }
 static inline void buf_put_(Buf *b, size_t n, const char s[static n]) {
@@ -181,9 +181,9 @@ void buf_pt(Buf *b, double x, double y); /* "x,y" with buf_num formatting, one r
 void buf_int(Buf *b, int64_t v);
 void buf_xml(Buf *b, Str s);     /* XML-escape text, handles mermaid #entity; */
 
-#ifdef CMM_PROFILE
+#ifdef MMD_PROFILE
 /* per-phase cycle accounting: time since the previous mark is charged to name ("" just resets);
- * totals print at exit, divided by the number of "" marks at render start (CMM_PROFILE builds only) */
+ * totals print at exit, divided by the number of "" marks at render start (MMD_PROFILE builds only) */
 void prof_mark(const char *name);
 #define PMARK(name) prof_mark(name)
 #else

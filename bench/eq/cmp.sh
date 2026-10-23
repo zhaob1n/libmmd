@@ -1,6 +1,6 @@
 #!/bin/bash
 # Byte-identity check. usage: bench/eq/cmp.sh BIN   (REF=1 bench/eq/cmp.sh BIN rewrites ref.sha)
-D=$(cd "$(dirname "$0")" && pwd); R=$(cd "$D/../.." && pwd); B=${1:-$R/build/mmdc-c}
+D=$(cd "$(dirname "$0")" && pwd); R=$(cd "$D/../.." && pwd); B=${1:-$R/build/mmd}
 cd "$R"; tmp=$(mktemp)
 for f in bench/eq/in/*.mmd bench/mmdr_fixtures/*.mmd bench/inputs/*.mmd tests/cases/*.mmd; do
   printf '%s %s\n' "$($B $f 2>/dev/null | sha256sum | cut -c1-16)" "$f"; done > $tmp

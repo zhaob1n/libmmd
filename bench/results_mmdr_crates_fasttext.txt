@@ -1,4 +1,4 @@
-input                                        cmm lib ms cmm cli ms mmdr lib ms mmdr cli ms   cli x
+input                                        mmd lib ms mmd cli ms mmdr lib ms mmdr cli ms   cli x
 flowchart.mmd                                      0.01       0.79       63.03       61.85   78.5x
 flowchart_medium.mmd                               0.04       0.77      142.53      143.82  186.9x
 flowchart_large.mmd                                0.24       1.20      397.52      402.21  335.6x

@@ -62,7 +62,7 @@ DIAG_FN(sankey_render) {
         Str s = line, f[3];
         for (int k = 0; k < 3; k++) {
             if (!s.n && k < 3) { if (k < 3) return diag_fail(err_off, msg, lo, "expected source,target,value"); }
-            if (!field(a, &s, &f[k], &oom)) return oom ? CMM_ERR_NOMEM : diag_fail(err_off, msg, lo, "bad CSV field");
+            if (!field(a, &s, &f[k], &oom)) return oom ? MMD_ERR_NOMEM : diag_fail(err_off, msg, lo, "bad CSV field");
         }
         if (s.n) return diag_fail(err_off, msg, (size_t)(s.p - src), "too many CSV fields");
         double v;
@@ -72,11 +72,11 @@ DIAG_FN(sankey_render) {
         for (int k = 0; k < 2; k++) {
             size_t j = 0;
             while (j < nv.n && !str_eq(nv.v[j].name, f[k])) j++;
-            if (j == nv.n && !VEC_PUSH(a, &nv, ((SNode){.name = f[k]}))) return CMM_ERR_NOMEM;
+            if (j == nv.n && !VEC_PUSH(a, &nv, ((SNode){.name = f[k]}))) return MMD_ERR_NOMEM;
             id[k] = (uint32_t)j;
         }
         if (id[0] == id[1]) return diag_fail(err_off, msg, lo, "sankey links cannot be self-loops");
-        if (!VEC_PUSH(a, &lv, ((SLink){.s = id[0], .t = id[1], .v = v}))) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &lv, ((SLink){.s = id[0], .t = id[1], .v = v}))) return MMD_ERR_NOMEM;
     }
     if (!lv.n) return diag_fail(err_off, msg, off, "sankey has no links");
     SNode *N = nv.v;
@@ -98,7 +98,7 @@ DIAG_FN(sankey_render) {
     const bool SHOWV = dcfg_bool("sankey.showValues", true);
     uint32_t *soff = ANEW(a, uint32_t, nn + 1), *toff = ANEW(a, uint32_t, nn + 1);
     uint32_t *sl = ANEW(a, uint32_t, nl), *tl = ANEW(a, uint32_t, nl), *fill = ANEW(a, uint32_t, nn);
-    if (!soff || !toff || !sl || !tl || !fill) return CMM_ERR_NOMEM;
+    if (!soff || !toff || !sl || !tl || !fill) return MMD_ERR_NOMEM;
     for (size_t i = 0; i <= nn; i++) soff[i] = toff[i] = 0;
     for (size_t l = 0; l < nl; l++) soff[L[l].s + 1]++, toff[L[l].t + 1]++;
     for (size_t i = 0; i < nn; i++) soff[i + 1] += soff[i], toff[i + 1] += toff[i];
@@ -114,7 +114,7 @@ DIAG_FN(sankey_render) {
     const double H = fmin(fmax(dcfg_num("sankey.height", 400), 100), 4000);
     constexpr double NW = 10;
     uint32_t *colcnt = ANEW(a, uint32_t, maxc + 2), *coff = ANEW(a, uint32_t, maxc + 2), *cn = ANEW(a, uint32_t, nn);
-    if (!colcnt || !coff || !cn) return CMM_ERR_NOMEM;
+    if (!colcnt || !coff || !cn) return MMD_ERR_NOMEM;
     for (uint32_t c = 0; c <= maxc + 1; c++) colcnt[c] = coff[c] = 0;
     for (size_t i = 0; i < nn; i++) colcnt[N[i].col]++;
     uint32_t maxcnt = 0;
@@ -224,7 +224,7 @@ DIAG_FN(sankey_render) {
     /* label collision avoidance: boxes overlapping horizontally are pushed apart vertically */
     double *lx0 = ANEW(a, double, nn), *lx1 = ANEW(a, double, nn), *ly = ANEW(a, double, nn);
     uint32_t *lbo = ANEW(a, uint32_t, nn);
-    if (!lx0 || !lx1 || !ly || !lbo) return CMM_ERR_NOMEM;
+    if (!lx0 || !lx1 || !ly || !lbo) return MMD_ERR_NOMEM;
     constexpr double LH = 17;
     for (size_t i = 0; i < nn; i++) {
         bool right = N[i].x < W / 2;
@@ -261,7 +261,7 @@ DIAG_FN(sankey_render) {
         ymin = fmin(ymin, fmin(N[i].y, fmin(cy, ly[i]) - 8)), ymax = fmax(ymax, fmax(N[i].y + N[i].h, fmax(cy, ly[i]) + 8)); /* pushed labels too */
     }
     BBox bb = {-fmax(lw, 0), ymin - top, W + fmax(rw, 0), ymax};
-    if (!buf_reserve(out, 1024 + nl * 300 + nn * 300)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 1024 + nl * 300 + nn * 300)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 0, "sankey", CSS);
     for (size_t i = 0; i < nl; i++) {
         const SLink *l = &L[i];
@@ -283,5 +283,5 @@ DIAG_FN(sankey_render) {
     }
     if (title.n) dg_text(out, title, 18, W / 2, -top / 2 - 5, "middle", "st");
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

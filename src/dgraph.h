@@ -1,8 +1,8 @@
 /* Shared helpers for diagram types that reuse the layered layout (state, class, er, mindmap...).
  * Builds a Graph directly (no flowchart parser), lets callers pre-size nodes (NF_FIXED),
  * and provides small SVG primitives. Owned by the diagram-types work; flow_* files untouched. */
-#ifndef CMM_DGRAPH_H
-#define CMM_DGRAPH_H
+#ifndef MMD_DGRAPH_H
+#define MMD_DGRAPH_H
 #include "graph.h"
 
 void dg_init(Graph *g, Arena *A, Dir dir, double fs);
@@ -63,7 +63,7 @@ unsigned dg_tspans(Buf *b, BBox *bb, Str s, double fs, double lh, double x, doub
 /* greedy word wrap at maxc characters per line (mermaid wrapText), '\n'-joined; {} on OOM */
 [[nodiscard]] Str dg_wrapc(Arena *a, Str s, size_t maxc);
 /* svg head for bb + margin, then body, then </svg>; frees body */
-[[nodiscard]] cmm_status dg_finish(Buf *out, Buf *body, BBox bb, double m, const char *kind, size_t ncss, const char css[static ncss]);
+[[nodiscard]] mmd_status dg_finish(Buf *out, Buf *body, BBox bb, double m, const char *kind, size_t ncss, const char css[static ncss]);
 #define DG_FINISH(o, body, bb, m, kind, css) dg_finish((o), (body), (bb), (m), (kind), sizeof(css) - 1, (css))
 #endif
 

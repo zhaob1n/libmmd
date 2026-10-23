@@ -1,11 +1,11 @@
 /* Entry points of the non-flowchart diagram types (one translation unit each, src/d_*.c). */
-#ifndef CMM_DIAGRAMS_H
-#define CMM_DIAGRAMS_H
+#ifndef MMD_DIAGRAMS_H
+#define MMD_DIAGRAMS_H
 #include "base.h"
-#include "cmermaid.h"
+#include "mmd.h"
 
 #define DIAG_FN(name)                                                                              \
-    cmm_status name(Arena *a, size_t n, const char src[static n], size_t off, Str title, double fs, \
+    mmd_status name(Arena *a, size_t n, const char src[static n], size_t off, Str title, double fs, \
                     Buf *out, size_t *err_off, char msg[static 160])
 typedef DIAG_FN((*DiagFn));
 
@@ -39,12 +39,12 @@ typedef DIAG_FN((*DiagFn));
 [[nodiscard]] DIAG_FN(wardley_render);
 /* swimlane-beta: flowchart parse/draw with a lane layout (d_swimlanes.c) */
 struct Graph;
-[[nodiscard]] cmm_status swim_layout(struct Graph *g, Str **keep);
-[[nodiscard]] cmm_status swim_titles(const struct Graph *g, const Str *keep, Buf *b);
+[[nodiscard]] mmd_status swim_layout(struct Graph *g, Str **keep);
+[[nodiscard]] mmd_status swim_titles(const struct Graph *g, const Str *keep, Buf *b);
 
 /* keyword -> renderer, nullptr when not a diagram type handled here */
 [[nodiscard]] DiagFn diag_lookup(Str kw);
 
 /* shared error helper */
-[[nodiscard]] cmm_status diag_fail(size_t *err_off, char msg[static 160], size_t off, const char *m);
+[[nodiscard]] mmd_status diag_fail(size_t *err_off, char msg[static 160], size_t off, const char *m);
 #endif

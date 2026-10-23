@@ -426,7 +426,7 @@ static void arrow(Buf *o, double x1, double x2, double y, uint8_t mk) {
 DIAG_FN(zenuml_render) {
     (void)fs;
     ZT z = {.a = a, .starter = -1};
-    if (!VEC_PUSH(a, &z.P, (Part){.icon = IC_ACTOR, .create_ev = -1})) return CMM_ERR_NOMEM;
+    if (!VEC_PUSH(a, &z.P, (Part){.icon = IC_ACTOR, .create_ev = -1})) return MMD_ERR_NOMEM;
     size_t i = off;
     while (i < n && src[i] != '\n') i++; /* header line */
     size_t s0 = i;
@@ -463,7 +463,7 @@ DIAG_FN(zenuml_render) {
     if (s0 < n && !z.oom) stmt(&z, (Str){.p = src + s0, .n = n - s0}, false);
     while (!z.oom && (z.sp || z.depth_skip)) close_block(&z);
     flush_end(&z);
-    if (z.oom) return CMM_ERR_NOMEM;
+    if (z.oom) return MMD_ERR_NOMEM;
     if (!title.n) title = z.title;
 
     /* ---- columns ---- */
@@ -505,7 +505,7 @@ DIAG_FN(zenuml_render) {
     /* ---- vertical layout ---- */
     int *dep = ANEW(a, int, np);
     int32_t *fst = ANEW(a, int32_t, ne + 1);
-    if (!dep || !fst) return CMM_ERR_NOMEM;
+    if (!dep || !fst) return MMD_ERR_NOMEM;
     memset(dep, 0, np * sizeof *dep);
     size_t fsp = 0;
     double top = TB + 12; /* zenuml always draws the (possibly empty) title bar */
@@ -584,7 +584,7 @@ DIAG_FN(zenuml_render) {
 
     /* ---- draw ---- */
     Buf *o = out;
-    if (!buf_reserve(o, 4096 + ne * 400 + np * 400)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(o, 4096 + ne * 400 + np * 400)) return MMD_ERR_NOMEM;
     double FY0 = title.n ? 0 : TB; /* no empty title bar without a title */
     BBox bb = {FX0, FY0, FX1, bottom};
     DG_HEAD(o, bb, 1, "zenuml", CSS);
@@ -654,5 +654,5 @@ DIAG_FN(zenuml_render) {
     }
     buf_lit(o, "</svg>\n");
     (void)err_off; (void)msg;
-    return o->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return o->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

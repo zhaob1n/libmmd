@@ -17,7 +17,7 @@ flowchart accTitle/accDescr + themeVariables/background via shared d_cfg.
 
 compare.py vs mmdr (release build) over bench/inputs small+medium and all mmdr fixture types
 (lib = in-process µs, cli = process ms; large/xlarge omitted: mmdr times out):
-input                                        cmm lib us cmm cli ms mmdr lib us mmdr cli ms   lib x   cli x
+input                                        mmd lib us mmd cli ms mmdr lib us mmdr cli ms   lib x   cli x
 small.mmd                                          13.1       0.78    155876.0      149.97  11899x  191.1x
 medium.mmd                                        529.9       1.43  19770152.0    19774.11  37309x 13793.6x
 basic.mmd                                           1.1       0.82       584.0        2.03    531x    2.5x

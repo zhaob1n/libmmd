@@ -1,6 +1,6 @@
 #define _GNU_SOURCE
 #include "dcfg.h"
-#include "cmermaid.h"
+#include "mmd.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -221,7 +221,7 @@ void dcfg_begin(Arena *a, size_t n, const char src[static n], size_t off) {
     }
 }
 
-static int cur_theme; /* CMM_THEME_* chosen by CLI option or init/frontmatter */
+static int cur_theme; /* MMD_THEME_* chosen by CLI option or init/frontmatter */
 void dcfg_end(void) { cur_theme = 0; cur = (DCfg){}; cur_a = nullptr; cur_cap = 0; }
 const DCfg *dcfg_cur(void) { return &cur; }
 
@@ -279,9 +279,9 @@ Str dcfg_tv(const char *var) {
     const ThemeKV *t = nullptr;
     size_t n = 0;
     switch (cur_theme) {
-    case CMM_THEME_DARK: t = TH_DARK, n = countof(TH_DARK); break;
-    case CMM_THEME_FOREST: t = TH_FOREST, n = countof(TH_FOREST); break;
-    case CMM_THEME_NEUTRAL: t = TH_NEUTRAL, n = countof(TH_NEUTRAL); break;
+    case MMD_THEME_DARK: t = TH_DARK, n = countof(TH_DARK); break;
+    case MMD_THEME_FOREST: t = TH_FOREST, n = countof(TH_FOREST); break;
+    case MMD_THEME_NEUTRAL: t = TH_NEUTRAL, n = countof(TH_NEUTRAL); break;
     default: break;
     }
     for (size_t i = 0; i < n; i++)
@@ -290,7 +290,7 @@ Str dcfg_tv(const char *var) {
 }
 
 const char *dcfg_pal(const char *prefix, size_t i, const char def[static 1]) {
-    if (!cur.n && cur_theme <= CMM_THEME_DEFAULT) return def;
+    if (!cur.n && cur_theme <= MMD_THEME_DEFAULT) return def;
     static thread_local char ring[8][208];
     static thread_local unsigned slot;
     char var[48];
@@ -304,7 +304,7 @@ const char *dcfg_pal(const char *prefix, size_t i, const char def[static 1]) {
 }
 
 const char *dcfg_list(const char *var, size_t i, const char def[static 1]) {
-    if (!cur.n && cur_theme <= CMM_THEME_DEFAULT) return def;
+    if (!cur.n && cur_theme <= MMD_THEME_DEFAULT) return def;
     static thread_local char ring[8][208];
     static thread_local unsigned slot;
     Str v = dcfg_tv(var);
@@ -325,7 +325,7 @@ const char *dcfg_list(const char *var, size_t i, const char def[static 1]) {
 
 Str dcfg_background(void) {
     Str v = dcfg_tv("background");
-    return (cur_theme > CMM_THEME_DEFAULT && v.n == 5 && !memcmp(v.p, "white", 5)) ? (Str){} : v;
+    return (cur_theme > MMD_THEME_DEFAULT && v.n == 5 && !memcmp(v.p, "white", 5)) ? (Str){} : v;
 }
 
 /* themeVariable -> CSS template ('$' = value); kind "*" applies to every diagram */
@@ -525,7 +525,7 @@ static const TV TVS[] = {
 };
 
 void dcfg_theme_css(Buf *b, const char *kind) {
-    if (!cur.n && cur_theme <= CMM_THEME_DEFAULT) return;
+    if (!cur.n && cur_theme <= MMD_THEME_DEFAULT) return;
     for (size_t i = 0; i < countof(TVS); i++) {
         if (strcmp(TVS[i].kind, "*") && strcmp(TVS[i].kind, kind)) continue;
         Str v = dcfg_tv(TVS[i].var);

@@ -10,7 +10,7 @@ shortest-first side detours. Cluster box overlaps over mmdr fixtures + bench + t
 Medium crossings 501 -> 589 (cost of cluster constraints).
 
 compare.py vs mmdr (bench/inputs + bench/mmdr_fixtures):
-input                                        cmm lib ms cmm cli ms mmdr lib ms mmdr cli ms   cli x
+input                                        mmd lib ms mmd cli ms mmdr lib ms mmdr cli ms   cli x
 large.mmd                                          9.49      11.80           -           -       -  mmdr: timeout>120s
 medium.mmd                                         0.58       1.74    20727.41    20731.73 11885.7x
 small.mmd                                          0.02       1.79      146.42      142.09   79.3x

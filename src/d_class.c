@@ -29,7 +29,7 @@ typedef struct CP {
     char *msg;
 } CP;
 
-static cmm_status cfail(CP *p, size_t off, const char *m) { return diag_fail(p->err_off, p->msg, off, m); }
+static mmd_status cfail(CP *p, size_t off, const char *m) { return diag_fail(p->err_off, p->msg, off, m); }
 
 /* ~T~ -> <T> (zero-copy unless a tilde is present) */
 static Str generics(Arena *A, Str s, bool *ok) {
@@ -108,12 +108,12 @@ static void ref_label(Graph *g, int32_t v, Str label) {
     if (label.n && g->nlabel[v].p == g->nid[v].p && g->nlabel[v].n == g->nid[v].n) g->nlabel[v] = label;
 }
 
-static cmm_status add_member(CP *p, int32_t v, Str t) {
+static mmd_status add_member(CP *p, int32_t v, Str t) {
     t = str_trim(t);
-    if (!t.n) return CMM_OK;
+    if (!t.n) return MMD_OK;
     if (t.n >= 4 && str_starts(t, S("<<")) && t.p[t.n - 1] == '>' && t.p[t.n - 2] == '>') {
         p->ci.v[v].annot = (Str){.p = t.p + 2, .n = t.n - 4};
-        return CMM_OK;
+        return MMD_OK;
     }
     uint8_t f = 0;
     if (memchr(t.p, '(', t.n)) f |= MF_METHOD;
@@ -128,7 +128,7 @@ static cmm_status add_member(CP *p, int32_t v, Str t) {
         if (rp && rp + 1 < t.p + t.n && (rp[1] == '$' || rp[1] == '*')) {
             f |= rp[1] == '$' ? MF_STATIC : MF_ABSTRACT;
             char *o = arena_alloc(p->A, t.n, 1);
-            if (!o) return CMM_ERR_NOMEM;
+            if (!o) return MMD_ERR_NOMEM;
             size_t k = (size_t)(rp + 1 - t.p);
             memcpy(o, t.p, k);
             memcpy(o + k, rp + 2, t.n - k - 1);
@@ -142,7 +142,7 @@ static cmm_status add_member(CP *p, int32_t v, Str t) {
             if (ret.n && ret.p[0] != ':') {
                 size_t k = (size_t)(rp2 + 1 - t.p);
                 char *o = arena_alloc(p->A, k + 3 + ret.n, 1);
-                if (!o) return CMM_ERR_NOMEM;
+                if (!o) return MMD_ERR_NOMEM;
                 memcpy(o, t.p, k);
                 memcpy(o + k, " : ", 3);
                 memcpy(o + k + 3, ret.p, ret.n);
@@ -152,8 +152,8 @@ static cmm_status add_member(CP *p, int32_t v, Str t) {
     }
     bool ok;
     t = generics(p->A, str_trim(t), &ok);
-    if (!ok) return CMM_ERR_NOMEM;
-    return VEC_PUSH(p->A, &p->mem, ((Member){.cls = v, .text = t, .flags = f})) ? CMM_OK : CMM_ERR_NOMEM;
+    if (!ok) return MMD_ERR_NOMEM;
+    return VEC_PUSH(p->A, &p->mem, ((Member){.cls = v, .text = t, .flags = f})) ? MMD_OK : MMD_ERR_NOMEM;
 }
 
 typedef struct RelTok { char t[3]; uint8_t len; RMark m; } RelTok;
@@ -219,7 +219,7 @@ static Str take_quoted_head(Str *s) {
     return (Str){};
 }
 
-static cmm_status parse(CP *p, LineIt *it) {
+static mmd_status parse(CP *p, LineIt *it) {
     Graph *g = &p->g;
     Str line;
     size_t off;
@@ -230,7 +230,7 @@ static cmm_status parse(CP *p, LineIt *it) {
             Str l = line;
             bool close = l.n && l.p[l.n - 1] == '}';
             if (close) l = str_trim((Str){.p = l.p, .n = l.n - 1});
-            cmm_status st = add_member(p, body, l);
+            mmd_status st = add_member(p, body, l);
             if (st) return st;
             if (close) body = NONE;
             continue;
@@ -264,7 +264,7 @@ static cmm_status parse(CP *p, LineIt *it) {
                     break;
                 }
             int32_t s = dg_cluster(g, nid, nlab, p->ns_depth ? p->ns_stack[p->ns_depth - 1] : NONE);
-            if (s == NONE) return CMM_ERR_NOMEM;
+            if (s == NONE) return MMD_ERR_NOMEM;
             p->ns_stack[p->ns_depth++] = s;
             continue;
         }
@@ -274,23 +274,23 @@ static cmm_status parse(CP *p, LineIt *it) {
             if (str_starts(r, S("for "))) {
                 r = str_trim((Str){.p = r.p + 4, .n = r.n - 4});
                 Str id = dg_word(&r);
-                if ((target = cls(p, id)) == NONE) return CMM_ERR_NOMEM;
+                if ((target = cls(p, id)) == NONE) return MMD_ERR_NOMEM;
             }
             Str t = take_quoted_head(&r);
             if (!t.p) return cfail(p, off, "note text must be quoted");
             char nid[24];
             int len = snprintf(nid, sizeof nid, "\x01note%u", p->nnotes++);
             Str id = arena_strdup(p->A, (Str){.p = nid, .n = (size_t)len});
-            if (!id.n) return CMM_ERR_NOMEM;
+            if (!id.n) return MMD_ERR_NOMEM;
             int32_t v = cls(p, id);
-            if (v == NONE) return CMM_ERR_NOMEM;
+            if (v == NONE) return MMD_ERR_NOMEM;
             bool ok;
             g->nlabel[v] = label_normalize(p->A, t, &ok);
-            if (!ok) return CMM_ERR_NOMEM;
+            if (!ok) return MMD_ERR_NOMEM;
             for (size_t k = 0; k + 1 < g->nlabel[v].n; k++) /* "\n" escapes in note text */
                 if (g->nlabel[v].p[k] == '\\' && g->nlabel[v].p[k + 1] == 'n') {
                     char *o = arena_alloc(p->A, g->nlabel[v].n, 1);
-                    if (!o) return CMM_ERR_NOMEM;
+                    if (!o) return MMD_ERR_NOMEM;
                     size_t q = 0;
                     for (size_t i = 0; i < g->nlabel[v].n; i++) {
                         if (g->nlabel[v].p[i] == '\\' && i + 1 < g->nlabel[v].n && g->nlabel[v].p[i + 1] == 'n') { o[q++] = '\n'; i++; }
@@ -302,7 +302,7 @@ static cmm_status parse(CP *p, LineIt *it) {
             p->ci.v[v].note = true;
             if (target != NONE) {
                 int32_t e = dg_edge(g, v, target, (Str){});
-                if (e == NONE || !VEC_PUSH(p->A, &p->rel, ((Rel){.dotted = true}))) return CMM_ERR_NOMEM;
+                if (e == NONE || !VEC_PUSH(p->A, &p->rel, ((Rel){.dotted = true}))) return MMD_ERR_NOMEM;
                 g->eend[e] = AH_NONE;
             }
             continue;
@@ -327,16 +327,16 @@ static cmm_status parse(CP *p, LineIt *it) {
             }
             if (!id.n) return cfail(p, off, "expected class name");
             int32_t v = cls(p, id);
-            if (v == NONE) return CMM_ERR_NOMEM;
+            if (v == NONE) return MMD_ERR_NOMEM;
             if (label.n) {
                 bool ok;
                 g->nlabel[v] = label_normalize(p->A, label, &ok);
-                if (!ok) return CMM_ERR_NOMEM;
+                if (!ok) return MMD_ERR_NOMEM;
             }
-            if (ann.n) { cmm_status st = add_member(p, v, ann); if (st) return st; }
+            if (ann.n) { mmd_status st = add_member(p, v, ann); if (st) return st; }
             if (open) {
                 inner = str_trim(inner);
-                if (inner.n) { cmm_status st = add_member(p, v, inner); if (st) return st; }
+                if (inner.n) { mmd_status st = add_member(p, v, inner); if (st) return st; }
                 if (!inline_close) body = v;
             }
             continue;
@@ -348,8 +348,8 @@ static cmm_status parse(CP *p, LineIt *it) {
             Str ann = {.p = line.p, .n = (size_t)(e - line.p)};
             Str label, id = class_ref(p, (Str){.p = e, .n = line.n - ann.n}, &label);
             int32_t v = id.n ? cls(p, id) : NONE;
-            if (v == NONE) return id.n ? CMM_ERR_NOMEM : cfail(p, off, "annotation needs a class");
-            cmm_status st = add_member(p, v, ann);
+            if (v == NONE) return id.n ? MMD_ERR_NOMEM : cfail(p, off, "annotation needs a class");
+            mmd_status st = add_member(p, v, ann);
             if (st) return st;
             continue;
         }
@@ -367,14 +367,14 @@ static cmm_status parse(CP *p, LineIt *it) {
             /* mermaid addRelation: a lollipop end (other end plain) is a bare interface label, one per relation */
             bool lia = r.ma == RM_LOLLI && r.mb == RM_NONE, lib = !lia && r.mb == RM_LOLLI && r.ma == RM_NONE;
             int32_t va = lia ? iface(p, ia) : cls(p, ia), vb = lib ? iface(p, ib) : cls(p, ib);
-            if (va == NONE || vb == NONE) return CMM_ERR_NOMEM;
+            if (va == NONE || vb == NONE) return MMD_ERR_NOMEM;
             ref_label(g, va, la), ref_label(g, vb, lb);
             bool ok;
             lab = label_normalize(p->A, lab, &ok);
             if (ok) lab = generics(p->A, lab, &ok);
-            if (!ok) return CMM_ERR_NOMEM;
+            if (!ok) return MMD_ERR_NOMEM;
             int32_t e = dg_edge(g, va, vb, lab);
-            if (e == NONE || !VEC_PUSH(p->A, &p->rel, r)) return CMM_ERR_NOMEM;
+            if (e == NONE || !VEC_PUSH(p->A, &p->rel, r)) return MMD_ERR_NOMEM;
             continue;
         }
         /* "Name : member" */
@@ -383,9 +383,9 @@ static cmm_status parse(CP *p, LineIt *it) {
             Str label, id = class_ref(p, (Str){.p = line.p, .n = (size_t)(c - line.p)}, &label);
             if (!id.n) return cfail(p, off, "expected class name before ':'");
             int32_t v = cls(p, id);
-            if (v == NONE) return CMM_ERR_NOMEM;
+            if (v == NONE) return MMD_ERR_NOMEM;
             ref_label(g, v, label);
-            cmm_status st = add_member(p, v, (Str){.p = c + 1, .n = line.n - (size_t)(c + 1 - line.p)});
+            mmd_status st = add_member(p, v, (Str){.p = c + 1, .n = line.n - (size_t)(c + 1 - line.p)});
             if (st) return st;
             continue;
         }
@@ -395,12 +395,12 @@ static cmm_status parse(CP *p, LineIt *it) {
                 return cfail(p, off + k, "unrecognised statement in class diagram");
         if (!id.n) return cfail(p, off, "unrecognised statement");
         int32_t v = cls(p, id);
-        if (v == NONE) return CMM_ERR_NOMEM;
+        if (v == NONE) return MMD_ERR_NOMEM;
         ref_label(g, v, label);
     }
     if (body != NONE) return cfail(p, it->n, "unterminated class body (missing '}')");
     if (p->ns_depth) return cfail(p, it->n, "unterminated namespace (missing '}')");
-    return CMM_OK;
+    return MMD_OK;
 }
 
 static constexpr char CSS[] =
@@ -489,14 +489,14 @@ DIAG_FN(class_render) {
     Str hdr;
     size_t ho;
     if (!dg_next_line(&it, &hdr, &ho)) return diag_fail(err_off, msg, off, "empty class diagram");
-    cmm_status st = parse(&p, &it);
+    mmd_status st = parse(&p, &it);
     if (st) return st;
     Graph *g = &p.g;
     if (!g->nn) return diag_fail(err_off, msg, off, "class diagram has no classes");
     size_t N = g->nn, M = p.mem.n;
     /* bucket members per class (stable counting sort) */
     Member *ms = ANEW(a, Member, M + 1);
-    if (!ms) return CMM_ERR_NOMEM;
+    if (!ms) return MMD_ERR_NOMEM;
     for (size_t i = 0; i < M; i++) p.ci.v[p.mem.v[i].cls].mn++;
     uint32_t acc = 0;
     for (size_t v = 0; v < N; v++) { p.ci.v[v].m0 = acc; acc += p.ci.v[v].mn; p.ci.v[v].mn = 0; }
@@ -536,7 +536,7 @@ DIAG_FN(class_render) {
     if ((st = flow_layout(g))) return st;
     BBox bb = dg_bbox(g);
     if (title.n) bb.y0 -= 30;
-    if (!buf_reserve(out, 4096 + N * 400 + g->ne * 300 + M * 120)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 4096 + N * 400 + g->ne * 300 + M * 120)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 8, "classDiagram", CSS);
     buf_lit(out, DEFS);
     if (title.n) dg_text(out, title, 18, (bb.x0 + bb.x1) / 2, bb.y0 + 12, "middle", "title");
@@ -547,7 +547,7 @@ DIAG_FN(class_render) {
     }
     double *cpl = ANEW(a, double, 8 * g->ne + 4);
     size_t ncpl = 0;
-    if (!cpl) return CMM_ERR_NOMEM;
+    if (!cpl) return MMD_ERR_NOMEM;
     for (size_t e = 0; e < g->ne; e++) {
         const Rel *r = &p.rel.v[e];
         if (!g->eptn[e] && g->efrom[e] != g->eto[e]) continue;
@@ -610,5 +610,5 @@ DIAG_FN(class_render) {
         }
     }
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

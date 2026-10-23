@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Golden/sanity tests: every case renders, output is well-formed XML (xmllint or python), errors report line/col.
 set -u
-BIN=${1:-build/mmdc-c}
+BIN=${1:-build/mmd}
 DIR=$(cd "$(dirname "$0")" && pwd)
 OUT=$DIR/out; mkdir -p "$OUT"
 pass=0; fail=0

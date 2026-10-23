@@ -205,9 +205,9 @@ static size_t fmt_num_slow(char *o, double v) {
     return (size_t)(p - o);
 }
 
-#ifdef CMM_FMT_TEST
-size_t cmm_fmt_fast(char *o, double v) { return fmt_num(o, v); }
-size_t cmm_fmt_slow(char *o, double v) { return fmt_num_slow(o, v); }
+#ifdef MMD_FMT_TEST
+size_t mmd_fmt_fast(char *o, double v) { return fmt_num(o, v); }
+size_t mmd_fmt_slow(char *o, double v) { return fmt_num_slow(o, v); }
 #endif
 
 void buf_num(Buf *b, double v) {
@@ -488,7 +488,7 @@ void buf_xml(Buf *b, Str s) {
     buf_put(b, s.n - run, s.p + run);
 }
 
-#ifdef CMM_PROFILE
+#ifdef MMD_PROFILE
 #include <stdio.h>
 #include <string.h>
 #include <x86intrin.h>

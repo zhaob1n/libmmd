@@ -1,8 +1,8 @@
 /* Faithful port of dagre's compound ranking: nestingGraph.run + networkSimplex (feasibleTree,
  * cut values, leave/enter edge in graphlib iteration order) + injectEdgeLabelProxies +
  * removeEmptyRanks + nestingGraph.cleanup + normalizeRanks + assignRankMinMax. */
-#ifndef CMM_DRANK_H
-#define CMM_DRANK_H
+#ifndef MMD_DRANK_H
+#define MMD_DRANK_H
 #include "base.h"
 
 typedef struct DRankIn {

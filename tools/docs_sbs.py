@@ -4,11 +4,11 @@ usage: docs_sbs.py tests/docs/x/01.mmd ...   (or a doc name: docs_sbs.py block)"
 import subprocess, sys, os, re, glob, concurrent.futures as cf
 import atexit as _ax, shutil as _sh, tempfile as _tf
 # chrome/puppeteer leave scoped_dir*/profile dirs in TMPDIR: confine them to one dir removed at exit
-if 'CMM_TMP' not in os.environ:
-    os.makedirs('/tmp/cmm-mmdc', exist_ok=True)
-    os.environ['CMM_TMP'] = os.environ['TMPDIR'] = _tf.mkdtemp(dir='/tmp/cmm-mmdc')
+if 'MMD_TMP' not in os.environ:
+    os.makedirs('/tmp/mmd-mmdc', exist_ok=True)
+    os.environ['MMD_TMP'] = os.environ['TMPDIR'] = _tf.mkdtemp(dir='/tmp/mmd-mmdc')
     _tf.tempdir = None
-    _ax.register(_sh.rmtree, os.environ['CMM_TMP'], True)
+    _ax.register(_sh.rmtree, os.environ['MMD_TMP'], True)
 from PIL import Image
 os.makedirs('/tmp/dsbs', exist_ok=True)
 def one(src):
@@ -16,7 +16,7 @@ def one(src):
     tag = (rel if not rel.startswith('..') else os.path.relpath(os.path.realpath(src)).replace('tests/cases/', ''))[:-4].replace('/', '_'); pid = os.getpid()
     cs, cp, mp = f'/tmp/dsbs/c_{tag}_{pid}.svg', f'/tmp/dsbs/c_{tag}_{pid}.png', f'/tmp/dsbs/m_{tag}.png'
     try:
-        subprocess.run(['build/mmdc-c', src, '-o', cs], check=True, capture_output=True)
+        subprocess.run(['build/mmd', src, '-o', cs], check=True, capture_output=True)
         w, h = [int(float(x)) + 2 for x in re.search(r'width="([\d.]+)" height="([\d.]+)"', open(cs).read(600)).groups()]
         subprocess.run(['google-chrome', '--headless', '--no-sandbox', '--disable-gpu', '--hide-scrollbars', f'--window-size={min(w,4000)},{min(h,4000)}', '--screenshot=' + cp, 'file://' + cs], check=True, timeout=60, capture_output=True)
         if not os.path.exists(mp) or os.path.getmtime(mp) < os.path.getmtime(src):

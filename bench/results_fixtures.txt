@@ -1,4 +1,4 @@
-input                                        cmm lib ms cmm cli ms mmdr lib ms mmdr cli ms   cli x
+input                                        mmd lib ms mmd cli ms mmdr lib ms mmdr cli ms   cli x
 flowchart.mmd                                      0.01       0.80       52.61       54.33   67.7x
 flowchart_asymmetric_components.mmd                0.01       0.72      108.90      115.82  161.4x
 flowchart_backedges_subgraphs.mmd                  0.02       0.77      169.29      183.03  237.9x

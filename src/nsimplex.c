@@ -1,7 +1,7 @@
 /* Network simplex rank assignment (Gansner et al.), following dagre's formulation:
  * feasible tight tree -> low/lim -> cut values -> leave/enter/exchange until optimal. */
 #include "nsimplex.h"
-#ifdef CMM_PROFILE
+#ifdef MMD_PROFILE
 #include <stdio.h>
 #include <time.h>
 static double ns_now(void) { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_sec * 1e3 + ts.tv_nsec / 1e6; }
@@ -172,7 +172,7 @@ static inline bool is_desc(const NS *s, int32_t v, int32_t root) {
 }
 
 static void run_component(NS *s, size_t max_iter) {
-#ifdef CMM_PROFILE
+#ifdef MMD_PROFILE
     double t0 = ns_now();
     size_t iters = 0;
 #endif
@@ -217,7 +217,7 @@ static void run_component(NS *s, size_t max_iter) {
             }
         }
     }
-#ifdef CMM_PROFILE
+#ifdef MMD_PROFILE
     double t1 = ns_now();
 #endif
     s->pe[root] = -1;
@@ -230,7 +230,7 @@ static void run_component(NS *s, size_t max_iter) {
             uint32_t e = s->cedges[(lptr + k) % s->ncE];
             if (s->intree_e[e] && s->cut[e] < 0) { le = e; lptr = (lptr + k + 1) % s->ncE; break; }
         }
-#ifdef CMM_PROFILE
+#ifdef MMD_PROFILE
         iters++;
 #endif
         if (le == UINT32_MAX) break;
@@ -268,8 +268,8 @@ static void run_component(NS *s, size_t max_iter) {
         s->intree_e[fe] = 1;
         dfs_range(s, l, s->pe[l], llow);
     }
-#ifdef CMM_PROFILE
-    if (s->nc > 100 && getenv("CMM_PROFV")) fprintf(stderr, "  ns: nc=%zu feasible=%.2fms simplex=%.2fms iters=%zu\n", s->nc, t1 - t0, ns_now() - t1, iters);
+#ifdef MMD_PROFILE
+    if (s->nc > 100 && getenv("MMD_PROFV")) fprintf(stderr, "  ns: nc=%zu feasible=%.2fms simplex=%.2fms iters=%zu\n", s->nc, t1 - t0, ns_now() - t1, iters);
 #endif
 }
 

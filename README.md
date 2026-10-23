@@ -1,8 +1,10 @@
-# cmermaid
+# libmmd
 
 A fast [Mermaid](https://mermaid.js.org) renderer written in C (`-std=gnu23`).
-It turns Mermaid source into SVG. It works as a command-line tool (`mmdc-c`) and as a small C library (`libcmermaid`).
+It turns Mermaid source into SVG. It works as a command-line tool (`mmd`) and as a small C library (`libmmd`).
 It needs no browser, no Node.js, no JavaScript engine and no dependencies beyond libc and libm.
+
+(Formerly named cmermaid; the CLI was `mmdc-c` and the API prefix `cmm_`.)
 
 - About **0.6–1.6 ms per diagram from the CLI**. mermaid-cli takes about 0.9–1.6 s for the same diagrams (see [Benchmarks](#benchmarks)).
 - Library renders take about **15 µs** for a small flowchart and about **0.5 ms** for a 4 KB one.
@@ -63,11 +65,11 @@ You need a C compiler with C23 support:
 The Makefile builds with `-std=gnu23`. You also need GNU make. Python 3 is needed only for the test and benchmark scripts.
 
 ```sh
-make                      # -> build/mmdc-c, build/libcmermaid.{a,so}, build/cmermaid.pc, build/bench
+make                      # -> build/mmd, build/libmmd.{a,so}, build/mmd.pc, build/bench
 make CC=gcc-14            # build with gcc instead
 make MARCH=native LTO=1   # optional: tuned build
 make pgo                  # optional: profile-guided build in build-pgo/
-make install PREFIX=/usr/local   # header, static + shared lib, pkg-config file, mmdc-c
+make install PREFIX=/usr/local   # header, static + shared lib, pkg-config file, mmd
 ```
 
 The build has zero warnings under `-Wall -Wextra` with both gcc 14 and clang.
@@ -75,57 +77,57 @@ The build has zero warnings under `-Wall -Wextra` with both gcc 14 and clang.
 ## CLI
 
 ```sh
-build/mmdc-c in.mmd -o out.svg
-build/mmdc-c -i in.mmd -o out.svg -t dark      # themes: default | dark | forest | neutral
-cat in.mmd | build/mmdc-c > out.svg            # stdin -> stdout
-build/mmdc-c in.mmd -o out.svg --no-avoid      # flowchart: skip obstacle re-routing (fastest)
+build/mmd in.mmd -o out.svg
+build/mmd -i in.mmd -o out.svg -t dark      # themes: default | dark | forest | neutral
+cat in.mmd | build/mmd > out.svg            # stdin -> stdout
+build/mmd in.mmd -o out.svg --no-avoid      # flowchart: skip obstacle re-routing (fastest)
 ```
 
 On a syntax error the tool exits with a non-zero status and prints `line:col: message`.
 
 ## C library
 
-The API is in [`include/cmermaid.h`](include/cmermaid.h):
+The API is in [`include/mmd.h`](include/mmd.h):
 
 ```c
 #include <stdio.h>
 #include <string.h>
-#include "cmermaid.h"
+#include "mmd.h"
 
 int main(void) {
     const char *src = "flowchart LR\n  A[Start] --> B{Ok?}\n  B -- yes --> C[Done]\n";
-    cmm_buffer svg = {};
-    cmm_error err = {};
-    if (cmm_render_svg(strlen(src), src, nullptr, &svg, &err) != CMM_OK) {
+    mmd_buffer svg = {};
+    mmd_error err = {};
+    if (mmd_render_svg(strlen(src), src, nullptr, &svg, &err) != MMD_OK) {
         fprintf(stderr, "%u:%u: %s\n", err.line, err.col, err.message);
         return 1;
     }
     fwrite(svg.data, 1, svg.len, stdout);
-    cmm_buffer_free(&svg);
+    mmd_buffer_free(&svg);
 }
 ```
 
 ```sh
-cc -std=gnu23 -Iinclude example.c build/libcmermaid.a -lm      # or: $(pkg-config --cflags --libs cmermaid)
+cc -std=gnu23 -Iinclude example.c build/libmmd.a -lm      # or: $(pkg-config --cflags --libs mmd)
 ```
 
-- `cmm_options` (which may be `nullptr`) sets node and rank spacing, font size, theme, and the `CMM_F_*` layout flags.
-- For batch rendering, `cmm_context_new()` / `cmm_context_render_svg()` / `cmm_context_free()` reuse the arena and output buffer between calls. Use one context per thread.
-- Errors come back as `cmm_status` together with `cmm_error` (code, 1-based line and column, message).
-- The shared library exports only `cmm_*` symbols.
+- `mmd_options` (which may be `nullptr`) sets node and rank spacing, font size, theme, and the `MMD_F_*` layout flags.
+- For batch rendering, `mmd_context_new()` / `mmd_context_render_svg()` / `mmd_context_free()` reuse the arena and output buffer between calls. Use one context per thread.
+- Errors come back as `mmd_status` together with `mmd_error` (code, 1-based line and column, message).
+- The shared library exports only `mmd_*` symbols.
 
 ## Benchmarks
 
-All numbers below were measured on the same 8-vCPU Intel Xeon VM. Times are wall-clock for a whole process run, including process start-up. Each value is the best of N runs: N = 20 for cmermaid, 5 for mmdr and 3 for mmdc.
+All numbers below were measured on the same 8-vCPU Intel Xeon VM. Times are wall-clock for a whole process run, including process start-up. Each value is the best of N runs: N = 20 for libmmd, 5 for mmdr and 3 for mmdc.
 
 The tools compared are:
-- `mmdc-c`: this project;
+- `mmd`: this project;
 - **mermaid-rs-renderer** (`mmdr` 0.3.1, Rust);
 - **mermaid-cli** (`mmdc` 11.17.0, headless Chrome).
 
 The run was made on 2026-10-23.
 
-| input | cmermaid CLI | mmdr CLI | mermaid-cli |
+| input | libmmd CLI | mmdr CLI | mermaid-cli |
 |---|---:|---:|---:|
 | flowchart_small (mmdr fixture) | 0.59 ms | 29.1 ms | 917 ms |
 | flowchart_medium (mmdr fixture) | 0.78 ms | 136.9 ms | 1064 ms |
@@ -134,7 +136,7 @@ The run was made on 2026-10-23.
 | seq_full (tests/cases) | 0.59 ms | 3.2 ms | 860 ms |
 | class_full (tests/cases) | 0.72 ms | 9.6 ms | 1124 ms |
 
-Rendering in-process through the library, timed with `build/bench` (minimum over repeated renders, clang build, from [`bench/results_v14.txt`](bench/results_v14.txt) and [`bench/results_cmermaid_inproc.txt`](bench/results_cmermaid_inproc.txt)):
+Rendering in-process through the library, timed with `build/bench` (minimum over repeated renders, clang build, from [`bench/results_v14.txt`](bench/results_v14.txt) and [`bench/results_libmmd_inproc.txt`](bench/results_libmmd_inproc.txt)):
 
 | input | size in → SVG out | time |
 |---|---|---:|
@@ -153,9 +155,9 @@ MMDR=/path/to/mmdr python3 bench/compare.py bench/mmdr_fixtures/*.mmd
 
 mermaid-cli spends most of its time starting Chrome. Its per-diagram cost is lower when it renders many diagrams in one process. The comparison is still useful for the common case of one CLI call per diagram.
 
-## Gallery: cmermaid vs mermaid-cli
+## Gallery: libmmd vs mermaid-cli
 
-Each image puts cmermaid on the left and mermaid-cli 11.17 on the right, rendered from the same source in `tests/cases/`. To regenerate them, run `python3 tools/gallery.py tests/cases/<name>.mmd`.
+Each image puts libmmd on the left and mermaid-cli 11.17 on the right, rendered from the same source in `tests/cases/`. To regenerate them, run `python3 tools/gallery.py tests/cases/<name>.mmd`.
 
 | | |
 |---|---|
@@ -177,8 +179,8 @@ More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 |---|---|
 | Golden + sanity tests (150 cases; XML well-formedness, error positions, viewBox bounds, mermaid docs corpus) | `make test` (`UPDATE_GOLDEN=1 make test` to refresh) |
 | Mermaid docs corpus: 432 examples from mermaid's syntax docs, 396/396 that mermaid itself renders | `python3 tools/docs_audit.py [-v]` |
-| ASan + UBSan build | `make asan` → `build-asan/mmdc-c` |
-| Fuzzing (mutational, under ASan) | `python3 tests/fuzz.py build-asan/mmdc-c 1000` |
+| ASan + UBSan build | `make asan` → `build-asan/mmd` |
+| Fuzzing (mutational, under ASan) | `python3 tests/fuzz.py build-asan/mmd 1000` |
 | Allocation-failure injection | `sh tests/poison.sh` |
 | Stress generator (every type, density 1×–5×) | `python3 tools/stress_gen.py OUT 2 SEED SCALE` |
 | Visual quality scanner (edges through nodes, label overlaps, labels on edges, out-of-bounds…) | `python3 tools/quality_scan.py files… [-v]` |
@@ -207,12 +209,12 @@ Embedded icon data comes from Font Awesome Free (CC BY 4.0) and simple-icons (CC
 
 ## 中文简介
 
-cmermaid 是一个用 C 语言（gnu23）编写的高速 Mermaid 渲染器，可作为命令行工具 `mmdc-c` 或 C 库 `libcmermaid` 使用。它把 Mermaid 源码直接渲染成 SVG，不需要浏览器、Node.js 或任何第三方依赖。
+libmmd 是一个用 C 语言（gnu23）编写的高速 Mermaid 渲染器，可作为命令行工具 `mmd` 或 C 库 `libmmd` 使用。它把 Mermaid 源码直接渲染成 SVG，不需要浏览器、Node.js 或任何第三方依赖。
 
 - 支持上表列出的全部 30 多种图表类型。
 - 单个图表的命令行渲染约 1 毫秒，mermaid-cli 约 1 秒。
 - 流程图采用与 mermaid（dagre）一致的布局算法。
 
-构建只需 `make`，用法为 `build/mmdc-c in.mmd -o out.svg`。效果对比见上方 Gallery。
+构建只需 `make`，用法为 `build/mmd in.mmd -o out.svg`。效果对比见上方 Gallery。
 
 许可证：MIT（见 [LICENSE](LICENSE)）。内嵌图标数据来自 Font Awesome Free（CC BY 4.0）和 simple-icons（CC0 1.0），详见 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES)。

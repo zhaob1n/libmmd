@@ -52,7 +52,7 @@ DIAG_FN(pie_render) {
         double v;
         if (!tail.n || tail.p[0] != ':' || !dg_parse_num(str_trim((Str){.p = tail.p + 1, .n = tail.n - 1}), &v) || v < 0)
             return diag_fail(err_off, msg, (size_t)(q + 1 - src), "expected ': <non-negative number>'");
-        if (!VEC_PUSH(a, &sl, ((Slice){label, v}))) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &sl, ((Slice){label, v}))) return MMD_ERR_NOMEM;
         total += v;
     }
     if (!sl.n) return diag_fail(err_off, msg, off, "pie has no slices");
@@ -70,7 +70,7 @@ DIAG_FN(pie_render) {
      * otherwise stack unreadable "1%" labels on top of each other) */
     double *LX = ANEW(a, double, sl.n), *LY = ANEW(a, double, sl.n), *LW = ANEW(a, double, sl.n), *LM = ANEW(a, double, sl.n);
     signed char *LO = ANEW(a, signed char, sl.n); /* 0 inside, +1 outside right, -1 outside left */
-    if (!LX || !LY || !LW || !LM || !LO) return CMM_ERR_NOMEM;
+    if (!LX || !LY || !LW || !LM || !LO) return MMD_ERR_NOMEM;
     char pct[32];
     bool any_out_r = false;
     double ext_l = 0, ext_r = 0;
@@ -116,12 +116,12 @@ DIAG_FN(pie_render) {
     for (size_t i = 0; i < sl.n; i++) if (LO[i] && fabs(LX[i] - CX) < 120) ty = fmin(ty, LY[i] - 22);
     if (title.n) bb.y0 = fmin(bb.y0, ty - 26);
     bb.y0 = fmin(bb.y0, CY - sl.n * 22 / 2.0 - 4), bb.y1 = fmax(bb.y1, CY + sl.n * 22 / 2.0 + 4); /* tall legends */
-    if (!buf_reserve(out, 2048 + sl.n * 600)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 2048 + sl.n * 600)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 8, "pie", CSS);
     if (title.n) dg_text(out, title, 25, CX, ty, "middle", "ttl");
     /* mermaid 11 keeps declaration order, clockwise from 12 o'clock */
     uint32_t *ord = ANEW(a, uint32_t, sl.n);
-    if (!ord) return CMM_ERR_NOMEM;
+    if (!ord) return MMD_ERR_NOMEM;
     for (size_t i = 0; i < sl.n; i++) ord[i] = (uint32_t)i;
     double ang = 0;
     char fill[64];
@@ -163,7 +163,7 @@ DIAG_FN(pie_render) {
         if (show) {
             int len = snprintf(fill, sizeof fill, " [%g]", sl.v[i].v);
             char *t = arena_alloc(a, lab.n + (size_t)len, 1);
-            if (!t) return CMM_ERR_NOMEM;
+            if (!t) return MMD_ERR_NOMEM;
             memcpy(t, lab.p, lab.n);
             memcpy(t + lab.n, fill, (size_t)len);
             lab = (Str){.p = t, .n = lab.n + (size_t)len};
@@ -171,5 +171,5 @@ DIAG_FN(pie_render) {
         dg_text(out, lab, fs, LEGX + 22, ly + 9, "start", nullptr);
     }
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

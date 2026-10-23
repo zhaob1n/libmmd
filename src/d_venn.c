@@ -169,7 +169,7 @@ DIAG_FN(venn_render) {
                 }
                 a0 = b0 + 1;
             }
-            if (!VEC_PUSH(a, &st, s)) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &st, s)) return MMD_ERR_NOMEM;
             continue;
         }
         if (!is_set && !is_un && !is_tx) return diag_fail(err_off, msg, lo, "expected set, union, text or style");
@@ -195,7 +195,7 @@ DIAG_FN(venn_render) {
             if (!cur) return diag_fail(err_off, msg, lo, "text requires a set");
             Str id = unq(idl);
             if (!id.n) return diag_fail(err_off, msg, lo, "text needs an identifier");
-            if (!VEC_PUSH(a, &tx, ((VText){cur, id, has_label ? lab : id}))) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &tx, ((VText){cur, id, has_label ? lab : id}))) return MMD_ERR_NOMEM;
             continue;
         }
         unsigned mask = 0, cnt = 0;
@@ -220,11 +220,11 @@ DIAG_FN(venn_render) {
         Str l = has_label ? lab : is_set ? ids[__builtin_ctz(mask)] : (Str){};
         bool okn;
         l = label_normalize(a, l, &okn);
-        if (!okn) return CMM_ERR_NOMEM;
+        if (!okn) return MMD_ERR_NOMEM;
         size_t j = 0;
         while (j < ar.n && ar.v[j].mask != mask) j++;
         if (j == ar.n && ar.n >= 256) return diag_fail(err_off, msg, lo, "too many areas");
-        if (j == ar.n) { if (!VEC_PUSH(a, &ar, ((VArea){mask, l, size, has_label || is_set}))) return CMM_ERR_NOMEM; }
+        if (j == ar.n) { if (!VEC_PUSH(a, &ar, ((VArea){mask, l, size, has_label || is_set}))) return MMD_ERR_NOMEM; }
         else ar.v[j] = (VArea){mask, l, size, has_label || is_set};
         cur = mask;
     }
@@ -284,7 +284,7 @@ DIAG_FN(venn_render) {
     for (size_t i = 0; i < ns; i++) X[i] = (X[i] - x0) * k + ox, Y[i] = (Y[i] - y0) * k + oy + th, R[i] *= k;
     /* label centres: deepest point of each region (grid search then refinement) */
     double *LX = ANEW(a, double, ar.n + 1), *LY = ANEW(a, double, ar.n + 1), *LD = ANEW(a, double, ar.n + 1);
-    if (!LX || !LY || !LD) return CMM_ERR_NOMEM;
+    if (!LX || !LY || !LD) return MMD_ERR_NOMEM;
     for (size_t i = 0; i < ar.n; i++) {
         unsigned m = ar.v[i].mask;
         double bx = 0, by = 0, bd = -1e300;
@@ -311,7 +311,7 @@ DIAG_FN(venn_render) {
     Str *LB = ANEW(a, Str, ar.n + 1);
     double *LF = ANEW(a, double, ar.n + 1), *LW = ANEW(a, double, ar.n + 1);
     unsigned *LN = ANEW(a, unsigned, ar.n + 1);
-    if (!LB || !LF || !LW || !LN) return CMM_ERR_NOMEM;
+    if (!LB || !LF || !LW || !LN) return MMD_ERR_NOMEM;
     for (size_t i = 0; i < ar.n; i++) LB[i] = ar.v[i].label, LF[i] = 48 * sc, LN[i] = 1, LW[i] = 0;
     for (int pass = 0; pass < 4; pass++) {
         bool again = false;

@@ -487,7 +487,7 @@ DIAG_FN(railroad_render) {
     /* body text without title/acc lines (blanked in a copy so offsets stay valid) */
     size_t bs = it.i;
     char *body = arena_alloc_array(a, n - bs + 1, 1, 1);
-    if (!body) return CMM_ERR_NOMEM;
+    if (!body) return MMD_ERR_NOMEM;
     memcpy(body, src + bs, n - bs);
     while (dg_next_line(&it, &ln, &lo)) {
         Str r = ln, w = dg_word(&r);
@@ -512,10 +512,10 @@ DIAG_FN(railroad_render) {
         Tok e = peek(&p);
         if (is_p(e, ";") || (g == G_EBNF && is_p(e, "."))) adv(&p, e);
         else if (e.k != T_EOF && !rule_start(&p)) { fail_at(&p, e, "expected ';'"); break; }
-        if (!VEC_PUSH(a, &rules, ((Rule){.name = t.s, .def = d}))) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &rules, ((Rule){.name = t.s, .def = d}))) return MMD_ERR_NOMEM;
     }
     if (p.err) {
-        if (!strcmp(p.err, "out of memory")) return CMM_ERR_NOMEM;
+        if (!strcmp(p.err, "out of memory")) return MMD_ERR_NOMEM;
         return diag_fail(err_off, msg, bs + p.eoff, p.err);
     }
     Buf b = {};

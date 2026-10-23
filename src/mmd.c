@@ -1,4 +1,4 @@
-#include "cmermaid.h"
+#include "mmd.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,28 +8,28 @@
 #include "seq.h"
 #include "dcfg.h"
 
-const char *cmm_status_str(cmm_status s) {
+const char *mmd_status_str(mmd_status s) {
     switch (s) {
-    case CMM_OK: return "ok";
-    case CMM_ERR_SYNTAX: return "syntax error";
-    case CMM_ERR_UNSUPPORTED: return "unsupported diagram type";
-    case CMM_ERR_NOMEM: return "out of memory";
-    case CMM_ERR_EMPTY: return "empty input";
-    case CMM_ERR_LIMIT: return "input too large";
+    case MMD_OK: return "ok";
+    case MMD_ERR_SYNTAX: return "syntax error";
+    case MMD_ERR_UNSUPPORTED: return "unsupported diagram type";
+    case MMD_ERR_NOMEM: return "out of memory";
+    case MMD_ERR_EMPTY: return "empty input";
+    case MMD_ERR_LIMIT: return "input too large";
     }
     return "unknown";
 }
 
-void cmm_buffer_free(cmm_buffer *buf) {
+void mmd_buffer_free(mmd_buffer *buf) {
     if (!buf) return;
     free(buf->data);
-    *buf = (cmm_buffer){};
+    *buf = (mmd_buffer){};
 }
 
 typedef struct Config {
     Str title;
     double node_sep, rank_sep;
-    cmm_theme theme;
+    mmd_theme theme;
 } Config;
 
 static double parse_num_after(Str s, Str key) {
@@ -49,7 +49,7 @@ static double parse_num_after(Str s, Str key) {
     return 0;
 }
 
-static cmm_theme parse_theme_after(Str s) {
+static mmd_theme parse_theme_after(Str s) {
     static const Str KEY = S("theme");
     for (size_t i = 0; i + KEY.n <= s.n; i++) {
         if (memcmp(s.p + i, KEY.p, KEY.n) != 0) continue;
@@ -62,18 +62,18 @@ static cmm_theme parse_theme_after(Str s) {
         while (j < s.n && (s.p[j] == '"' || s.p[j] == '\'' || s.p[j] == ':' || is_sp(s.p[j]))) j++;
         Str w = {.p = s.p + j, .n = 0};
         while (j < s.n && (unsigned)((s.p[j] | 32) - 'a') < 26u) j++, w.n++;
-        if (str_eq(w, S("dark"))) return CMM_THEME_DARK;
-        if (str_eq(w, S("forest"))) return CMM_THEME_FOREST;
-        if (str_eq(w, S("neutral"))) return CMM_THEME_NEUTRAL;
-        if (str_eq(w, S("default")) || str_eq(w, S("base"))) return CMM_THEME_DEFAULT;
+        if (str_eq(w, S("dark"))) return MMD_THEME_DARK;
+        if (str_eq(w, S("forest"))) return MMD_THEME_FOREST;
+        if (str_eq(w, S("neutral"))) return MMD_THEME_NEUTRAL;
+        if (str_eq(w, S("default")) || str_eq(w, S("base"))) return MMD_THEME_DEFAULT;
     }
-    return CMM_THEME_AUTO;
+    return MMD_THEME_AUTO;
 }
 
 static void apply_cfg_text(Config *c, Str s) {
     double v;
-    cmm_theme t = parse_theme_after(s);
-    if (t != CMM_THEME_AUTO) c->theme = t;
+    mmd_theme t = parse_theme_after(s);
+    if (t != MMD_THEME_AUTO) c->theme = t;
     if ((v = parse_num_after(s, S("nodeSpacing"))) > 0) c->node_sep = v;
     if ((v = parse_num_after(s, S("rankSpacing"))) > 0) c->rank_sep = v;
 }
@@ -131,10 +131,10 @@ static size_t preamble(Str src, Config *c) {
     }
 }
 
-static void set_err(cmm_error *err, cmm_status st, size_t n, const char src[static n], size_t off, const char *msg) {
+static void set_err(mmd_error *err, mmd_status st, size_t n, const char src[static n], size_t off, const char *msg) {
     if (!err) return;
-    *err = (cmm_error){.code = st};
-    if (st == CMM_ERR_SYNTAX) {
+    *err = (mmd_error){.code = st};
+    if (st == MMD_ERR_SYNTAX) {
         uint32_t line = 1, col = 1;
         for (size_t i = 0; i < off && i < n; i++) {
             if (src[i] == '\n') line++, col = 1;
@@ -143,19 +143,19 @@ static void set_err(cmm_error *err, cmm_status st, size_t n, const char src[stat
         err->line = line;
         err->col = col;
     }
-    snprintf(err->message, sizeof err->message, "%s", msg && *msg ? msg : cmm_status_str(st));
+    snprintf(err->message, sizeof err->message, "%s", msg && *msg ? msg : mmd_status_str(st));
 }
 
-static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n], const cmm_options *opt,
-                         cmm_error *err) {
-    if (n > (size_t)1 << 30) { set_err(err, CMM_ERR_LIMIT, n, src, 0, nullptr); return CMM_ERR_LIMIT; }
+static mmd_status render(Arena *ap, Buf *bp, size_t n, const char src[static n], const mmd_options *opt,
+                         mmd_error *err) {
+    if (n > (size_t)1 << 30) { set_err(err, MMD_ERR_LIMIT, n, src, 0, nullptr); return MMD_ERR_LIMIT; }
     Config cfg = {.node_sep = 50, .rank_sep = 50};
     Str s = {.p = src, .n = n};
     size_t off = preamble(s, &cfg);
     if (opt && opt->node_spacing > 0) cfg.node_sep = opt->node_spacing;
     if (opt && opt->rank_spacing > 0) cfg.rank_sep = opt->rank_spacing;
     double fs = opt && opt->font_size > 0 ? opt->font_size : 16;
-    if (off >= n) { set_err(err, CMM_ERR_EMPTY, n, src, 0, nullptr); return CMM_ERR_EMPTY; }
+    if (off >= n) { set_err(err, MMD_ERR_EMPTY, n, src, 0, nullptr); return MMD_ERR_EMPTY; }
     size_t k = off;
     while (k < n && !is_sp(src[k]) && src[k] != '\n' && src[k] != ';') k++;
     Str kw = {.p = src + off, .n = k - off};
@@ -167,28 +167,28 @@ static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n],
     b.oom = false;
     char msg[160] = {};
     size_t eoff = 0;
-    cmm_status st = CMM_OK;
+    mmd_status st = MMD_OK;
     PMARK("");
     dcfg_begin(&arena, n, src, off); /* %%{init}%% / frontmatter keys + accTitle/accDescr, all diagram kinds */
     dcfg_set_theme(opt && opt->theme ? opt->theme : cfg.theme);
     if (str_eq(kw, S("graph")) || str_eq(kw, S("flowchart")) || str_eq(kw, S("flowchart-elk")) || str_eq(kw, S("swimlane-beta"))) {
         dcfg_set_theme(0); /* flowchart applies named themes itself (Graph.theme) */
         Graph g = {.arena = &arena, .title = cfg.title,
-                   .theme = (uint8_t)(opt && opt->theme ? opt->theme : cfg.theme ? cfg.theme : CMM_THEME_DEFAULT),
+                   .theme = (uint8_t)(opt && opt->theme ? opt->theme : cfg.theme ? cfg.theme : MMD_THEME_DEFAULT),
                    .flags = opt ? opt->flags : 0, .node_sep = cfg.node_sep,
                    .rank_sep = cfg.rank_sep, .font_size = fs};
         /* config: flowchart.nodeSpacing / rankSpacing (init or frontmatter; API options win), cycleRemoval */
         if (!(opt && opt->node_spacing > 0)) g.node_sep = dcfg_num("flowchart.nodeSpacing", g.node_sep);
         if (!(opt && opt->rank_spacing > 0)) g.rank_sep = dcfg_num("flowchart.rankSpacing", g.rank_sep);
         Str cr = dcfg_get("flowchart.cycleRemoval");
-        g.acyclicer = str_eq(cr, S("dfs")) ? CMM_ACYC_DFS : str_eq(cr, S("greedy")) ? CMM_ACYC_GREEDY : CMM_ACYC_AUTO;
-        if (g.flags & CMM_F_FAS_DFS) g.acyclicer = CMM_ACYC_DFS;
-        if (g.flags & CMM_F_FAS_GREEDY) g.acyclicer = CMM_ACYC_GREEDY;
+        g.acyclicer = str_eq(cr, S("dfs")) ? MMD_ACYC_DFS : str_eq(cr, S("greedy")) ? MMD_ACYC_GREEDY : MMD_ACYC_AUTO;
+        if (g.flags & MMD_F_FAS_DFS) g.acyclicer = MMD_ACYC_DFS;
+        if (g.flags & MMD_F_FAS_GREEDY) g.acyclicer = MMD_ACYC_GREEDY;
         Str om = dcfg_get("flowchart.order");
-        g.order_mode = str_eq(om, S("dagre")) ? CMM_ORDER_DAGRE : str_eq(om, S("fast")) ? CMM_ORDER_FAST : CMM_ORDER_AUTO;
-        const char *oe = getenv("CMM_ORDER");
-        if (oe && *oe == 'd') g.order_mode = CMM_ORDER_DAGRE;
-        if (oe && *oe == 'f') g.order_mode = CMM_ORDER_FAST;
+        g.order_mode = str_eq(om, S("dagre")) ? MMD_ORDER_DAGRE : str_eq(om, S("fast")) ? MMD_ORDER_FAST : MMD_ORDER_AUTO;
+        const char *oe = getenv("MMD_ORDER");
+        if (oe && *oe == 'd') g.order_mode = MMD_ORDER_DAGRE;
+        if (oe && *oe == 'f') g.order_mode = MMD_ORDER_FAST;
         Str cv = dcfg_get("flowchart.curve");
         g.curve = flow_curve_kind(cv);
         PMARK("setup");
@@ -199,7 +199,7 @@ static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n],
         PMARK("layout-misc");
         Str *lanes = nullptr;
         if (str_eq(kw, S("swimlane-beta")) && (st = swim_layout(&g, &lanes))) goto fail;
-        if (!buf_reserve(&b, 256 + g.nn * 320 + g.ne * 200)) { st = CMM_ERR_NOMEM; goto fail; }
+        if (!buf_reserve(&b, 256 + g.nn * 320 + g.ne * 200)) { st = MMD_ERR_NOMEM; goto fail; }
         if ((st = flow_svg(&g, &b))) goto fail;
         if (lanes && (st = swim_titles(&g, lanes, &b))) goto fail;
         PMARK("svg");
@@ -208,14 +208,14 @@ static cmm_status render(Arena *ap, Buf *bp, size_t n, const char src[static n],
     } else if (diag_lookup(kw)) {
         if ((st = diag_lookup(kw)(&arena, n, src, off, cfg.title, fs, &b, &eoff, msg))) goto fail;
     } else {
-        st = CMM_ERR_UNSUPPORTED;
+        st = MMD_ERR_UNSUPPORTED;
         snprintf(msg, sizeof msg, "unsupported diagram type '%.*s'", (int)(kw.n > 40 ? 40 : kw.n), kw.p);
         eoff = off;
         goto fail;
     }
-    if (b.oom) { st = CMM_ERR_NOMEM; goto fail; }
+    if (b.oom) { st = MMD_ERR_NOMEM; goto fail; }
     b.p[b.n] = 0;
-    if (err) *err = (cmm_error){};
+    if (err) *err = (mmd_error){};
 fail:
     dcfg_end();
     *ap = arena;
@@ -224,46 +224,46 @@ fail:
     return st;
 }
 
-cmm_status cmm_render_svg(size_t n, const char src[static n], const cmm_options *opt, cmm_buffer *out,
-                          cmm_error *err) {
-    if (out) *out = (cmm_buffer){};
-    if (!out) return CMM_ERR_EMPTY;
+mmd_status mmd_render_svg(size_t n, const char src[static n], const mmd_options *opt, mmd_buffer *out,
+                          mmd_error *err) {
+    if (out) *out = (mmd_buffer){};
+    if (!out) return MMD_ERR_EMPTY;
     Arena a = {};
     Buf b = {};
-    cmm_status st = render(&a, &b, n, src, opt, err);
+    mmd_status st = render(&a, &b, n, src, opt, err);
     arena_free(&a);
     if (st) { free(b.p); return st; }
     out->data = b.p;
     out->len = b.n;
-    return CMM_OK;
+    return MMD_OK;
 }
 
-struct cmm_context {
+struct mmd_context {
     Arena arena;
     Buf out;
 };
 
-cmm_context *cmm_context_new(void) {
-    cmm_context *c = calloc(1, sizeof *c);
+mmd_context *mmd_context_new(void) {
+    mmd_context *c = calloc(1, sizeof *c);
     return c;
 }
 
-void cmm_context_free(cmm_context *c) {
+void mmd_context_free(mmd_context *c) {
     if (!c) return;
     arena_free(&c->arena);
     free(c->out.p);
     free(c);
 }
 
-cmm_status cmm_context_render_svg(cmm_context *c, size_t n, const char src[static n], const cmm_options *opt,
-                                  const char **svg, size_t *len, cmm_error *err) {
+mmd_status mmd_context_render_svg(mmd_context *c, size_t n, const char src[static n], const mmd_options *opt,
+                                  const char **svg, size_t *len, mmd_error *err) {
     if (svg) *svg = nullptr;
     if (len) *len = 0;
-    if (!c || !svg) return CMM_ERR_EMPTY;
+    if (!c || !svg) return MMD_ERR_EMPTY;
     arena_reset(&c->arena);
-    cmm_status st = render(&c->arena, &c->out, n, src, opt, err);
+    mmd_status st = render(&c->arena, &c->out, n, src, opt, err);
     if (st) return st;
     *svg = c->out.p;
     if (len) *len = c->out.n;
-    return CMM_OK;
+    return MMD_OK;
 }

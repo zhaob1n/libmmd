@@ -75,12 +75,12 @@ DIAG_FN(timeline_render) {
         rest = str_trim(rest);
         if (str_eq(w, S("title"))) { title = rest; continue; }
         if (str_starts(w, S("acc"))) continue;
-        if (str_eq(w, S("section"))) { if (!VEC_PUSH(a, &secs, rest)) return CMM_ERR_NOMEM; continue; }
+        if (str_eq(w, S("section"))) { if (!VEC_PUSH(a, &secs, rest)) return MMD_ERR_NOMEM; continue; }
         if (line.p[0] == ':') {
             if (!per.n) return diag_fail(err_off, msg, lo, "event without a period");
             if (per.v[per.n - 1].e0 + per.v[per.n - 1].ne != ev.n) return diag_fail(err_off, msg, lo, "misplaced event");
             push_events(a, (Str){.p = line.p + 1, .n = line.n - 1}, &ev, &oom);
-            if (oom) return CMM_ERR_NOMEM;
+            if (oom) return MMD_ERR_NOMEM;
             per.v[per.n - 1].ne = (uint32_t)ev.n - per.v[per.n - 1].e0;
             continue;
         }
@@ -88,22 +88,22 @@ DIAG_FN(timeline_render) {
         Period p = {.name = str_trim((Str){.p = line.p, .n = c ? (size_t)(c - line.p) : line.n}),
                     .sec = secs.n ? (uint32_t)secs.n - 1 : 0, .e0 = (uint32_t)ev.n};
         if (c) push_events(a, (Str){.p = c + 1, .n = line.n - (size_t)(c + 1 - line.p)}, &ev, &oom);
-        if (oom) return CMM_ERR_NOMEM;
+        if (oom) return MMD_ERR_NOMEM;
         p.ne = (uint32_t)ev.n - p.e0;
-        if (!VEC_PUSH(a, &per, p)) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &per, p)) return MMD_ERR_NOMEM;
     }
     if (!per.n) return diag_fail(err_off, msg, off, "timeline has no periods");
     const bool MULTI = !dcfg_bool("timeline.disableMulticolor", false);
     /* ---- mermaid timelineRenderer (LR) ---- */
     Str *wev = ANEW(a, Str, ev.n + 1);
     double *eh = ANEW(a, double, ev.n + 1);
-    if (!wev || !eh) return CMM_ERR_NOMEM;
+    if (!wev || !eh) return MMD_ERR_NOMEM;
     if (TD) { /* mermaid timelineRendererVertical */
         const double LMv = dcfg_num("timeline.leftMargin", 150), P = 5, NW = 200, EWv = 300;
         const double X0 = 50 + LMv, TX = X0 + NW + 2 * P + 20, SW = fmax(50, (NW + 2 * P + 20) + (EWv + 2 * P + 50) - 2 * P);
         Str *ws = ANEW(a, Str, secs.n + 1), *wp = ANEW(a, Str, per.n + 1);
         double *hp = ANEW(a, double, per.n + 1);
-        if (!ws || !wp || !hp) return CMM_ERR_NOMEM;
+        if (!ws || !wp || !hp) return MMD_ERR_NOMEM;
         double mSH = 0, mTH = 0, mES = 0;
         for (size_t k = 0; k < secs.n; k++) { ws[k] = tl_wrap(a, secs.v[k], SW); mSH = fmax(mSH, tl_vh(ws[k], P)); }
         for (size_t i = 0; i < per.n; i++) {
@@ -129,7 +129,7 @@ DIAG_FN(timeline_render) {
                 tx = (x1 - x0) / 2 - LMv;
                 BBox bb = {fmin(x0, title.n ? tx : x0), title.n ? -11 : 18, x1, bot + 28};
                 if (title.n) bb.x1 = fmax(bb.x1, tx + text_width(title, 33.2) * 1.06);
-                if (!buf_reserve(out, 4096 + (per.n + ev.n + secs.n) * 600)) return CMM_ERR_NOMEM;
+                if (!buf_reserve(out, 4096 + (per.n + ev.n + secs.n) * 600)) return MMD_ERR_NOMEM;
                 DG_HEAD(out, bb, 50, "timeline", CSS);
                 /* the vertical renderer references url(#arrowhead), which is never defined: no arrowheads */
                 buf_lit(out, "<line class=\"ax4\" x1=\""); buf_num(out, TX);
@@ -171,13 +171,13 @@ DIAG_FN(timeline_render) {
             buf_xml(out, title); buf_lit(out, "</text>");
         }
         buf_lit(out, "</svg>\n");
-        return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+        return out->oom ? MMD_ERR_NOMEM : MMD_OK;
     }
     const double LM = dcfg_num("timeline.leftMargin", 150);
     Str *wper = ANEW(a, Str, per.n + 1), *wsec = ANEW(a, Str, secs.n + 1);
     double *ph = ANEW(a, double, per.n + 1), *sh = ANEW(a, double, secs.n + 1);
     size_t *cnt = ANEW(a, size_t, secs.n + 1);
-    if (!wper || !wsec || !ph || !sh || !cnt) return CMM_ERR_NOMEM;
+    if (!wper || !wsec || !ph || !sh || !cnt) return MMD_ERR_NOMEM;
     double maxSH = 0, maxTH = 0, maxELL = 0;
     for (size_t k = 0; k < secs.n; k++) {
         wsec[k] = tl_wrap(a, secs.v[k], 150);
@@ -224,7 +224,7 @@ DIAG_FN(timeline_render) {
         if (tx < bb.x0) bb.x0 = tx;
         if (tx + tw > bb.x1) bb.x1 = tx + tw;
     }
-    if (!buf_reserve(out, 4096 + (per.n + ev.n + secs.n) * 500)) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 4096 + (per.n + ev.n + secs.n) * 500)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 50, "timeline", CSS);
     buf_lit(out, "<defs><marker id=\"tarrow\" refX=\"5\" refY=\"2\" markerWidth=\"6\" markerHeight=\"4\" orient=\"auto\">"
                  "<path d=\"M 0,0 V 4 L6,2 Z\"/></marker></defs>");
@@ -262,5 +262,5 @@ DIAG_FN(timeline_render) {
     buf_lit(out, "\" y1=\""); buf_num(out, depthY); buf_lit(out, "\" x2=\""); buf_num(out, ax2);
     buf_lit(out, "\" y2=\""); buf_num(out, depthY); buf_lit(out, "\"/>");
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

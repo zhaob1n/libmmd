@@ -129,7 +129,7 @@ DIAG_FN(eventmodeling_render) {
             }
             if (!closed) return diag_fail(err_off, msg, lo, "unterminated data block");
             d.body = (Str){.p = src + bs, .n = be > bs ? be - bs : 0};
-            if (!VEC_PUSH(a, &de, d)) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &de, d)) return MMD_ERR_NOMEM;
             continue;
         }
         bool reset = str_eq(w, S("rf")) || str_eq(w, S("resetframe"));
@@ -164,7 +164,7 @@ DIAG_FN(eventmodeling_render) {
             r = str_trim((Str){.p = r.p + e + 2, .n = r.n - e - 2});
         }
         if (r.n) return diag_fail(err_off, msg, lo, "unexpected text after frame");
-        if (!VEC_PUSH(a, &fr, f)) return CMM_ERR_NOMEM;
+        if (!VEC_PUSH(a, &fr, f)) return MMD_ERR_NOMEM;
     }
     if (!fr.n) return diag_fail(err_off, msg, off, "eventmodeling needs at least one frame");
     /* data text: trimmed lines, '\n' joined */
@@ -178,7 +178,7 @@ DIAG_FN(eventmodeling_render) {
                 if (str_eq(de.v[k].name, f->dref)) { raw = de.v[k].body, have = true; break; }
         if (!have) continue;
         char *o = arena_alloc_array(a, raw.n + 1, 1, 1);
-        if (!o) return CMM_ERR_NOMEM;
+        if (!o) return MMD_ERR_NOMEM;
         size_t on = 0, i2 = 0;
         while (i2 < raw.n) {
             size_t j = i2;
@@ -217,14 +217,14 @@ DIAG_FN(eventmodeling_render) {
             idx = m + 1;
             size_t pl = strlen(PFX[grp]);
             char *lb = arena_alloc_array(a, pl + ns.n + 1, 1, 1);
-            if (!lb) return CMM_ERR_NOMEM;
+            if (!lb) return MMD_ERR_NOMEM;
             memcpy(lb, PFX[grp], pl), memcpy(lb + pl, ns.p, ns.n);
             label = (Str){.p = lb, .n = pl + ns.n};
         }
         int li = -1;
         for (size_t k = 0; k < ln_.n; k++) if (ln_.v[k].idx == idx) { li = (int)k; break; }
         if (li < 0) {
-            if (!VEC_PUSH(a, &ln_, ((Lane){.idx = idx, .label = label, .ns = ns, .maxh = LANE_MIN, .h = LANE_MIN}))) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &ln_, ((Lane){.idx = idx, .label = label, .ns = ns, .maxh = LANE_MIN, .h = LANE_MIN}))) return MMD_ERR_NOMEM;
             li = (int)ln_.n - 1;
         }
         f->lane = li;
@@ -258,7 +258,7 @@ DIAG_FN(eventmodeling_render) {
     }
     /* lane y: sorted by idx */
     int *ord = ANEW(a, int, ln_.n);
-    if (!ord) return CMM_ERR_NOMEM;
+    if (!ord) return MMD_ERR_NOMEM;
     for (size_t k = 0; k < ln_.n; k++) ord[k] = (int)k;
     for (size_t k = 1; k < ln_.n; k++)
         for (size_t j = k; j > 0 && ln_.v[ord[j - 1]].idx > ln_.v[ord[j]].idx; j--) {

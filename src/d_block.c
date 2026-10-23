@@ -401,12 +401,12 @@ DIAG_FN(block_render) {
     BlkVec bv = {};
     VEC(BEdge) ev = {};
     VEC(Str) sv = {}; /* classDef / class / style lines, resolved when drawing */
-    if (add_blk(a, &bv, UINT32_MAX, (Blk){.cols = -1, .span = 1, .group = true}) == UINT32_MAX) return CMM_ERR_NOMEM;
+    if (add_blk(a, &bv, UINT32_MAX, (Blk){.cols = -1, .span = 1, .group = true}) == UINT32_MAX) return MMD_ERR_NOMEM;
     uint32_t cur = 0;
     unsigned depth = 0;
     while (dg_next_line(&it, &line, &lo)) {
         if (str_starts(line, S("classDef ")) || str_starts(line, S("class ")) || str_starts(line, S("style "))) {
-            if (!VEC_PUSH(a, &sv, line)) return CMM_ERR_NOMEM;
+            if (!VEC_PUSH(a, &sv, line)) return MMD_ERR_NOMEM;
             continue;
         }
         P p = {.s = line.p, .i = 0, .n = line.n};
@@ -440,7 +440,7 @@ DIAG_FN(block_render) {
                 }
                 if (depth >= 32) return diag_fail(err_off, msg, eo, "blocks nested too deeply");
                 uint32_t gi = add_blk(a, &bv, cur, g);
-                if (gi == UINT32_MAX) return CMM_ERR_NOMEM;
+                if (gi == UINT32_MAX) return MMD_ERR_NOMEM;
                 cur = gi, depth++, prev = UINT32_MAX;
                 continue;
             }
@@ -455,7 +455,7 @@ DIAG_FN(block_render) {
                     if (p.i == ds || !v) return diag_fail(err_off, msg, eo, "bad space width");
                     s = v > 64 ? 64 : v;
                 }
-                if (add_blk(a, &bv, cur, (Blk){.span = s, .space = true}) == UINT32_MAX) return CMM_ERR_NOMEM;
+                if (add_blk(a, &bv, cur, (Blk){.span = s, .space = true}) == UINT32_MAX) return MMD_ERR_NOMEM;
                 prev = UINT32_MAX;
                 continue;
             }
@@ -490,9 +490,9 @@ DIAG_FN(block_render) {
                 size_t ts = p.i;
                 if (!node_tok(&p, &id, &label, &shape, &span, &hl)) return diag_fail(err_off, msg, lo + ts, "expected edge target");
                 uint32_t t = find(&bv, id);
-                if (t == UINT32_MAX && (t = add_blk(a, &bv, cur, (Blk){.id = id, .label = hl ? label : id, .shape = shape, .span = span})) == UINT32_MAX) return CMM_ERR_NOMEM;
+                if (t == UINT32_MAX && (t = add_blk(a, &bv, cur, (Blk){.id = id, .label = hl ? label : id, .shape = shape, .span = span})) == UINT32_MAX) return MMD_ERR_NOMEM;
                 else if (hl) bv.v[t].label = label, bv.v[t].shape = shape;
-                if (!VEC_PUSH(a, &ev, ((BEdge){.a = prev, .b = t, .label = lab, .arrow = ar.p[ar.n - 1] == '>', .arrow_s = ar.p[0] == '<'}))) return CMM_ERR_NOMEM;
+                if (!VEC_PUSH(a, &ev, ((BEdge){.a = prev, .b = t, .label = lab, .arrow = ar.p[ar.n - 1] == '>', .arrow_s = ar.p[0] == '<'}))) return MMD_ERR_NOMEM;
                 prev = t;
                 continue;
             }
@@ -503,7 +503,7 @@ DIAG_FN(block_render) {
             if (!node_tok(&p, &id, &label, &shape, &span, &hl)) return diag_fail(err_off, msg, eo, "unexpected token in block diagram");
             uint32_t t = find(&bv, id);
             if (t == UINT32_MAX) {
-                if ((t = add_blk(a, &bv, cur, (Blk){.id = id, .label = hl ? label : id, .shape = shape, .span = span})) == UINT32_MAX) return CMM_ERR_NOMEM;
+                if ((t = add_blk(a, &bv, cur, (Blk){.id = id, .label = hl ? label : id, .shape = shape, .span = span})) == UINT32_MAX) return MMD_ERR_NOMEM;
             } else if (hl) bv.v[t].label = label, bv.v[t].shape = shape;
             prev = t;
         }
@@ -513,7 +513,7 @@ DIAG_FN(block_render) {
     size_t nb = bv.n;
     uint32_t *rc = ANEW(a, uint32_t, nb), *cc = ANEW(a, uint32_t, nb), *rows = ANEW(a, uint32_t, nb);
     double **gx = ANEW(a, double *, nb); /* per group: extra gap after column k (labelled side-by-side edges) */
-    if (!rc || !cc || !rows || !gx) return CMM_ERR_NOMEM;
+    if (!rc || !cc || !rows || !gx) return MMD_ERR_NOMEM;
     memset(gx, 0, nb * sizeof *gx); /* arena memory is not zeroed */
     /* bottom-up natural sizes (children always have larger indices) */
     for (size_t i = nb; i-- > 0;) {
@@ -558,7 +558,7 @@ DIAG_FN(block_render) {
                 uint32_t k = cc[L] + (B[L].span < cols ? B[L].span : cols) - 1;
                 double need = 30 + (ev.v[e].label.n ? text_width(ev.v[e].label, fs * 0.875) + 8 : 0) - GAP;
                 if (k >= cols || need <= 0) continue;
-                if (!gx[i]) { if (!(gx[i] = ANEW(a, double, cols))) return CMM_ERR_NOMEM; memset(gx[i], 0, cols * sizeof *gx[i]); }
+                if (!gx[i]) { if (!(gx[i] = ANEW(a, double, cols))) return MMD_ERR_NOMEM; memset(gx[i], 0, cols * sizeof *gx[i]); }
                 gx[i][k] = fmax(gx[i][k], need);
                 continue;
             }
@@ -568,7 +568,7 @@ DIAG_FN(block_render) {
             if (cc[R] != cc[L] + sL || !cc[R]) continue;
             double need = text_width(ev.v[e].label, fs) + 16 - GAP;
             if (need <= 0) continue;
-            if (!gx[i]) { if (!(gx[i] = ANEW(a, double, cols))) return CMM_ERR_NOMEM; memset(gx[i], 0, cols * sizeof *gx[i]); }
+            if (!gx[i]) { if (!(gx[i] = ANEW(a, double, cols))) return MMD_ERR_NOMEM; memset(gx[i], 0, cols * sizeof *gx[i]); }
             gx[i][cc[R] - 1] = fmax(gx[i][cc[R] - 1], need);
         }
         if (gx[i]) for (uint32_t k = 0; k < cols; k++) S += gx[i][k];
@@ -617,7 +617,7 @@ DIAG_FN(block_render) {
     Buf ebuf = {}, *eb = &ebuf;
     double *LBX = ANEW(a, double, 4 * ev.n + 4);
     size_t nlb = 0;
-    if (!LBX) return CMM_ERR_NOMEM;
+    if (!LBX) return MMD_ERR_NOMEM;
     for (size_t e = 0; e < ev.n; e++) /* self-loop labels have fixed spots: register them first */
         if (ev.v[e].a == ev.v[e].b && ev.v[e].label.n) {
             const Blk *s = &B[ev.v[e].a];
@@ -772,8 +772,8 @@ DIAG_FN(block_render) {
             dg_text(eb, ev.v[e].label, fs * 0.875, mx, my, "middle", "bt\" font-size=\"14");
         }
     }
-    if (eb->oom) { free(ebuf.p); return CMM_ERR_NOMEM; }
-    if (!buf_reserve(out, 2048 + nb * 400 + ev.n * 300)) return CMM_ERR_NOMEM;
+    if (eb->oom) { free(ebuf.p); return MMD_ERR_NOMEM; }
+    if (!buf_reserve(out, 2048 + nb * 400 + ev.n * 300)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 5, "block", CSS);
     buf_lit(out, DEFS);
     if (title.n) dg_text(out, title, 18, B[0].w / 2, -top / 2, "middle", "bt");
@@ -852,12 +852,12 @@ DIAG_FN(block_render) {
         default: dg_rect(out, x, y, w, h, 0, "bn");
         }
         Str css = sv.n ? node_css(sv.n, sv.v, b->id) : (Str){};
-        if (css.n && !style_shape(out, shape0, css)) return CMM_ERR_NOMEM;
+        if (css.n && !style_shape(out, shape0, css)) return MMD_ERR_NOMEM;
         dg_text(out, b->label, fs, cx, cy, "middle", "bt");
         buf_lit(out, "</g>");
     }
     buf_put(out, ebuf.n, ebuf.p);
     free(ebuf.p);
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

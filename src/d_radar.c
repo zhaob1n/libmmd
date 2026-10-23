@@ -72,7 +72,7 @@ DIAG_FN(radar_render) {
                 Axis x;
                 id_label(&rest, &x.id, &x.label);
                 if (!x.id.n) return diag_fail(err_off, msg, (size_t)(rest.p - src), "expected axis name");
-                if (!VEC_PUSH(a, &ax, x)) return CMM_ERR_NOMEM;
+                if (!VEC_PUSH(a, &ax, x)) return MMD_ERR_NOMEM;
                 rest = str_trim(rest);
                 if (rest.n && rest.p[0] == ',') rest = (Str){.p = rest.p + 1, .n = rest.n - 1};
                 else if (rest.n) return diag_fail(err_off, msg, (size_t)(rest.p - src), "expected ','");
@@ -88,7 +88,7 @@ DIAG_FN(radar_render) {
             if (c.label.p == c.id.p) c.id = c.label = str_trim((Str){.p = w.p + w.n, .n = (size_t)(br - w.p) - w.n});
             if (!c.id.n) return diag_fail(err_off, msg, lo, "curve needs a name");
             if (!VEC_PUSH(a, &cv, c) || !VEC_PUSH(a, &raw, ((Str){.p = br + 1, .n = (size_t)(line.p + line.n - 1 - br - 1)})))
-                return CMM_ERR_NOMEM;
+                return MMD_ERR_NOMEM;
             continue;
         }
         return diag_fail(err_off, msg, lo, "unknown radar statement");
@@ -98,7 +98,7 @@ DIAG_FN(radar_render) {
     double dmax = -INFINITY;
     for (size_t c = 0; c < cv.n; c++) {
         cv.v[c].v0 = (uint32_t)vals.n;
-        for (size_t k = 0; k < na; k++) if (!VEC_PUSH(a, &vals, vmin)) return CMM_ERR_NOMEM;
+        for (size_t k = 0; k < na; k++) if (!VEC_PUSH(a, &vals, vmin)) return MMD_ERR_NOMEM;
         Str b = raw.v[c];
         for (size_t k = 0; b.n || k == 0; k++) {
             const char *cm = memchr(b.p, ',', b.n);
@@ -127,7 +127,7 @@ DIAG_FN(radar_render) {
     double cy = (title.n ? 40 : 10) + 300, lgw = 0;
     if (legend) for (size_t c = 0; c < cv.n; c++) lgw = fmax(lgw, text_width(cv.v[c].label, 12) + 30);
     BBox bb = {0, 0, 700 + lgw, cy + 310};
-    if (!buf_reserve(out, 2048 + na * 300 + cv.n * (na * 60 + 300))) return CMM_ERR_NOMEM;
+    if (!buf_reserve(out, 2048 + na * 300 + cv.n * (na * 60 + 300))) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 4, "radar", CSS);
 #define ANG(k) (2 * M_PI * (double)(k) / (double)na - M_PI / 2)
     for (int t = ticks; t >= 1; t--) {
@@ -177,5 +177,5 @@ DIAG_FN(radar_render) {
         }
     if (title.n) dg_text(out, title, 16, CX, 22, "middle", "ttl");
     buf_lit(out, "</svg>\n");
-    return out->oom ? CMM_ERR_NOMEM : CMM_OK;
+    return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }
