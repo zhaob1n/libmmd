@@ -475,7 +475,8 @@ DIAG_FN(wardley_render) {
         double *L = lbo + 6 * i, r = NLO + (nd->ss ? 10 : 0), tw = text_width(nd->label, 10);
         L[0] = r, L[1] = -r, L[2] = L[3] = L[4] = L[5] = 0;
         if (nd->k == WK_ANCHOR || nd->has_lo) continue;
-        const double cand[][2] = {{r, -r}, {-r - tw, -r}, {r, r + 9}, {-r - tw, r + 9}, {r + 4, 3}, {-r - 4 - tw, 3}};
+        const double cand[][2] = {{r, -r}, {-r - tw, -r}, {r, r + 9}, {-r - tw, r + 9}, {r + 4, 3}, {-r - 4 - tw, 3},
+            {-tw / 2, -r - 3}, {-tw / 2, r + 12}, {2 * r, -2 * r}, {-2 * r - tw, -2 * r}, {2 * r, 2 * r + 9}, {-2 * r - tw, 2 * r + 9}};
         double bc = INFINITY;
         for (size_t c = 0; c < countof(cand); c++) {
             double bx[4] = {nd->px + cand[c][0], nd->py + cand[c][1] - 9, nd->px + cand[c][0] + tw, nd->py + cand[c][1] + 2};
