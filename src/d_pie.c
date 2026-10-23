@@ -65,11 +65,59 @@ DIAG_FN(pie_render) {
         double w = text_width(sl.v[i].label, fs) + (show ? text_width(S(" [000000]"), fs) : 0);
         if (w > lw) lw = w;
     }
-    BBox bb = {0, 0, CX + R + 50 + 22 + lw, 450};
-    if (title.n) bb.y0 = -40;
+    /* percentage labels: mermaid puts them at TPOS * R. One that doesn't fit its slice there, or would sit
+     * on an earlier label, goes outside the pie with a leader line (deviation from mermaid: tiny slices
+     * otherwise stack unreadable "1%" labels on top of each other) */
+    double *LX = ANEW(a, double, sl.n), *LY = ANEW(a, double, sl.n), *LW = ANEW(a, double, sl.n), *LM = ANEW(a, double, sl.n);
+    signed char *LO = ANEW(a, signed char, sl.n); /* 0 inside, +1 outside right, -1 outside left */
+    if (!LX || !LY || !LW || !LM || !LO) return CMM_ERR_NOMEM;
+    char pct[32];
+    bool any_out_r = false;
+    double ext_l = 0, ext_r = 0;
+    {
+        double ang0 = 0;
+        for (size_t i = 0; i < sl.n; i++) {
+            double frac = total > 0 ? sl.v[i].v / total : 0, mid = ang0 + frac * M_PI;
+            ang0 += frac * 2 * M_PI;
+            LM[i] = mid, LO[i] = 0, LW[i] = 0;
+            if (frac <= 0) continue;
+            int len = snprintf(pct, sizeof pct, "%.0f%%", frac * 100);
+            LW[i] = text_width((Str){.p = pct, .n = (size_t)len}, 17);
+            LX[i] = CX + TPOS * R * sin(mid), LY[i] = CY - TPOS * R * cos(mid);
+            bool fits = frac >= 0.5 || 2 * TPOS * R * sin(frac * M_PI) >= fmin(LW[i], 20) + 6;
+            for (size_t k = 0; k < i && fits; k++)
+                if (LW[k] > 0 && !LO[k] && fabs(LX[k] - LX[i]) * 2 < LW[k] + LW[i] + 2 && fabs(LY[k] - LY[i]) < 19) fits = false;
+            if (fits || sl.n == 1) continue;
+            LO[i] = sin(mid) >= 0 ? 1 : -1;
+            LX[i] = CX + (R + 30) * sin(mid), LY[i] = CY - (R + 30) * cos(mid);
+        }
+        /* outside labels: keep 19px apart vertically on each side, in angle order */
+        for (int side = -1; side <= 1; side += 2) {
+            double last = -INFINITY;
+            for (size_t k = 0; k < sl.n; k++) {
+                size_t i = side > 0 ? k : sl.n - 1 - k; /* right side runs top-down clockwise, left side bottom-up: walk both top-down */
+                if (LO[i] != side) continue;
+                if (LY[i] < last + 19) LY[i] = last + 19;
+                last = LY[i];
+            }
+            (void)last;
+        }
+        for (size_t i = 0; i < sl.n; i++) {
+            if (!LO[i]) continue;
+            if (LO[i] > 0) any_out_r = true, ext_r = fmax(ext_r, LX[i] + 4 + LW[i] - (CX + R));
+            else ext_l = fmax(ext_l, (CX - R) - (LX[i] - 4 - LW[i]));
+        }
+    }
+    const double LEGX = CX + R + 50 + (any_out_r ? fmax(0, ext_r - 40) : 0);
+    BBox bb = {0, 0, LEGX + 22 + lw, 450};
+    if (ext_l > CX - R) bb.x0 = (CX - R) - ext_l - 4;
+    for (size_t i = 0; i < sl.n; i++) if (LO[i]) bb.y0 = fmin(bb.y0, LY[i] - 12), bb.y1 = fmax(bb.y1, LY[i] + 12);
+    double ty = -14; /* title baseline: above any outside label near 12 o'clock */
+    for (size_t i = 0; i < sl.n; i++) if (LO[i] && fabs(LX[i] - CX) < 120) ty = fmin(ty, LY[i] - 22);
+    if (title.n) bb.y0 = fmin(bb.y0, ty - 26);
     if (!buf_reserve(out, 2048 + sl.n * 600)) return CMM_ERR_NOMEM;
     DG_HEAD(out, bb, 8, "pie", CSS);
-    if (title.n) dg_text(out, title, 25, CX, -14, "middle", "ttl");
+    if (title.n) dg_text(out, title, 25, CX, ty, "middle", "ttl");
     /* mermaid 11 keeps declaration order, clockwise from 12 o'clock */
     uint32_t *ord = ANEW(a, uint32_t, sl.n);
     if (!ord) return CMM_ERR_NOMEM;
@@ -92,21 +140,23 @@ DIAG_FN(pie_render) {
         }
         ang = a1;
     }
-    ang = 0;
-    for (size_t j = 0; j < sl.n; j++) { /* percentage labels, mermaid places at 0.75 R */
-        size_t i = ord[j];
-        double frac = total > 0 ? sl.v[i].v / total : 0, mid = ang + frac * M_PI;
-        ang += frac * 2 * M_PI;
+    for (size_t i = 0; i < sl.n; i++) {
+        double frac = total > 0 ? sl.v[i].v / total : 0, mid = LM[i];
         if (frac <= 0) continue;
         int len = snprintf(fill, sizeof fill, "%.0f%%", frac * 100);
-        dg_text(out, (Str){.p = fill, .n = (size_t)len}, 17, CX + TPOS * R * sin(mid), CY - TPOS * R * cos(mid), "middle", "pct");
+        if (!LO[i]) { dg_text(out, (Str){.p = fill, .n = (size_t)len}, 17, LX[i], LY[i], "middle", "pct"); continue; }
+        buf_lit(out, "<path class=\"leader\" fill=\"none\" stroke=\"#666\" stroke-width=\"1\" d=\"M");
+        dg_pt(out, CX + (R - 4) * sin(mid), CY - (R - 4) * cos(mid)); buf_ch(out, 'L');
+        dg_pt(out, CX + (R + 18) * sin(mid), CY - (R + 18) * cos(mid)); buf_ch(out, 'L');
+        dg_pt(out, LX[i], LY[i]); buf_lit(out, "\"/>");
+        dg_text(out, (Str){.p = fill, .n = (size_t)len}, 17, LX[i] + 4 * LO[i], LY[i], LO[i] > 0 ? "start" : "end", "pct");
     }
     buf_lit(out, "<circle class=\"outer\" cx=\""); buf_num(out, CX); buf_lit(out, "\" cy=\""); buf_num(out, CY);
     buf_lit(out, "\" r=\""); buf_num(out, R + 1); buf_lit(out, "\"/>");
     double ly = CY - sl.n * 22 / 2.0;
     for (size_t i = 0; i < sl.n; i++, ly += 22) {
         const char *col = dcfg_pal("pie", i % countof(COLORS) + 1, COLORS[i % countof(COLORS)]);
-        buf_lit(out, "<rect width=\"18\" height=\"18\" x=\""); buf_num(out, CX + R + 50); buf_lit(out, "\" y=\"");
+        buf_lit(out, "<rect width=\"18\" height=\"18\" x=\""); buf_num(out, LEGX); buf_lit(out, "\" y=\"");
         buf_num(out, ly); buf_lit(out, "\" fill=\""); buf_put(out, strlen(col), col); buf_lit(out, "\" stroke=\"#000\"/>");
         Str lab = sl.v[i].label;
         if (show) {
@@ -117,7 +167,7 @@ DIAG_FN(pie_render) {
             memcpy(t + lab.n, fill, (size_t)len);
             lab = (Str){.p = t, .n = lab.n + (size_t)len};
         }
-        dg_text(out, lab, fs, CX + R + 72, ly + 9, "start", nullptr);
+        dg_text(out, lab, fs, LEGX + 22, ly + 9, "start", nullptr);
     }
     buf_lit(out, "</svg>\n");
     return out->oom ? CMM_ERR_NOMEM : CMM_OK;
