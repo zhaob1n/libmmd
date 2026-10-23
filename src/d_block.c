@@ -375,6 +375,24 @@ static size_t gap_route(Arena *a, const Blk *B, size_t nb, const Blk *s, const B
     return m;
 }
 
+/* overlap of a label box centred (cx, cy) with drawn blocks (all, or all but s / t) and earlier labels */
+static double lbl_cost(const Blk *B, size_t nb, const Blk *s, const Blk *t, const double *LBX, size_t nlb, double cx, double cy, double tw, double fs) {
+    double ov = 0;
+    for (size_t j = 1; j < nb; j++) {
+        const Blk *o = &B[j];
+        if (o->group || o->space || o->w <= 0 || o == s || o == t) continue;
+        double ox = fmin(cx + tw / 2 + 2, o->x + o->w) - fmax(cx - tw / 2 - 2, o->x);
+        double oy = fmin(cy + fs * 0.6, o->y + o->h) - fmax(cy - fs * 0.6, o->y);
+        if (ox > 0 && oy > 0) ov += ox * oy;
+    }
+    for (size_t q = 0; q < nlb; q++) {
+        double ox = fmin(cx + tw / 2 + 2, LBX[4 * q + 2]) - fmax(cx - tw / 2 - 2, LBX[4 * q]);
+        double oy = fmin(cy + fs * 0.6, LBX[4 * q + 3]) - fmax(cy - fs * 0.6, LBX[4 * q + 1]);
+        if (ox > 0 && oy > 0) ov += 2 * ox * oy;
+    }
+    return ov;
+}
+
 DIAG_FN(block_render) {
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
@@ -600,6 +618,12 @@ DIAG_FN(block_render) {
     double *LBX = ANEW(a, double, 4 * ev.n + 4);
     size_t nlb = 0;
     if (!LBX) return CMM_ERR_NOMEM;
+    for (size_t e = 0; e < ev.n; e++) /* self-loop labels have fixed spots: register them first */
+        if (ev.v[e].a == ev.v[e].b && ev.v[e].label.n) {
+            const Blk *s = &B[ev.v[e].a];
+            double X = s->x + s->w, Y = s->y + s->h / 2, tw = text_width(ev.v[e].label, fs * 0.875), *lq = LBX + 4 * nlb++;
+            lq[0] = X + 26, lq[1] = Y - fs * 0.6, lq[2] = X + 30 + tw, lq[3] = Y + fs * 0.6;
+        }
     for (size_t e = 0; e < ev.n; e++) {
         const Blk *s = &B[ev.v[e].a], *t = &B[ev.v[e].b];
         double x0, y0, x1, y1;
@@ -683,6 +707,29 @@ DIAG_FN(block_render) {
                     if (ox > 0 && oy > 0) ov += 2 * ox * oy;
                 }
                 if (ov < best - 1e-9) best = ov, mx = cx, my = cy;
+            }
+            double ax = mx, ay = my;
+            bool lead = false;
+            if (rn < 2 && best > 0) { /* still crowded: step the label off the edge sideways, with a leader line */
+                double dx = x1 - x0, dy = y1 - y0, dl = hypot(dx, dy);
+                if (dl > 1e-9) {
+                    double nx = -dy / dl, ny = dx / dl, bo = best;
+                    for (size_t k = 0; k < countof(TS); k++)
+                        for (int m = 1; m <= 4; m++) {
+                            double u = TS[k], px = (1 - u) * (1 - u) * x0 + 2 * u * (1 - u) * qx + u * u * x1, py = (1 - u) * (1 - u) * y0 + 2 * u * (1 - u) * qy + u * u * y1;
+                            double o = (m & 1 ? 1 : -1) * (m <= 2 ? 1 : 2) * (fabs(nx) * (tw / 2 + 6) + fabs(ny) * (fs * 0.6 + 6));
+                            double cx = px + nx * o, cy = py + ny * o;
+                            double c = lbl_cost(B, nb, nullptr, nullptr, LBX, nlb, cx, cy, tw, fs) + fabs(o) * 0.5;
+                            if (c < bo - 1e-9) bo = c, mx = cx, my = cy, ax = px, ay = py, lead = true;
+                        }
+                    if (lead) {
+                        bb.x0 = fmin(bb.x0, mx - tw / 2 - 2), bb.x1 = fmax(bb.x1, mx + tw / 2 + 2);
+                        bb.y0 = fmin(bb.y0, my - fs * 0.6), bb.y1 = fmax(bb.y1, my + fs * 0.6);
+                        buf_lit(eb, "<path class=\"leader\" d=\"M");
+                        dg_pt(eb, ax, ay); buf_ch(eb, 'L'); dg_pt(eb, mx, my);
+                        buf_lit(eb, "\" stroke=\"#999\" stroke-width=\"1\" stroke-dasharray=\"2 2\" fill=\"none\"/>");
+                    }
+                }
             }
             if (rn >= 2) { /* routed: try points along every run, scored against all blocks and earlier labels */
                 best = INFINITY;
