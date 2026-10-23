@@ -364,6 +364,20 @@ DIAG_FN(venn_render) {
         double sx = LX[i] - iw / 2, sy = LY[i] - ih / 2 + lo2;
         size_t cols = (size_t)ceil(sqrt((double)cnt)), rows = (cnt + cols - 1) / cols, idx = 0;
         double cw = iw / (double)cols, chh = ih / (double)rows;
+        if (ar.v[i].label.n && LD[i] > -1e299) { /* keep the first row (wrapped, so maybe taller) below the area label */
+            double need = 0;
+            for (size_t t = 0, k = 0; t < tx.n && k < cols; t++) {
+                if (tx.v[t].mask != m) continue;
+                Str wl = dg_wrap(a, tx.v[t].label, 40 * sc, cw * 0.9);
+                if (!wl.p) wl = tx.v[t].label;
+                double nl = 1;
+                for (size_t q = 0; q < wl.n; q++) nl += wl.p[q] == '\n';
+                double cy = sy + chh * 0.5;
+                need = fmax(need, LY[i] + 28 * sc + nl * 24 * sc - cy);
+                k++;
+            }
+            sy += need;
+        }
         buf_lit(&b, "<g class=\"venn-text-nodes\" font-size=\""); buf_num(&b, 40 * sc); buf_lit(&b, "px\">");
         for (size_t t = 0; t < tx.n; t++) {
             if (tx.v[t].mask != m) continue;
