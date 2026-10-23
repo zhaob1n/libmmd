@@ -142,6 +142,25 @@ static void bnd_insert(Bnd *b, unsigned shape_row, double w, double h, double *o
 
 constexpr int32_t C4_GLOBAL = -2; /* mermaid's implicit "global" boundary (not drawn) */
 
+/* mermaid lineBreakRegex /<br\s*\/?>/gi: length of the next segment of t from *i, advancing past the break */
+static Str br_next(Str t, size_t *i) {
+    size_t s0 = *i;
+    for (size_t k = s0; k < t.n; k++) {
+        if (t.p[k] != '<' || k + 3 > t.n || (t.p[k + 1] | 32) != 'b' || (t.p[k + 2] | 32) != 'r') continue;
+        size_t j = k + 3;
+        while (j < t.n && (t.p[j] == ' ' || t.p[j] == '\t')) j++;
+        if (j < t.n && t.p[j] == '/') j++;
+        if (j < t.n && t.p[j] == '>') { *i = j + 1; return (Str){.p = t.p + s0, .n = k - s0}; }
+    }
+    *i = t.n + 1;
+    return (Str){.p = t.p + s0, .n = t.n - s0};
+}
+static unsigned br_lines(Str t) {
+    unsigned n = 0;
+    for (size_t i = 0; i <= t.n;) { (void)br_next(t, &i); n++; }
+    return n;
+}
+
 /* drawInsideBoundary(parentBounds, boundaries whose parent is `parent`) */
 static void lay(Lay *L, Bnd *P, int32_t parent, unsigned depth) {
     const Graph *g = L->g;
@@ -156,8 +175,14 @@ static void lay(Lay *L, Bnd *P, int32_t parent, unsigned depth) {
         if (parent == C4_GLOBAL) s = NONE;
         else if (!L->items[k].box || g->sparent[L->items[k].idx] != parent) continue;
         else s = L->items[k].idx;
-        bool typed = s == NONE || memchr(g->stitle[s].p, '\n', g->stitle[s].n);
-        double Y = 8 + C4_LBL_H + (typed ? 5 + C4_TYPE_H : 0);
+        double Y = 8 + C4_LBL_H + 5 + C4_TYPE_H; /* the implicit global boundary is typed */
+        if (s != NONE) { /* wrap is off for boundaries: one text line per <br> segment */
+            Str t = g->stitle[s];
+            const char *nl = memchr(t.p, '\n', t.n);
+            Str t1 = nl ? (Str){.p = t.p, .n = (size_t)(nl - t.p)} : t;
+            Y = 8 + C4_LBL_H * br_lines(t1);
+            if (nl) Y += 5 + C4_TYPE_H * br_lines((Str){.p = nl + 1, .n = t.n - (size_t)(nl + 1 - t.p)});
+        }
         if (bi == 0 || bi % L->box_row == 0) bnd_set(&cur, P->x0 + C4_DMX, P->y1 + C4_DMY + Y);
         else bnd_set(&cur, cur.x1 != cur.x0 ? cur.x1 + C4_DMX : cur.x0, cur.y0);
         bi++;
@@ -333,9 +358,9 @@ DIAG_FN(c4_render) {
     while (ci.n < g.nn) if (!VEC_PUSH(a, &ci, (CInfo){.kind = K_SYSTEM, .stereo = S("system")})) return CMM_ERR_NOMEM;
     /* mermaid 11.17 c4LabelHelper: sections name (14px bold) / [type] (0.75em) / descr (0.82em) wrapped to
      * width - 2*padding (padding 20), stacked 3px apart; shapes pad the stack by 20 on each side. */
-    Str *dw = ANEW(a, Str, g.nn), *dn = ANEW(a, Str, g.nn);
+    Str *dw = ANEW(a, Str, g.nn), *dn = ANEW(a, Str, g.nn), *dt = ANEW(a, Str, g.nn);
     double *lab = ANEW(a, double, g.nn);
-    if (!dw || !dn || !lab) return CMM_ERR_NOMEM;
+    if (!dw || !dn || !dt || !lab) return CMM_ERR_NOMEM;
     for (size_t v = 0; v < g.nn; v++) {
         CInfo *c = &ci.v[v];
         double w = 216; /* mermaid: node.width = conf.width; the [type] line is not used for sizing */
@@ -348,7 +373,23 @@ DIAG_FN(c4_render) {
         unsigned nl = 0;
         label_measure_f(dn[v], C4_NF, text_width_os, &tw, &nl);
         w = fmax(w, tw + w - ww);
-        double h = sec_h(nl, C4_NF) + C4_GAP + sec_h(1, C4_TF);
+        { /* mermaid 11 type line: [Person], [Software System], [Container: techn]; wrapped like the rest */
+            size_t kl = strlen(C4_TY[c->kind]), n = kl + 3 + (c->techn.n ? c->techn.n + 2 : 0);
+            char *t = ANEW(a, char, n);
+            if (!t) return CMM_ERR_NOMEM;
+            size_t k = 0;
+            t[k++] = '[';
+            memcpy(t + k, C4_TY[c->kind], kl), k += kl;
+            if (c->techn.n) t[k++] = ':', t[k++] = ' ', memcpy(t + k, c->techn.p, c->techn.n), k += c->techn.n;
+            t[k++] = ']';
+            dt[v] = dg_wrapf(a, (Str){.p = t, .n = k}, C4_TF, ww, text_width_os);
+            if (!dt[v].n) return CMM_ERR_NOMEM;
+        }
+        double twid;
+        unsigned tl;
+        label_measure_f(dt[v], C4_TF, text_width_os, &twid, &tl);
+        w = fmax(w, twid + w - ww);
+        double h = sec_h(nl, C4_NF) + C4_GAP + sec_h(tl, C4_TF);
         if (dw[v].n) {
             double dwid;
             unsigned dl;
@@ -469,7 +510,11 @@ DIAG_FN(c4_render) {
         const char *nl = memchr(t.p, '\n', t.n);
         Str t1 = nl ? (Str){.p = t.p, .n = (size_t)(nl - t.p)} : t;
         dg_text(out, t1, 14, g.sx[s] + g.sw[s] / 2, g.sy[s] + 14, "middle", "cbt"); /* mermaid centres boundary titles */
-        if (nl) dg_text(out, (Str){.p = nl + 1, .n = t.n - (size_t)(nl + 1 - t.p)}, 12, g.sx[s] + g.sw[s] / 2, g.sy[s] + 30, "middle", "cbs");
+        if (nl) {
+            Str t2 = {.p = nl + 1, .n = t.n - (size_t)(nl + 1 - t.p)};
+            unsigned k = 0;
+            for (size_t i = 0; i <= t2.n; k++) dg_text(out, br_next(t2, &i), 12, g.sx[s] + g.sw[s] / 2, g.sy[s] + 30 + C4_TYPE_H * k, "middle", "cbs");
+        }
     }
     for (size_t e = 0; e < g.ne; e++) {
         int32_t f = g.efrom[e], t = g.eto[e];
@@ -544,12 +589,12 @@ DIAG_FN(c4_render) {
         double y = lt;
         dg_text_lh(out, dn[v], 1.1 * C4_NF, cx, y + sec_h(nl, C4_NF) / 2, "middle", "cn");
         y += sec_h(nl, C4_NF) + C4_GAP;
-        { /* mermaid 11 type line: [Person], [Software System], [Container: techn], [Component: techn] */
-            dg_text_open(out, cx, y + sec_h(1, C4_TF) / 2 + 0.35 * C4_TF, "middle", "cs");
-            buf_ch(out, '['); buf_put(out, strlen(C4_TY[c->kind]), C4_TY[c->kind]);
-            if (c->techn.n) { buf_lit(out, ": "); buf_xml(out, c->techn); }
-            buf_lit(out, "]</text>");
-            y += sec_h(1, C4_TF) + C4_GAP;
+        {
+            double twid;
+            unsigned tl;
+            label_measure_f(dt[v], C4_TF, text_width_os, &twid, &tl);
+            dg_text_lh(out, dt[v], 1.1 * C4_TF, cx, y + sec_h(tl, C4_TF) / 2, "middle", "cs");
+            y += sec_h(tl, C4_TF) + C4_GAP;
         }
         if (dw[v].n) {
             double dwid;
