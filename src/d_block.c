@@ -584,6 +584,20 @@ DIAG_FN(block_render) {
         buf_lit(out, "/>");
         if (ev.v[e].label.n) {
             double tw = text_width(ev.v[e].label, fs * 0.875), mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+            /* the midpoint can land on a block crossed by the straight edge: slide the label along it to a free spot */
+            static constexpr double TS[] = {0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.12, 0.88};
+            double best = INFINITY;
+            for (size_t k = 0; k < countof(TS) && best > 0; k++) { /* least overlap with other blocks; first clear wins */
+                double cx = x0 + (x1 - x0) * TS[k], cy = y0 + (y1 - y0) * TS[k], ov = 0;
+                for (size_t j = 1; j < nb; j++) {
+                    const Blk *o = &B[j];
+                    if (o->group || o->w <= 0 || o == s || o == t) continue;
+                    double ox = fmin(cx + tw / 2 + 2, o->x + o->w) - fmax(cx - tw / 2 - 2, o->x);
+                    double oy = fmin(cy + fs * 0.6, o->y + o->h) - fmax(cy - fs * 0.6, o->y);
+                    if (ox > 0 && oy > 0) ov += ox * oy;
+                }
+                if (ov < best - 1e-9) best = ov, mx = cx, my = cy;
+            }
             dg_rect(out, mx - tw / 2 - 2, my - fs * 0.6, tw + 4, fs * 1.2, 0, "bl");
             dg_text(out, ev.v[e].label, fs * 0.875, mx, my, "middle", "bt\" font-size=\"14");
         }
