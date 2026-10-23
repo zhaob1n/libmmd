@@ -433,9 +433,9 @@ ef06eb46add75fd1 bench/inputs/large.mmd
 69be40d101603b91 bench/inputs/medium.mmd
 4ae2dd5a2e67289b bench/inputs/small.mmd
 f6e8dccf5cf12f4a bench/inputs/xlarge.mmd
-59703937e5a48789 tests/cases/architecture_full.mmd
-1c5d39424fe7b147 tests/cases/architecture_groups.mmd
-6d5c5fa14c783c96 tests/cases/architecture_overlap.mmd
+678f54867cc78f0a tests/cases/architecture_full.mmd
+a4dab5cc44ddd8fe tests/cases/architecture_groups.mmd
+6adb29bec2e21342 tests/cases/architecture_overlap.mmd
 0b0c13f2f1776d9d tests/cases/basic.mmd
 d739efc9ff6f8eff tests/cases/block_full.mmd
 f460e6ef3b240f4b tests/cases/block_route.mmd
