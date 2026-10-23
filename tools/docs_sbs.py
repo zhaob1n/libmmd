@@ -5,7 +5,8 @@ import subprocess, sys, os, re, glob, concurrent.futures as cf
 from PIL import Image
 os.makedirs('/tmp/dsbs', exist_ok=True)
 def one(src):
-    tag = (src[11:] if src.startswith('tests/docs/') else os.path.basename(src))[:-4].replace('/', '_'); pid = os.getpid()
+    rel = os.path.relpath(os.path.realpath(src), os.path.realpath('tests/docs'))  # absolute paths must map to the same tag
+    tag = (rel if not rel.startswith('..') else os.path.relpath(os.path.realpath(src)).replace('tests/cases/', ''))[:-4].replace('/', '_'); pid = os.getpid()
     cs, cp, mp = f'/tmp/dsbs/c_{tag}_{pid}.svg', f'/tmp/dsbs/c_{tag}_{pid}.png', f'/tmp/dsbs/m_{tag}.png'
     try:
         subprocess.run(['build/mmdc-c', src, '-o', cs], check=True, capture_output=True)
