@@ -442,8 +442,8 @@ a7ed82c11988dc3d bench/mmdr_fixtures/flowchart_small.mmd
 e300619179959179 tests/cases/c4_bgcolor.mmd
 e2e00de8640c89f0 tests/cases/c4_full.mmd
 a50e550267467c7c tests/cases/c4_styles.mmd
-511164b88b619e91 tests/cases/class_full.mmd
-95a27408b34239b3 tests/cases/class_ns_iso.mmd
+62a7ca1c8916485f tests/cases/class_full.mmd
+78b64e09f441c0ef tests/cases/class_ns_iso.mmd
 eeadabde68c69c9d tests/cases/config_keys.mmd
 b2a9983ee0faecb0 tests/cases/config_pie.mmd
 3f90ebf94953c684 tests/cases/config_quadrant.mmd
@@ -456,7 +456,7 @@ b2a9983ee0faecb0 tests/cases/config_pie.mmd
 a163e308f3db855a tests/cases/dir_subgraphs.mmd
 53ea9622d461dc28 tests/cases/dir_subgraphs_isolated.mmd
 4c22cdfc36d2c18f tests/cases/edge_ids.mmd
-9ee58fad9009c249 tests/cases/edges.mmd
+f6546b50954835fc tests/cases/edges.mmd
 b300dec060978f00 tests/cases/er_full.mmd
 afbaa6b4ebd14b86 tests/cases/er_sub_dir.mmd
 db21aebcf656ffce tests/cases/er_sub_iso.mmd
@@ -504,12 +504,12 @@ c455f991c71798d4 tests/cases/state_full.mmd
 715f5012f0d8902c tests/cases/styles.mmd
 cd68ad5b79474019 tests/cases/subgraphs.mmd
 93a6f7a491b99c4e tests/cases/swimlane_01.mmd
-b93297be0a7e1e7a tests/cases/swimlane_03.mmd
-51e6f702b77bc31c tests/cases/swimlane_06.mmd
-32d05bd141644c68 tests/cases/swimlane_11.mmd
-67c0577c4669380e tests/cases/swimlane_edge.mmd
+01d6928d322a4e9f tests/cases/swimlane_03.mmd
+24a1b7de162fcdc6 tests/cases/swimlane_06.mmd
+479b2ee569af0119 tests/cases/swimlane_11.mmd
+2b2c620e329a3c3d tests/cases/swimlane_edge.mmd
 aa2c1a8b439e5c16 tests/cases/theme_dark.mmd
-0311d0e51d617e21 tests/cases/theme_dark_class.mmd
+7c8a999133fded5d tests/cases/theme_dark_class.mmd
 896f78b847df18a6 tests/cases/theme_dark_er.mmd
 04047b5fe41f2155 tests/cases/theme_dark_gantt.mmd
 fbd2f0182f209389 tests/cases/theme_dark_journey.mmd
@@ -521,7 +521,7 @@ f6cf249a32e61eb9 tests/cases/theme_dark_kanban.mmd
 584afa932077a37c tests/cases/theme_dark_timeline.mmd
 6c0a167e64828b17 tests/cases/theme_dark_xychart.mmd
 aa9b3b45327094f3 tests/cases/theme_forest.mmd
-dd9e61389e219cf5 tests/cases/theme_forest_class.mmd
+10e2404fbe8f13fa tests/cases/theme_forest_class.mmd
 8f28617b13249996 tests/cases/theme_forest_gantt.mmd
 b8cfd072d1516985 tests/cases/theme_forest_gitgraph.mmd
 5df5a23bbe3fc490 tests/cases/theme_forest_state.mmd
@@ -553,6 +553,6 @@ e36ff8612f4ec5da tests/cases/wardley_10.mmd
 3a007588f83e1b8c tests/cases/wardley_edge.mmd
 c669fbe34dccf7ac tests/cases/xychart_full.mmd
 566fbe582282399a tests/cases/xychart_horiz.mmd
-c8637291156c9539 tests/cases/zenuml_basic.mmd
-dc1fb38e36740328 tests/cases/zenuml_comments.mmd
+8de4094e894e22b6 tests/cases/zenuml_basic.mmd
+78a7393ab7264e9b tests/cases/zenuml_comments.mmd
 9737d584bb593281 tests/cases/zenuml_full.mmd
