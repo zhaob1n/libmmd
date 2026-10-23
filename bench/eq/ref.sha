@@ -437,7 +437,7 @@ ff71a6aae7508813 bench/inputs/xlarge.mmd
 1c5d39424fe7b147 tests/cases/architecture_groups.mmd
 6d5c5fa14c783c96 tests/cases/architecture_overlap.mmd
 0b0c13f2f1776d9d tests/cases/basic.mmd
-4a751aea53e20a58 tests/cases/block_full.mmd
+d739efc9ff6f8eff tests/cases/block_full.mmd
 49330118db45e8d7 tests/cases/bt_rl.mmd
 1fffeb2386a38d8a tests/cases/c4_bgcolor.mmd
 9826537f886b7d8a tests/cases/c4_full.mmd
@@ -458,6 +458,7 @@ a163e308f3db855a tests/cases/dir_subgraphs.mmd
 e8fb4339558404ee tests/cases/edge_ids.mmd
 4bf71a04e6efc0d1 tests/cases/edges.mmd
 b300dec060978f00 tests/cases/er_full.mmd
+8e21339bfc6b221d tests/cases/er_selfloop.mmd
 afbaa6b4ebd14b86 tests/cases/er_sub_dir.mmd
 db21aebcf656ffce tests/cases/er_sub_iso.mmd
 1bba53cc7c93fb4d tests/cases/er_subgraph.mmd
@@ -466,7 +467,7 @@ e3b0c44298fc1c14 tests/cases/err1.mmd
 af7e6f9cbf935c8d tests/cases/eventmodeling_06.mmd
 9a9ab2cb2a653126 tests/cases/eventmodeling_09.mmd
 47ec8b95f6e3496c tests/cases/eventmodeling_12.mmd
-50cb601b7fa8dc51 tests/cases/eventmodeling_edge.mmd
+b4cfb9f2d1076698 tests/cases/eventmodeling_edge.mmd
 a518915789349703 tests/cases/flow_config_acc.mmd
 b86cfe9ab2e03b76 tests/cases/flow_config_curve.mmd
 da12ad4c1e8e2285 tests/cases/flow_config_linear.mmd
@@ -539,10 +540,10 @@ a52073d38ed7205f tests/cases/treeview_annot.mmd
 ffc1e30144073275 tests/cases/treeview_box.mmd
 dd81f9158ac2a5ba tests/cases/treeview_cfg.mmd
 43af58d0153da63e tests/cases/treeview_icons.mmd
-60dc8101ec5f901c tests/cases/venn_edge.mmd
+4c651dda832dd6cd tests/cases/venn_edge.mmd
 25b0ebb1bf64dc28 tests/cases/venn_styled.mmd
 3555c558bd2eb8c9 tests/cases/venn_text.mmd
-cf8b964da8e3abf8 tests/cases/venn_three.mmd
+0d6b02a2f7490994 tests/cases/venn_three.mmd
 9082968f3eb448a9 tests/cases/wardley_01.mmd
 a21142bf56798dc1 tests/cases/wardley_08.mmd
 30d5676468d35896 tests/cases/wardley_09.mmd
