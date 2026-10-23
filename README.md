@@ -4,8 +4,6 @@ A fast [Mermaid](https://mermaid.js.org) renderer written in C (`-std=gnu23`).
 It turns Mermaid source into SVG. It works as a command-line tool (`mmd`) and as a small C library (`libmmd`).
 It needs no browser, no Node.js, no JavaScript engine and no dependencies beyond libc and libm.
 
-(Formerly named cmermaid; the CLI was `mmdc-c` and the API prefix `cmm_`.)
-
 - About **0.6–1.6 ms per diagram from the CLI**. mermaid-cli takes about 0.9–1.6 s for the same diagrams (see [Benchmarks](#benchmarks)).
 - Library renders take about **15 µs** for a small flowchart and about **0.5 ms** for a 4 KB one.
 - Flowchart layout follows dagre's algorithm, so node positions match mermaid's closely (mean node-centre error 1.6 px on the fixture set).
