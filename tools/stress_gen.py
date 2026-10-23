@@ -98,7 +98,35 @@ def treemap():
         s.append(f'"{w()} {i}"')
         for j in range(R.randint(1,5)): s.append(f'    "{w()} {i}{j}": {R.randint(1,100)}')
     return s
-G=dict(flow=flow,cls=cls,state=state,er=er,seq=seq,block=block,mind=mind,git=gitg,kanban=kanban,timeline=timeline,pie=pie,gantt=gantt,venn=venn,em=em,journey=journey,quadrant=quadrant,treemap=treemap)
+def c4():
+    n=R.randint(5,12); s=['C4Context','  title '+w()]
+    for i in range(n): s.append(f'  {R.choice(["Person","System","System_Ext","SystemDb"])}(e{i}, "{w()} {i}", "{w()} {w()}")')
+    if R.random()<.6: s+= ['  Enterprise_Boundary(b0, "'+w()+'") {']+[f'    System(eb{i}, "{w()}")' for i in range(R.randint(1,3))]+['  }']
+    for _ in range(n): s.append(f'  Rel(e{R.randrange(n)}, e{R.randrange(n)}, "{w()}")')
+    return s
+def wardley():
+    n=R.randint(6,14); s=['wardley-beta','title '+w()]; names=[f'{w().title()} {i}' for i in range(n)]
+    for x in names: s.append(f'component {x} [{R.uniform(.05,.95):.2f}, {R.uniform(.05,.95):.2f}]')
+    for _ in range(n): s.append(f'{R.choice(names)} -> {R.choice(names)}')
+    return s
+def sankey():
+    n=R.randint(5,12); s=['sankey-beta']; names=[f'{w()} {i}' for i in range(n)]
+    for i in range(n*2):
+        a=R.randrange(n-1); b=R.randrange(a+1,n); s.append(f'"{names[a]}","{names[b]}",{R.uniform(1,100):.1f}')
+    return s
+def requirement():
+    n=R.randint(3,7); s=['requirementDiagram']
+    for i in range(n): s+= [f'  requirement r{i} {{',f'    id: {i}',f'    text: {w()} {w()} {w()}','    risk: high','    verifymethod: test','  }']
+    for i in range(R.randint(1,3)): s+= [f'  element el{i} {{',f'    type: {w()}','  }']
+    for i in range(n+2): s.append(f'  {R.choice([f"r{R.randrange(n)}","el0"])} - {R.choice(["satisfies","traces","contains","derives","verifies"])} -> r{R.randrange(n)}')
+    return s
+def arch():
+    n=R.randint(5,10); s=['architecture-beta','  group g0(cloud)['+w()+']']
+    for i in range(n): s.append(f'  service s{i}({R.choice(["database","server","disk","internet","cloud"])})[{w()}]'+(' in g0' if R.random()<.4 else ''))
+    D='LRTB'
+    for _ in range(n): a,b=R.sample(range(n),2); s.append(f'  s{a}:{R.choice(D)} {R.choice(["--","-->"])} {R.choice(D)}:s{b}')
+    return s
+G=dict(flow=flow,cls=cls,state=state,er=er,seq=seq,block=block,mind=mind,git=gitg,kanban=kanban,timeline=timeline,pie=pie,gantt=gantt,venn=venn,em=em,journey=journey,quadrant=quadrant,treemap=treemap,c4=c4,wardley=wardley,sankey=sankey,req=requirement,arch=arch)
 os.makedirs(out,exist_ok=True)
 for k,f in G.items():
     for i in range(N): open(os.path.join(out,f'{k}_{i}.mmd'),'w').write('\n'.join(f())+'\n')
