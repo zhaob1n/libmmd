@@ -2851,6 +2851,8 @@ static cmm_status loops_expand(Graph *g, LoopSave *sv) {
     uint16_t *eln = ANEW(A, uint16_t, E2 + 1);
     uint8_t *efl = ANEW(A, uint8_t, E2 + 1);
     if (!nw || !nh || !ef || !et || !el || !ei || !es || !ea || !eb || !eln || !efl) return CMM_ERR_NOMEM;
+    if (g->nw) memcpy(nw, g->nw, N * sizeof *nw); /* preset sizes (ER/class dg_size) must survive */
+    if (g->nh) memcpy(nh, g->nh, N * sizeof *nh);
     size_t v2 = N, k2 = 0;
     for (size_t e = 0; e < E; e++) {
         sv->map[e] = (int32_t)k2;

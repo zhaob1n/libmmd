@@ -1,0 +1,12 @@
+erDiagram
+  CUSTOMER ||--o{ ORDER : places
+  ORDER ||--o{ ORDER : "splits into"
+  EMPLOYEE |o--o{ EMPLOYEE : manages
+  CUSTOMER {
+    string name
+    int id PK
+  }
+  ORDER {
+    int id PK
+    date placed
+  }
