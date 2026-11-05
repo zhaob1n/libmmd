@@ -212,13 +212,15 @@ mmd_status swim_layout(Graph *g, Str **keep) {
     for (size_t i = 0; i < m; i++) if (rank[i] + 1 > nr) nr = rank[i] + 1;
     /* assignCoordinates (TB space: lanes are columns of width = widest lane slice, layers are rows) */
     size_t NL = (size_t)nl + 1; /* column 0 = loose nodes */
+    size_t ncell;
+    if (ckd_mul(&ncell, NL, (size_t)nr)) return MMD_ERR_NOMEM;
     double *lh = ANEW(a, double, (size_t)nr), *lw = ANEW(a, double, (size_t)nr), *ly = ANEW(a, double, (size_t)nr);
-    double *slice = ANEW(a, double, NL * (size_t)nr), *colw = ANEW(a, double, NL), *colc = ANEW(a, double, NL);
-    int32_t *scnt = ANEW(a, int32_t, NL * (size_t)nr);
+    double *slice = ANEW(a, double, ncell), *colw = ANEW(a, double, NL), *colc = ANEW(a, double, NL);
+    int32_t *scnt = ANEW(a, int32_t, ncell);
     if (!lh || !lw || !ly || !slice || !colw || !colc || !scnt) return MMD_ERR_NOMEM;
     memset(lh, 0, (size_t)nr * sizeof *lh), memset(lw, 0, (size_t)nr * sizeof *lw);
-    memset(slice, 0, NL * (size_t)nr * sizeof *slice), memset(colw, 0, NL * sizeof *colw);
-    memset(scnt, 0, NL * (size_t)nr * sizeof *scnt);
+    memset(slice, 0, ncell * sizeof *slice), memset(colw, 0, NL * sizeof *colw);
+    memset(scnt, 0, ncell * sizeof *scnt);
     double ng = g->node_sep, lg = g->rank_sep;
     for (size_t i = 0; i < m; i++) {
         size_t c = (size_t)(ilane[i] + 1) * (size_t)nr + (size_t)rank[i];
@@ -239,7 +241,7 @@ mmd_status swim_layout(Graph *g, Str **keep) {
         if (horiz && r + 1 < nr) extra = fmax(0, (lw[r] + lw[r + 1]) / 2 - (lh[r] + lh[r + 1]) / 2 - lg);
         yo += lh[r] + lg + extra;
     }
-    memset(slice, 0, NL * (size_t)nr * sizeof *slice);
+    memset(slice, 0, ncell * sizeof *slice);
     for (size_t k = 0; k < no; k++) { /* spread a lane slice around the lane centre, in layering order */
         int32_t i = order[k];
         size_t c = (size_t)(ilane[i] + 1) * (size_t)nr + (size_t)rank[i];
