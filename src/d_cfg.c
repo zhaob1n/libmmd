@@ -14,17 +14,15 @@ static thread_local size_t cur_cap;
 static constexpr size_t MAX_KV = 512;
 
 static void kv_put(Str k, Str v) {
-    static const char *const PRE[] = {"init.", "initialize.", "config."};
-    for (size_t i = 0; i < countof(PRE); i++) {
-        Str p = {.p = PRE[i], .n = strlen(PRE[i])};
-        if (str_starts(k, p)) { k.p += p.n; k.n -= p.n; break; }
-    }
+    static const Str PRE[] = {S("init."), S("initialize."), S("config.")};
+    for (size_t i = 0; i < countof(PRE); i++)
+        if (str_starts(k, PRE[i])) { k.p += PRE[i].n; k.n -= PRE[i].n; break; }
     if (!k.n || cur.n >= MAX_KV) return;
     if (cur.n == cur_cap) {
         size_t nc = cur_cap ? cur_cap * 2 : 32;
         DKV *nv = ANEW(cur_a, DKV, nc);
         if (!nv) return;
-        for (size_t i = 0; i < cur.n; i++) nv[i] = cur.kv[i];
+        if (cur.n) memcpy(nv, cur.kv, cur.n * sizeof *nv);
         cur.kv = nv, cur_cap = nc;
     }
     cur.kv[cur.n++] = (DKV){.k = k, .v = v};
@@ -289,13 +287,10 @@ Str dcfg_tv(const char *var) {
     return (Str){};
 }
 
-const char *dcfg_pal(const char *prefix, size_t i, const char def[static 1]) {
-    if (!cur.n && cur_theme <= MMD_THEME_DEFAULT) return def;
+/* NUL-terminated copy of v that outlives the call (eight live at once), or def when v is empty or long */
+static const char *ring_str(Str v, const char def[static 1]) {
     static thread_local char ring[8][208];
     static thread_local unsigned slot;
-    char var[48];
-    snprintf(var, sizeof var, "%s%zu", prefix, i);
-    Str v = dcfg_tv(var);
     if (!v.n || v.n >= sizeof ring[0]) return def;
     char *o = ring[slot++ % countof(ring)];
     memcpy(o, v.p, v.n);
@@ -303,10 +298,15 @@ const char *dcfg_pal(const char *prefix, size_t i, const char def[static 1]) {
     return o;
 }
 
+const char *dcfg_pal(const char *prefix, size_t i, const char def[static 1]) {
+    if (!cur.n && cur_theme <= MMD_THEME_DEFAULT) return def;
+    char var[48];
+    snprintf(var, sizeof var, "%s%zu", prefix, i);
+    return ring_str(dcfg_tv(var), def);
+}
+
 const char *dcfg_list(const char *var, size_t i, const char def[static 1]) {
     if (!cur.n && cur_theme <= MMD_THEME_DEFAULT) return def;
-    static thread_local char ring[8][208];
-    static thread_local unsigned slot;
     Str v = dcfg_tv(var);
     size_t cnt = v.n ? 1 : 0;
     for (size_t k = 0; k < v.n; k++) cnt += v.p[k] == ',';
@@ -315,12 +315,7 @@ const char *dcfg_list(const char *var, size_t i, const char def[static 1]) {
     size_t b = 0;
     for (size_t k = 0; k < i; k++) b = (size_t)((const char *)memchr(v.p + b, ',', v.n - b) - v.p) + 1;
     const char *c = memchr(v.p + b, ',', v.n - b);
-    Str it = str_trim((Str){.p = v.p + b, .n = (c ? (size_t)(c - v.p) : v.n) - b});
-    if (!it.n || it.n >= sizeof ring[0]) return def;
-    char *o = ring[slot++ % countof(ring)];
-    memcpy(o, it.p, it.n);
-    o[it.n] = 0;
-    return o;
+    return ring_str(str_trim((Str){.p = v.p + b, .n = (c ? (size_t)(c - v.p) : v.n) - b}), def);
 }
 
 Str dcfg_background(void) {
