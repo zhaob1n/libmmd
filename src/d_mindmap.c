@@ -33,7 +33,7 @@ static constexpr char SECS[][8] = {"#cccc33", "#99cc33", "#7f33cc", "#cc33cc", "
                                    "#cc8033", "#80cc33", "#33cc80", "#33cccc", "#337fcc"};
 static constexpr bool SECW[] = {false, false, true, false, false, false, false, false, false, false, false}; /* white text */
 
-static bool parse_node(Str s, Str *label, uint8_t *shape) {
+static void parse_node(Str s, Str *label, uint8_t *shape) {
     typedef struct { char o[3], c[3]; uint8_t sh; } Delim;
     static constexpr Delim SH[] = {
         {"((", "))", M_CIR}, {"))", "((", M_BANG}, {"{{", "}}", M_HEX}, {"[", "]", M_SQ},
@@ -45,11 +45,10 @@ static bool parse_node(Str s, Str *label, uint8_t *shape) {
                 !memcmp(s.p + s.n - cl, SH[k].c, cl)) {
                 Str in = {.p = s.p + i + ol, .n = s.n - i - ol - cl};
                 *label = in, *shape = SH[k].sh;
-                return true;
+                return;
             }
         }
     *label = s, *shape = M_DEF;
-    return true;
 }
 
 static void measure_sub(MNode *v, uint32_t i) {
@@ -264,7 +263,7 @@ DIAG_FN(mindmap_render) {
                 line = str_trim((Str){.p = line.p, .n = i});
                 break;
             }
-        if (!parse_node(line, &m.label, &m.shape)) return diag_fail(err_off, msg, lo, "bad node");
+        parse_node(line, &m.label, &m.shape);
         bool ok;
         m.label = label_normalize(a, m.label, &ok); /* "quoted", "`markdown`", <br> */
         if (!ok) return MMD_ERR_NOMEM;
