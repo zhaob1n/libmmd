@@ -22,6 +22,6 @@ typedef struct DRankIn {
 /* rank[N] for the listed real nodes; top/bot[S] = rank of the cluster's _bt/_bb border node
  * (cluster minRank/maxRank), INT32_MAX/-1 for clusters without children. corder[S] lists clusters in
  * border-node creation order (-1 padded). */
-[[nodiscard]] bool dagre_rank(Arena A[static 1], const DRankIn in[static 1], int32_t rank[], int32_t top[], int32_t bot[],
-                              int32_t corder[]);
+[[nodiscard]] bool dagre_rank(Arena A[restrict static 1], const DRankIn in[restrict static 1], int32_t rank[restrict],
+                              int32_t top[restrict], int32_t bot[restrict], int32_t corder[restrict]);
 #endif

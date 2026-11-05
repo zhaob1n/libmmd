@@ -153,7 +153,7 @@ static uint64_t cross_all(const Lay L[static 1], uint32_t *buf, uint32_t *fen) {
 
 typedef struct BcItem { double bc; int32_t id; uint32_t i; } BcItem;
 static inline bool bc_lt(BcItem a, BcItem b) { return a.bc < b.bc || (a.bc == b.bc && a.id < b.id); }
-static void bc_sort(size_t n, BcItem a[static n], BcItem tmp[static n]) {
+static void bc_sort(size_t n, BcItem a[restrict static n], BcItem tmp[restrict static n]) {
     if (n <= 24) {
         for (size_t i = 1; i < n; i++) {
             BcItem t = a[i];
