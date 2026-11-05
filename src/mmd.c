@@ -228,13 +228,13 @@ mmd_status mmd_render_svg(size_t n, const char *src, const mmd_options *opt, mmd
                           mmd_error *err) {
     if (out) *out = (mmd_buffer){};
     if (!out) return MMD_ERR_EMPTY;
-    Arena a = {};
-    Buf b = {};
+    AUTO_ARENA Arena a = {};
+    AUTO_BUF Buf b = {};
     mmd_status st = render(&a, &b, n, src, opt, err);
-    arena_free(&a);
-    if (st) { free(b.p); return st; }
-    out->data = b.p;
-    out->len = b.n;
+    if (st) return st;
+    Buf r = buf_take(&b);
+    out->data = r.p;
+    out->len = r.n;
     return MMD_OK;
 }
 
