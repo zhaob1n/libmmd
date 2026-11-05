@@ -1,6 +1,6 @@
 # libmmd
 
-A fast [Mermaid](https://mermaid.js.org) renderer written in C (`-std=gnu23`).
+A fast [Mermaid](https://mermaid.js.org) renderer written in C (`-std=gnu2y`).
 It turns Mermaid source into SVG. It works as a command-line tool (`mmd`) and as a small C library (`libmmd`).
 It needs no browser, no Node.js, no JavaScript engine and no dependencies beyond libc and libm.
 
@@ -58,19 +58,19 @@ Per-type feature notes are in [docs/dev/INTERNALS.md](docs/dev/INTERNALS.md).
 
 You need a C compiler with C23 support:
 - **clang** (the default; tested with clang 23);
-- or **gcc 14**.
+- or **gcc 16**.
 
-The Makefile builds with `-std=gnu23`. You also need GNU make. Python 3 is needed only for the test and benchmark scripts.
+The Makefile builds with `-std=gnu2y -fms-extensions`. You also need GNU make. Python 3 is needed only for the test and benchmark scripts.
 
 ```sh
 make                      # -> build/mmd, build/libmmd.{a,so}, build/mmd.pc, build/bench
-make CC=gcc-14            # build with gcc instead
+make CC=gcc-16            # build with gcc instead
 make MARCH=native LTO=1   # optional: tuned build
 make pgo                  # optional: profile-guided build in build-pgo/
 make install PREFIX=/usr/local   # header, static + shared lib, pkg-config file, mmd
 ```
 
-The build has zero warnings under `-Wall -Wextra` with both gcc 14 and clang.
+The build has zero warnings under `-Wall -Wextra` with both gcc 16 and clang.
 
 ## CLI
 
@@ -213,7 +213,7 @@ Embedded icon data comes from Font Awesome Free (CC BY 4.0) and simple-icons (CC
 
 ## 中文简介
 
-libmmd 是一个用 C 语言（gnu23）编写的高速 Mermaid 渲染器，可作为命令行工具 `mmd` 或 C 库 `libmmd` 使用。它把 Mermaid 源码直接渲染成 SVG，不需要浏览器、Node.js 或任何第三方依赖。
+libmmd 是一个用 C 语言（gnu2y）编写的高速 Mermaid 渲染器，可作为命令行工具 `mmd` 或 C 库 `libmmd` 使用。它把 Mermaid 源码直接渲染成 SVG，不需要浏览器、Node.js 或任何第三方依赖。
 
 - 支持上表列出的全部 30 多种图表类型。
 - 单个图表的命令行渲染约 1 毫秒，mermaid-cli 约 1 秒。
