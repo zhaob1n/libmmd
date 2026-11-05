@@ -83,7 +83,7 @@ DIAG_FN(gitgraph_render) {
     }
     VEC(Commit) cm = {};
     VEC(Branch) br = {};
-    Str mainb = dcfg_get("gitGraph.mainBranchName");
+    Str mainb = dcfg_get_str(S("gitGraph.mainBranchName"));
     if (!mainb.n) mainb = S("main");
     if (!VEC_PUSH(a, &br, ((Branch){.name = mainb}))) return MMD_ERR_NOMEM;
     uint32_t cur = 0;

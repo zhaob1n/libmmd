@@ -250,7 +250,7 @@ DIAG_FN(treemap_render) {
     if (!(bb.x1 > bb.x0)) bb = (BBox){0, 0, W, H + top};
     if (!buf_reserve(out, 2048 + v.n * 600)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, dcfg_num("treemap.diagramPadding", 8), "treemap", CSS);
-    bool showv = !str_eq(dcfg_get("treemap.showValues"), S("false"));
+    bool showv = !str_eq(dcfg_get_str(S("treemap.showValues")), S("false"));
     char nb_[40];
     size_t nl;
     for (size_t k = 1; k < nb; k++) { /* sections */

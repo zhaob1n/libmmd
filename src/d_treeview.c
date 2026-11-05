@@ -138,8 +138,8 @@ DIAG_FN(treeview_render) {
     double py = fmin(fmax(dcfg_num("treeView.paddingY", 5), 0), 200), lt = fmin(fmax(dcfg_num("treeView.lineThickness", 1), 0), 50);
     bool show = dcfg_bool("treeView.showIcons", false);
     double lfs = fmin(fmax(dcfg_num("themeVariables.treeView.labelFontSize", 16), 4), 200);
-    Str lcol = dcfg_get("themeVariables.treeView.labelColor"), lncol = dcfg_get("themeVariables.treeView.lineColor");
-    Str pack = dcfg_get("treeView.defaultIconPack");
+    Str lcol = dcfg_get_str(S("themeVariables.treeView.labelColor")), lncol = dcfg_get_str(S("themeVariables.treeView.lineColor"));
+    Str pack = dcfg_get_str(S("treeView.defaultIconPack"));
     double lh = lfs * 1.0635, rowh = lh + 2 * py, y = 0, W = 0, maxr = 0;
     Buf b = {};
     buf_lit(&b, "<g class=\"tree-view\">");
