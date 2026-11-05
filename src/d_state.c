@@ -377,6 +377,43 @@ typedef struct Ctx {
     double fs;
 } Ctx;
 
+/* layout-node -> element list of the scope being built (grown in the arena) */
+typedef struct ElemList { Scope *s; size_t cnt, cap; } ElemList;
+
+/* add element e as a layout node of the scope's graph, sized w x h */
+[[nodiscard]] static mmd_status add_elem(Ctx *c, ElemList *el, int32_t e, Str id, double w, double h, Shape shape) {
+    Graph *lg = &el->s->lg;
+    int32_t lv = dg_node(lg, id, nullptr);
+    if (lv == NONE) return MMD_ERR_NOMEM;
+    if (el->cnt == el->cap) {
+        int32_t *ne = arena_grow(c->p->A, el->s->elem, &el->cap, sizeof(int32_t), alignof(int32_t));
+        if (!ne) return MMD_ERR_NOMEM;
+        el->s->elem = ne;
+    }
+    el->s->elem[el->cnt++] = e;
+    lg->nshape[lv] = shape;
+    dg_size(lg, lv, w, h);
+    return MMD_OK;
+}
+
+/* the notes of node v (r == NONE) or of cluster r; mermaid inserts a state's note node before the
+ * state itself (dagre initial order) */
+[[nodiscard]] static mmd_status add_notes(Ctx *c, ElemList *el, int32_t v, int32_t r) {
+    const StP *p = c->p;
+    const Graph *g = &p->g;
+    for (size_t i = 0; i < p->notes.n; i++) {
+        int32_t nv = p->notes.v[i].v;
+        if (r == NONE ? nv != v || p->ccl.v[nv] != NONE : p->ccl.v[nv] != r) continue;
+        char tag[24];
+        int len = snprintf(tag, sizeof tag, "----note-%zu", i);
+        Str nid = cat3(p->A, r == NONE ? g->nid[nv] : g->sid[r], (Str){.p = tag, .n = (size_t)len}, S(""));
+        if (!nid.n) return MMD_ERR_NOMEM;
+        mmd_status st = add_elem(c, el, NOTE_EL0 + (int32_t)i, nid, c->ntw[i], c->nth[i], SH_RECT);
+        if (st != MMD_OK) return st;
+    }
+    return MMD_OK;
+}
+
 static mmd_status layout_scope(Ctx *c, int32_t cl) {
     StP *p = c->p;
     Graph *g = &p->g;
@@ -402,38 +439,17 @@ static mmd_status layout_scope(Ctx *c, int32_t cl) {
     }
     Graph *lg = &s->lg;
     dg_init(lg, p->A, cl == NONE ? g->dir : g->sdir[cl], c->fs);
-    size_t cap = 16, cnt = 0;
+    size_t cap = 16;
     s->elem = ANEW(p->A, int32_t, cap);
     if (!s->elem) return MMD_ERR_NOMEM;
-    #define ADD_ELEM(E, ID, W, H, SH)                                                     \
-        do {                                                                              \
-            int32_t lv_ = dg_node(lg, (ID), nullptr);                                     \
-            if (lv_ == NONE) return MMD_ERR_NOMEM;                                        \
-            if (cnt == cap) {                                                             \
-                int32_t *ne_ = arena_grow(p->A, s->elem, &cap, sizeof(int32_t), alignof(int32_t)); \
-                if (!ne_) return MMD_ERR_NOMEM;                                           \
-                s->elem = ne_;                                                            \
-            }                                                                             \
-            s->elem[cnt++] = (E);                                                         \
-            lg->nshape[lv_] = (SH);                                                       \
-            dg_size(lg, lv_, (W), (H));                                                   \
-        } while (0)
-    /* mermaid inserts a state's note node before the state itself (dagre initial order) */
-    #define ADD_NOTES(V, R)                                                                   \
-        for (size_t i = 0; i < p->notes.n; i++) {                                             \
-            int32_t nv_ = p->notes.v[i].v;                                                    \
-            if ((R) == NONE ? nv_ != (int32_t)(V) || p->ccl.v[nv_] != NONE : p->ccl.v[nv_] != (R)) continue; \
-            char tag[24];                                                                     \
-            int len = snprintf(tag, sizeof tag, "----note-%zu", i);                           \
-            Str nid = cat3(p->A, (R) == NONE ? g->nid[nv_] : g->sid[R], (Str){.p = tag, .n = (size_t)len}, S("")); \
-            if (!nid.n) return MMD_ERR_NOMEM;                                                 \
-            ADD_ELEM(NOTE_EL0 + (int32_t)i, nid, c->ntw[i], c->nth[i], SH_RECT);              \
-        }
+    ElemList el = {.s = s, .cap = cap};
     for (size_t v = 0; v < g->nn; v++)
         if (g->nparent[v] == cl && p->ccl.v[v] == NONE) {
-            ADD_NOTES(v, NONE);
-            ADD_ELEM((int32_t)v, g->nid[v], g->nw[v] + 2 * c->npad[v], g->nh[v] > c->nph[v] ? g->nh[v] : c->nph[v],
-                     g->nshape[v]);
+            mmd_status st = add_notes(c, &el, (int32_t)v, NONE);
+            if (st == MMD_OK)
+                st = add_elem(c, &el, (int32_t)v, g->nid[v], g->nw[v] + 2 * c->npad[v],
+                              g->nh[v] > c->nph[v] ? g->nh[v] : c->nph[v], g->nshape[v]);
+            if (st != MMD_OK) return st;
         }
     for (size_t r = 0; r < g->ns; r++) {
         if (g->sparent[r] != cl || g->sclass[r].n) continue;
@@ -442,11 +458,11 @@ static mmd_status layout_scope(Ctx *c, int32_t cl) {
         if (w < tw) w = tw;
         if (w < 60) w = 60;
         c->cw[r] = w, c->ch[r] = h; /* true size; the layout node may be widened for notes */
-        ADD_NOTES(r, (int32_t)r);
-        ADD_ELEM(el_cl((int32_t)r), g->sid[r], w + 2 * c->cpad[r], h > c->cph[r] ? h : c->cph[r], SH_RECT);
+        mmd_status st = add_notes(c, &el, (int32_t)r, (int32_t)r);
+        if (st == MMD_OK)
+            st = add_elem(c, &el, el_cl((int32_t)r), g->sid[r], w + 2 * c->cpad[r], h > c->cph[r] ? h : c->cph[r], SH_RECT);
+        if (st != MMD_OK) return st;
     }
-    #undef ADD_NOTES
-    #undef ADD_ELEM
     for (size_t lv = 0; lv < lg->nn; lv++) {
         if (!el_is_note(s->elem[lv])) continue;
         size_t i = (size_t)(s->elem[lv] - NOTE_EL0);
