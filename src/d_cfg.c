@@ -225,7 +225,7 @@ Str dcfg_get_str(Str key) {
     return (Str){};
 }
 
-Str dcfg_get(const char *key) { return dcfg_get_str((Str){.p = key, .n = strlen(key)}); }
+Str dcfg_get(const char key[static 1]) { return dcfg_get_str((Str){.p = key, .n = strlen(key)}); }
 
 double dcfg_num(const char key[static 1], double def) {
     Str v = dcfg_get(key);
@@ -260,7 +260,7 @@ static Str css_safe(Str v) {
     return v;
 }
 
-Str dcfg_css(const char *key) { return css_safe(dcfg_get(key)); }
+Str dcfg_css(const char key[static 1]) { return css_safe(dcfg_get(key)); }
 
 typedef struct ThemeKV { const char *k, *v; } ThemeKV;
 #include "d_themes.h"
@@ -268,7 +268,7 @@ typedef struct ThemeKV { const char *k, *v; } ThemeKV;
 void dcfg_set_theme(int theme) { cur_theme = theme; }
 
 /* user themeVariables.<var> first, then the named theme's preset (mermaid's own values) */
-Str dcfg_tv(const char *var) {
+Str dcfg_tv(const char var[static 1]) {
     char key[96];
     int kn = snprintf(key, sizeof key, "themeVariables.%s", var);
     if (kn > 0 && (size_t)kn < sizeof key) { /* a truncated key would look up a different variable */

@@ -98,7 +98,7 @@ size_t label_br_len(Str s, size_t i) {
     return j < s.n && s.p[j] == '>' ? j + 1 - i : 0;
 }
 
-Str label_normalize(Arena *a, Str raw, bool ok[static 1]) {
+Str label_normalize(Arena a[static 1], Str raw, bool ok[static 1]) {
     *ok = true;
     Str s = str_trim(raw);
     bool md = false;

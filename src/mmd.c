@@ -146,7 +146,7 @@ static void set_err(mmd_error *err, mmd_status st, size_t n, const char *src, si
     snprintf(err->message, sizeof err->message, "%s", msg && *msg ? msg : mmd_status_str(st));
 }
 
-static mmd_status render(Arena *ap, Buf *bp, size_t n, const char *src, const mmd_options *opt,
+static mmd_status render(Arena ap[static 1], Buf bp[static 1], size_t n, const char *src, const mmd_options *opt,
                          mmd_error *err) {
     if (n > (size_t)1 << 30) { set_err(err, MMD_ERR_LIMIT, n, src, 0, nullptr); return MMD_ERR_LIMIT; }
     Config cfg = {.node_sep = 50, .rank_sep = 50};

@@ -7,7 +7,7 @@
 
 constexpr size_t ARENA_MIN_BLOCK = 64 * 1024;
 
-void *arena_alloc_slow(Arena *a, size_t size, size_t align) {
+void *arena_alloc_slow(Arena a[static 1], size_t size, size_t align) {
     ArenaBlock *b = a->head;
     if (b) {
         size_t off = (b->used + (align - 1)) & ~(align - 1);
@@ -36,7 +36,7 @@ void *arena_alloc_slow(Arena *a, size_t size, size_t align) {
     return nb->data;
 }
 
-void *arena_grow(Arena *a, void *old, size_t *cap, size_t elem, size_t align) {
+void *arena_grow(Arena a[static 1], void *old, size_t cap[static 1], size_t elem, size_t align) {
     size_t ncap = *cap ? *cap * 2 : 8;
     size_t oldb = *cap * elem, newb = 0;
     if (ckd_mul(&newb, ncap, elem)) return nullptr;
@@ -59,7 +59,7 @@ void *arena_grow(Arena *a, void *old, size_t *cap, size_t elem, size_t align) {
     return np;
 }
 
-void arena_free(Arena *a) {
+void arena_free(Arena a[static 1]) {
     ArenaBlock *b = a->head;
     while (b) {
         ArenaBlock *nx = b->next;
@@ -69,7 +69,7 @@ void arena_free(Arena *a) {
     *a = (Arena){};
 }
 
-void arena_reset(Arena *a) {
+void arena_reset(Arena a[static 1]) {
     ArenaBlock *b = a->head;
     if (!b) return;
     size_t total = 0;
@@ -88,7 +88,7 @@ void arena_reset(Arena *a) {
     a->last_size = 0;
 }
 
-Str arena_strdup(Arena *a, Str s) {
+Str arena_strdup(Arena a[static 1], Str s) {
     char *p = arena_alloc(a, s.n + 1, 1);
     if (!p) return (Str){};
     if (s.n) memcpy(p, s.p, s.n);
@@ -96,7 +96,7 @@ Str arena_strdup(Arena *a, Str s) {
     return (Str){.p = p, .n = s.n};
 }
 
-Str str_cat(Arena *a, size_t n, const Str parts[static n]) {
+Str str_cat(Arena a[static 1], size_t n, const Str parts[static n]) {
     size_t len = 0;
     for (size_t i = 0; i < n; i++)
         if (ckd_add(&len, len, parts[i].n)) return (Str){};
@@ -111,7 +111,7 @@ Str str_cat(Arena *a, size_t n, const Str parts[static n]) {
     return (Str){.p = p, .n = k};
 }
 
-bool buf_reserve_slow(Buf *b, size_t extra) {
+bool buf_reserve_slow(Buf b[static 1], size_t extra) {
     if (b->oom) return false;
     size_t need = 0;
     if (ckd_add(&need, b->n, extra + 1)) goto fail;
@@ -225,7 +225,7 @@ size_t mmd_fmt_fast(char *o, double v) { return fmt_num(o, v); }
 size_t mmd_fmt_slow(char *o, double v) { return fmt_num_slow(o, v); }
 #endif
 
-void buf_num(Buf *b, double v) {
+void buf_num(Buf b[static 1], double v) {
     if (!buf_reserve(b, 26)) return;
     b->n += fmt_num(b->p + b->n, v);
 }
@@ -453,7 +453,7 @@ static constexpr Ent ENTS[] = {
     return 0;
 }
 
-void buf_xml(Buf *b, Str s) {
+void buf_xml(Buf b[static 1], Str s) {
     size_t i = 0, run = 0;
     while (i < s.n) {
         i = scan_xml_plain(s.n, s.p, i); /* bulk-skip bytes needing no escape */

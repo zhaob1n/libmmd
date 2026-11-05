@@ -103,7 +103,7 @@ static inline Str str_from(Str s, size_t i) { return (Str){.p = s.p + i, .n = s.
 /* [b, e) within one string */
 static inline Str str_span(const char *b, const char *e) { return (Str){.p = b, .n = (size_t)(e - b)}; }
 /* split at the first c: *head before it, *tail after it; false (outputs untouched) when absent */
-static inline bool str_split(Str s, char c, Str *head, Str *tail) {
+static inline bool str_split(Str s, char c, Str head[static 1], Str tail[static 1]) {
     const char *m = s.n ? memchr(s.p, c, s.n) : nullptr;
     if (!m) return false;
     *head = str_span(s.p, m);
@@ -124,8 +124,8 @@ typedef struct Arena {
     size_t last_size;
 } Arena;
 
-[[nodiscard]] void *arena_alloc_slow(Arena *a, size_t size, size_t align);
-[[nodiscard]] static inline void *arena_alloc(Arena *a, size_t size, size_t align) {
+[[nodiscard]] void *arena_alloc_slow(Arena a[static 1], size_t size, size_t align);
+[[nodiscard]] static inline void *arena_alloc(Arena a[static 1], size_t size, size_t align) {
     ArenaBlock *b = a->head;
     if (b) { /* bump fast path */
         size_t off = (b->used + (align - 1)) & ~(align - 1);
@@ -138,21 +138,21 @@ typedef struct Arena {
     }
     return arena_alloc_slow(a, size, align);
 }
-[[nodiscard]] static inline void *arena_alloc_array(Arena *a, size_t n, size_t size, size_t align) {
+[[nodiscard]] static inline void *arena_alloc_array(Arena a[static 1], size_t n, size_t size, size_t align) {
     size_t total = 0;
     if (ckd_mul(&total, n, size)) return nullptr;
     return arena_alloc(a, total ? total : 1, align);
 }
 /* grow an array previously allocated from the arena (or nullptr). */
-[[nodiscard]] void *arena_grow(Arena *a, void *old, size_t *cap, size_t elem, size_t align);
-void arena_free(Arena *a);
-static inline void arena_freep(Arena *a) { arena_free(a); }
+[[nodiscard]] void *arena_grow(Arena a[static 1], void *old, size_t cap[static 1], size_t elem, size_t align);
+void arena_free(Arena a[static 1]);
+static inline void arena_freep(Arena a[static 1]) { arena_free(a); }
 #define AUTO_ARENA [[gnu::cleanup(arena_freep)]]
 /* Drop all allocations but keep (coalesced) memory for reuse. */
-void arena_reset(Arena *a);
-[[nodiscard]] Str arena_strdup(Arena *a, Str s);
+void arena_reset(Arena a[static 1]);
+[[nodiscard]] Str arena_strdup(Arena a[static 1], Str s);
 /* concatenation of n views, NUL-terminated; {} on OOM */
-[[nodiscard]] Str str_cat(Arena *a, size_t n, const Str parts[static n]);
+[[nodiscard]] Str str_cat(Arena a[static 1], size_t n, const Str parts[static n]);
 #define STR_CAT(a, ...) str_cat((a), countof(((const Str[]){__VA_ARGS__})), (const Str[]){__VA_ARGS__})
 
 #define ANEW(a, T, n) arena_alloc_array((a), (n), sizeof(T), alignof(T))
@@ -187,38 +187,38 @@ typedef struct Buf {
  * Hand ownership out with TAKE_PTR(p) / buf_take(&b), which null the
  * local so the cleanup becomes a no-op. */
 static inline void freep(void *pp) { free(*(void **)pp); }
-static inline void fclosep(FILE **fp) { if (*fp) fclose(*fp); }
-static inline void buf_freep(Buf *b) { free(b->p); }
+static inline void fclosep(FILE *fp[static 1]) { if (*fp) fclose(*fp); }
+static inline void buf_freep(Buf b[static 1]) { free(b->p); }
 #define AUTOFREE [[gnu::cleanup(freep)]]
 #define AUTOCLOSE [[gnu::cleanup(fclosep)]]
 #define AUTO_BUF [[gnu::cleanup(buf_freep)]]
 #define TAKE_PTR(p) ({ auto take_ = (p); (p) = nullptr; take_; })
 static inline Buf buf_take(Buf b[static 1]) { Buf r = *b; *b = (Buf){}; return r; }
 
-bool buf_reserve_slow(Buf *b, size_t extra);
-static inline bool buf_reserve(Buf *b, size_t extra) {
+bool buf_reserve_slow(Buf b[static 1], size_t extra);
+static inline bool buf_reserve(Buf b[static 1], size_t extra) {
     if (MMD_LIKELY(b->cap - b->n > extra)) return true;
     return buf_reserve_slow(b, extra);
 }
-static inline void buf_put_(Buf *b, size_t n, const char s[static n]) {
+static inline void buf_put_(Buf b[static 1], size_t n, const char s[static n]) {
     if (!buf_reserve(b, n)) return;
     memcpy(b->p + b->n, s, n);
     b->n += n;
 }
 /* zero-length appends are common (escape runs); [static 0] would be UB, so filter here */
 #define buf_put(b, n, s) do { size_t n_ = (n); if (n_) buf_put_((b), n_, (s)); } while (0)
-static inline void buf_str(Buf *b, Str s) { if (s.n) buf_put(b, s.n, s.p); }
-static inline void buf_cstr(Buf *b, const char *s) { buf_put(b, strlen(s), s); }
+static inline void buf_str(Buf b[static 1], Str s) { if (s.n) buf_put(b, s.n, s.p); }
+static inline void buf_cstr(Buf b[static 1], const char s[static 1]) { buf_put(b, strlen(s), s); }
 /* append a string literal; countof() rejects a pointer at compile time */
 #define buf_lit(b, lit) buf_put((b), countof(lit) - 1, (lit))
-static inline void buf_ch(Buf *b, char c) {
+static inline void buf_ch(Buf b[static 1], char c) {
     if (!buf_reserve(b, 1)) return;
     b->p[b->n++] = c;
 }
-void buf_num(Buf *b, double v);  /* fast fixed 2-decimal, trimmed */
+void buf_num(Buf b[static 1], double v); /* fast fixed 2-decimal, trimmed */
 void buf_pt(Buf b[static 1], double x, double y); /* "x,y" with buf_num formatting, one reserve */
 void buf_int(Buf b[static 1], int64_t v);
-void buf_xml(Buf *b, Str s);     /* XML-escape text, handles mermaid #entity; */
+void buf_xml(Buf b[static 1], Str s); /* XML-escape text, handles mermaid #entity; */
 
 #ifdef MMD_PROFILE
 /* per-phase cycle accounting: time since the previous mark is charged to name ("" just resets);
