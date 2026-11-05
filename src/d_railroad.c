@@ -101,11 +101,10 @@ static Tok peek(RP *p) {
         t.k = T_NUM, t.s = (Str){.p = p->s + p->i, .n = j - p->i};
         return t;
     }
-    static const char *const MULTI[] = {"::=", "<-", "=/"};
+    static const Str MULTI[] = {S("::="), S("<-"), S("=/")};
     for (size_t k = 0; k < countof(MULTI); k++) {
-        size_t l = strlen(MULTI[k]);
-        if (p->n - p->i >= l && !memcmp(p->s + p->i, MULTI[k], l)) {
-            t.k = T_PUNCT, t.s = (Str){.p = p->s + p->i, .n = l};
+        if (str_starts((Str){.p = p->s + p->i, .n = p->n - p->i}, MULTI[k])) {
+            t.k = T_PUNCT, t.s = (Str){.p = p->s + p->i, .n = MULTI[k].n};
             return t;
         }
     }
@@ -122,7 +121,7 @@ static void adv(RP *p, Tok t) {
         p->i = q + 1;
     }
 }
-static bool is_p(Tok t, const char *c) { return t.k == T_PUNCT && t.s.n == strlen(c) && !memcmp(t.s.p, c, t.s.n); }
+static bool is_p(Tok t, Str c) { return t.k == T_PUNCT && str_eq(t.s, c); }
 static RNode *fail_at(RP *p, Tok t, const char *m) {
     if (!p->err) p->err = m, p->eoff = t.off;
     return nullptr;
@@ -161,7 +160,7 @@ static bool rule_start(RP *p) {
     if (t.k == T_ID) {
         adv(p, t);
         Tok o = peek(p);
-        r = is_p(o, "=") || is_p(o, "::=") || is_p(o, "<-") || is_p(o, "=/");
+        r = is_p(o, S("=")) || is_p(o, S("::=")) || is_p(o, S("<-")) || is_p(o, S("=/"));
     }
     p->i = save;
     return r;
@@ -177,12 +176,12 @@ static RNode *p_primary(RP *p) {
     else if (t.k == T_ID && p->g == G_FN) {
         adv(p, t);
         Tok o = peek(p);
-        if (!is_p(o, "(")) r = mk(p, RN_NONTERM, t.s);
+        if (!is_p(o, S("("))) r = mk(p, RN_NONTERM, t.s);
         else {
             adv(p, o);
-            static const char *const F[] = {"sequence", "choice", "optional", "oneOrMore", "zeroOrMore", "terminal", "nonterminal", "special", "skip"};
+            static const Str F[] = {S("sequence"), S("choice"), S("optional"), S("oneOrMore"), S("zeroOrMore"), S("terminal"), S("nonterminal"), S("special"), S("skip")};
             int f = -1;
-            for (int k = 0; k < (int)countof(F); k++) if (str_eq(t.s, (Str){.p = F[k], .n = strlen(F[k])})) f = k;
+            for (int k = 0; k < (int)countof(F); k++) if (str_eq(t.s, F[k])) f = k;
             if (f < 0) return fail_at(p, t, "unknown railroad function");
             if (f >= 5 && f <= 7) {
                 Tok s = peek(p);
@@ -193,12 +192,12 @@ static RNode *p_primary(RP *p) {
                 r = mk(p, f == 1 ? RN_CHOICE : RN_SEQ, (Str){});
                 if (!r) return nullptr;
                 Tok c = peek(p);
-                while (!is_p(c, ")")) {
+                while (!is_p(c, S(")"))) {
                     RNode *e = p_primary(p);
                     if (!e || !add(p, r, e)) return nullptr;
                     c = peek(p);
-                    if (is_p(c, ",")) adv(p, c), c = peek(p);
-                    else if (!is_p(c, ")")) return fail_at(p, c, "expected ',' or ')'");
+                    if (is_p(c, S(","))) adv(p, c), c = peek(p);
+                    else if (!is_p(c, S(")"))) return fail_at(p, c, "expected ',' or ')'");
                 }
                 if (f == 8) r->nk = 0;
                 if (f == 2) r = wrap1(p, RN_OPT, collapse(r), 0);
@@ -206,20 +205,20 @@ static RNode *p_primary(RP *p) {
                 else if (!r->nk) return fail_at(p, c, "empty sequence/choice");
             }
             Tok c = peek(p);
-            if (!is_p(c, ")")) return fail_at(p, c, "expected ')'");
+            if (!is_p(c, S(")"))) return fail_at(p, c, "expected ')'");
             adv(p, c);
         }
     } else if (t.k == T_ID) adv(p, t), r = mk(p, RN_NONTERM, t.s);
-    else if (is_p(t, ".") && p->g == G_PEG) adv(p, t), r = mk(p, RN_SPECIAL, t.s);
-    else if (is_p(t, "(") || is_p(t, "[") || (is_p(t, "{") && p->g == G_EBNF)) {
+    else if (is_p(t, S(".")) && p->g == G_PEG) adv(p, t), r = mk(p, RN_SPECIAL, t.s);
+    else if (is_p(t, S("(")) || is_p(t, S("[")) || (is_p(t, S("{")) && p->g == G_EBNF)) {
         adv(p, t);
-        const char *close = is_p(t, "(") ? ")" : is_p(t, "[") ? "]" : "}";
+        Str close = is_p(t, S("(")) ? S(")") : is_p(t, S("[")) ? S("]") : S("}");
         RNode *in = p_choice(p);
         if (!in) return nullptr;
         Tok c = peek(p);
         if (!is_p(c, close)) return fail_at(p, c, "unbalanced bracket");
         adv(p, c);
-        r = is_p(t, "(") ? in : is_p(t, "[") ? wrap1(p, RN_OPT, in, 0) : wrap1(p, RN_REP, in, 0);
+        r = is_p(t, S("(")) ? in : is_p(t, S("[")) ? wrap1(p, RN_OPT, in, 0) : wrap1(p, RN_REP, in, 0);
     } else return fail_at(p, t, t.k == T_EOF ? "unexpected end of rule" : "unexpected token");
     p->depth--;
     return r;
@@ -228,14 +227,14 @@ static RNode *p_primary(RP *p) {
 /* one sequence element with its grammar's prefix/postfix operators */
 static RNode *p_term(RP *p) {
     Tok t = peek(p);
-    if (p->g == G_ABNF && (t.k == T_NUM || is_p(t, "*"))) { /* repeat prefix: n, n*m, *m, * */
+    if (p->g == G_ABNF && (t.k == T_NUM || is_p(t, S("*")))) { /* repeat prefix: n, n*m, *m, * */
         unsigned mn = 0, mx = 0;
         bool star = false, hasmx = false;
         if (t.k == T_NUM) {
             for (size_t k = 0; k < t.s.n && k < 6; k++) mn = mn * 10 + (unsigned)(t.s.p[k] - '0');
             adv(p, t), t = peek(p);
         }
-        if (is_p(t, "*") && t.off == p->i) {
+        if (is_p(t, S("*")) && t.off == p->i) {
             star = true, adv(p, t);
             Tok m = peek(p);
             if (m.k == T_NUM && m.off == t.off + 1) {
@@ -250,17 +249,17 @@ static RNode *p_term(RP *p) {
         return wrap1(p, RN_REP, in, mn ? 1 : 0);
     }
     char pre = 0;
-    if (p->g == G_PEG && (is_p(t, "&") || is_p(t, "!"))) pre = t.s.p[0], adv(p, t);
+    if (p->g == G_PEG && (is_p(t, S("&")) || is_p(t, S("!")))) pre = t.s.p[0], adv(p, t);
     RNode *r = p_primary(p);
     for (;;) {
         if (!r) return nullptr;
         Tok o = peek(p);
         if (p->g == G_EBNF || p->g == G_PEG) {
-            if (is_p(o, "?")) { adv(p, o), r = wrap1(p, RN_OPT, r, 0); continue; }
-            if (is_p(o, "*")) { adv(p, o), r = wrap1(p, RN_REP, r, 0); continue; }
-            if (is_p(o, "+")) { adv(p, o), r = wrap1(p, RN_REP, r, 1); continue; }
+            if (is_p(o, S("?"))) { adv(p, o), r = wrap1(p, RN_OPT, r, 0); continue; }
+            if (is_p(o, S("*"))) { adv(p, o), r = wrap1(p, RN_REP, r, 0); continue; }
+            if (is_p(o, S("+"))) { adv(p, o), r = wrap1(p, RN_REP, r, 1); continue; }
         }
-        if (p->g == G_EBNF && is_p(o, "-")) {
+        if (p->g == G_EBNF && is_p(o, S("-"))) {
             adv(p, o);
             RNode *ex = p_primary(p), *s = mk(p, RN_SEQ, (Str){}), *m = mk(p, RN_TERM, S("-"));
             if (!ex || !s || !m || !add(p, s, r) || !add(p, s, m) || !add(p, s, ex)) return nullptr;
@@ -270,26 +269,25 @@ static RNode *p_term(RP *p) {
         break;
     }
     if (pre) {
-        const char *lbl = r->k == RN_TERM ? "\"" : "";
+        bool quote = r->k == RN_TERM; /* !"x" */
         Str in = r->k == RN_TERM || r->k == RN_NONTERM || r->k == RN_SPECIAL ? r->s : S("(...)");
-        size_t ll = strlen(lbl);
-        char *o = arena_alloc_array(p->a, in.n + 2 * ll + 2, 1, 1);
+        char *o = ANEW(p->a, char, in.n + 3);
         if (!o) { p->err = "out of memory"; return nullptr; }
         size_t on = 0;
         o[on++] = pre;
-        memcpy(o + on, lbl, ll), on += ll;
+        if (quote) o[on++] = '"';
         memcpy(o + on, in.p, in.n), on += in.n;
-        memcpy(o + on, lbl, ll), on += ll;
+        if (quote) o[on++] = '"';
         r = mk(p, RN_SPECIAL, (Str){.p = o, .n = on});
     }
     return r;
 }
 
 static bool seq_end(RP *p, Tok t) {
-    if (t.k == T_EOF || is_p(t, ";") || is_p(t, ")") || is_p(t, "]") || is_p(t, "}")) return true;
-    if (p->g == G_EBNF && (is_p(t, "|") || (is_p(t, ".") ))) return true;
-    if ((p->g == G_ABNF || p->g == G_PEG) && is_p(t, "/")) return true;
-    if (p->g == G_FN && is_p(t, "|")) return true;
+    if (t.k == T_EOF || is_p(t, S(";")) || is_p(t, S(")")) || is_p(t, S("]")) || is_p(t, S("}"))) return true;
+    if (p->g == G_EBNF && (is_p(t, S("|")) || (is_p(t, S(".")) ))) return true;
+    if ((p->g == G_ABNF || p->g == G_PEG) && is_p(t, S("/"))) return true;
+    if (p->g == G_FN && is_p(t, S("|"))) return true;
     return rule_start(p);
 }
 
@@ -301,7 +299,7 @@ static RNode *p_seq(RP *p) {
         RNode *e = p_term(p);
         if (!e || !add(p, s, e)) return nullptr;
         t = peek(p);
-        if (p->g == G_EBNF && is_p(t, ",")) adv(p, t), t = peek(p);
+        if (p->g == G_EBNF && is_p(t, S(","))) adv(p, t), t = peek(p);
     }
     if (!s->nk) return fail_at(p, t, "empty alternative");
     return collapse(s);
@@ -314,8 +312,8 @@ static RNode *p_choice(RP *p) {
         RNode *s = p_seq(p);
         if (!s || !add(p, c, s)) return nullptr;
         Tok t = peek(p);
-        if ((p->g == G_EBNF || p->g == G_FN) && is_p(t, "|")) { adv(p, t); continue; }
-        if ((p->g == G_ABNF || p->g == G_PEG) && is_p(t, "/")) { adv(p, t); continue; }
+        if ((p->g == G_EBNF || p->g == G_FN) && is_p(t, S("|"))) { adv(p, t); continue; }
+        if ((p->g == G_ABNF || p->g == G_PEG) && is_p(t, S("/"))) { adv(p, t); continue; }
         break;
     }
     return collapse(c);
@@ -332,7 +330,7 @@ constexpr double TH = 17;
 
 static Str label_of(Arena *a, const RNode *r) {
     if (r->k != RN_SPECIAL) return r->s;
-    char *o = arena_alloc_array(a, r->s.n + 5, 1, 1);
+    char *o = ANEW(a, char, r->s.n + 5);
     if (!o) return r->s;
     memcpy(o, "? ", 2), memcpy(o + 2, r->s.p, r->s.n), memcpy(o + 2 + r->s.n, " ?", 2);
     return (Str){.p = o, .n = r->s.n + 4};
@@ -391,8 +389,8 @@ static void draw(DC *c, const RNode *r, double ox, double oy) {
     Buf *b = c->b;
     switch (r->k) {
     case RN_TERM: case RN_NONTERM: case RN_SPECIAL: {
-        static const char *const CL[] = {"railroad-terminal", "railroad-nonterminal", "railroad-special"};
-        buf_lit(b, "<g class=\""); buf_put(b, strlen(CL[r->k]), CL[r->k]); buf_lit(b, "\"><rect x=\"");
+        static const Str CL[] = {S("railroad-terminal"), S("railroad-nonterminal"), S("railroad-special")};
+        buf_lit(b, "<g class=\""); buf_str(b, CL[r->k]); buf_lit(b, "\"><rect x=\"");
         buf_num(b, ox); buf_lit(b, "\" y=\""); buf_num(b, oy); buf_lit(b, "\" width=\""); buf_num(b, r->w);
         buf_lit(b, "\" height=\""); buf_num(b, r->h);
         if (r->k == RN_TERM) buf_lit(b, "\" rx=\"10\" ry=\"10\"/>");
@@ -486,7 +484,7 @@ DIAG_FN(railroad_render) {
            : str_eq(w0, S("railroad-peg-beta")) ? G_PEG : G_FN;
     /* body text without title/acc lines (blanked in a copy so offsets stay valid) */
     size_t bs = it.i;
-    char *body = arena_alloc_array(a, n - bs + 1, 1, 1);
+    char *body = ANEW(a, char, n - bs + 1);
     if (!body) return MMD_ERR_NOMEM;
     memcpy(body, src + bs, n - bs);
     while (dg_next_line(&it, &ln, &lo)) {
@@ -504,13 +502,13 @@ DIAG_FN(railroad_render) {
         if (t.k != T_ID) { fail_at(&p, t, "expected a rule name"); break; }
         adv(&p, t);
         Tok o = peek(&p);
-        bool okop = g == G_PEG ? is_p(o, "<-") || is_p(o, "=") : is_p(o, "=") || is_p(o, "::=") || is_p(o, "=/");
+        bool okop = g == G_PEG ? is_p(o, S("<-")) || is_p(o, S("=")) : is_p(o, S("=")) || is_p(o, S("::=")) || is_p(o, S("=/"));
         if (!okop) { fail_at(&p, o, g == G_PEG ? "expected '<-'" : "expected '='"); break; }
         adv(&p, o);
         RNode *d = p_choice(&p);
         if (!d) break;
         Tok e = peek(&p);
-        if (is_p(e, ";") || (g == G_EBNF && is_p(e, "."))) adv(&p, e);
+        if (is_p(e, S(";")) || (g == G_EBNF && is_p(e, S(".")))) adv(&p, e);
         else if (e.k != T_EOF && !rule_start(&p)) { fail_at(&p, e, "expected ';'"); break; }
         if (!VEC_PUSH(a, &rules, ((Rule){.name = t.s, .def = d}))) return MMD_ERR_NOMEM;
     }
