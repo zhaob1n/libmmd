@@ -54,7 +54,7 @@ static constexpr char TV_FILL[][31] = {"themeVariables.emUiFill", "themeVariable
 static constexpr char TV_STROKE[][33] = {"themeVariables.emUiStroke", "themeVariables.emProcessorStroke",
     "themeVariables.emReadModelStroke", "themeVariables.emCommandStroke", "themeVariables.emEventStroke"};
 
-static void put_col(Buf *b, Str v, const char *def) {
+static void put_col(Buf b[static 1], Str v, const char def[static 1]) {
     if (dg_css_ok(v)) buf_xml(b, v); else buf_cstr(b, def);
 }
 
