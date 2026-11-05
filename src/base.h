@@ -175,6 +175,7 @@ static inline void buf_put_(Buf *b, size_t n, const char s[static n]) {
 /* zero-length appends are common (escape runs); [static 0] would be UB, so filter here */
 #define buf_put(b, n, s) do { size_t n_ = (n); if (n_) buf_put_((b), n_, (s)); } while (0)
 static inline void buf_str(Buf *b, Str s) { if (s.n) buf_put(b, s.n, s.p); }
+static inline void buf_cstr(Buf *b, const char *s) { buf_put(b, strlen(s), s); }
 #define buf_lit(b, lit) buf_put((b), sizeof(lit) - 1, (lit))
 static inline void buf_ch(Buf *b, char c) {
     if (!buf_reserve(b, 1)) return;
