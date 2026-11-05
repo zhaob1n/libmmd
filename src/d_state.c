@@ -504,7 +504,7 @@ static mmd_status layout_scope(Ctx c[static 1], int32_t cl) {
     return MMD_OK;
 }
 
-static void translate(Graph *lg, double dx, double dy) {
+static void translate(Graph lg[static 1], double dx, double dy) {
     for (size_t v = 0; v < lg->nn; v++) lg->nx[v] += dx, lg->ny[v] += dy;
     for (size_t i = 0; i + 1 < lg->pts.n; i += 2) lg->pts.v[i] += dx, lg->pts.v[i + 1] += dy;
     for (size_t e = 0; e < lg->ne; e++) lg->elx[e] += dx, lg->ely[e] += dy;
