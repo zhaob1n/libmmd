@@ -45,7 +45,8 @@ typedef struct Ctx {
 static int32_t new_ent(Ctx *c) {
     if (c->etop == c->ecap) {
         size_t nc = c->ecap ? 2 * c->ecap : 64;
-        Ent *p = realloc(c->ent, nc * sizeof *p);
+        size_t bytes;
+        Ent *p = ckd_mul(&bytes, nc, sizeof *p) ? nullptr : realloc(c->ent, bytes);
         if (!p) { c->oom = true; return -1; }
         c->ent = p, c->ecap = nc;
     }
@@ -54,7 +55,8 @@ static int32_t new_ent(Ctx *c) {
 static int32_t new_lk(Ctx *c, int32_t e, int32_t next) {
     if (c->ltop == c->lcap) {
         size_t nc = c->lcap ? 2 * c->lcap : 64;
-        Lk *p = realloc(c->lk, nc * sizeof *p);
+        size_t bytes;
+        Lk *p = ckd_mul(&bytes, nc, sizeof *p) ? nullptr : realloc(c->lk, bytes);
         if (!p) { c->oom = true; return -1; }
         c->lk = p, c->lcap = nc;
     }
