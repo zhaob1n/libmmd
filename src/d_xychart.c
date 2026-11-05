@@ -44,7 +44,7 @@ static Str take_title(Str *s) {
     *s = (Str){.p = cut, .n = t.n - (size_t)(cut - t.p)};
     return str_trim((Str){.p = head.p, .n = (size_t)(cut - head.p)});
 }
-static bool range(Str s, double *lo, double *hi) {
+[[nodiscard]] static bool range(Str s, double *lo, double *hi) {
     s = str_trim(s);
     for (size_t i = 0; i + 3 <= s.n; i++)
         if (!memcmp(s.p + i, "-->", 3))
@@ -54,7 +54,7 @@ static bool range(Str s, double *lo, double *hi) {
 /* "[a, "b, c", d]" -> items */
 typedef VEC(Str) StrVec;
 
-static bool list(Arena *a, Str s, StrVec *v, bool *oom) {
+[[nodiscard]] static bool list(Arena *a, Str s, StrVec *v, bool *oom) {
     s = str_trim(s);
     if (s.n < 2 || s.p[0] != '[' || s.p[s.n - 1] != ']') return false;
     s = (Str){.p = s.p + 1, .n = s.n - 2};

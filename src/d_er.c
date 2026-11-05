@@ -83,7 +83,7 @@ static constexpr CardTok WCARD[] = { /* word forms, longest first */
 };
 
 /* symbolic: A <lc>(--|..)<rc> B ; word form: A <card> (to|optionally to) <card> B */
-static bool parse_rel(Str l, Str *a, Str *b, ERel *r, Str *label) {
+[[nodiscard]] static bool parse_rel(Str l, Str *a, Str *b, ERel *r, Str *label) {
     const char *c = nullptr;
     bool inq = false;
     for (size_t k = 0; k < l.n; k++) {
@@ -138,7 +138,7 @@ static bool parse_rel(Str l, Str *a, Str *b, ERel *r, Str *label) {
     return false;
 }
 
-static mmd_status parse(EP *p, LineIt *it) {
+[[nodiscard]] static mmd_status parse(EP *p, LineIt *it) {
     Graph *g = &p->g;
     Str line;
     size_t off;

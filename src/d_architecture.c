@@ -34,7 +34,7 @@ static Str take_id(Str *s) {
     s->p += i, s->n -= i;
     return r;
 }
-static bool encl(Str *s, char o, char c, Str *out) {
+[[nodiscard]] static bool encl(Str *s, char o, char c, Str *out) {
     if (!s->n || s->p[0] != o) return true;
     const char *e = memchr(s->p, c, s->n);
     if (!e) return false;

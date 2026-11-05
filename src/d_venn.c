@@ -71,7 +71,7 @@ static bool safe_val(Str v) {
 }
 
 /* darken a #rgb/#rrggbb colour by 30 lightness points (khroma darken), else nullptr */
-static bool darken30(Str c, char out[static 8]) {
+[[nodiscard]] static bool darken30(Str c, char out[static 8]) {
     unsigned v[3];
     if (c.n == 7 && c.p[0] == '#') {
         for (int i = 0; i < 3; i++) {

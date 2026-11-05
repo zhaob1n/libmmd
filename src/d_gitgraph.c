@@ -23,7 +23,7 @@ static constexpr char COL[][8] = {"#0000ec", "#dede00", "#9dec00", "#0076ec", "#
 static constexpr char LTXT[][5] = {"#fff", "#000", "#000", "#fff", "#000", "#000", "#000", "#000"};
 
 typedef struct Attr { Str id, tag, msg, parent; uint8_t type; double order; bool has_type, has_order; } Attr;
-static bool attrs(Str s, Attr *at) {
+[[nodiscard]] static bool attrs(Str s, Attr *at) {
     while ((s = str_trim(s)).n) {
         if (s.p[0] == '"') { /* legacy `commit "msg"` */
             const char *q = memchr(s.p + 1, '"', s.n - 1);
