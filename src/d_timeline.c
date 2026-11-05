@@ -17,7 +17,6 @@ static constexpr char CSS[] =
     "#mermaid .dl{stroke:#000;stroke-width:2px;stroke-dasharray:5 5;}#mermaid .ax4{stroke:#000;stroke-width:4px;}";
 static const char *const COL[] = {"#8686ff", "#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2",
                                   "#ff8686", "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"}; /* mermaid cScale */
-#define TXG(out, k) do { if ((k) % countof(COL) == 0) buf_lit(out, "<g fill=\"#fff\">"); else buf_lit(out, "<g fill=\"#000\">"); } while (0)
 
 static void push_events(Arena *a, Str s, void *evp, bool *oom) {
     typedef VEC(Str) EV;
@@ -48,7 +47,7 @@ static void tl_node(Buf *out, double x, double y, double w, double h, Str t, siz
     buf_lit(out, "<path class=\"box\" fill=\""); buf_str(out, (Str){.p = fill, .n = strlen(fill)});
     buf_lit(out, "\" d=\"M0 "); buf_num(out, h - 5); buf_lit(out, " v"); buf_num(out, -h + 10);
     buf_lit(out, " q0,-5,5,-5 h"); buf_num(out, w - 10); buf_lit(out, " q5,0,5,5 v"); buf_num(out, h - 5); buf_lit(out, " H0 Z\"/>");
-    TXG(out, ci);
+    if (ci % countof(COL) == 0) buf_lit(out, "<g fill=\"#fff\">"); else buf_lit(out, "<g fill=\"#000\">");
     double tw;
     unsigned nl;
     label_measure(t, 16, &tw, &nl);
