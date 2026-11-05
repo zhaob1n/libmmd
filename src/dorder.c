@@ -363,7 +363,7 @@ static void heap_release(Heap h[static 1]) {
 }
 static void ctx_release(Ctx c[static 1]) { free(c->ent), free(c->lk); }
 
-bool dagre_order(Arena A[static 1], const DOrder d[static 1], uint64_t *crossings) {
+bool dagre_order(Arena A[restrict static 1], const DOrder d[restrict static 1], uint64_t *restrict crossings) {
     size_t V = d->V, S = d->S, R = d->R, NS = V + S;
     DT(t_start);
     [[gnu::cleanup(ctx_release)]] Ctx c = {.d = d, .V = V, .S = S, .NS = NS};
