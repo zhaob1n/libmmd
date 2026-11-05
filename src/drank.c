@@ -427,6 +427,7 @@ bool dagre_rank(Arena *A, const DRankIn *in, int32_t rank[], int32_t top[], int3
         char *p = gen + 16 * (i - NR);
         const char *pre = i == NR ? "_root" : ((i - NR - 1) % 2 ? "_bb" : "_bt");
         int n = snprintf(p, 16, "%s%u", pre, (unsigned)(1000000 + i));
+        if (n < 0 || n >= 16) return false;
         nm[i] = (Str){p, (size_t)n};
     }
     NameIx *byname = ANEW(A, NameIx, M + 1);

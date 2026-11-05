@@ -1122,6 +1122,7 @@ static mmd_status layout_core(Graph *g) {
     if (getenv("MMD_DUMPGRAPH")) {
         static const char *DN[] = {"TB", "BT", "LR", "RL"};
         FILE *F = fopen(getenv("MMD_DUMPGRAPH"), "w");
+        if (!F) goto nodump;
         fprintf(F, "{\"dir\":\"%s\",\"nodesep\":%g,\"ranksep\":%g,\"clusters\":[", DN[g->dir], g->node_sep, g->rank_sep);
         for (size_t s = 0; s < S; s++) fprintf(F, "%s{\"id\":\"%.*s\",\"parent\":%s%.*s%s}", s ? "," : "", (int)g->sid[s].n, g->sid[s].p,
             g->sparent[s] == NONE ? "null" : "\"", g->sparent[s] == NONE ? 0 : (int)g->sid[g->sparent[s]].n, g->sparent[s] == NONE ? "" : g->sid[g->sparent[s]].p, g->sparent[s] == NONE ? "" : "\"");
@@ -1140,6 +1141,7 @@ static mmd_status layout_core(Graph *g) {
                 (int)g->nid[g->eto[e]].n, g->nid[g->eto[e]].p, g->elw[e], g->elh[e], (unsigned)g->elen[e]);
         fprintf(F, "]}\n");
         fclose(F);
+    nodump:;
     }
 #endif
     /* dagre-faithful path (makeSpaceForEdgeLabels always doubles minlen, nesting-graph ranking, dagre order) */
