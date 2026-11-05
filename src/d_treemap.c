@@ -127,11 +127,7 @@ static void put_c(Buf *out, const char *pfx, size_t i) {
     const char *c = dcfg_pal(pfx, i, def);
     buf_put(out, strlen(c), c);
 }
-static Str unq(Str s) {
-    s = str_trim(s);
-    if (s.n >= 2 && (s.p[0] == '"' || s.p[0] == '\'') && s.p[s.n - 1] == s.p[0]) s = (Str){.p = s.p + 1, .n = s.n - 2};
-    return s;
-}
+static Str unq(Str s) { return dg_unquote(s, true); }
 static void fmt_val(double v, size_t cap, char b[static cap], size_t *len) {
     int k = fabs(v - round(v)) < 1e-9 ? snprintf(b, cap, "%.0f", v) : snprintf(b, cap, "%.2f", v);
     *len = k < 0 ? 0 : (size_t)k < cap ? (size_t)k : cap - 1;

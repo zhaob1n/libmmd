@@ -17,11 +17,7 @@ static constexpr char CSS[] =
     "#mermaid .km{font-size:12px;fill:#666;}#mermaid .kp{stroke-width:4px;}";
 static const char *const COLF[] = {"#ECECFF", "#ffffde", "#e8f4ea", "#fde8e8", "#e8f0fd", "#f8e8fd"};
 
-static Str unq(Str s) {
-    s = str_trim(s);
-    if (s.n >= 2 && (s.p[0] == '"' || s.p[0] == '\'') && s.p[s.n - 1] == s.p[0]) s = (Str){.p = s.p + 1, .n = s.n - 2};
-    return s;
-}
+static Str unq(Str s) { return dg_unquote(s, true); }
 /* `id[label]`, `[label]`, `id(label)` or text; returns label, strips/parses @{..} into *meta */
 static Str node_label(Str s, Str *meta) {
     *meta = (Str){};

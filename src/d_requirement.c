@@ -22,11 +22,7 @@ static constexpr char CSS[] =
     "#mermaid .rr{fill:none;stroke:#333;stroke-width:1px;stroke-dasharray:10,7;}#mermaid .rr.c{stroke-dasharray:none;}"
     "#mermaid .rh{fill:#333;}#mermaid .rl{fill:#fff;opacity:.9;}#mermaid .rn{font-weight:bold;}#mermaid .rt{font-size:14px;}";
 
-static Str unq(Str s) {
-    s = str_trim(s);
-    if (s.n >= 2 && s.p[0] == '"' && s.p[s.n - 1] == '"') s = (Str){.p = s.p + 1, .n = s.n - 2};
-    return s;
-}
+static Str unq(Str s) { return dg_unquote(s, false); }
 static Str cap(Arena *a, Str s) { /* Medium / Test: capitalise like mermaid */
     if (!s.n || !(s.p[0] >= 'a' && s.p[0] <= 'z')) return s;
     char *o = ANEW(a, char, s.n);

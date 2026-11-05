@@ -77,11 +77,7 @@ static int dom_of(Str w) {
     return -1;
 }
 
-static Str unq(Str s) {
-    s = str_trim(s);
-    if (s.n >= 2 && (s.p[0] == '"' || s.p[0] == '\'') && s.p[s.n - 1] == s.p[0]) s.p++, s.n -= 2;
-    return s;
-}
+static Str unq(Str s) { return dg_unquote(s, true); }
 
 DIAG_FN(cynefin_render) {
     (void)fs;

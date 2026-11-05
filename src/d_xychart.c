@@ -18,11 +18,7 @@ static const char *const PAL[] = {"#ECECFF", "#8493A6", "#FFC3A0", "#DCDDE1", "#
                                   "#D1A36F", "#C3CDE6", "#FFB6C1", "#496078", "#F8F3E3"};
 static const char *const LINEPAL[] = {"#8493A6", "#FF7F50", "#3c9a3c", "#7b52ab", "#c0392b"};
 
-static Str unq(Str s) {
-    s = str_trim(s);
-    if (s.n >= 2 && s.p[0] == '"' && s.p[s.n - 1] == '"') s = (Str){.p = s.p + 1, .n = s.n - 2};
-    return s;
-}
+static Str unq(Str s) { return dg_unquote(s, false); }
 /* optional leading quoted or bare title, then rest */
 static Str take_title(Str *s) {
     Str t = str_trim(*s);
