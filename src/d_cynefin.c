@@ -41,13 +41,13 @@ static double rnd(int64_t seed) { /* mermaid seededRandom (mulberry32 step) */
     return (double)(t ^ (t >> 14)) / 4294967296.0;
 }
 
-static int32_t hash_id(const char *s) {
+static int32_t hash_id(const char s[static 1]) {
     uint32_t h = 0;
     for (; *s; s++) h = (h << 5) - h + (uint32_t)(unsigned char)*s;
     return (int32_t)h;
 }
 
-static void wavy(Buf *b, double W, double H, int64_t seed, double amp, bool vert) {
+static void wavy(Buf b[static 1], double W, double H, int64_t seed, double amp, bool vert) {
     double P[8][2];
     for (int i = 0; i <= 7; i++) {
         double j = rnd(seed + i * (vert ? 17 : 23)) * amp * 2 - amp;
@@ -66,7 +66,7 @@ static void wavy(Buf *b, double W, double H, int64_t seed, double amp, bool vert
     buf_lit(b, "\"/>");
 }
 
-static void text(Buf *b, const char *s, double x, double y, const char *cls, const char *base) {
+static void text(Buf b[static 1], const char s[static 1], double x, double y, const char cls[static 1], const char base[static 1]) {
     buf_lit(b, "<text class=\""); buf_cstr(b, cls); buf_lit(b, "\" x=\""); buf_num(b, x);
     buf_lit(b, "\" y=\""); buf_num(b, y); buf_lit(b, "\" text-anchor=\"middle\" dominant-baseline=\"");
     buf_cstr(b, base); buf_lit(b, "\">");
