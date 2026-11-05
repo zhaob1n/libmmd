@@ -28,11 +28,11 @@ typedef struct StP {
     char *msg;
 } StP;
 
-static mmd_status sfail(StP *p, size_t off, const char *m) { return diag_fail(p->err_off, p->msg, off, m); }
+static mmd_status sfail(StP p[static 1], size_t off, const char m[static 1]) { return diag_fail(p->err_off, p->msg, off, m); }
 
-static int32_t cur_scope(const StP *p) { return p->depth ? p->stk[p->depth - 1].region : NONE; }
+static int32_t cur_scope(const StP p[static 1]) { return p->depth ? p->stk[p->depth - 1].region : NONE; }
 
-[[nodiscard]] static int32_t state(StP *p, Str id, SKind k) {
+[[nodiscard]] static int32_t state(StP p[static 1], Str id, SKind k) {
     bool fresh;
     int32_t v = dg_node(&p->g, id, &fresh);
     if (v == NONE) return NONE;
@@ -49,7 +49,7 @@ static int32_t cur_scope(const StP *p) { return p->depth ? p->stk[p->depth - 1].
 }
 
 /* resolve "[*]" to a per-scope start/end pseudo state */
-[[nodiscard]] static int32_t endpoint(StP *p, Str id, bool src) {
+[[nodiscard]] static int32_t endpoint(StP p[static 1], Str id, bool src) {
     Str cls = {};
     for (size_t k = 0; k + 3 <= id.n; k++)
         if (id.p[k] == ':' && id.p[k + 1] == ':' && id.p[k + 2] == ':') {
@@ -70,7 +70,7 @@ static int32_t cur_scope(const StP *p) { return p->depth ? p->stk[p->depth - 1].
     return v;
 }
 
-static mmd_status open_composite(StP *p, int32_t v, size_t off) {
+static mmd_status open_composite(StP p[static 1], int32_t v, size_t off) {
     if (p->depth >= countof(p->stk)) return sfail(p, off, "states nested too deeply");
     Graph *g = &p->g;
     p->kind.v[v] = SK_COMPOSITE;
@@ -86,7 +86,7 @@ static mmd_status open_composite(StP *p, int32_t v, size_t off) {
     return MMD_OK;
 }
 
-static mmd_status new_region(StP *p, size_t off) {
+static mmd_status new_region(StP p[static 1], size_t off) {
     if (!p->depth) return sfail(p, off, "'--' outside a composite state");
     Graph *g = &p->g;
     Frame *f = &p->stk[p->depth - 1];
@@ -108,7 +108,7 @@ static mmd_status new_region(StP *p, size_t off) {
     return MMD_OK;
 }
 
-static mmd_status add_desc(StP *p, int32_t v, Str d) {
+static mmd_status add_desc(StP p[static 1], int32_t v, Str d) {
     bool ok;
     d = label_normalize(p->A, d, &ok);
     if (!ok) return MMD_ERR_NOMEM;
@@ -128,7 +128,7 @@ static const char *find_sub(Str s, Str needle) {
     return nullptr;
 }
 
-static mmd_status parse(StP *p, LineIt *it) {
+static mmd_status parse(StP p[static 1], LineIt it[static 1]) {
     Str line;
     size_t off;
     Graph *g = &p->g;
@@ -302,7 +302,7 @@ static constexpr char CSS[] =
     "#mermaid .note{fill:#fff5ad;stroke:#aaaa33;stroke-width:1px;}"
     "#mermaid .note-l{stroke:#aaaa33;stroke-width:1px;stroke-dasharray:3,3;}";
 
-static void css_attr(Buf *b, const StP *p, Str cls) {
+static void css_attr(Buf b[static 1], const StP p[static 1], Str cls) {
     for (size_t i = 0; i < p->cdefs.n; i++) {
         if (!str_eq(p->cdefs.v[i].name, cls)) continue;
         Str c = p->cdefs.v[i].css;
@@ -340,14 +340,14 @@ constexpr int32_t NOTE_EL0 = INT32_MIN + 1;
 static inline bool el_is_note(int32_t e) { return e >= NOTE_EL0 && e < NOTE_EL0 + (1 << 24); }
 static inline int32_t sc_ix(int32_t c) { return c + 1; } /* scope index: 0 = root */
 
-static int32_t elem_parent(const StP *p, int32_t e) {
+static int32_t elem_parent(const StP p[static 1], int32_t e) {
     return e >= 0 ? p->g.nparent[e] : p->g.sparent[-e - 2];
 }
-static int32_t node_elem(const StP *p, int32_t v) { return p->ccl.v[v] != NONE ? el_cl(p->ccl.v[v]) : v; }
+static int32_t node_elem(const StP p[static 1], int32_t v) { return p->ccl.v[v] != NONE ? el_cl(p->ccl.v[v]) : v; }
 
 /* path root..leaf of elements (deeper nesting is cut off); returns length */
 constexpr unsigned PATH_MAX_ELEMS = 160;
-static unsigned elem_path(const StP *p, int32_t e, int32_t out[static PATH_MAX_ELEMS]) {
+static unsigned elem_path(const StP p[static 1], int32_t e, int32_t out[static PATH_MAX_ELEMS]) {
     int32_t tmp[PATH_MAX_ELEMS];
     unsigned k = 0;
     tmp[k++] = e;
@@ -373,7 +373,7 @@ typedef struct Ctx {
 typedef struct ElemList { Scope *s; size_t cnt, cap; } ElemList;
 
 /* add element e as a layout node of the scope's graph, sized w x h */
-[[nodiscard]] static mmd_status add_elem(Ctx *c, ElemList *el, int32_t e, Str id, double w, double h, Shape shape) {
+[[nodiscard]] static mmd_status add_elem(Ctx c[static 1], ElemList el[static 1], int32_t e, Str id, double w, double h, Shape shape) {
     Graph *lg = &el->s->lg;
     int32_t lv = dg_node(lg, id, nullptr);
     if (lv == NONE) return MMD_ERR_NOMEM;
@@ -390,7 +390,7 @@ typedef struct ElemList { Scope *s; size_t cnt, cap; } ElemList;
 
 /* the notes of node v (r == NONE) or of cluster r; mermaid inserts a state's note node before the
  * state itself (dagre initial order) */
-[[nodiscard]] static mmd_status add_notes(Ctx *c, ElemList *el, int32_t v, int32_t r) {
+[[nodiscard]] static mmd_status add_notes(Ctx c[static 1], ElemList el[static 1], int32_t v, int32_t r) {
     const StP *p = c->p;
     const Graph *g = &p->g;
     for (size_t i = 0; i < p->notes.n; i++) {
@@ -406,7 +406,7 @@ typedef struct ElemList { Scope *s; size_t cnt, cap; } ElemList;
     return MMD_OK;
 }
 
-static mmd_status layout_scope(Ctx *c, int32_t cl) {
+static mmd_status layout_scope(Ctx c[static 1], int32_t cl) {
     StP *p = c->p;
     Graph *g = &p->g;
     Scope *s = &c->sc[sc_ix(cl)];
@@ -510,7 +510,7 @@ static void translate(Graph *lg, double dx, double dy) {
     for (size_t e = 0; e < lg->ne; e++) lg->elx[e] += dx, lg->ely[e] += dy;
 }
 
-static void place(Ctx *c, int32_t cl, double ox, double oy, unsigned depth) {
+static void place(Ctx c[static 1], int32_t cl, double ox, double oy, unsigned depth) {
     StP *p = c->p;
     Graph *g = &p->g;
     Scope *s = &c->sc[sc_ix(cl)];
