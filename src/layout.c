@@ -752,7 +752,7 @@ static mmd_status dagre_prep_order(Lay L[static 1], const Graph g[static 1], siz
                                    const uint8_t *rev, const uint32_t *revord, size_t nrevord, const int32_t *esub,
                                    const int32_t *rank, const uint32_t *choff, const int32_t *cmin,
                                    const int32_t *cmax, const uint32_t *bbase, const int32_t *sdepth,
-                                   uint64_t bestc[static 1]) {
+                                   uint64_t *bestc) {
     Arena *A = L->A;
     size_t N = L->N, V = L->V, S = L->S, NS = V + S;
 #define DV(e) (ef[e] != NONE && et[e] != NONE && ef[e] != et[e])

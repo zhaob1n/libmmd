@@ -10,7 +10,7 @@ void dg_init(Graph g[static 1], Arena A[static 1], Dir dir, double fs);
 [[nodiscard]] int32_t dg_node(Graph g[static 1], Str id, bool *fresh);
 /* lookup only */
 [[nodiscard]] int32_t dg_find(const Graph g[static 1], Str id);
-static inline void dg_size(Graph *g, int32_t v, double w, double h) {
+static inline void dg_size(Graph g[static 1], int32_t v, double w, double h) {
     g->nw[v] = w;
     g->nh[v] = h;
     g->nflags[v] |= NF_FIXED;
@@ -20,7 +20,7 @@ static inline void dg_size(Graph *g, int32_t v, double w, double h) {
 
 /* ---- SVG ---- */
 typedef struct BBox { double x0, y0, x1, y1; } BBox;
-static inline void bb_add(BBox *bb, double x0, double y0, double x1, double y1) {
+static inline void bb_add(BBox bb[static 1], double x0, double y0, double x1, double y1) {
     if (x0 < bb->x0) bb->x0 = x0;
     if (y0 < bb->y0) bb->y0 = y0;
     if (x1 > bb->x1) bb->x1 = x1;
