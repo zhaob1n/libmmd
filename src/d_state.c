@@ -354,12 +354,13 @@ static int32_t elem_parent(const StP *p, int32_t e) {
 }
 static int32_t node_elem(const StP *p, int32_t v) { return p->ccl.v[v] != NONE ? el_cl(p->ccl.v[v]) : v; }
 
-/* path root..leaf of elements; returns length */
-static unsigned elem_path(const StP *p, int32_t e, int32_t out[static 160]) {
-    int32_t tmp[160];
+/* path root..leaf of elements (deeper nesting is cut off); returns length */
+constexpr unsigned PATH_MAX_ELEMS = 160;
+static unsigned elem_path(const StP *p, int32_t e, int32_t out[static PATH_MAX_ELEMS]) {
+    int32_t tmp[PATH_MAX_ELEMS];
     unsigned k = 0;
     tmp[k++] = e;
-    for (int32_t c = elem_parent(p, e); c != NONE && k < 160; c = p->g.sparent[c]) tmp[k++] = el_cl(c);
+    for (int32_t c = elem_parent(p, e); c != NONE && k < PATH_MAX_ELEMS; c = p->g.sparent[c]) tmp[k++] = el_cl(c);
     for (unsigned i = 0; i < k; i++) out[i] = tmp[k - 1 - i];
     return k;
 }
@@ -600,13 +601,11 @@ DIAG_FN(state_render) {
     c.cw = ANEW(a, double, S + 1); c.ch = ANEW(a, double, S + 1); c.relx = ANEW(a, double, S + 1);
     int32_t *sdep = ANEW(a, int32_t, S + 1);
     if (!c.sc || !c.eloc || !c.ax || !c.ay || !c.cx || !c.cy || !c.cw || !c.ch || !c.relx || !sdep) return MMD_ERR_NOMEM;
-    memset(c.sc, 0, (S + 1) * sizeof *c.sc);
-    memset(c.ax, 0, N * sizeof *c.ax);
-    memset(c.ay, 0, N * sizeof *c.ay);
-    for (size_t r = 0; r <= S; r++) c.cx[r] = c.cy[r] = c.cw[r] = c.ch[r] = c.relx[r] = 0;
+    for (size_t r = 0; r <= S; r++) c.sc[r] = (Scope){}, c.cx[r] = c.cy[r] = c.cw[r] = c.ch[r] = c.relx[r] = 0;
+    for (size_t v = 0; v < N; v++) c.ax[v] = c.ay[v] = 0;
     /* where does each edge live? deepest common scope, with the children-of-scope representatives */
     for (size_t e = 0; e < E; e++) {
-        int32_t pa[160], pb[160];
+        int32_t pa[PATH_MAX_ELEMS], pb[PATH_MAX_ELEMS];
         unsigned na = elem_path(&p, node_elem(&p, g->efrom[e]), pa), nb = elem_path(&p, node_elem(&p, g->eto[e]), pb);
         unsigned k = 0;
         while (k < na && k < nb && pa[k] == pb[k]) k++;
