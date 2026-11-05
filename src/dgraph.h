@@ -51,6 +51,18 @@ typedef struct LineIt { const char *s; size_t n, i, lstart; } LineIt;
 /* indentation (columns, tab = 4) of the raw line starting at offset off */
 [[nodiscard]] unsigned dg_indent(const LineIt *it, size_t off);
 [[nodiscard]] Str dg_word(Str *s);
+/* trim, then drop one pair of matching outer quotes: '"' always, '\'' too when apos */
+static inline Str dg_unquote(Str s, bool apos) {
+    s = str_trim(s);
+    if (s.n >= 2 && (s.p[0] == '"' || (apos && s.p[0] == '\'')) && s.p[s.n - 1] == s.p[0]) s = (Str){.p = s.p + 1, .n = s.n - 2};
+    return s;
+}
+/* user-supplied CSS value safe to splice into a style attribute */
+static inline bool dg_css_ok(Str v) {
+    if (!v.n || v.n > 40) return false;
+    for (size_t i = 0; i < v.n; i++) if (strchr(";{}<>\"'\\", v.p[i])) return false;
+    return true;
+}
 [[nodiscard]] bool dg_parse_num(Str s, double *out);
 /* ---- free-form (non-graph) renderers: draw into a body Buf while growing a BBox ---- */
 typedef enum TBase { TB_ALPHA, TB_MIDDLE, TB_HANG } TBase;
