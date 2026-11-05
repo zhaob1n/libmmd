@@ -32,7 +32,7 @@ typedef struct CP {
 static mmd_status cfail(CP p[static 1], size_t off, const char m[static 1]) { return diag_fail(p->err_off, p->msg, off, m); }
 
 /* ~T~ -> <T> (zero-copy unless a tilde is present) */
-static Str generics(Arena *A, Str s, bool ok[static 1]) {
+static Str generics(Arena A[static 1], Str s, bool ok[static 1]) {
     *ok = true;
     if (!s.n || !memchr(s.p, '~', s.n)) return s;
     char *o = arena_alloc(A, s.n + 1, 1);
