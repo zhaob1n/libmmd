@@ -116,11 +116,14 @@ static const char *decorators(Str r, WNode *nd) {
     }
 }
 
+/* error-message sentinel for allocation failure (compared by address) */
+static const char OOM[] = "out of memory";
+
 static const char *add_node(W *w, WNode nd) {
     ptrdiff_t e = -1;
     for (size_t i = 0; i < w->nodes.n; i++) if (str_eq(w->nodes.v[i].id, nd.id)) e = (ptrdiff_t)i;
     if (e >= 0) { w->nodes.v[e] = nd; return nullptr; }
-    return VEC_PUSH(w->a, &w->nodes, nd) ? nullptr : "out of memory";
+    return VEC_PUSH(w->a, &w->nodes, nd) ? nullptr : OOM;
 }
 
 /* link operators, longest first */
@@ -187,6 +190,9 @@ static void text(Buf *b, double x, double y, Str extra, Str s) {
 }
 
 constexpr double PAD = 48;
+/* map coordinates (0..100, evolution left->right, visibility bottom->top) to SVG pixels */
+static double px(const W *w, double v) { return PAD + v / 100 * (w->width - 2 * PAD); }
+static double py(const W *w, double v) { return w->height - PAD - v / 100 * (w->height - 2 * PAD); }
 constexpr double NR = 6;
 constexpr double NLO = 8;
 /* hits of segment (x0,y0)-(x1,y1) with box b (x0 y0 x1 y1), sampled */
@@ -211,6 +217,11 @@ static double seg_box_hits(double x0, double y0, double x1, double y1, const dou
 #define TXT "#131300"
 #define STK "#333333"
 
+/* parse error at off, or MMD_ERR_NOMEM when a helper reported OOM */
+[[nodiscard]] static mmd_status wfail(size_t *err_off, char msg[static 160], size_t off, const char *m) {
+    return m == OOM ? MMD_ERR_NOMEM : diag_fail(err_off, msg, off, m);
+}
+
 DIAG_FN(wardley_render) {
     (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
@@ -220,7 +231,7 @@ DIAG_FN(wardley_render) {
     W w = {.a = a, .width = 900, .height = 600};
     Str ttl = title;
     ptrdiff_t pipe = -1; /* index into w.pipes while inside pipeline { } */
-#define FAIL(m) return (strcmp((m), "out of memory") ? diag_fail(err_off, msg, lo, (m)) : MMD_ERR_NOMEM)
+#define FAIL(m) return wfail(err_off, msg, lo, (m))
     while (dg_next_line(&it, &ln, &lo)) {
         /* strip trailing %% comments */
         for (size_t i = 0; i + 1 < ln.n; i++) if (ln.p[i] == '%' && ln.p[i + 1] == '%') { ln.n = i; break; }
@@ -370,9 +381,7 @@ DIAG_FN(wardley_render) {
     if (pipe >= 0) return diag_fail(err_off, msg, n, "unclosed pipeline");
 
     double W_ = w.width, H = w.height, cw = W_ - 2 * PAD, ch = H - 2 * PAD, sq = NR * 1.6;
-#define PX(v) (PAD + (v) / 100 * cw)
-#define PY(v) (H - PAD - (v) / 100 * ch)
-    for (size_t i = 0; i < w.nodes.n; i++) w.nodes.v[i].px = PX(w.nodes.v[i].x), w.nodes.v[i].py = PY(w.nodes.v[i].y);
+    for (size_t i = 0; i < w.nodes.n; i++) w.nodes.v[i].px = px(&w, w.nodes.v[i].x), w.nodes.v[i].py = py(&w, w.nodes.v[i].y);
 
     Buf b = {};
     buf_lit(&b, "<g class=\"wardley-map\"><rect class=\"wardley-background\""); attr(&b, "width", W_); attr(&b, "height", H);
@@ -462,7 +471,7 @@ DIAG_FN(wardley_render) {
             }
             for (size_t k = 0; k < w.trends.n; k++) {
                 const WNode *o = &w.nodes.v[w.trends.v[k].num];
-                lc += 4 * seg_box_hits(o->px, o->py, PX(w.trends.v[k].x), PY(w.trends.v[k].y), bx);
+                lc += 4 * seg_box_hits(o->px, o->py, px(&w, w.trends.v[k].x), py(&w, w.trends.v[k].y), bx);
             }
             cost += lc;
             for (size_t j = 0; j < w.nodes.n; j++) {
@@ -470,7 +479,7 @@ DIAG_FN(wardley_render) {
                 if (qx + rr > bx[0] && qx - rr < bx[2] && qy + rr > bx[1] && qy - rr < bx[3]) cost += 30;
             }
             for (size_t k = 0; k < w.notes.n; k++) {
-                double nx = PX(w.notes.v[k].x), ny = PY(w.notes.v[k].y), nw = text_width(w.notes.v[k].s, 11) * 1.05;
+                double nx = px(&w, w.notes.v[k].x), ny = py(&w, w.notes.v[k].y), nw = text_width(w.notes.v[k].s, 11) * 1.05;
                 if (nx < bx[2] && bx[0] < nx + nw && ny - 11 < bx[3] && bx[1] < ny + 3) cost += 30;
             }
             for (size_t j = 0; j < i; j++) {
@@ -551,7 +560,7 @@ DIAG_FN(wardley_render) {
     buf_lit(&b, "</g><g class=\"wardley-trends\">");
     for (size_t k = 0; k < w.trends.n; k++) {
         WNode *o = &w.nodes.v[w.trends.v[k].num];
-        double tx = PX(w.trends.v[k].x), ty = PY(w.trends.v[k].y), dx = tx - o->px, dy = ty - o->py, d = sqrt(dx * dx + dy * dy), sb = NR + 2;
+        double tx = px(&w, w.trends.v[k].x), ty = py(&w, w.trends.v[k].y), dx = tx - o->px, dy = ty - o->py, d = sqrt(dx * dx + dy * dy), sb = NR + 2;
         double x2 = d > sb ? tx - dx / d * sb : tx, y2 = d > sb ? ty - dy / d * sb : ty;
         line(&b, o->px, o->py, x2, y2, S(" class=\"wardley-trend\" stroke=\"#dc3545\" stroke-width=\"1\" stroke-dasharray=\"4 4\" marker-end=\"url(#mermaid-arrow)\""));
     }
@@ -610,8 +619,8 @@ DIAG_FN(wardley_render) {
             char nb[16];
             int nl = snprintf(nb, sizeof nb, "%u", w.ann.v[k].num);
             buf_lit(&b, "<g class=\"wardley-annotation\">");
-            circle(&b, PX(w.ann.v[k].x), PY(w.ann.v[k].y), 10, S(" fill=\"white\" stroke=\"" STK "\" stroke-width=\"1.5\""));
-            text(&b, PX(w.ann.v[k].x), PY(w.ann.v[k].y), S(" text-anchor=\"middle\" dominant-baseline=\"central\" font-size=\"10\" fill=\"" TXT "\" font-weight=\"bold\""), (Str){.p = nb, .n = (size_t)nl});
+            circle(&b, px(&w, w.ann.v[k].x), py(&w, w.ann.v[k].y), 10, S(" fill=\"white\" stroke=\"" STK "\" stroke-width=\"1.5\""));
+            text(&b, px(&w, w.ann.v[k].x), py(&w, w.ann.v[k].y), S(" text-anchor=\"middle\" dominant-baseline=\"central\" font-size=\"10\" fill=\"" TXT "\" font-weight=\"bold\""), (Str){.p = nb, .n = (size_t)nl});
             buf_lit(&b, "</g>");
         }
         if (w.has_box) {
@@ -638,7 +647,7 @@ DIAG_FN(wardley_render) {
                     maxw = fmax(maxw, text_width(lines[k], 11));
                 }
                 double bw = maxw + 20 + 105, bh = (double)m * 16 + 20 + 13.0 / 2;
-                double bx = fmax(PAD, fmin(PX(w.boxx), W_ - PAD - bw)), by = fmax(PAD, fmin(PY(w.boxy), H - PAD - bh));
+                double bx = fmax(PAD, fmin(px(&w, w.boxx), W_ - PAD - bw)), by = fmax(PAD, fmin(py(&w, w.boxy), H - PAD - bh));
                 buf_lit(&b, "<g class=\"wardley-annotations-box\"><rect"); attr(&b, "x", bx); attr(&b, "y", by);
                 attr(&b, "width", bw); attr(&b, "height", bh);
                 buf_lit(&b, " fill=\"white\" stroke=\"" STK "\" stroke-width=\"1.5\" rx=\"4\" ry=\"4\"/>");
@@ -652,7 +661,7 @@ DIAG_FN(wardley_render) {
     if (w.notes.n) {
         buf_lit(&b, "<g class=\"wardley-notes\">");
         for (size_t k = 0; k < w.notes.n; k++)
-            text(&b, fmax(2, fmin(PX(w.notes.v[k].x), W_ - 4 - text_width(w.notes.v[k].s, 11) * 1.05)), PY(w.notes.v[k].y), S(" text-anchor=\"start\" font-size=\"11\" fill=\"" TXT "\" font-weight=\"bold\""), w.notes.v[k].s);
+            text(&b, fmax(2, fmin(px(&w, w.notes.v[k].x), W_ - 4 - text_width(w.notes.v[k].s, 11) * 1.05)), py(&w, w.notes.v[k].y), S(" text-anchor=\"start\" font-size=\"11\" fill=\"" TXT "\" font-weight=\"bold\""), w.notes.v[k].s);
         buf_lit(&b, "</g>");
     }
     for (int dir = 0; dir < 2; dir++) {
@@ -661,7 +670,7 @@ DIAG_FN(wardley_render) {
         if (!cnt) continue;
         buf_str(&b, dir ? S("<g class=\"wardley-deaccelerators\">") : S("<g class=\"wardley-accelerators\">"));
         for (size_t k = 0; k < cnt; k++) {
-            double x = PX(v[k].x), y = PY(v[k].y);
+            double x = px(&w, v[k].x), y = py(&w, v[k].y);
             double P[7][2] = {{0, -15}, {40, -15}, {40, -23}, {60, 0}, {40, 23}, {40, 15}, {0, 15}};
             buf_lit(&b, "<path d=\"");
             for (int q = 0; q < 7; q++) {
