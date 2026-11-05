@@ -328,10 +328,23 @@ static size_t gap_route(Arena *a, const Blk *B, size_t nb, const Blk *s, const B
     uint32_t *prev = ANEW(a, uint32_t, NS), *hp = ANEW(a, uint32_t, 4 * NS + 4);
     uint8_t *ok = ANEW(a, uint8_t, N);
     if (!dist || !prev || !hp || !ok) return 0;
+    /* obstacles once, then which grid points and which grid segments (by midpoint) are free:
+     * hfree[i] = segment i -> i+ny (next x), vfree[i] = segment i -> i+1 (next y) */
+    uint32_t *obs = ANEW(a, uint32_t, nb + 1);
+    uint8_t *hfree = ANEW(a, uint8_t, N), *vfree = ANEW(a, uint8_t, N);
+    if (!obs || !hfree || !vfree) return 0;
+    size_t nobs = 0;
+    for (size_t j = 1; j < nb; j++) if (obstacle(&B[j], s, t)) obs[nobs++] = (uint32_t)j;
     for (size_t i = 0; i < N; i++) {
-        double x = xs[i / ny], y = ys[i % ny];
-        ok[i] = 1;
-        for (size_t j = 1; j < nb && ok[i]; j++) if (obstacle(&B[j], s, t) && in_rect(&B[j], x, y, -1)) ok[i] = 0;
+        size_t xi = i / ny, yi = i % ny;
+        double x = xs[xi], y = ys[yi], hx = xi + 1 < nx ? (x + xs[xi + 1]) / 2 : 0, vy = yi + 1 < ny ? (y + ys[yi + 1]) / 2 : 0;
+        ok[i] = hfree[i] = vfree[i] = 1;
+        for (size_t j = 0; j < nobs; j++) {
+            const Blk *o = &B[obs[j]];
+            if (in_rect(o, x, y, -1)) ok[i] = 0;
+            if (xi + 1 < nx && in_rect(o, hx, y, -1)) hfree[i] = 0;
+            if (yi + 1 < ny && in_rect(o, x, vy, -1)) vfree[i] = 0;
+        }
     }
     for (size_t i = 0; i < NS; i++) dist[i] = HUGE_VAL, prev[i] = UINT32_MAX;
     size_t si = 0, ti = 0, hn = 0;
@@ -350,10 +363,8 @@ static size_t gap_route(Arena *a, const Blk *B, size_t nb, const Blk *s, const B
             if (X < 0 || Y < 0 || (size_t)X >= nx || (size_t)Y >= ny) continue;
             size_t v = (size_t)X * ny + (size_t)Y;
             if (!ok[v] && v != ti) continue;
-            double mx = (xs[xi] + xs[X]) / 2, my = (ys[yi] + ys[Y]) / 2; /* segment midpoint must be free too */
-            bool blk = false;
-            for (size_t j = 1; j < nb && !blk; j++) if (obstacle(&B[j], s, t) && in_rect(&B[j], mx, my, -1)) blk = true;
-            if (blk) continue;
+            size_t lo = v < node ? v : node; /* segment midpoint must be free too */
+            if (!(DX[d] ? hfree[lo] : vfree[lo])) continue;
             double nd = dist[u] + fabs(xs[X] - xs[xi]) + fabs(ys[Y] - ys[yi]) + ((size_t)d != d0 && node != si ? 30 : 0);
             uint32_t w = (uint32_t)(4 * v + (size_t)d);
             if (nd < dist[w] - 1e-9 && hn < 4 * NS) { dist[w] = nd, prev[w] = u; heap_push(hp, &hn, dist, w); }
