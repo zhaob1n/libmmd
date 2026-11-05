@@ -149,8 +149,9 @@ BBox dg_bbox(const Graph g[static 1]) {
     return bb;
 }
 
-void dg_pt(Buf b[static 1], double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
-void dg_arrowhead(Buf b[static 1], const char cls[static 1], const double tip[static 2], const double from[static 2], double half) {
+void dg_pt(Buf b[restrict static 1], double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
+void dg_arrowhead(Buf b[restrict static 1], const char cls[restrict static 1], const double tip[restrict static 2],
+                  const double from[restrict static 2], double half) {
     double dx = tip[0] - from[0], dy = tip[1] - from[1], L = sqrt(dx * dx + dy * dy);
     if (L < 1e-9) return;
     dx /= L, dy /= L;
@@ -159,7 +160,7 @@ void dg_arrowhead(Buf b[static 1], const char cls[static 1], const double tip[st
     buf_pt(b, tip[0] - dx * 10 + dy * half, tip[1] - dy * 10 - dx * half); buf_lit(b, "z\"/>");
 }
 
-void dg_basis(Buf b[static 1], size_t n, const double P[static 2 * n]) {
+void dg_basis(Buf b[restrict static 1], size_t n, const double P[restrict static 2 * n]) {
     double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
     unsigned st = 0;
     for (size_t i = 0; i < n; i++) {
@@ -190,7 +191,7 @@ void dg_basis(Buf b[static 1], size_t n, const double P[static 2 * n]) {
     }
 }
 
-void dg_edge_d(Buf b[static 1], const Graph g[static 1], size_t e) {
+void dg_edge_d(Buf b[restrict static 1], const Graph g[restrict static 1], size_t e) {
     if (g->efrom[e] == g->eto[e] && g->efrom[e] != NONE && !(g->eflags && (g->eflags[e] & EF_LOOPPTS) && g->eptn[e] >= 2)) {
         int32_t v = g->efrom[e];
         double x = g->nx[v] + g->nw[v] / 2, y = g->ny[v], q = g->nh[v] / 4;
@@ -202,11 +203,13 @@ void dg_edge_d(Buf b[static 1], const Graph g[static 1], size_t e) {
     if (g->eptn[e] >= 2) dg_basis(b, g->eptn[e], g->pts.v + g->eptoff[e]);
 }
 
-void dg_text(Buf b[static 1], Str s, double fs, double x, double cy, const char anchor[static 1], const char *cls) {
+void dg_text(Buf b[restrict static 1], Str s, double fs, double x, double cy, const char anchor[restrict static 1],
+             const char *restrict cls) {
     dg_text_lh(b, s, fs * 1.5, x, cy, anchor, cls);
 }
 
-void dg_text_lh(Buf b[static 1], Str s, double lh, double x, double cy, const char anchor[static 1], const char *cls) {
+void dg_text_lh(Buf b[restrict static 1], Str s, double lh, double x, double cy, const char anchor[restrict static 1],
+                const char *restrict cls) {
     unsigned k = 0;
     size_t pos = 0;
     Str ln;
@@ -227,7 +230,8 @@ void dg_text_lh(Buf b[static 1], Str s, double lh, double x, double cy, const ch
     }
 }
 
-void dg_head(Buf b[static 1], BBox bb, double m, const char kind[static 1], size_t ncss, const char css[static ncss]) {
+void dg_head(Buf b[restrict static 1], BBox bb, double m, const char kind[restrict static 1], size_t ncss,
+             const char css[restrict static ncss]) {
     double x = bb.x0 - m, y = bb.y0 - m, w = bb.x1 - bb.x0 + 2 * m, h = bb.y1 - bb.y0 + 2 * m;
     size_t kl = strlen(kind);
     buf_lit(b, "<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"mermaid\" class=\""); buf_put(b, kl, kind);
@@ -246,7 +250,7 @@ void dg_head(Buf b[static 1], BBox bb, double m, const char kind[static 1], size
     buf_lit(b, "\"/>");
 }
 
-void dg_rect(Buf b[static 1], double x, double y, double w, double h, double rx, const char *cls) {
+void dg_rect(Buf b[restrict static 1], double x, double y, double w, double h, double rx, const char *restrict cls) {
     buf_lit(b, "<rect");
     if (cls) { buf_lit(b, " class=\""); buf_cstr(b, cls); buf_ch(b, '"'); }
     buf_lit(b, " x=\""); buf_num(b, x); buf_lit(b, "\" y=\""); buf_num(b, y);
@@ -255,7 +259,7 @@ void dg_rect(Buf b[static 1], double x, double y, double w, double h, double rx,
     buf_lit(b, "\"/>");
 }
 
-void dg_line(Buf b[static 1], double x1, double y1, double x2, double y2, const char *cls) {
+void dg_line(Buf b[restrict static 1], double x1, double y1, double x2, double y2, const char *restrict cls) {
     buf_lit(b, "<line");
     if (cls) { buf_lit(b, " class=\""); buf_cstr(b, cls); buf_ch(b, '"'); }
     buf_lit(b, " x1=\""); buf_num(b, x1); buf_lit(b, "\" y1=\""); buf_num(b, y1);
@@ -336,14 +340,15 @@ bool dg_parse_num(Str s, double out[static 1]) {
     return true;
 }
 
-void dg_text_open(Buf b[static 1], double x, double cy, const char anchor[static 1], const char *cls) {
+void dg_text_open(Buf b[restrict static 1], double x, double cy, const char anchor[restrict static 1], const char *restrict cls) {
     buf_lit(b, "<text");
     if (cls) { buf_lit(b, " class=\""); buf_cstr(b, cls); buf_ch(b, '"'); }
     buf_lit(b, " x=\""); buf_num(b, x); buf_lit(b, "\" y=\""); buf_num(b, cy);
     buf_lit(b, "\" text-anchor=\""); buf_cstr(b, anchor);
     buf_lit(b, "\" dominant-baseline=\"central\">");
 }
-void dg_rect_fill(Buf b[static 1], double x, double y, double w, double h, double rx, const char *cls, const char *fill) {
+void dg_rect_fill(Buf b[restrict static 1], double x, double y, double w, double h, double rx, const char *restrict cls,
+                  const char *restrict fill) {
     buf_lit(b, "<rect");
     if (cls) { buf_lit(b, " class=\""); buf_cstr(b, cls); buf_ch(b, '"'); }
     buf_lit(b, " x=\""); buf_num(b, x); buf_lit(b, "\" y=\""); buf_num(b, y);
@@ -405,8 +410,8 @@ BBox dg_tbox(Str s, double fs, double lh, double x, double y, bool centre, const
     return (BBox){x0, top, x0 + w, top + (k - 1) * lh + 1.15 * fs};
 }
 
-unsigned dg_tspans(Buf b[static 1], BBox *bb, Str s, double fs, double lh, double x, double y, bool centre,
-                   const char anchor[static 1], TBase base, const char *cls) {
+unsigned dg_tspans(Buf b[restrict static 1], BBox *restrict bb, Str s, double fs, double lh, double x, double y, bool centre,
+                   const char anchor[restrict static 1], TBase base, const char *restrict cls) {
     unsigned k = nlines(s);
     if (bb) {
         BBox t = dg_tbox(s, fs, lh, x, y, centre, anchor, base);
@@ -450,8 +455,8 @@ Str dg_wrapc(Arena a[static 1], Str s, size_t maxc) {
     return (Str){.p = o, .n = n};
 }
 
-mmd_status dg_finish(Buf out[static 1], Buf body[static 1], BBox bb, double m, const char kind[static 1],
-                     size_t ncss, const char css[static ncss]) {
+mmd_status dg_finish(Buf out[restrict static 1], Buf body[restrict static 1], BBox bb, double m, const char kind[restrict static 1],
+                     size_t ncss, const char css[restrict static ncss]) {
     if (bb.x0 > bb.x1) bb = (BBox){0, 0, 100, 100};
     if (!body->oom && buf_reserve(out, body->n + ncss + 1024)) {
         dg_head(out, bb, m, kind, ncss, css);
