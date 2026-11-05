@@ -141,7 +141,7 @@ DIAG_FN(treeview_render) {
     Str lcol = dcfg_get_str(S("themeVariables.treeView.labelColor")), lncol = dcfg_get_str(S("themeVariables.treeView.lineColor"));
     Str pack = dcfg_get_str(S("treeView.defaultIconPack"));
     double lh = lfs * 1.0635, rowh = lh + 2 * py, y = 0, W = 0, maxr = 0;
-    Buf b = {};
+    AUTO_BUF Buf b = {};
     buf_lit(&b, "<g class=\"tree-view\">");
     for (size_t i = 0; i < v.n; i++) { /* pre-order already */
         TNode *t = &v.v[i];
@@ -233,7 +233,7 @@ DIAG_FN(treeview_render) {
         buf_num(&b, t->y + t->h / 2); buf_lit(&b, "\">"); buf_xml(&b, t->desc); buf_lit(&b, "</text>");
         W = fmax(W, dx + text_width(t->desc, lfs) + px);
     }
-    Buf hb = {};
+    AUTO_BUF Buf hb = {};
     for (size_t i = 0; i < v.n; i++) {
         const TNode *t = &v.v[i];
         bool hl = false;
@@ -245,13 +245,12 @@ DIAG_FN(treeview_render) {
         W = fmax(W, t->labx + rw + 2);
     }
     /* highlight rects go underneath: prepend */
-    Buf body = {};
+    AUTO_BUF Buf body = {};
     buf_put(&body, hb.n, hb.p);
     buf_put(&body, b.n, b.p);
     buf_lit(&body, "</g>");
     bool oom = hb.oom || b.oom;
-    free(hb.p), free(b.p);
-    if (oom) { free(body.p); return MMD_ERR_NOMEM; }
+    if (oom) return MMD_ERR_NOMEM;
     char css[640];
     Str lc = dg_css_ok(lcol) ? lcol : S("black"), nc = dg_css_ok(lncol) ? lncol : S("black");
     snprintf(css, sizeof css,

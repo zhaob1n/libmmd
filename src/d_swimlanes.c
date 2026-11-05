@@ -411,7 +411,7 @@ mmd_status swim_layout(Graph *g, Str **keep) {
 mmd_status swim_titles(const Graph *g, const Str *keep, Buf *b) {
     bool horiz = g->dir == DIR_LR || g->dir == DIR_RL;
     if (!horiz || b->n < 6) return MMD_OK;
-    Buf t = {};
+    AUTO_BUF Buf t = {};
     for (size_t s = 0; s < g->ns; s++) {
         if (g->sparent[s] != NONE || g->sw[s] <= 0) continue;
         double cx = g->sx[s] + SW_TITLE / 2, cy = g->sy[s] + g->sh[s] / 2;
@@ -432,6 +432,5 @@ mmd_status swim_titles(const Graph *g, const Str *keep, Buf *b) {
         memcpy(b->p + at, t.p, t.n);
         b->n += t.n;
     } else if (t.n) oom = true;
-    free(t.p);
     return oom ? MMD_ERR_NOMEM : MMD_OK;
 }

@@ -363,7 +363,7 @@ DIAG_FN(architecture_render) {
     double *SG = ANEW(a, double, 4 * 8 * (ev.n + 1)); /* routed segments, for de-bundling detours */
     if (!SG) return MMD_ERR_NOMEM;
     size_t ns = 0;
-    Buf eb = {}; /* edges first: detours may grow the bbox */
+    AUTO_BUF Buf eb = {}; /* edges first: detours may grow the bbox */
     for (size_t e = 0; e < ev.n; e++) {
         const AEdge *E = &ev.v[e];
         double ra = N[E->a].junction ? 0 : IS / 2, rb = N[E->b].junction ? 0 : IS / 2;
@@ -439,8 +439,8 @@ DIAG_FN(architecture_render) {
             dg_text(&eb, E->label, 14, lx, ly, "middle", "ael");
         }
     }
-    if (eb.oom) { free(eb.p); return MMD_ERR_NOMEM; }
-    if (!buf_reserve(out, 4096 + nn * 1500 + eb.n + gv.n * 1200)) { free(eb.p); return MMD_ERR_NOMEM; }
+    if (eb.oom) return MMD_ERR_NOMEM;
+    if (!buf_reserve(out, 4096 + nn * 1500 + eb.n + gv.n * 1200)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 16, "architecture", CSS);
     if (title.n) dg_text(out, title, 18, (bb.x0 + bb.x1) / 2, bb.y0 + 14, "middle", "agl");
     for (size_t g = 0; g < gv.n; g++) {
@@ -481,7 +481,6 @@ DIAG_FN(architecture_render) {
         dg_text(out, G->label.n ? G->label : G->id, fs, tx, G->y0 + 15, "start", "agl");
     }
     buf_put(out, eb.n, eb.p);
-    free(eb.p);
     for (size_t i = 0; i < nn; i++) {
         if (N[i].junction) {
             buf_lit(out, "<circle class=\"aj\" cx=\""); buf_num(out, cx[i]); buf_lit(out, "\" cy=\""); buf_num(out, cy[i]); buf_lit(out, "\" r=\"4\"/>");
