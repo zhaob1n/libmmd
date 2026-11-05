@@ -18,16 +18,12 @@ typedef struct VText { unsigned mask; Str id, label; } VText;
 typedef struct VStyle { Str fill, fop, stroke, sw, color; } VStyle;
 typedef struct VSty { Str key; unsigned mask; VStyle s; } VSty;
 
-static const char *const PAL[8] = {"#5353ff", "#ffff45", "#b5ff20", "#ff53ff", "#53ffff", "#45ff45", "#ff5353", "#45ffff"};
-static const char *const PALT[8] = {"#0000b9", "#abab00", "#598600", "#b900b9", "#00b9b9", "#00ab00", "#b90000", "#00abab"};
+static constexpr char PAL[8][8] = {"#5353ff", "#ffff45", "#b5ff20", "#ff53ff", "#53ffff", "#45ff45", "#ff5353", "#45ffff"};
+static constexpr char PALT[8][8] = {"#0000b9", "#abab00", "#598600", "#b900b9", "#00b9b9", "#00ab00", "#b90000", "#00abab"};
 
 static constexpr char CSS[] = "#mermaid .vt{fill:#333;}#mermaid .vl{fill:#333;}#mermaid .vn{fill:#333;}";
 
-static Str unq(Str s) {
-    s = str_trim(s);
-    if (s.n >= 2 && s.p[0] == '"' && s.p[s.n - 1] == '"') s.p++, s.n -= 2;
-    return s;
-}
+static Str unq(Str s) { return dg_unquote(s, false); }
 
 static double lens(double r1, double r2, double d) { /* area of intersection of two circles */
     if (d >= r1 + r2) return 0;
@@ -74,10 +70,8 @@ static bool safe_val(Str v) {
     return true;
 }
 
-static void put_s(Buf *b, Str s) { buf_put(b, s.n, s.p); }
-
 /* darken a #rgb/#rrggbb colour by 30 lightness points (khroma darken), else nullptr */
-static bool darken30(Str c, char out[static 8]) {
+[[nodiscard]] static bool darken30(Str c, char out[static 8]) {
     unsigned v[3];
     if (c.n == 7 && c.p[0] == '#') {
         for (int i = 0; i < 3; i++) {
@@ -381,9 +375,9 @@ DIAG_FN(venn_render) {
             buf_lit(&b, "<g class=\"venn-area "); if (single) buf_lit(&b, "venn-circle\">"); else buf_lit(&b, "venn-intersection\">");
             if (single) {
                 buf_lit(&b, "<circle cx=\""); buf_num(&b, X[si]); buf_lit(&b, "\" cy=\""); buf_num(&b, Y[si]); buf_lit(&b, "\" r=\""); buf_num(&b, R[si]);
-                buf_lit(&b, "\" style=\"fill:"); put_s(&b, base); buf_lit(&b, ";fill-opacity:"); if (cs->fop.n) put_s(&b, cs->fop); else buf_lit(&b, "0.1");
-                buf_lit(&b, ";stroke:"); put_s(&b, cs->stroke.n ? cs->stroke : base); buf_lit(&b, ";stroke-width:");
-                if (cs->sw.n) put_s(&b, cs->sw); else buf_num(&b, 5 * sc);
+                buf_lit(&b, "\" style=\"fill:"); buf_str(&b, base); buf_lit(&b, ";fill-opacity:"); if (cs->fop.n) buf_str(&b, cs->fop); else buf_lit(&b, "0.1");
+                buf_lit(&b, ";stroke:"); buf_str(&b, cs->stroke.n ? cs->stroke : base); buf_lit(&b, ";stroke-width:");
+                if (cs->sw.n) buf_str(&b, cs->sw); else buf_num(&b, 5 * sc);
                 buf_lit(&b, ";stroke-opacity:0.95\"/>");
             } else if (cs->fill.n) {
                 int depthc = 0;
@@ -395,7 +389,7 @@ DIAG_FN(venn_render) {
                     buf_lit(&b, "<g clip-path=\"url(#vc"); buf_num(&b, (double)i); buf_ch(&b, '_'); buf_num(&b, (double)j); buf_lit(&b, ")\">"); depthc++;
                 }
                 buf_lit(&b, "<rect x=\"0\" y=\"0\" width=\""); buf_num(&b, W); buf_lit(&b, "\" height=\""); buf_num(&b, H);
-                buf_lit(&b, "\" style=\"fill:"); put_s(&b, cs->fill); buf_lit(&b, "\"/>");
+                buf_lit(&b, "\" style=\"fill:"); buf_str(&b, cs->fill); buf_lit(&b, "\"/>");
                 while (depthc--) buf_lit(&b, "</g>");
             }
             if (ar.v[i].label.n && LD[i] > -1e299) {
@@ -406,7 +400,7 @@ DIAG_FN(venn_render) {
                 if (nl == 1) buf_lit(&b, " dy=\".35em\"");
                 buf_lit(&b, " x=\""); buf_num(&b, LX[i]); buf_lit(&b, "\" y=\""); buf_num(&b, LY[i]);
                 buf_lit(&b, "\" style=\"font-size:"); buf_num(&b, fz); buf_lit(&b, "px");
-                if (txt.n) { buf_lit(&b, ";fill:"); put_s(&b, txt); }
+                if (txt.n) { buf_lit(&b, ";fill:"); buf_str(&b, txt); }
                 buf_ch(&b, '"');
                 if (nl == 1) { buf_ch(&b, '>'); buf_xml(&b, lb); }
                 else {
@@ -460,7 +454,7 @@ DIAG_FN(venn_render) {
             if (!wl.p) wl = tx.v[t].label;
             char cls[64] = "vn";
             if (col.n) {
-                buf_lit(&b, "<g style=\"fill:"); put_s(&b, col); buf_lit(&b, "\">");
+                buf_lit(&b, "<g style=\"fill:"); buf_str(&b, col); buf_lit(&b, "\">");
             }
             BBox tb = BB_EMPTY;
             dg_tspans(&b, &tb, wl, 40 * sc, 40 * sc * 1.2, cx, cy, true, "middle", TB_MIDDLE, col.n ? nullptr : cls);

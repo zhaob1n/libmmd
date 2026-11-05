@@ -27,14 +27,15 @@ typedef struct MNode {
 static constexpr char CSS[] = "#mermaid .mt{font-size:16px;}#mermaid .me{fill:none;}"
                               "#mermaid .ic{fill:#fff;stroke:#333;stroke-width:1px;}#mermaid .ict{font-size:11px;font-weight:bold;fill:#333;}";
 /* mermaid 11 default cScale (section k uses cScale[k+1]; root is the darker primary), darker strokes for borders */
-static const char *const SEC[] = {"#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2", "#ff8686",
+static constexpr char SEC[][8] = {"#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2", "#ff8686",
                                   "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"};
-static const char *const SECS[] = {"#cccc33", "#99cc33", "#7f33cc", "#cc33cc", "#cc3380", "#cc3333",
+static constexpr char SECS[][8] = {"#cccc33", "#99cc33", "#7f33cc", "#cc33cc", "#cc3380", "#cc3333",
                                    "#cc8033", "#80cc33", "#33cc80", "#33cccc", "#337fcc"};
-static const bool SECW[] = {false, false, true, false, false, false, false, false, false, false, false}; /* white text */
+static constexpr bool SECW[] = {false, false, true, false, false, false, false, false, false, false, false}; /* white text */
 
-static bool parse_node(Str s, Str *label, uint8_t *shape) {
-    static const struct { const char *o, *c; uint8_t sh; } SH[] = {
+static void parse_node(Str s, Str *label, uint8_t *shape) {
+    typedef struct { char o[3], c[3]; uint8_t sh; } Delim;
+    static constexpr Delim SH[] = {
         {"((", "))", M_CIR}, {"))", "((", M_BANG}, {"{{", "}}", M_HEX}, {"[", "]", M_SQ},
         {"(", ")", M_RND}, {")", "(", M_CLOUD}};
     for (size_t i = 0; i < s.n; i++)
@@ -44,11 +45,10 @@ static bool parse_node(Str s, Str *label, uint8_t *shape) {
                 !memcmp(s.p + s.n - cl, SH[k].c, cl)) {
                 Str in = {.p = s.p + i + ol, .n = s.n - i - ol - cl};
                 *label = in, *shape = SH[k].sh;
-                return true;
+                return;
             }
         }
     *label = s, *shape = M_DEF;
-    return true;
 }
 
 static void measure_sub(MNode *v, uint32_t i) {
@@ -172,7 +172,7 @@ static void mm_pair(const MNode V[], size_t i, size_t j, double margin, double f
 /* SVG endpoint arc (rotation ignored; mermaid's are circular or ~1 degree) sampled into bb */
 static void arc_bb(BBox *bb, double x1, double y1, double rx, double ry, bool large, bool sweep, double x2, double y2) {
     double dx = (x1 - x2) / 2, dy = (y1 - y2) / 2;
-    if (rx <= 0 || ry <= 0 || (!dx && !dy)) { bb_add(bb, fmin(x1, x2), fmin(y1, y2), fmax(x1, x2), fmax(y1, y2)); return; }
+    if (rx <= 0 || ry <= 0 || (dx == 0 && dy == 0)) { bb_add(bb, fmin(x1, x2), fmin(y1, y2), fmax(x1, x2), fmax(y1, y2)); return; }
     double lam = dx * dx / (rx * rx) + dy * dy / (ry * ry);
     if (lam > 1) rx *= sqrt(lam), ry *= sqrt(lam);
     double num = rx * rx * ry * ry - rx * rx * dy * dy - ry * ry * dx * dx, den = rx * rx * dy * dy + ry * ry * dx * dx;
@@ -211,7 +211,7 @@ static void scallop(Buf *out, BBox *bb, const MNode *m) {
     for (int k = 0; k < n; k++) {
         if (out) {
             buf_lit(out, "a"); buf_num(out, A[k][0]); buf_ch(out, ','); buf_num(out, A[k][1]);
-            buf_lit(out, sw ? " 0 0,1 " : " 0 0,0 "); buf_num(out, A[k][2]); buf_ch(out, ','); buf_num(out, A[k][3]);
+            if (sw) buf_lit(out, " 0 0,1 "); else buf_lit(out, " 0 0,0 "); buf_num(out, A[k][2]); buf_ch(out, ','); buf_num(out, A[k][3]);
         }
         if (bb) arc_bb(bb, px, py, A[k][0], A[k][1], false, sw, px + A[k][2], py + A[k][3]);
         px += A[k][2], py += A[k][3];
@@ -263,7 +263,7 @@ DIAG_FN(mindmap_render) {
                 line = str_trim((Str){.p = line.p, .n = i});
                 break;
             }
-        if (!parse_node(line, &m.label, &m.shape)) return diag_fail(err_off, msg, lo, "bad node");
+        parse_node(line, &m.label, &m.shape);
         bool ok;
         m.label = label_normalize(a, m.label, &ok); /* "quoted", "`markdown`", <br> */
         if (!ok) return MMD_ERR_NOMEM;

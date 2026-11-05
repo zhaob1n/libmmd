@@ -11,7 +11,7 @@
 
 typedef struct Axis { Str id, label; } Axis;
 /* mermaid 11 default cScale (radarCurve-N) */
-static const char *const COL[] = {"#8686ff", "#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2", "#ff8686", "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"};
+static constexpr char COL[][8] = {"#8686ff", "#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2", "#ff8686", "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"};
 typedef struct Curve { Str id, label; uint32_t v0; } Curve;
 
 static constexpr char CSS[] =
@@ -38,6 +38,8 @@ static void id_label(Str *s, Str *id, Str *label) {
     }
     *s = r;
 }
+
+static double axis_angle(size_t k, size_t na) { return 2 * M_PI * (double)k / (double)na - M_PI / 2; }
 
 DIAG_FN(radar_render) {
     (void)fs;
@@ -129,7 +131,6 @@ DIAG_FN(radar_render) {
     BBox bb = {0, 0, 700 + lgw, cy + 310};
     if (!buf_reserve(out, 2048 + na * 300 + cv.n * (na * 60 + 300))) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 4, "radar", CSS);
-#define ANG(k) (2 * M_PI * (double)(k) / (double)na - M_PI / 2)
     for (int t = ticks; t >= 1; t--) {
         double r = R * t / ticks;
         if (!poly) {
@@ -137,12 +138,12 @@ DIAG_FN(radar_render) {
             buf_lit(out, "\" r=\""); buf_num(out, r); buf_lit(out, "\"/>");
         } else {
             buf_lit(out, "<path class=\"gr\" d=\"");
-            for (size_t k = 0; k < na; k++) { buf_ch(out, k ? 'L' : 'M'); dg_pt(out, CX + r * cos(ANG(k)), cy + r * sin(ANG(k))); }
+            for (size_t k = 0; k < na; k++) { buf_ch(out, k ? 'L' : 'M'); dg_pt(out, CX + r * cos(axis_angle(k, na)), cy + r * sin(axis_angle(k, na))); }
             buf_lit(out, "Z\"/>");
         }
     }
     for (size_t k = 0; k < na; k++) {
-        double c = cos(ANG(k)), s = sin(ANG(k));
+        double c = cos(axis_angle(k, na)), s = sin(axis_angle(k, na));
         dg_line(out, CX, cy, CX + R * c, cy + R * s, "ax");
         const char *anc = fabs(c) < 0.1 ? "middle" : c > 0 ? "start" : "end";
         dg_text(out, ax.v[k].label, 12, CX + R * 1.05 * c + (fabs(c) < 0.1 ? 0 : c > 0 ? 4 : -4), cy + R * 1.05 * s + s * 6, anc, "al");
@@ -153,7 +154,7 @@ DIAG_FN(radar_render) {
         size_t m = na < 64 ? na : 64;
         for (size_t k = 0; k < m; k++) {
             double v = vals.v[cv.v[c].v0 + k], r = R * fmin(fmax((v - vmin) / (vmax - vmin), 0), 1);
-            P[2 * k] = CX + r * cos(ANG(k)), P[2 * k + 1] = cy + r * sin(ANG(k));
+            P[2 * k] = CX + r * cos(axis_angle(k, na)), P[2 * k + 1] = cy + r * sin(axis_angle(k, na));
         }
         buf_lit(out, "<path class=\"cv\" fill=\""); buf_put(out, strlen(col), col); buf_lit(out, "\" stroke=\"");
         buf_put(out, strlen(col), col); buf_lit(out, "\" d=\"M");
@@ -168,7 +169,6 @@ DIAG_FN(radar_render) {
         }
         buf_lit(out, "Z\"/>");
     }
-#undef ANG
     if (legend)
         for (size_t c = 0; c < cv.n; c++) {
             double y = cy - R + 20 * (double)c;

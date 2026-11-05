@@ -11,22 +11,19 @@
 typedef struct RInfo { Str kind, f[4]; bool elem; } RInfo; /* f: id,text,risk,verify | type,docref */
 typedef struct RRel { Str type; } RRel;
 
-static const struct { const char *kw, *disp; } KINDS[] = {
+typedef struct ReqKind { char kw[23], disp[24]; } ReqKind;
+static constexpr ReqKind KINDS[] = {
     {"requirement", "Requirement"}, {"functionalRequirement", "Functional Requirement"},
     {"interfaceRequirement", "Interface Requirement"}, {"performanceRequirement", "Performance Requirement"},
     {"physicalRequirement", "Physical Requirement"}, {"designConstraint", "Design Constraint"}, {"element", "Element"}};
-static const char *const RELS[] = {"contains", "copies", "derives", "satisfies", "verifies", "refines", "traces"};
+static constexpr char RELS[][10] = {"contains", "copies", "derives", "satisfies", "verifies", "refines", "traces"};
 
 static constexpr char CSS[] =
     "#mermaid .rq{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#mermaid .rqd{stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .rr{fill:none;stroke:#333;stroke-width:1px;stroke-dasharray:10,7;}#mermaid .rr.c{stroke-dasharray:none;}"
     "#mermaid .rh{fill:#333;}#mermaid .rl{fill:#fff;opacity:.9;}#mermaid .rn{font-weight:bold;}#mermaid .rt{font-size:14px;}";
 
-static Str unq(Str s) {
-    s = str_trim(s);
-    if (s.n >= 2 && s.p[0] == '"' && s.p[s.n - 1] == '"') s = (Str){.p = s.p + 1, .n = s.n - 2};
-    return s;
-}
+static Str unq(Str s) { return dg_unquote(s, false); }
 static Str cap(Arena *a, Str s) { /* Medium / Test: capitalise like mermaid */
     if (!s.n || !(s.p[0] >= 'a' && s.p[0] <= 'z')) return s;
     char *o = ANEW(a, char, s.n);
@@ -36,7 +33,7 @@ static Str cap(Arena *a, Str s) { /* Medium / Test: capitalise like mermaid */
     return (Str){.p = o, .n = s.n};
 }
 
-static void arrowhead(Buf *b, const double *P, uint32_t np) {
+static void arrowhead(Buf *b, uint32_t np, const double *P) {
     if (np < 2) return;
     const double *A = P + 2 * (np - 1), *B = P + 2 * (np - 2);
     double dx = A[0] - B[0], dy = A[1] - B[1], L = sqrt(dx * dx + dy * dy);
@@ -125,8 +122,8 @@ DIAG_FN(requirement_render) {
     if (body != NONE) return diag_fail(err_off, msg, n, "unterminated block (missing '}')");
     if (!g.nn) return diag_fail(err_off, msg, off, "requirement diagram is empty");
     double rfs = 14, lh = rfs * 1.5;
-    static const char *const RLAB[] = {"ID: ", "Text: ", "Risk: ", "Verification: "};
-    static const char *const ELAB[] = {"Type: ", "Doc Ref: "};
+    static constexpr char RLAB[][15] = {"ID: ", "Text: ", "Risk: ", "Verification: "};
+    static constexpr char ELAB[][10] = {"Type: ", "Doc Ref: "};
     for (size_t v = 0; v < g.nn; v++) {
         RInfo *r = &ri.v[v];
         if (!r->kind.n) r->kind = S("Element"), r->elem = true; /* referenced only */
@@ -164,7 +161,7 @@ DIAG_FN(requirement_render) {
                 dg_line(out, cx - 8, cy, cx + 8, cy, "rqd");
                 dg_line(out, cx, cy - 8, cx, cy + 8, "rqd");
             }
-        } else arrowhead(out, P, g.eptn[e]);
+        } else arrowhead(out, g.eptn[e], P);
         dg_rect(out, g.elx[e] - g.elw[e] / 2, g.ely[e] - g.elh[e] / 2, g.elw[e], g.elh[e], 0, "rl");
         { /* mermaid draws relation labels on a light grey plate */
             double lw, lh;

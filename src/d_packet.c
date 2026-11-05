@@ -15,7 +15,7 @@ static constexpr char CSS[] =
     "#mermaid .pb{fill:#efefef;stroke:#000;stroke-width:1px;}#mermaid .pl{font-size:12px;fill:#000;}"
     "#mermaid .pn{font-size:10px;fill:#000;}#mermaid .ttl{font-size:14px;fill:#000;}";
 
-static bool num(Str *s, uint32_t *v) {
+[[nodiscard]] static bool num(Str *s, uint32_t *v) {
     size_t i = 0;
     uint64_t x = 0;
     while (i < s->n && (unsigned)(s->p[i] - '0') < 10u && x < (1u << 24)) x = x * 10 + (uint64_t)(s->p[i++] - '0');

@@ -23,27 +23,27 @@ static constexpr char CSS[] =
     "#mermaid .sv{font-size:10px;font-style:italic;}"
     "#mermaid .sec{fill-opacity:.6;stroke-width:2px;stroke-opacity:.4;}#mermaid .ttl{font-size:16px;fill:#333;}";
 /* mermaid 11 default cScale (hsl(h,100%,~76%)): sections fill .6 opacity, leaves .3 with a 3px same-colour border */
-static const char *const SEC[] = {"#8686ff", "#ffff78", "#d7ff86", "#86c2ff", "#86ffff", "#86ffc2", "#ff86ff", "#ff8686"};
-static const char *const SECD[] = {"#3939ff", "#ffff2c", "#b5ff20", "#399cff", "#39ffff", "#39ff9c", "#ff39ff", "#ff3939"};
+static constexpr char SEC[][8] = {"#8686ff", "#ffff78", "#d7ff86", "#86c2ff", "#86ffff", "#86ffc2", "#ff86ff", "#ff8686"};
+static constexpr char SECD[][8] = {"#3939ff", "#ffff2c", "#b5ff20", "#399cff", "#39ffff", "#39ff9c", "#ff39ff", "#ff3939"};
 static constexpr unsigned char TMI[] = {0, 1, 2, 11, 10, 9, 4, 6}; /* SEC[k] == cScale[TMI[k]] */
-static const char *const SECT[] = {"#fff", "#000", "#000", "#000", "#000", "#000", "#000", "#000"};
+static constexpr char SECT[][8] = {"#fff", "#000", "#000", "#000", "#000", "#000", "#000", "#000"};
 
 /* ---- d3-hierarchy 3 treemap() port: squarify (ratio phi), paddings, .round(true) ---- */
-static void dice(TNode *V, const uint32_t *ch, size_t n, double sum, double x0, double y0, double x1, double y1) {
-    double k = sum ? (x1 - x0) / sum : 0;
+static void dice(TNode *V, size_t n, const uint32_t ch[static n], double sum, double x0, double y0, double x1, double y1) {
+    double k = sum != 0 ? (x1 - x0) / sum : 0;
     for (size_t i = 0; i < n; i++) { TNode *t = &V[ch[i]]; t->y = y0, t->h = y1, t->x = x0, t->w = x0 += t->v * k; }
 }
-static void slice(TNode *V, const uint32_t *ch, size_t n, double sum, double x0, double y0, double x1, double y1) {
-    double k = sum ? (y1 - y0) / sum : 0;
+static void slice(TNode *V, size_t n, const uint32_t ch[static n], double sum, double x0, double y0, double x1, double y1) {
+    double k = sum != 0 ? (y1 - y0) / sum : 0;
     for (size_t i = 0; i < n; i++) { TNode *t = &V[ch[i]]; t->x = x0, t->w = x1, t->y = y0, t->h = y0 += t->v * k; }
 }
 /* x,y,w,h hold x0,y0,x1,y1 during layout */
-static void squarify(TNode *V, const uint32_t *ch, size_t n, double value, double x0, double y0, double x1, double y1) {
+static void squarify(TNode *V, size_t n, const uint32_t ch[static n], double value, double x0, double y0, double x1, double y1) {
     const double ratio = (1 + sqrt(5.0)) / 2;
     size_t i0 = 0, i1 = 0;
     while (i0 < n) {
         double dx = x1 - x0, dy = y1 - y0, sum;
-        do sum = V[ch[i1++]].v; while (!sum && i1 < n);
+        do sum = V[ch[i1++]].v; while (sum == 0 && i1 < n);
         double mn = sum, mx = sum, alpha = fmax(dy / dx, dx / dy) / (value * ratio), beta = sum * sum * alpha;
         double minr = fmax(mx / beta, beta / mn);
         for (; i1 < n; ++i1) {
@@ -56,8 +56,8 @@ static void squarify(TNode *V, const uint32_t *ch, size_t n, double value, doubl
             if (nr > minr) { sum -= nv; break; }
             minr = nr;
         }
-        if (dx < dy) { double yy = value ? y0 + dy * sum / value : y1; dice(V, ch + i0, i1 - i0, sum, x0, y0, x1, yy); if (value) y0 = yy; }
-        else { double xx = value ? x0 + dx * sum / value : x1; slice(V, ch + i0, i1 - i0, sum, x0, y0, xx, y1); if (value) x0 = xx; }
+        if (dx < dy) { double yy = value != 0 ? y0 + dy * sum / value : y1; dice(V, i1 - i0, ch + i0, sum, x0, y0, x1, yy); if (value != 0) y0 = yy; }
+        else { double xx = value != 0 ? x0 + dx * sum / value : x1; slice(V, i1 - i0, ch + i0, sum, x0, y0, xx, y1); if (value != 0) x0 = xx; }
         value -= sum, i0 = i1;
     }
 }
@@ -95,7 +95,7 @@ static void position(TNode *V, uint32_t *tmp, uint32_t id, double p, double inne
     if (y1 < y0) y0 = y1 = (y0 + y1) / 2;
     size_t k = 0;
     for (uint32_t c = t->first; c != UINT32_MAX; c = V[c].next) tmp[k++] = c;
-    squarify(V, tmp, k, t->v, x0, y0, x1, y1);
+    squarify(V, k, tmp, t->v, x0, y0, x1, y1);
     for (uint32_t c = t->first; c != UINT32_MAX; c = V[c].next) position(V, tmp + k, c, q, inner);
 }
 
@@ -106,7 +106,7 @@ static size_t ord_idx(Str *dom, size_t *n, Str name, bool root) {
     if (!root && !name.p) dom[*n] = (Str){.p = "", .n = 0};
     return (*n)++;
 }
-static const TCls *find_cls(const TCls *c, size_t n, Str name) {
+static const TCls *find_cls(size_t n, const TCls *c, Str name) {
     if (!name.n) return nullptr;
     const TCls *r = nullptr;
     for (size_t k = 0; k < n; k++) if (str_eq(c[k].name, name)) r = &c[k];
@@ -120,18 +120,14 @@ static void put_c(Buf *out, const char *pfx, size_t i) {
         if (i == 0) { buf_lit(out, "transparent"); return; }
         i--;
     } else i %= 12;
-    const char *const *tab = lab ? SECT : !strcmp(pfx, "cScale") ? SEC : SECD;
+    const char (*tab)[8] = lab ? SECT : !strcmp(pfx, "cScale") ? SEC : SECD;
     const char *def = tab[i % countof(SEC)];
     for (size_t k = 0; k < countof(TMI); k++) if (TMI[k] == i) def = tab[k];
     if (lab) def = i == 0 || i == 3 ? "#fff" : "#000"; /* default theme: cScaleLabel0/3 = invert(labelTextColor) */
     const char *c = dcfg_pal(pfx, i, def);
     buf_put(out, strlen(c), c);
 }
-static Str unq(Str s) {
-    s = str_trim(s);
-    if (s.n >= 2 && (s.p[0] == '"' || s.p[0] == '\'') && s.p[s.n - 1] == s.p[0]) s = (Str){.p = s.p + 1, .n = s.n - 2};
-    return s;
-}
+static Str unq(Str s) { return dg_unquote(s, true); }
 static void fmt_val(double v, size_t cap, char b[static cap], size_t *len) {
     int k = fabs(v - round(v)) < 1e-9 ? snprintf(b, cap, "%.0f", v) : snprintf(b, cap, "%.2f", v);
     *len = k < 0 ? 0 : (size_t)k < cap ? (size_t)k : cap - 1;
@@ -261,7 +257,7 @@ DIAG_FN(treemap_render) {
     for (size_t k = 1; k < nb; k++) { /* sections */
         const TNode *t = &V[bfs[k]];
         if (t->first == UINT32_MAX) continue;
-        const TCls *uc = find_cls(cls.v, cls.n, t->cls);
+        const TCls *uc = find_cls(cls.n, cls.v, t->cls);
         size_t fi = ord_idx(dom_f, &nf, t->label, false), li = ord_idx(dom_l, &nlab, t->label, false);
         buf_lit(out, "<rect class=\"sec");
         if (t->cls.n) { buf_ch(out, ' '); buf_xml(out, t->cls); }
@@ -273,8 +269,8 @@ DIAG_FN(treemap_render) {
         if (uc && uc->stroke.n) buf_xml(out, uc->stroke); else put_c(out, "cScalePeer", fi);
         buf_lit(out, "\"/>");
         /* header label: x+6, clipped/ellipsised to the space left of the value */
-        double room = fmax(15, showv && t->v ? t->w - 10 - 30 - 10 - 6 : t->w - 12);
-        bool sv = showv && t->v; /* narrow header: the value keeps what's left after real room for the label */
+        double room = fmax(15, showv && t->v != 0 ? t->w - 10 - 30 - 10 - 6 : t->w - 12);
+        bool sv = showv && t->v != 0; /* narrow header: the value keeps what's left after real room for the label */
         if (sv) {
             fmt_val(t->v, sizeof nb_, nb_, &nl);
             double vw = text_width((Str){.p = nb_, .n = nl}, 10);
@@ -307,7 +303,7 @@ DIAG_FN(treemap_render) {
     const double bl = cx ? 16 : 38, bv = cx ? 14 : 28, ml = cx ? 4 : 8, mv = cx ? 4 : 6, lp = cx ? 2 : 4, thr = cx ? 8 : 10, sp = cx ? 1 : 2;
     for (size_t k = 0; k < nlv; k++) {
         const TNode *t = &V[leaves[k]];
-        const TCls *uc = find_cls(cls.v, cls.n, t->cls);
+        const TCls *uc = find_cls(cls.n, cls.v, t->cls);
         size_t fi = ord_idx(dom_f, &nf, V[t->parent].label, t->parent == 0);
         buf_lit(out, "<rect class=\"lf");
         if (t->cls.n) { buf_ch(out, ' '); buf_xml(out, t->cls); }
@@ -335,7 +331,7 @@ DIAG_FN(treemap_render) {
         char cl[64];
         snprintf(cl, sizeof cl, "ln\" font-size=\"%.0f", f);
         dg_text(out, t->label, f, t->x + t->w / 2, t->y + t->h / 2, "middle", cl);
-        if (showv && t->v) {
+        if (showv && t->v != 0) {
             fmt_val(t->v, sizeof nb_, nb_, &nl);
             Str vs = {.p = nb_, .n = nl};
             double vt = t->h / 2 + f / 2 + sp; /* dominant-baseline: hanging */

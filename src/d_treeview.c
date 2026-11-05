@@ -21,11 +21,11 @@ typedef struct TNode {
     double y, h, labx, labr;
 } TNode;
 
-static const char FOLDER[] = "M10.59 4.59A2 2 0 0 0 9.17 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.17z";
-static const char FILEP[] = "M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.83a2 2 0 0 0-.59-1.42l-4.82-4.82A2 2 0 0 0 13.17 2H6Zm7.5 1.9l4.6 4.6h-3.6a1 1 0 0 1-1-1V3.9Z";
+static constexpr char FOLDER[] = "M10.59 4.59A2 2 0 0 0 9.17 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.17z";
+static constexpr char FILEP[] = "M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.83a2 2 0 0 0-.59-1.42l-4.82-4.82A2 2 0 0 0 13.17 2H6Zm7.5 1.9l4.6 4.6h-3.6a1 1 0 0 1-1-1V3.9Z";
 
 /* UTF-8 box-drawing chars used by the preprocessor: ─━│┃└┗├┣ (all E2 94 xx) */
-static int box_kind(const char *p, size_t left) { /* 1 branch, 2 dash, 3 vertical, 0 none */
+static int box_kind(size_t left, const char *p) { /* 1 branch, 2 dash, 3 vertical, 0 none */
     if (left < 3 || (unsigned char)p[0] != 0xE2 || (unsigned char)p[1] != 0x94) return 0;
     switch ((unsigned char)p[2]) {
     case 0x94: case 0x97: case 0x9c: case 0xa3: return 1;
@@ -33,12 +33,6 @@ static int box_kind(const char *p, size_t left) { /* 1 branch, 2 dash, 3 vertica
     case 0x82: case 0x83: return 3;
     default: return 0;
     }
-}
-
-static bool css_ok(Str v) {
-    if (!v.n || v.n > 40) return false;
-    for (size_t i = 0; i < v.n; i++) if (strchr(";{}<>\"'\\", v.p[i])) return false;
-    return true;
 }
 
 DIAG_FN(treeview_render) {
@@ -57,7 +51,7 @@ DIAG_FN(treeview_render) {
             while (ls > 0 && src[ls - 1] != '\n') ls--;
             size_t col = 0;
             for (size_t p = ls; p < n && src[p] != '\n'; ) {
-                int k = box_kind(src + p, n - p);
+                int k = box_kind(n - p, src + p);
                 if (k) boxm = true;
                 if (k == 1 && !segw && col > 0) segw = col;
                 if (k == 1) break;
@@ -86,11 +80,11 @@ DIAG_FN(treeview_render) {
             size_t col = 0, p = ls;
             bool found = false, onlydec = true;
             while (p < n && src[p] != '\n') {
-                int k = box_kind(src + p, n - p);
+                int k = box_kind(n - p, src + p);
                 if (k == 1) {
                     level = (int)lround((double)col / (double)segw) + 1;
                     p += 3;
-                    while (box_kind(src + p, n - p) == 2) p += 3;
+                    while (box_kind(n - p, src + p) == 2) p += 3;
                     while (p < n && src[p] == ' ') p++;
                     found = true;
                     break;
@@ -184,7 +178,7 @@ DIAG_FN(treeview_render) {
         double ix = ind + px, lx = ix + (want ? 18 : 0);
         if (t->cls.n) {
             buf_lit(&b, "<g class=\"");
-            if (css_ok(t->cls)) buf_xml(&b, t->cls);
+            if (dg_css_ok(t->cls)) buf_xml(&b, t->cls);
             buf_lit(&b, "\">");
         } else buf_lit(&b, "<g>");
         if (want) {
@@ -259,7 +253,7 @@ DIAG_FN(treeview_render) {
     free(hb.p), free(b.p);
     if (oom) { free(body.p); return MMD_ERR_NOMEM; }
     char css[640];
-    Str lc = css_ok(lcol) ? lcol : S("black"), nc = css_ok(lncol) ? lncol : S("black");
+    Str lc = dg_css_ok(lcol) ? lcol : S("black"), nc = dg_css_ok(lncol) ? lncol : S("black");
     snprintf(css, sizeof css,
              "#mermaid .tl{font-size:%gpx;fill:%.*s;white-space:pre;}#mermaid .td{font-weight:bold;}"
              "#mermaid .tln{stroke:%.*s;stroke-width:%g;}#mermaid .tic{color:#546e7a;}#mermaid .tii{fill:#546e7a;}"

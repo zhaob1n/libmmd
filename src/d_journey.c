@@ -23,8 +23,8 @@ static constexpr char CSS[] =
     "#mermaid .tbox{stroke:#666;stroke-width:1px;}#mermaid .axis{stroke:#000;stroke-width:4px;}"
     "#mermaid .ttl{font-size:20px;font-weight:bold;}#mermaid .tx{font-size:14px;}"
     "#mermaid .adot{stroke:#000;stroke-width:1px;}";
-static const char *const SECCOL[] = {"#ECECFF", "#ffffde", "#f5ffe0", "#e0f0ff", "#ffe0f0", "#e0ffe8"};
-static const char *const ACTCOL[] = {"#8FBC8F", "#7CFC00", "#00FFFF", "#20B2AA", "#B0E0E6", "#FFFFE0", "#FFB6C1", "#87CEFA"};
+static constexpr char SECCOL[][8] = {"#ECECFF", "#ffffde", "#f5ffe0", "#e0f0ff", "#ffe0f0", "#e0ffe8"};
+static constexpr char ACTCOL[][8] = {"#8FBC8F", "#7CFC00", "#00FFFF", "#20B2AA", "#B0E0E6", "#FFFFE0", "#FFB6C1", "#87CEFA"};
 
 static void face(Buf *b, double cx, double cy, double score) {
     buf_lit(b, "<circle class=\"face\" cx=\""); buf_num(b, cx); buf_lit(b, "\" cy=\""); buf_num(b, cy);
@@ -117,7 +117,7 @@ DIAG_FN(journey_render) {
     DG_HEAD(out, bb, 0, "journey", CSS);
     if (title.n) dg_text(out, title, 20, left, 25, "start", "ttl");
     for (size_t i = 0; i < actors.n; i++) {
-        double y = 60 + i * 20;
+        double y = 60 + (double)i * 20;
         buf_lit(out, "<circle class=\"adot\" r=\"7\" cx=\"20\" cy=\""); buf_num(out, y);
         buf_lit(out, "\" fill=\""); buf_put(out, strlen(ACTCOL[i % countof(ACTCOL)]), ACTCOL[i % countof(ACTCOL)]);
         buf_lit(out, "\"/>");
@@ -126,7 +126,7 @@ DIAG_FN(journey_render) {
     for (size_t i = 0; i < tk.n;) { /* section headers span their tasks */
         size_t j = i;
         while (j < tk.n && tk.v[j].sec == tk.v[i].sec) j++;
-        double x = left + i * (TW + TM), w = (j - i) * (TW + TM) - TM;
+        double x = left + (double)i * (TW + TM), w = (double)(j - i) * (TW + TM) - TM;
         const char *col = dcfg_pal("fillType", tk.v[i].sec % countof(SECCOL), SECCOL[tk.v[i].sec % countof(SECCOL)]);
         if (secs.n) {
             dg_rect_fill(out, x, SY, w, BOX, 3, "tbox", col);
@@ -136,7 +136,7 @@ DIAG_FN(journey_render) {
     }
     for (size_t i = 0; i < tk.n; i++) {
         const JTask *t = &tk.v[i];
-        double x = left + i * (TW + TM), cx = x + TW / 2;
+        double x = left + (double)i * (TW + TM), cx = x + TW / 2;
         double s = t->score < 0 ? 0 : t->score > 5 ? 5 : t->score, fy = FACE0 + (5 - s) * 30;
         dg_line(out, cx, TY, cx, LINE_END, "tl");
         dg_rect_fill(out, x, TY, TW, BOX, 3, "tbox", dcfg_pal("fillType", t->sec % countof(SECCOL), SECCOL[t->sec % countof(SECCOL)]));

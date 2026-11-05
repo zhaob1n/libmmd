@@ -66,16 +66,16 @@ typedef struct EP {
     return v;
 }
 
-typedef struct CardTok { const char *t; Card c; } CardTok;
-static const CardTok LCARD[] = {
+typedef struct CardTok { char t[13]; Card c; } CardTok;
+static constexpr CardTok LCARD[] = {
     {"|o", CD_ZERO_ONE}, {"||", CD_ONE}, {"}o", CD_ZERO_MANY}, {"}|", CD_ONE_MANY},
     {"o|", CD_ZERO_ONE}, {"o{", CD_ZERO_MANY}, {"|{", CD_ONE_MANY}, /* mermaid's lexer accepts either facing */
 };
-static const CardTok RCARD[] = {
+static constexpr CardTok RCARD[] = {
     {"o|", CD_ZERO_ONE}, {"||", CD_ONE}, {"o{", CD_ZERO_MANY}, {"|{", CD_ONE_MANY},
     {"|o", CD_ZERO_ONE}, {"}o", CD_ZERO_MANY}, {"}|", CD_ONE_MANY},
 };
-static const CardTok WCARD[] = { /* word forms, longest first */
+static constexpr CardTok WCARD[] = { /* word forms, longest first */
     {"one or zero", CD_ZERO_ONE}, {"zero or one", CD_ZERO_ONE}, {"one or more", CD_ONE_MANY},
     {"one or many", CD_ONE_MANY}, {"zero or more", CD_ZERO_MANY}, {"zero or many", CD_ZERO_MANY},
     {"many(1)", CD_ONE_MANY}, {"many(0)", CD_ZERO_MANY}, {"only one", CD_ONE}, {"1+", CD_ONE_MANY},
@@ -83,7 +83,7 @@ static const CardTok WCARD[] = { /* word forms, longest first */
 };
 
 /* symbolic: A <lc>(--|..)<rc> B ; word form: A <card> (to|optionally to) <card> B */
-static bool parse_rel(Str l, Str *a, Str *b, ERel *r, Str *label) {
+[[nodiscard]] static bool parse_rel(Str l, Str *a, Str *b, ERel *r, Str *label) {
     const char *c = nullptr;
     bool inq = false;
     for (size_t k = 0; k < l.n; k++) {
@@ -138,7 +138,7 @@ static bool parse_rel(Str l, Str *a, Str *b, ERel *r, Str *label) {
     return false;
 }
 
-static mmd_status parse(EP *p, LineIt *it) {
+[[nodiscard]] static mmd_status parse(EP *p, LineIt *it) {
     Graph *g = &p->g;
     Str line;
     size_t off;

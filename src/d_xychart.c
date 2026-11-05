@@ -14,15 +14,11 @@ static constexpr char CSS[] =
     "#mermaid .ax{stroke:#131300;stroke-width:2px;}#mermaid .tk{stroke:#131300;stroke-width:2px;}"
     "#mermaid .tl{font-size:14px;fill:#131300;}#mermaid .at{font-size:16px;fill:#131300;}"
     "#mermaid .ttl{font-size:20px;fill:#131300;}#mermaid .ln{fill:none;stroke-width:2px;}#mermaid .lg{stroke:#131300;stroke-width:.5px;}";
-static const char *const PAL[] = {"#ECECFF", "#8493A6", "#FFC3A0", "#DCDDE1", "#B8E994",
+static constexpr char PAL[][8] = {"#ECECFF", "#8493A6", "#FFC3A0", "#DCDDE1", "#B8E994",
                                   "#D1A36F", "#C3CDE6", "#FFB6C1", "#496078", "#F8F3E3"};
-static const char *const LINEPAL[] = {"#8493A6", "#FF7F50", "#3c9a3c", "#7b52ab", "#c0392b"};
+static constexpr char LINEPAL[][8] = {"#8493A6", "#FF7F50", "#3c9a3c", "#7b52ab", "#c0392b"};
 
-static Str unq(Str s) {
-    s = str_trim(s);
-    if (s.n >= 2 && s.p[0] == '"' && s.p[s.n - 1] == '"') s = (Str){.p = s.p + 1, .n = s.n - 2};
-    return s;
-}
+static Str unq(Str s) { return dg_unquote(s, false); }
 /* optional leading quoted or bare title, then rest */
 static Str take_title(Str *s) {
     Str t = str_trim(*s);
@@ -48,7 +44,7 @@ static Str take_title(Str *s) {
     *s = (Str){.p = cut, .n = t.n - (size_t)(cut - t.p)};
     return str_trim((Str){.p = head.p, .n = (size_t)(cut - head.p)});
 }
-static bool range(Str s, double *lo, double *hi) {
+[[nodiscard]] static bool range(Str s, double *lo, double *hi) {
     s = str_trim(s);
     for (size_t i = 0; i + 3 <= s.n; i++)
         if (!memcmp(s.p + i, "-->", 3))
@@ -56,9 +52,9 @@ static bool range(Str s, double *lo, double *hi) {
     return false;
 }
 /* "[a, "b, c", d]" -> items */
-static bool list(Arena *a, Str s, void *vp, bool *oom) {
-    typedef VEC(Str) V;
-    V *v = vp;
+typedef VEC(Str) StrVec;
+
+[[nodiscard]] static bool list(Arena *a, Str s, StrVec *v, bool *oom) {
     s = str_trim(s);
     if (s.n < 2 || s.p[0] != '[' || s.p[s.n - 1] != ']') return false;
     s = (Str){.p = s.p + 1, .n = s.n - 2};
@@ -100,7 +96,7 @@ DIAG_FN(xychart_render) {
         if (str_eq(dg_word(&r), S("horizontal"))) horiz = true;
     }
     Str xt = {}, yt = {};
-    VEC(Str) cats = {};
+    StrVec cats = {};
     VEC(double) vals = {};
     VEC(Str) labs = {};
     VEC(Series) ser = {};
@@ -127,7 +123,7 @@ DIAG_FN(xychart_render) {
         if (str_eq(w, S("bar")) || str_eq(w, S("line"))) {
             Series s = {.line = w.p[0] == 'l', .v0 = (uint32_t)vals.n};
             s.name = take_title(&rest);
-            VEC(Str) items = {};
+            StrVec items = {};
             if (!list(a, rest, &items, &oom)) return oom ? MMD_ERR_NOMEM : diag_fail(err_off, msg, lo, "expected [numbers]");
             for (size_t i = 0; i < items.n; i++) {
                 double d;
