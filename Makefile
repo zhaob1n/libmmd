@@ -45,7 +45,8 @@ else
 CFLAGS += -fprofile-use=$(PGO_USE) -fprofile-correction -Wno-missing-profile
 endif
 endif
-STD := gnu23
+# gnu2y where the compiler knows it (clang, gcc >= 15); gcc-14 stops at gnu23.
+STD := $(or $(STD),$(shell $(CC) -std=gnu2y -E -x c /dev/null >/dev/null 2>&1 && echo gnu2y || echo gnu23))
 CFLAGS += -std=$(STD) -fms-extensions -fPIC -fvisibility=hidden $(WARN) -Iinclude -Isrc
 LDLIBS = -lm
 BUILD ?= build
@@ -103,7 +104,7 @@ test: all $(BUILD)/test-shared
 
 both:
 	$(MAKE) CC=$(HOME)/.local/bin/clang BUILD=build
-	$(MAKE) CC=gcc BUILD=build-gcc
+	$(MAKE) CC=gcc-14 BUILD=build-gcc
 
 asan:
 	$(MAKE) BUILD=build-asan OPT="-O1 -fsanitize=address,undefined -fno-omit-frame-pointer" LDLIBS="-lm -fsanitize=address,undefined"
