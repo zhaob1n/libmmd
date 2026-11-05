@@ -455,7 +455,8 @@ static double ov_area(double ax, double ay, double ahw, double ahh, double bx, d
 }
 /* deviate from mermaid: candidates are scored against every relation label, every class box and the
  * cardinalities already placed (pl: x, y, hw, hh quads), so parallel relations don't stack their labels */
-static void card_label(Buf b[static 1], const Graph g[static 1], const double *P, uint32_t np, bool end, Str t, double fs, double *pl, size_t npl[static 1], const BBox bb[static 1]) {
+static void card_label(Buf b[static 1], const Graph g[static 1], const double *P, uint32_t np, bool end,
+                       Str t, double fs, double *pl, size_t npl[static 1], const BBox bb[static 1]) {
     const double *P0 = end ? P + 2 * (np - 1) : P, *P1 = P0;
     for (uint32_t i = 1; i < np; i++) {
         P1 = end ? P + 2 * (np - 1 - i) : P + 2 * i;

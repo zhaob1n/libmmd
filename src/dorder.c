@@ -86,7 +86,8 @@ static bool key_lt(const Ctx c[static 1], const Ent a[static 1], const Ent b[sta
     return a->i < b->i;
 }
 
-static bool cmp_bias(const Ent a[static 1], const Ent b[static 1], bool bias, bool tie[static 1]) { /* a before b? (sort.js compareWithBias) */
+/* a before b? (sort.js compareWithBias) */
+static bool cmp_bias(const Ent a[static 1], const Ent b[static 1], bool bias, bool tie[static 1]) {
     if (a->bc < b->bc) return true;
     if (a->bc > b->bc) return false;
     *tie = true; /* result depends on biasRight */

@@ -124,7 +124,8 @@ static const char *add_node(W w[static 1], WNode nd) {
 /* link operators, longest first */
 static const Str OPS[] = {S("+<>"), S("-.->"), S("+<"), S("+>"), S("->"), S("+'")};
 
-static const char *parse_link(W w[static 1], Str ln, bool matched[static 1], Str from_out[static 1], Str to_out[static 1], WLink lk[static 1]) {
+static const char *parse_link(W w[static 1], Str ln, bool matched[static 1], Str from_out[static 1],
+                              Str to_out[static 1], WLink lk[static 1]) {
     *matched = false;
     bool q = false;
     for (size_t i = 0; i < ln.n; i++) {

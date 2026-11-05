@@ -337,7 +337,8 @@ static bool link_start(const P p[static 1]) {
 }
 
 /* parse a link body at p->i: [-=.~]+ followed by optional head */
-static bool link_body(P p[static 1], Link l[static 1], size_t nd[static 1], size_t ne[static 1], size_t ndot[static 1], size_t nt[static 1]) {
+static bool link_body(P p[static 1], Link l[static 1], size_t nd[static 1], size_t ne[static 1],
+                      size_t ndot[static 1], size_t nt[static 1]) {
     *nd = *ne = *ndot = *nt = 0;
     size_t st = p->i;
     while (p->i < p->n && (CC[(unsigned char)p->s[p->i]] & C_LINK)) {

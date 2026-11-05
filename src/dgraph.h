@@ -77,7 +77,8 @@ unsigned dg_tspans(Buf b[static 1], BBox *bb, Str s, double fs, double lh, doubl
 /* greedy word wrap at maxc characters per line (mermaid wrapText), '\n'-joined; {} on OOM */
 [[nodiscard]] Str dg_wrapc(Arena a[static 1], Str s, size_t maxc);
 /* svg head for bb + margin, then body, then </svg>; frees body */
-[[nodiscard]] mmd_status dg_finish(Buf out[static 1], Buf body[static 1], BBox bb, double m, const char kind[static 1], size_t ncss, const char css[static ncss]);
+[[nodiscard]] mmd_status dg_finish(Buf out[static 1], Buf body[static 1], BBox bb, double m,
+                                   const char kind[static 1], size_t ncss, const char css[static ncss]);
 #define DG_FINISH(o, body, bb, m, kind, css) dg_finish((o), (body), (bb), (m), (kind), sizeof(css) - 1, (css))
 #endif
 

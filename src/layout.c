@@ -439,7 +439,8 @@ typedef struct BKWork {
 
 /* vertical alignment + horizontal compaction for one of the 4 variants */
 /* sepv[i]: separation between lay[i-1] and lay[i] (symmetric, so shared by all 4 passes) */
-static bool bk_pass(Lay L[static 1], const PairSet conf[static 1], bool up, bool left, BKWork W[static 1], const double *sepv, double *out) {
+static bool bk_pass(Lay L[static 1], const PairSet conf[static 1], bool up, bool left, BKWork W[static 1],
+                    const double *sepv, double *out) {
     size_t V = L->V, R = L->R;
     /* build pass layer order */
     for (size_t r = 0; r < R; r++) {

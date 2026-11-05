@@ -450,7 +450,8 @@ Str dg_wrapc(Arena a[static 1], Str s, size_t maxc) {
     return (Str){.p = o, .n = n};
 }
 
-mmd_status dg_finish(Buf out[static 1], Buf body[static 1], BBox bb, double m, const char kind[static 1], size_t ncss, const char css[static ncss]) {
+mmd_status dg_finish(Buf out[static 1], Buf body[static 1], BBox bb, double m, const char kind[static 1],
+                     size_t ncss, const char css[static ncss]) {
     if (bb.x0 > bb.x1) bb = (BBox){0, 0, 100, 100};
     if (!body->oom && buf_reserve(out, body->n + ncss + 1024)) {
         dg_head(out, bb, m, kind, ncss, css);
