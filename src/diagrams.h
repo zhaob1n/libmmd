@@ -5,9 +5,9 @@
 #include "mmd.h"
 
 #define DIAG_FN(name)                                                                              \
-    mmd_status name(Arena *a, size_t n, const char src[static n], size_t off,                     \
+    mmd_status name(Arena a[static 1], size_t n, const char src[static n], size_t off,             \
                     [[maybe_unused]] Str title, [[maybe_unused]] double fs,                         \
-                    Buf *out, size_t *err_off, char msg[static 160])
+                    Buf out[static 1], size_t err_off[static 1], char msg[static 160])
 typedef DIAG_FN((*DiagFn));
 
 [[nodiscard]] DIAG_FN(state_render);
