@@ -21,6 +21,7 @@ const char *dcfg_pal(const char *prefix, size_t i, const char def[static 1]);
 const char *dcfg_list(const char *var, size_t i, const char def[static 1]);
 const DCfg *dcfg_cur(void);
 Str dcfg_get(const char *key);                  /* last match, or empty; "themeVariables.x" etc. */
+Str dcfg_get_str(Str key);                      /* same, for a key whose length is known: dcfg_get_str(S("x")) */
 double dcfg_num(const char *key, double def);   /* bounded number, optional "px" suffix */
 bool dcfg_bool(const char *key, bool def);
 Str dcfg_css(const char *key);                  /* value only if safe inside CSS / an attribute */

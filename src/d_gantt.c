@@ -259,9 +259,9 @@ DIAG_FN(gantt_render) {
     if (!dg_next_line(&it, &line, &lo)) return diag_fail(err_off, msg, off, "empty gantt");
     GCtx c = {.a = a, .fmt = S("YYYY-MM-DD")};
     Str axis = S("%Y-%m-%d"), tick = {}, today_style = {};
-    bool compact = str_starts(dcfg_get("gantt.displayMode"), S("compact")) || str_starts(dcfg_get("displayMode"), S("compact"));
+    bool compact = str_starts(dcfg_get_str(S("gantt.displayMode")), S("compact")) || str_starts(dcfg_get_str(S("displayMode")), S("compact"));
     { /* config defaults; in-diagram axisFormat/tickInterval lines override */
-        Str ca = dcfg_get("gantt.axisFormat"), ct = dcfg_get("gantt.tickInterval");
+        Str ca = dcfg_get_str(S("gantt.axisFormat")), ct = dcfg_get_str(S("gantt.tickInterval"));
         if (ca.n && ca.n <= 64) axis = ca;
         if (ct.n && ct.n <= 32) tick = ct;
     }
@@ -468,7 +468,7 @@ DIAG_FN(gantt_render) {
     /* width: mermaid-cli renders into an 800px page with an 8px body margin, so the container is 784px wide */
     char lab[96];
     double W = 784, maxlab = 0;
-    { Str uw = dcfg_get("gantt.useWidth"); double v; if (uw.n && dg_parse_num(uw, &v) && v >= 100 && v <= 20000) W = v; }
+    { Str uw = dcfg_get_str(S("gantt.useWidth")); double v; if (uw.n && dg_parse_num(uw, &v) && v >= 100 && v <= 20000) W = v; }
     /* tick times; d3 day intervals restart at each month (... Jan 29, Jan 31, Feb 01) */
     double TK[600];
     size_t ntk = 0;

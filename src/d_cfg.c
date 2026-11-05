@@ -223,12 +223,13 @@ static thread_local int cur_theme; /* MMD_THEME_* chosen by CLI option or init/f
 void dcfg_end(void) { cur_theme = 0; cur = (DCfg){}; cur_a = nullptr; cur_cap = 0; }
 const DCfg *dcfg_cur(void) { return &cur; }
 
-Str dcfg_get(const char *key) {
-    Str k = {.p = key, .n = strlen(key)};
+Str dcfg_get_str(Str key) {
     for (size_t i = cur.n; i-- > 0;)
-        if (str_eq(cur.kv[i].k, k)) return cur.kv[i].v;
+        if (str_eq(cur.kv[i].k, key)) return cur.kv[i].v;
     return (Str){};
 }
+
+Str dcfg_get(const char *key) { return dcfg_get_str((Str){.p = key, .n = strlen(key)}); }
 
 double dcfg_num(const char *key, double def) {
     Str v = dcfg_get(key);
@@ -249,8 +250,8 @@ bool dcfg_bool(const char *key, bool def) {
     return def;
 }
 
-Str dcfg_css(const char *key) {
-    Str v = dcfg_get(key);
+/* v if it is safe inside CSS / an attribute, else empty */
+static Str css_safe(Str v) {
     if (!v.n || v.n > 200) return (Str){};
     for (size_t i = 0; i < v.n; i++) {
         unsigned char c = (unsigned char)v.p[i];
@@ -263,6 +264,8 @@ Str dcfg_css(const char *key) {
     return v;
 }
 
+Str dcfg_css(const char *key) { return css_safe(dcfg_get(key)); }
+
 typedef struct ThemeKV { const char *k, *v; } ThemeKV;
 #include "d_themes.h"
 
@@ -271,9 +274,11 @@ void dcfg_set_theme(int theme) { cur_theme = theme; }
 /* user themeVariables.<var> first, then the named theme's preset (mermaid's own values) */
 Str dcfg_tv(const char *var) {
     char key[96];
-    snprintf(key, sizeof key, "themeVariables.%s", var);
-    Str v = dcfg_css(key);
-    if (v.n) return v;
+    int kn = snprintf(key, sizeof key, "themeVariables.%s", var);
+    if (kn > 0 && (size_t)kn < sizeof key) { /* a truncated key would look up a different variable */
+        Str v = css_safe(dcfg_get_str((Str){.p = key, .n = (size_t)kn}));
+        if (v.n) return v;
+    }
     const ThemeKV *t = nullptr;
     size_t n = 0;
     switch (cur_theme) {
