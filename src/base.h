@@ -5,9 +5,15 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-#define countof(a) (sizeof(a) / sizeof((a)[0]))
+/* element count of a real array; a pointer argument is a compile error */
+#define countof(a)                                                                             \
+    (sizeof(a) / sizeof((a)[0]) +                                                              \
+     0 * sizeof(struct { static_assert(!__builtin_types_compatible_p(typeof(a), typeof(&(a)[0])), \
+                                       "countof on a pointer"); int x_; }))
 #define MMD_LIKELY(x) __builtin_expect(!!(x), 1)
 #define MMD_UNLIKELY(x) __builtin_expect(!!(x), 0)
 
@@ -95,6 +101,19 @@ static inline Str str_trim(Str s) {
     return s;
 }
 static inline bool str_starts(Str s, Str pre) { return s.n >= pre.n && memcmp(s.p, pre.p, pre.n) == 0; }
+/* s[i, j); callers guarantee i <= j <= s.n */
+static inline Str str_sub(Str s, size_t i, size_t j) { return (Str){.p = s.p + i, .n = j - i}; }
+static inline Str str_from(Str s, size_t i) { return (Str){.p = s.p + i, .n = s.n - i}; }
+/* [b, e) within one string */
+static inline Str str_span(const char *b, const char *e) { return (Str){.p = b, .n = (size_t)(e - b)}; }
+/* split at the first c: *head before it, *tail after it; false (outputs untouched) when absent */
+static inline bool str_split(Str s, char c, Str *head, Str *tail) {
+    const char *m = s.n ? memchr(s.p, c, s.n) : nullptr;
+    if (!m) return false;
+    *head = str_span(s.p, m);
+    *tail = str_span(m + 1, s.p + s.n);
+    return true;
+}
 
 /* ---- arena ---- */
 typedef struct ArenaBlock ArenaBlock;
@@ -131,9 +150,14 @@ typedef struct Arena {
 /* grow an array previously allocated from the arena (or nullptr). */
 [[nodiscard]] void *arena_grow(Arena *a, void *old, size_t *cap, size_t elem, size_t align);
 void arena_free(Arena *a);
+static inline void arena_freep(Arena *a) { arena_free(a); }
+#define AUTO_ARENA [[gnu::cleanup(arena_freep)]]
 /* Drop all allocations but keep (coalesced) memory for reuse. */
 void arena_reset(Arena *a);
 [[nodiscard]] Str arena_strdup(Arena *a, Str s);
+/* concatenation of n views, NUL-terminated; {} on OOM */
+[[nodiscard]] Str str_cat(Arena *a, size_t n, const Str parts[static n]);
+#define STR_CAT(a, ...) str_cat((a), countof(((const Str[]){__VA_ARGS__})), (const Str[]){__VA_ARGS__})
 
 #define ANEW(a, T, n) arena_alloc_array((a), (n), sizeof(T), alignof(T))
 
@@ -158,6 +182,23 @@ typedef struct Buf {
     bool oom;
 } Buf;
 
+
+/* ---- scope-bound cleanup ([[gnu::cleanup]]) ----
+ * AUTOFREE char *p = malloc(n);   freed when p leaves scope
+ * AUTO_ARENA Arena a = {};          arena_free(&a)
+ * AUTO_BUF Buf b = {};              free(b.p)
+ * AUTOCLOSE FILE *f = fopen(..);    fclose(f) if non-null
+ * Hand ownership out with TAKE_PTR(p) / buf_take(&b), which null the
+ * local so the cleanup becomes a no-op. */
+static inline void freep(void *pp) { free(*(void **)pp); }
+static inline void fclosep(FILE **fp) { if (*fp) fclose(*fp); }
+static inline void buf_freep(Buf *b) { free(b->p); }
+#define AUTOFREE [[gnu::cleanup(freep)]]
+#define AUTOCLOSE [[gnu::cleanup(fclosep)]]
+#define AUTO_BUF [[gnu::cleanup(buf_freep)]]
+#define TAKE_PTR(p) ({ auto take_ = (p); (p) = nullptr; take_; })
+static inline Buf buf_take(Buf *b) { Buf r = *b; *b = (Buf){}; return r; }
+
 bool buf_reserve_slow(Buf *b, size_t extra);
 static inline bool buf_reserve(Buf *b, size_t extra) {
     if (MMD_LIKELY(b->cap - b->n > extra)) return true;
@@ -171,6 +212,7 @@ static inline void buf_put_(Buf *b, size_t n, const char s[static n]) {
 /* zero-length appends are common (escape runs); [static 0] would be UB, so filter here */
 #define buf_put(b, n, s) do { size_t n_ = (n); if (n_) buf_put_((b), n_, (s)); } while (0)
 static inline void buf_str(Buf *b, Str s) { if (s.n) buf_put(b, s.n, s.p); }
+static inline void buf_cstr(Buf *b, const char *s) { buf_put(b, strlen(s), s); }
 #define buf_lit(b, lit) buf_put((b), sizeof(lit) - 1, (lit))
 static inline void buf_ch(Buf *b, char c) {
     if (!buf_reserve(b, 1)) return;

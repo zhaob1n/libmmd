@@ -96,6 +96,21 @@ Str arena_strdup(Arena *a, Str s) {
     return (Str){.p = p, .n = s.n};
 }
 
+Str str_cat(Arena *a, size_t n, const Str parts[static n]) {
+    size_t len = 0;
+    for (size_t i = 0; i < n; i++)
+        if (ckd_add(&len, len, parts[i].n)) return (Str){};
+    char *p = arena_alloc(a, len + 1, 1);
+    if (!p) return (Str){};
+    size_t k = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (parts[i].n) memcpy(p + k, parts[i].p, parts[i].n);
+        k += parts[i].n;
+    }
+    p[k] = 0;
+    return (Str){.p = p, .n = k};
+}
+
 bool buf_reserve_slow(Buf *b, size_t extra) {
     if (b->oom) return false;
     size_t need = 0;

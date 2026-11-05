@@ -53,9 +53,7 @@ constexpr double ACT_MARGIN = 50;
 constexpr double BOX_MARGIN = 10;
 
 static mmd_status sfail(SP *p, size_t off, const char *m) {
-    p->err = off;
-    snprintf(p->msg, 160, "%s", m);
-    return MMD_ERR_SYNTAX;
+    return diag_fail(&p->err, p->msg, off, m);
 }
 
 static int32_t part_get(SP *p, Str id, bool *oom) {
@@ -75,14 +73,16 @@ static Str word(Str *s) {
     return w;
 }
 
-typedef struct ArrowTok { char t[8]; Head h; bool dotted, bidir; } ArrowTok;
+typedef struct ArrowTok { char t[8]; uint8_t n; Head h; bool dotted, bidir; } ArrowTok;
+#define AT(tok, ...) {tok, sizeof(tok) - 1, __VA_ARGS__}
 static constexpr ArrowTok ARROWS[] = {
-    {"<<-->>", HD_ARROW, true, true}, {"<<->>", HD_ARROW, false, true},
-    {"-->>", HD_ARROW, true, false},  {"->>", HD_ARROW, false, false},
-    {"--x", HD_CROSS, true, false},   {"-x", HD_CROSS, false, false},
-    {"--)", HD_ASYNC, true, false},   {"-)", HD_ASYNC, false, false},
-    {"-->", HD_NONE, true, false},    {"->", HD_NONE, false, false},
+    AT("<<-->>", HD_ARROW, true, true), AT("<<->>", HD_ARROW, false, true),
+    AT("-->>", HD_ARROW, true, false),  AT("->>", HD_ARROW, false, false),
+    AT("--x", HD_CROSS, true, false),   AT("-x", HD_CROSS, false, false),
+    AT("--)", HD_ASYNC, true, false),   AT("-)", HD_ASYNC, false, false),
+    AT("-->", HD_NONE, true, false),    AT("->", HD_NONE, false, false),
 };
+#undef AT
 
 constexpr double WRAP_MSG = 220;
 constexpr double WRAP_NOTE = 160;
@@ -294,14 +294,13 @@ static mmd_status parse_line(SP *p, Str line, size_t off) {
     for (size_t k = 0; k < line.n && !at; k++) {
         if (line.p[k] != '-' && line.p[k] != '<') continue;
         for (size_t t = 0; t < countof(ARROWS); t++) {
-            size_t tl = strlen(ARROWS[t].t);
+            size_t tl = ARROWS[t].n;
             if (k + tl <= line.n && memcmp(line.p + k, ARROWS[t].t, tl) == 0) { at = &ARROWS[t]; apos = k; break; }
         }
     }
     if (!at || apos == 0) return sfail(p, off, "unrecognised statement in sequence diagram");
     Str from = str_trim((Str){.p = line.p, .n = apos});
-    Str r2 = {.p = line.p + apos + strlen(at->t), .n = line.n - apos - strlen(at->t)};
-    r2 = str_trim(r2);
+    Str r2 = str_trim(str_from(line, apos + at->n));
     if (r2.n && r2.p[0] == '+') { ev.act_to = true; r2.p++; r2.n--; }
     else if (r2.n && r2.p[0] == '-') { ev.deact_from = true; r2.p++; r2.n--; }
     const char *c = memchr(r2.p, ':', r2.n);
@@ -326,12 +325,12 @@ static mmd_status parse_line(SP *p, Str line, size_t off) {
 
 static void pt(Buf *b, double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
 static void rect(Buf *b, double x, double y, double w, double h, const char *cls) {
-    buf_lit(b, "<rect class=\""); buf_put(b, strlen(cls), cls); buf_lit(b, "\" x=\""); buf_num(b, x);
+    buf_lit(b, "<rect class=\""); buf_cstr(b, cls); buf_lit(b, "\" x=\""); buf_num(b, x);
     buf_lit(b, "\" y=\""); buf_num(b, y); buf_lit(b, "\" width=\""); buf_num(b, w);
     buf_lit(b, "\" height=\""); buf_num(b, h); buf_lit(b, "\"/>");
 }
 static void line_(Buf *b, double x1, double y1, double x2, double y2, const char *cls) {
-    buf_lit(b, "<line class=\""); buf_put(b, strlen(cls), cls); buf_lit(b, "\" x1=\""); buf_num(b, x1);
+    buf_lit(b, "<line class=\""); buf_cstr(b, cls); buf_lit(b, "\" x1=\""); buf_num(b, x1);
     buf_lit(b, "\" y1=\""); buf_num(b, y1); buf_lit(b, "\" x2=\""); buf_num(b, x2);
     buf_lit(b, "\" y2=\""); buf_num(b, y2); buf_lit(b, "\"/>");
 }
@@ -340,8 +339,8 @@ static void text_(Buf *b, Str s, double fs, double x, double y, const char *anch
     Str ln;
     double lh = fs * 1.5;
     while (label_next_line(s, &pos, &ln)) {
-        buf_lit(b, "<text class=\""); buf_put(b, strlen(cls), cls); buf_lit(b, "\" x=\""); buf_num(b, x);
-        buf_lit(b, "\" y=\""); buf_num(b, y); buf_lit(b, "\" text-anchor=\""); buf_put(b, strlen(anchor), anchor);
+        buf_lit(b, "<text class=\""); buf_cstr(b, cls); buf_lit(b, "\" x=\""); buf_num(b, x);
+        buf_lit(b, "\" y=\""); buf_num(b, y); buf_lit(b, "\" text-anchor=\""); buf_cstr(b, anchor);
         buf_lit(b, "\" dominant-baseline=\"central\">");
         buf_xml(b, ln);
         buf_lit(b, "</text>");
@@ -445,8 +444,7 @@ static constexpr char SEQ_DEFS[] =
     "markerUnits=\"userSpaceOnUse\" orient=\"auto\"><path d=\"M0,0 L12,6 L0,12\" fill=\"none\" stroke=\"#333\" stroke-width=\"1.5\"/></marker>"
     "</defs>";
 
-mmd_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, Str title, double fs,
-                      Buf *out, size_t *err_off, char msg[static 160]) {
+DIAG_FN(seq_render) {
     SP p = {.A = a, .s = src, .n = n, .msg = msg, .title = title, .cur_box = -1};
     for (size_t k = 0; k + 4 <= off; k++) /* global wrap from frontmatter/directive config */
         if (memcmp(src + k, "wrap", 4) == 0) {
@@ -455,7 +453,10 @@ mmd_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
             if (j + 4 <= off && memcmp(src + j, "true", 4) == 0) p.wrap = true;
         }
     mmd_status st = MMD_OK;
-    Buf back = {}, mid = {}, front = {};
+    AUTO_BUF Buf back = {};
+    AUTO_BUF Buf mid = {};
+    AUTO_BUF Buf front = {};
+    AUTO_BUF Buf boxes = {};
     /* skip header line */
     const char *nl = memchr(src + off, '\n', n - off);
     size_t i = nl ? (size_t)(nl - src) + 1 : n;
@@ -548,7 +549,7 @@ mmd_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
                 buf_lit(&front, "<path class=\"msg"); if (ev->dotted) buf_lit(&front, " dotted");
                 buf_lit(&front, "\" d=\"M"); pt(&front, x1, ly); buf_lit(&front, " L"); pt(&front, x2 - dir * 1, ly); buf_ch(&front, '"');
             }
-            if (mk) { buf_lit(&front, " marker-end=\"url(#"); buf_put(&front, strlen(mk), mk); buf_lit(&front, ")\""); }
+            if (mk) { buf_lit(&front, " marker-end=\"url(#"); buf_cstr(&front, mk); buf_lit(&front, ")\""); }
             if (ev->bidir) buf_lit(&front, " marker-start=\"url(#sq-arrow-start)\"");
             buf_lit(&front, "/>");
             for (int e = 0; e < 2; e++)
@@ -729,7 +730,6 @@ mmd_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
         if (!pa[k].created) actor_box(&back, &pa[k], title_h, fs);
         if (pa[k].y1 <= 0) actor_box(&front, &pa[k], bottom, fs);
     }
-    Buf boxes = {};
     for (size_t bi = 0; bi < p.boxes.n; bi++) {
         double x0 = INFINITY, x1 = -INFINITY;
         for (size_t k = 0; k < P; k++)
@@ -750,7 +750,7 @@ mmd_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
         buf_lit(&boxes, "\"/>");
         if (bx->label.n) text_(&boxes, bx->label, fs, (x0 + x1) / 2, by + lh / 2 + 4, "middle", "box-label");
     }
-    if (back.oom || mid.oom || front.oom || boxes.oom) { free(boxes.p); st = MMD_ERR_NOMEM; goto done; }
+    if (back.oom || mid.oom || front.oom || boxes.oom) { st = MMD_ERR_NOMEM; goto done; }
     double m = 50, vx = minx - m, vy = -10, vw = maxx - minx + 2 * m, vh = bottom + ACT_H + 21; /* diagramMarginX 50, diagramMarginY 10 (+1 as mermaid-cli emits) */
     buf_lit(out, "<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"mermaid\" class=\"sequence\" width=\"");
     buf_num(out, vw); buf_lit(out, "\" height=\""); buf_num(out, vh); buf_lit(out, "\" viewBox=\"");
@@ -768,16 +768,12 @@ mmd_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
     buf_lit(out, "\"/>");
     if (p.title.n) text_(out, p.title, 18, (minx + maxx) / 2, 15, "middle", "title");
     buf_put(out, boxes.n, boxes.p ? boxes.p : "");
-    free(boxes.p);
     buf_put(out, back.n, back.p ? back.p : "");
     buf_put(out, mid.n, mid.p ? mid.p : "");
     buf_put(out, front.n, front.p ? front.p : "");
     buf_lit(out, "</svg>\n");
     if (out->oom) st = MMD_ERR_NOMEM;
 done:
-    free(back.p);
-    free(mid.p);
-    free(front.p);
     *err_off = p.err;
     return st;
 }

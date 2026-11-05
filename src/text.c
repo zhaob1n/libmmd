@@ -90,14 +90,12 @@ double text_width(Str s, double fs) {
     return ceil((double)acc * fs * 64.0 / 2048.0 - 1e-9) / 64.0;
 }
 
-static bool is_br(Str s, size_t i, size_t *len) {
-    /* <br>, <br/>, <br />, case-insensitive */
-    if (i + 4 > s.n || s.p[i] != '<' || (s.p[i + 1] | 32) != 'b' || (s.p[i + 2] | 32) != 'r') return false;
+size_t label_br_len(Str s, size_t i) {
+    if (i + 4 > s.n || s.p[i] != '<' || (s.p[i + 1] | 32) != 'b' || (s.p[i + 2] | 32) != 'r') return 0;
     size_t j = i + 3;
     while (j < s.n && s.p[j] == ' ') j++;
     if (j < s.n && s.p[j] == '/') j++;
-    if (j < s.n && s.p[j] == '>') { *len = j + 1 - i; return true; }
-    return false;
+    return j < s.n && s.p[j] == '>' ? j + 1 - i : 0;
 }
 
 Str label_normalize(Arena *a, Str raw, bool *ok) {
@@ -120,7 +118,7 @@ Str label_normalize(Arena *a, Str raw, bool *ok) {
     for (size_t i = 0; i < s.n; i++) {
         size_t bl = 0;
         char c = s.p[i];
-        if (c == '<' && is_br(s, i, &bl)) { o[k++] = '\n'; i += bl - 1; continue; }
+        if (c == '<' && (bl = label_br_len(s, i))) { o[k++] = '\n'; i += bl - 1; continue; }
         if (md && (c == '*' || c == '_')) continue; /* basic markdown: drop emphasis markers */
         if (md && c == '\n') {
             while (k && o[k - 1] == ' ') k--;
@@ -142,21 +140,6 @@ bool label_next_line(Str s, size_t *pos, Str *line) {
     *line = (Str){.p = st, .n = len};
     *pos += len + 1;
     return true;
-}
-
-void label_measure(Str s, double fs, double *w, unsigned *lines) {
-    double mw = 0;
-    unsigned cnt = 0;
-    size_t pos = 0;
-    Str ln;
-    if (s.n == 0) { *w = 0; *lines = 0; return; }
-    while (label_next_line(s, &pos, &ln)) {
-        double lw = text_width(ln, fs);
-        if (lw > mw) mw = lw;
-        cnt++;
-    }
-    *w = mw;
-    *lines = cnt;
 }
 
 /* "Open Sans" (C4 labels) ASCII advances in 1/1000 em, measured in Chromium; kerning ignored.
@@ -185,3 +168,5 @@ void label_measure_f(Str s, double fs, double (*meas)(Str, double), double *w, u
     while (label_next_line(s, &pos, &ln)) mw = fmax(mw, meas(ln, fs)), k++;
     *w = mw, *lines = k;
 }
+
+void label_measure(Str s, double fs, double *w, unsigned *lines) { label_measure_f(s, fs, text_width, w, lines); }

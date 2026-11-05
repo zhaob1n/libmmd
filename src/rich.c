@@ -65,15 +65,6 @@ bool rich_needed(Str s) {
     return false;
 }
 
-static bool is_br(Str s, size_t i, size_t *len) {
-    if (i + 4 > s.n || s.p[i] != '<' || (s.p[i + 1] | 32) != 'b' || (s.p[i + 2] | 32) != 'r') return false;
-    size_t j = i + 3;
-    while (j < s.n && s.p[j] == ' ') j++;
-    if (j < s.n && s.p[j] == '/') j++;
-    if (j < s.n && s.p[j] == '>') { *len = j + 1 - i; return true; }
-    return false;
-}
-
 Str rich_normalize(Arena *a, Str raw, bool *ok) {
     Str s = str_trim(raw);
     if (!(s.n >= 4 && s.p[0] == '"' && s.p[s.n - 1] == '"' && s.p[1] == '`' && s.p[s.n - 2] == '`'))
@@ -87,7 +78,7 @@ Str rich_normalize(Arena *a, Str raw, bool *ok) {
     for (size_t i = 0; i < s.n; i++) {
         char c = s.p[i];
         size_t bl = 0;
-        if (c == '<' && is_br(s, i, &bl)) { o[k++] = '\n'; i += bl - 1; continue; }
+        if (c == '<' && (bl = label_br_len(s, i))) { o[k++] = '\n'; i += bl - 1; continue; }
         if (c == '*' || c == '_') {
             bool dbl = i + 1 < s.n && s.p[i + 1] == c;
             /* intra-word underscores are literal (snake_case) */
@@ -160,7 +151,7 @@ Str rich_wrap(Arena *a, Str s, double fs, double maxw, bool *ok) {
     o[s.n] = 0;
     /* greedy: replace a space with '\n' when the line would overflow */
     size_t ls = 0, last_sp = SIZE_MAX;
-    bool bold = false, bold_ls = false;
+    bool bold_ls = false;
     for (size_t i = 0; i <= s.n; i++) {
         if (i < s.n && o[i] != ' ' && o[i] != '\n') continue;
         bool b2 = bold_ls;
@@ -179,7 +170,6 @@ Str rich_wrap(Arena *a, Str s, double fs, double maxw, bool *ok) {
         if (o[i] == '\n') { bold_ls = b2; ls = i + 1; last_sp = SIZE_MAX; }
         else last_sp = i;
     }
-    (void)bold;
     return (Str){.p = o, .n = s.n};
 }
 

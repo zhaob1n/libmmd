@@ -1,6 +1,6 @@
 # libmmd internals, per-type feature notes and version history
 
-Moved from the old README. Numbers here are historical; see bench/results_v*.txt.
+Numbers here are historical; see bench/results_v*.txt.
 
 ## Pipeline
 | stage | file | notes |
@@ -163,3 +163,9 @@ Mermaid-exact text metrics (Liberation/Arial advances+kerning), mermaid node pad
 Byte-identical output. medium 590.5 → 481.5 µs, small 15.1 → 14.6 µs (min, this box). v1 is at 407 / 11.9, so the targets are not met yet.
 Main gains came from incremental network simplex (rank cycles 449k → 231k) and from dorder sort/crossing shortcuts.
 Build with `-DMMD_PROFILE` to get per-phase cycle counters. See bench/results_v13.txt and bench/prof13/.
+
+## Toolchain
+- Builds use `-std=gnu2y` when the compiler accepts it (clang), else `gnu23` (gcc-14). Code must compile warning-free under both, so C2y-only syntax (`_Countof`, `if` declarations) is avoided; `countof` is a macro in `src/base.h`.
+- Byte-identity gate: `bench/eq/cmp.sh build/mmd` must print `bad=0`.
+- Before writing a string helper, check `src/base.h` (`str_sub`/`str_from`/`str_span`, `str_split`, `str_cat`/`STR_CAT`, `buf_cstr`), `src/text.h` (`label_br_len`) and `src/dgraph.h`.
+- Resource release uses `[[gnu::cleanup]]` via `src/base.h`: `AUTOFREE` (free), `AUTO_BUF` (Buf), `AUTO_ARENA` (Arena), `AUTOCLOSE` (FILE). No hand-written frees or goto-cleanup; return ownership with `TAKE_PTR(p)` / `buf_take(&b)`. Never `goto` past a cleanup variable's declaration (clang errors, gcc silently skips it): declare them before the first jump.

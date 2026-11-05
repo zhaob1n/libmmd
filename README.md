@@ -52,7 +52,7 @@ Every type also supports:
 - `%%{init}%%` and YAML front-matter config, with `themeVariables` values whitelisted;
 - `accTitle`/`accDescr`, which become `<title>`/`<desc>` plus ARIA attributes.
 
-Per-type feature notes are in [docs/INTERNALS.md](docs/INTERNALS.md).
+Per-type feature notes are in [docs/dev/INTERNALS.md](docs/dev/INTERNALS.md).
 
 ## Build
 
@@ -199,7 +199,7 @@ More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 - **Architecture** also has its own grid layout, not fcose.
 - **Text** is measured with built-in Helvetica/Arial-compatible advance tables, not a real font engine. Unusual fonts and complex scripts can be sized imperfectly. CJK and emoji are treated as wide characters.
 - **Very dense diagrams**, around 5× the stress generator's density, can still have label overlaps. This mostly affects Sankey, quadrant and Wardley charts on a fixed-size canvas.
-- **Known differences** from mermaid include gantt tick density, state concurrent-region styling and journey legend order. See [docs/INTERNALS.md](docs/INTERNALS.md).
+- **Known differences** from mermaid include gantt tick density, state concurrent-region styling and journey legend order. See [docs/dev/INTERNALS.md](docs/dev/INTERNALS.md).
 - **`fa:` icons** in flowcharts need the Font Awesome font where the SVG is viewed. Architecture and mindmap icons are embedded as paths.
 - **Not supported:** interactivity (`click` callbacks, tooltips) and PNG/PDF output. To get a raster image, convert the SVG with any SVG rasteriser.
 

@@ -131,7 +131,7 @@ static size_t preamble(Str src, Config *c) {
     }
 }
 
-static void set_err(mmd_error *err, mmd_status st, size_t n, const char src[static n], size_t off, const char *msg) {
+static void set_err(mmd_error *err, mmd_status st, size_t n, const char *src, size_t off, const char *msg) {
     if (!err) return;
     *err = (mmd_error){.code = st};
     if (st == MMD_ERR_SYNTAX) {
@@ -146,7 +146,7 @@ static void set_err(mmd_error *err, mmd_status st, size_t n, const char src[stat
     snprintf(err->message, sizeof err->message, "%s", msg && *msg ? msg : mmd_status_str(st));
 }
 
-static mmd_status render(Arena *ap, Buf *bp, size_t n, const char src[static n], const mmd_options *opt,
+static mmd_status render(Arena *ap, Buf *bp, size_t n, const char *src, const mmd_options *opt,
                          mmd_error *err) {
     if (n > (size_t)1 << 30) { set_err(err, MMD_ERR_LIMIT, n, src, 0, nullptr); return MMD_ERR_LIMIT; }
     Config cfg = {.node_sep = 50, .rank_sep = 50};
@@ -224,17 +224,17 @@ fail:
     return st;
 }
 
-mmd_status mmd_render_svg(size_t n, const char src[static n], const mmd_options *opt, mmd_buffer *out,
+mmd_status mmd_render_svg(size_t n, const char *src, const mmd_options *opt, mmd_buffer *out,
                           mmd_error *err) {
     if (out) *out = (mmd_buffer){};
     if (!out) return MMD_ERR_EMPTY;
-    Arena a = {};
-    Buf b = {};
+    AUTO_ARENA Arena a = {};
+    AUTO_BUF Buf b = {};
     mmd_status st = render(&a, &b, n, src, opt, err);
-    arena_free(&a);
-    if (st) { free(b.p); return st; }
-    out->data = b.p;
-    out->len = b.n;
+    if (st) return st;
+    Buf r = buf_take(&b);
+    out->data = r.p;
+    out->len = r.n;
     return MMD_OK;
 }
 
@@ -255,7 +255,7 @@ void mmd_context_free(mmd_context *c) {
     free(c);
 }
 
-mmd_status mmd_context_render_svg(mmd_context *c, size_t n, const char src[static n], const mmd_options *opt,
+mmd_status mmd_context_render_svg(mmd_context *c, size_t n, const char *src, const mmd_options *opt,
                                   const char **svg, size_t *len, mmd_error *err) {
     if (svg) *svg = nullptr;
     if (len) *len = 0;
