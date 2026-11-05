@@ -264,7 +264,7 @@ DIAG_FN(gitgraph_render) {
     for (size_t b = 0; b < br.n; b++) {
         double q = q0 + lq[lane[b]];
         const char *col = dcfg_pal("git", lane[b] % countof(COL), COL[lane[b] % countof(COL)]);
-        buf_lit(out, "<line class=\"bl\" stroke=\""); buf_put(out, strlen(col), col);
+        buf_lit(out, "<line class=\"bl\" stroke=\""); buf_cstr(out, col);
         buf_lit(out, "\" x1=\""); buf_num(out, PX(p0 - 10, q)); buf_lit(out, "\" y1=\""); buf_num(out, PY(p0 - 10, q));
         buf_lit(out, "\" x2=\""); buf_num(out, PX(plen - 10, q)); buf_lit(out, "\" y2=\""); buf_num(out, PY(plen - 10, q));
         buf_lit(out, "\"/>");
@@ -273,7 +273,7 @@ DIAG_FN(gitgraph_render) {
         double lx = dir == 0 ? p0 - 10 - 17 - tw - (rot ? 30 : 0) : q - tw / 2, ly = dir == 0 ? q : (dir == 1 ? p0 - 35 : plen - p0 + 35);
         if (dir == 0) dg_rect_fill(out, lx - 6, ly - 11, tw + 18, 22, 4, nullptr, col);
         else dg_rect_fill(out, lx - 6, ly - 11, tw + 12, 22, 4, nullptr, col);
-        buf_lit(out, "<g fill=\""); buf_put(out, strlen(LTXT[lane[b] % countof(LTXT)]), LTXT[lane[b] % countof(LTXT)]); buf_lit(out, "\">");
+        buf_lit(out, "<g fill=\""); buf_cstr(out, LTXT[lane[b] % countof(LTXT)]); buf_lit(out, "\">");
         dg_text(out, br.v[b].name, 14, lx + tw / 2 + (dir == 0 ? 3 : 0), ly, "middle", "bn bnx");
         buf_lit(out, "</g>");
     }
@@ -288,7 +288,7 @@ DIAG_FN(gitgraph_render) {
             /* colour: the lane that is not the lower-index main lane (mermaid colours by the branch going away) */
             uint32_t cl = lane[cm.v[par].lane] > lane[c->lane] ? lane[cm.v[par].lane] : lane[c->lane];
             const char *col = dcfg_pal("git", cl % countof(COL), COL[cl % countof(COL)]);
-            buf_lit(out, "<path class=\"ar\" stroke=\""); buf_put(out, strlen(col), col); buf_lit(out, "\" d=\"M");
+            buf_lit(out, "<path class=\"ar\" stroke=\""); buf_cstr(out, col); buf_lit(out, "\" d=\"M");
             dg_pt(out, PX(pp, pq), PY(pp, pq));
             /* orthogonal route with rounded corners. Branch-out (and cherry-pick) turns at the parent and runs
              * on the child lane; merges run on the parent lane and turn at the child. If that run would pass
@@ -336,7 +336,7 @@ DIAG_FN(gitgraph_render) {
             dg_rect_fill(out, x - R + 3, y - R + 3, 2 * R - 6, 2 * R - 6, 0, nullptr, "#fff");
         } else {
             buf_lit(out, "<circle cx=\""); buf_num(out, x); buf_lit(out, "\" cy=\""); buf_num(out, y);
-            buf_lit(out, "\" r=\""); buf_num(out, R); buf_lit(out, "\" fill=\""); buf_put(out, strlen(col), col);
+            buf_lit(out, "\" r=\""); buf_num(out, R); buf_lit(out, "\" fill=\""); buf_cstr(out, col);
             buf_lit(out, "\"/>");
             if (c->type == C_MERGE) {
                 buf_lit(out, "<circle fill=\"#fff\" cx=\""); buf_num(out, x); buf_lit(out, "\" cy=\""); buf_num(out, y);

@@ -190,7 +190,7 @@ DIAG_FN(requirement_render) {
             if (!r->f[k].n) continue;
             const char *pfx = r->elem ? ELAB[k] : RLAB[k];
             dg_text_open(out, x0 + 12, y, "start", "rt");
-            buf_put(out, strlen(pfx), pfx);
+            buf_cstr(out, pfx);
             buf_xml(out, r->f[k]);
             buf_lit(out, "</text>");
             y += lh;

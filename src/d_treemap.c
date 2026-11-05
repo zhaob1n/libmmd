@@ -125,7 +125,7 @@ static void put_c(Buf *out, const char *pfx, size_t i) {
     for (size_t k = 0; k < countof(TMI); k++) if (TMI[k] == i) def = tab[k];
     if (lab) def = i == 0 || i == 3 ? "#fff" : "#000"; /* default theme: cScaleLabel0/3 = invert(labelTextColor) */
     const char *c = dcfg_pal(pfx, i, def);
-    buf_put(out, strlen(c), c);
+    buf_cstr(out, c);
 }
 static void fmt_val(double v, size_t cap, char b[static cap], size_t *len) {
     int k = fabs(v - round(v)) < 1e-9 ? snprintf(b, cap, "%.0f", v) : snprintf(b, cap, "%.2f", v);

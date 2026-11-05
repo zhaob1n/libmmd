@@ -55,7 +55,7 @@ static constexpr char TV_STROKE[][33] = {"themeVariables.emUiStroke", "themeVari
     "themeVariables.emReadModelStroke", "themeVariables.emCommandStroke", "themeVariables.emEventStroke"};
 
 static void put_col(Buf *b, Str v, const char *def) {
-    if (dg_css_ok(v)) buf_xml(b, v); else buf_put(b, strlen(def), def);
+    if (dg_css_ok(v)) buf_xml(b, v); else buf_cstr(b, def);
 }
 
 /* does segment (x0,y0)-(x1,y1) pass through a box other than frames a and b? (Liang-Barsky clip) */

@@ -38,7 +38,7 @@ typedef struct IS {
 } IS;
 
 static void line(IS *s, double x1, double y1, double x2, double y2, const char *cls) {
-    buf_lit(s->b, "<line class=\""); buf_put(s->b, strlen(cls), cls);
+    buf_lit(s->b, "<line class=\""); buf_cstr(s->b, cls);
     buf_lit(s->b, "\" x1=\""); buf_num(s->b, x1); buf_lit(s->b, "\" y1=\""); buf_num(s->b, y1);
     buf_lit(s->b, "\" x2=\""); buf_num(s->b, x2); buf_lit(s->b, "\" y2=\""); buf_num(s->b, y2);
     buf_lit(s->b, "\" marker-start=\"url(#ish-arrow)\"/>");

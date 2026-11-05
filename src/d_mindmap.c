@@ -375,7 +375,7 @@ DIAG_FN(mindmap_render) {
         const MNode *p = &V[V[i].parent], *c = &V[i];
         if (!tidy) {
             const char *col = dcfg_pal("cScale", c->sec % countof(SEC) + 1, SEC[c->sec % countof(SEC)]); /* mermaid colours edges like their section's nodes */
-            buf_lit(out, "<path class=\"me\" stroke=\""); buf_put(out, strlen(col), col);
+            buf_lit(out, "<path class=\"me\" stroke=\""); buf_cstr(out, col);
             buf_lit(out, "\" stroke-width=\""); buf_num(out, fmax(2, 17 - 3.0 * c->depth)); buf_lit(out, "\" d=\"M");
             dg_pt(out, p->x, p->y); buf_ch(out, 'L'); dg_pt(out, c->x, c->y); buf_lit(out, "\"/>");
             continue;
@@ -384,7 +384,7 @@ DIAG_FN(mindmap_render) {
         double x0 = V[i].parent == 0 ? p->x : p->x + dir * p->w / 2, y0 = p->y;
         double x1 = c->x - dir * c->w / 2, y1 = c->y + (c->shape == M_DEF ? c->h / 2 : 0);
         const char *col = dcfg_pal("cScalePeer", c->sec % countof(SECS) + 1, SECS[c->sec % countof(SECS)]);
-        buf_lit(out, "<path class=\"me\" stroke=\""); buf_put(out, strlen(col), col);
+        buf_lit(out, "<path class=\"me\" stroke=\""); buf_cstr(out, col);
         buf_lit(out, "\" stroke-width=\""); buf_num(out, fmax(2, 17 - 3.0 * c->depth)); buf_lit(out, "\" d=\"M");
         dg_pt(out, x0, y0); buf_ch(out, 'C'); dg_pt(out, (x0 + x1) / 2, y0); buf_ch(out, ' ');
         dg_pt(out, (x0 + x1) / 2, y1); buf_ch(out, ' '); dg_pt(out, x1, y1); buf_lit(out, "\"/>");
@@ -398,7 +398,7 @@ DIAG_FN(mindmap_render) {
         char sn[16];
         buf_put(out, (size_t)snprintf(sn, sizeof sn, "%d", i ? (int)m->sec : -1), sn);
         if (m->cls.n) { buf_ch(out, ' '); buf_xml(out, m->cls); }
-        buf_lit(out, "\" fill=\""); buf_put(out, strlen(fill), fill); buf_lit(out, "\" stroke=\""); buf_put(out, strlen(st), st);
+        buf_lit(out, "\" fill=\""); buf_cstr(out, fill); buf_lit(out, "\" stroke=\""); buf_cstr(out, st);
         buf_lit(out, "\">");
         switch (m->shape) {
         case M_DEF:

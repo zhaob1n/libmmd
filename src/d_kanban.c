@@ -111,7 +111,7 @@ DIAG_FN(kanban_render) {
         dg_rect_fill(out, x, top, CW, ch[c] + 5, 5, "kc", fill); /* mermaid sizes each column to its cards */
         Str t = dg_wrap(a, cols.v[c], 16, CW - 20);
         const char *lc = dcfg_pal("cScaleLabel", ci, "");
-        if (*lc) { buf_lit(out, "<g font-size=\"16px\" fill=\""); buf_put(out, strlen(lc), lc); buf_lit(out, "\">"); }
+        if (*lc) { buf_lit(out, "<g font-size=\"16px\" fill=\""); buf_cstr(out, lc); buf_lit(out, "\">"); }
         dg_text(out, t.p ? t : cols.v[c], 16, x + CW / 2, top + 13, "middle", *lc ? nullptr : "kt");
         if (*lc) buf_lit(out, "</g>");
         cy[c] = top + 28;
@@ -126,7 +126,7 @@ DIAG_FN(kanban_render) {
         else if (str_eq(k->priority, S("Low"))) pc = "blue";
         else if (str_eq(k->priority, S("Very Low"))) pc = "lightblue";
         if (pc) {
-            buf_lit(out, "<line class=\"kp\" stroke=\""); buf_put(out, strlen(pc), pc); buf_lit(out, "\" x1=\"");
+            buf_lit(out, "<line class=\"kp\" stroke=\""); buf_cstr(out, pc); buf_lit(out, "\" x1=\"");
             buf_num(out, x + 2); buf_lit(out, "\" y1=\""); buf_num(out, y + 3); buf_lit(out, "\" x2=\""); buf_num(out, x + 2);
             buf_lit(out, "\" y2=\""); buf_num(out, y + k->h - 3); buf_lit(out, "\"/>");
         }

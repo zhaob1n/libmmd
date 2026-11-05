@@ -201,7 +201,7 @@ DIAG_FN(xychart_render) {
     for (size_t s = 0; s < ser.n; s++) {
         if (!ser.v[s].line) continue;
         const char *col = ser.v[s].col = dcfg_list("xyChart.plotColorPalette", s, LINEPAL[li++ % countof(LINEPAL)]);
-        buf_lit(out, "<path class=\"ln\" stroke=\""); buf_put(out, strlen(col), col); buf_lit(out, "\" d=\"");
+        buf_lit(out, "<path class=\"ln\" stroke=\""); buf_cstr(out, col); buf_lit(out, "\" d=\"");
         for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
             double v = vals.v[ser.v[s].v0 + k];
             buf_ch(out, k ? 'L' : 'M');
@@ -214,7 +214,7 @@ DIAG_FN(xychart_render) {
             Str l = labs.v[ser.v[s].v0 + k];
             if (!l.n) continue;
             double p = VPOS(vals.v[ser.v[s].v0 + k]), c = CPOS(k);
-            buf_lit(out, "<g font-size=\"12\" fill=\""); buf_put(out, strlen(ser.v[s].col), ser.v[s].col); buf_lit(out, "\">");
+            buf_lit(out, "<g font-size=\"12\" fill=\""); buf_cstr(out, ser.v[s].col); buf_lit(out, "\">");
             if (horiz) dg_text(out, l, 12, p + 6, c, "start", nullptr);
             else dg_text(out, l, 12, c, p - 10, "middle", nullptr);
             buf_lit(out, "</g>");
@@ -243,7 +243,7 @@ DIAG_FN(xychart_render) {
         double ly = oy + 10;
         for (size_t s = 0; s < ser.n; s++) {
             if (!ser.v[s].name.n) continue;
-            if (ser.v[s].line) { buf_lit(out, "<path class=\"ln\" stroke=\""); buf_put(out, strlen(ser.v[s].col), ser.v[s].col);
+            if (ser.v[s].line) { buf_lit(out, "<path class=\"ln\" stroke=\""); buf_cstr(out, ser.v[s].col);
                 buf_lit(out, "\" d=\"M"); dg_pt(out, ox + pw + 20, ly); buf_ch(out, 'L'); dg_pt(out, ox + pw + 36, ly); buf_lit(out, "\"/>"); }
             else dg_rect_fill(out, ox + pw + 22, ly - 6, 12, 12, 0, "lg", ser.v[s].col);
             dg_text(out, ser.v[s].name, 14, ox + pw + 42, ly, "start", "tl");
