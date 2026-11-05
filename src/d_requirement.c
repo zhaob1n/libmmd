@@ -142,7 +142,7 @@ DIAG_FN(requirement_render) {
         dg_edge_d(out, &g, e);
         buf_lit(out, "\"/>");
         const double *P = g.pts.v + g.eptoff[e];
-        if (cont) { /* circle-plus at the container (source) end */
+        if (cont && g.eptn[e] >= 2) { /* circle-plus at the container (source) end */
             double dx = P[2] - P[0], dy = P[3] - P[1], L = sqrt(dx * dx + dy * dy);
             if (L > 1e-9) {
                 double cx = P[0] + dx / L * 8, cy = P[1] + dy / L * 8;
@@ -150,7 +150,7 @@ DIAG_FN(requirement_render) {
                 dg_line(out, cx - 8, cy, cx + 8, cy, "rqd");
                 dg_line(out, cx, cy - 8, cx, cy + 8, "rqd");
             }
-        } else if (g.eptn[e] >= 2) { /* arrowhead on the last segment */
+        } else if (!cont && g.eptn[e] >= 2) { /* arrowhead on the last segment */
             const double *end = P + 2 * g.eptn[e];
             dg_arrowhead(out, "rh", end - 2, end - 4, 5);
         }
