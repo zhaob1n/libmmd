@@ -75,14 +75,16 @@ static Str word(Str *s) {
     return w;
 }
 
-typedef struct ArrowTok { char t[8]; Head h; bool dotted, bidir; } ArrowTok;
+typedef struct ArrowTok { char t[8]; uint8_t n; Head h; bool dotted, bidir; } ArrowTok;
+#define AT(tok, ...) {tok, sizeof(tok) - 1, __VA_ARGS__}
 static constexpr ArrowTok ARROWS[] = {
-    {"<<-->>", HD_ARROW, true, true}, {"<<->>", HD_ARROW, false, true},
-    {"-->>", HD_ARROW, true, false},  {"->>", HD_ARROW, false, false},
-    {"--x", HD_CROSS, true, false},   {"-x", HD_CROSS, false, false},
-    {"--)", HD_ASYNC, true, false},   {"-)", HD_ASYNC, false, false},
-    {"-->", HD_NONE, true, false},    {"->", HD_NONE, false, false},
+    AT("<<-->>", HD_ARROW, true, true), AT("<<->>", HD_ARROW, false, true),
+    AT("-->>", HD_ARROW, true, false),  AT("->>", HD_ARROW, false, false),
+    AT("--x", HD_CROSS, true, false),   AT("-x", HD_CROSS, false, false),
+    AT("--)", HD_ASYNC, true, false),   AT("-)", HD_ASYNC, false, false),
+    AT("-->", HD_NONE, true, false),    AT("->", HD_NONE, false, false),
 };
+#undef AT
 
 constexpr double WRAP_MSG = 220;
 constexpr double WRAP_NOTE = 160;
@@ -294,14 +296,13 @@ static mmd_status parse_line(SP *p, Str line, size_t off) {
     for (size_t k = 0; k < line.n && !at; k++) {
         if (line.p[k] != '-' && line.p[k] != '<') continue;
         for (size_t t = 0; t < countof(ARROWS); t++) {
-            size_t tl = strlen(ARROWS[t].t);
+            size_t tl = ARROWS[t].n;
             if (k + tl <= line.n && memcmp(line.p + k, ARROWS[t].t, tl) == 0) { at = &ARROWS[t]; apos = k; break; }
         }
     }
     if (!at || apos == 0) return sfail(p, off, "unrecognised statement in sequence diagram");
     Str from = str_trim((Str){.p = line.p, .n = apos});
-    Str r2 = {.p = line.p + apos + strlen(at->t), .n = line.n - apos - strlen(at->t)};
-    r2 = str_trim(r2);
+    Str r2 = str_trim(str_from(line, apos + at->n));
     if (r2.n && r2.p[0] == '+') { ev.act_to = true; r2.p++; r2.n--; }
     else if (r2.n && r2.p[0] == '-') { ev.deact_from = true; r2.p++; r2.n--; }
     const char *c = memchr(r2.p, ':', r2.n);
