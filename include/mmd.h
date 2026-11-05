@@ -54,7 +54,7 @@ typedef struct mmd_options {
 
 /* Render Mermaid source (n bytes, need not be NUL-terminated) to SVG.
  * opt may be nullptr. err may be nullptr. On success *out owns a buffer. */
-[[nodiscard]] MMD_API mmd_status mmd_render_svg(size_t n, const char src[static n],
+[[nodiscard]] MMD_API mmd_status mmd_render_svg(size_t n, const char *src,
                                         const mmd_options *opt,
                                         mmd_buffer *out, mmd_error *err);
 
@@ -68,7 +68,7 @@ MMD_API void mmd_context_free(mmd_context *ctx);
 /* On success *svg (NUL-terminated, *len bytes) is owned by ctx and stays
  * valid until the next call on ctx or mmd_context_free. Not thread-safe per
  * ctx; use one context per thread. */
-[[nodiscard]] MMD_API mmd_status mmd_context_render_svg(mmd_context *ctx, size_t n, const char src[static n],
+[[nodiscard]] MMD_API mmd_status mmd_context_render_svg(mmd_context *ctx, size_t n, const char *src,
                                                 const mmd_options *opt, const char **svg, size_t *len,
                                                 mmd_error *err);
 
