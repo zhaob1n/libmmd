@@ -413,17 +413,16 @@ mmd_status flow_svg(const Graph *g, Buf *b) {
         text_lines(b, g->nlabel[v], fs, 0, 0, "nodeLabel");
         /* inject text colour if class/style specifies color: */
         if (b->n > mark) {
-            Buf tmp = {};
+            AUTO_BUF Buf tmp = {};
             style_attr(&tmp, g, g->nclass[v], g->nstyle[v], true, true);
-            if (tmp.oom) { free(tmp.p); return MMD_ERR_NOMEM; }
+            if (tmp.oom) return MMD_ERR_NOMEM;
             if (tmp.n) {
                 /* insert after "<text" */
-                if (!buf_reserve(b, tmp.n)) { free(tmp.p); return MMD_ERR_NOMEM; }
+                if (!buf_reserve(b, tmp.n)) return MMD_ERR_NOMEM;
                 memmove(b->p + mark + 5 + tmp.n, b->p + mark + 5, b->n - mark - 5);
                 memcpy(b->p + mark + 5, tmp.p, tmp.n);
                 b->n += tmp.n;
             }
-            free(tmp.p);
         }
         buf_lit(b, "</g>");
     }
