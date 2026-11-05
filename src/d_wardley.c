@@ -124,7 +124,7 @@ static const char *add_node(W *w, WNode nd) {
 }
 
 /* link operators, longest first */
-static const char *const OPS[] = {"+<>", "-.->", "+<", "+>", "->", "+'"};
+static const Str OPS[] = {S("+<>"), S("-.->"), S("+<"), S("+>"), S("->"), S("+'")};
 
 static const char *parse_link(W *w, Str ln, bool *matched, Str *from_out, Str *to_out, WLink *lk) {
     *matched = false;
@@ -133,8 +133,8 @@ static const char *parse_link(W *w, Str ln, bool *matched, Str *from_out, Str *t
         if (ln.p[i] == '"') { q = !q; continue; }
         if (q) continue;
         for (size_t k = 0; k < countof(OPS); k++) {
-            size_t ol = strlen(OPS[k]);
-            if (ln.n - i < ol || memcmp(ln.p + i, OPS[k], ol)) continue;
+            size_t ol = OPS[k].n;
+            if (!str_starts((Str){.p = ln.p + i, .n = ln.n - i}, OPS[k])) continue;
             *matched = true;
             *lk = (WLink){};
             size_t j = i + ol;
@@ -242,7 +242,7 @@ DIAG_FN(wardley_render) {
             const char *err = decorators(rest, &nd);
             if (err) FAIL(err);
             Str pid = w.nodes.v[w.pipes.v[pipe].parent].id;
-            char *idb = arena_alloc_array(a, pid.n + name.n + 1, 1, 1);
+            char *idb = ANEW(a, char, pid.n + name.n + 1);
             if (!idb) return MMD_ERR_NOMEM;
             memcpy(idb, pid.p, pid.n), idb[pid.n] = '_', memcpy(idb + pid.n + 1, name.p, name.n);
             nd.id = (Str){.p = idb, .n = pid.n + 1 + name.n};
@@ -274,7 +274,7 @@ DIAG_FN(wardley_render) {
                 /* normalise "A / B" spacing */
                 for (size_t k = 0; k < st.n; k++) if (st.p[k] == '/') {
                     Str l = str_trim((Str){.p = st.p, .n = k}), rr = str_trim((Str){.p = st.p + k + 1, .n = st.n - k - 1});
-                    char *o = arena_alloc_array(a, l.n + rr.n + 3, 1, 1);
+                    char *o = ANEW(a, char, l.n + rr.n + 3);
                     if (!o) return MMD_ERR_NOMEM;
                     memcpy(o, l.p, l.n), memcpy(o + l.n, " / ", 3), memcpy(o + l.n + 3, rr.p, rr.n);
                     st = (Str){.p = o, .n = l.n + 3 + rr.n};
@@ -630,7 +630,7 @@ DIAG_FN(wardley_render) {
                 if (!lines) { free(b.p); return MMD_ERR_NOMEM; }
                 for (size_t k = 0; k < m; k++) {
                     WPt *p = &w.ann.v[ord[k]];
-                    char *o = arena_alloc_array(a, p->s.n + 16, 1, 1);
+                    char *o = ANEW(a, char, p->s.n + 16);
                     if (!o) { free(b.p); return MMD_ERR_NOMEM; }
                     int pl = snprintf(o, 16, "%u. ", p->num);
                     memcpy(o + pl, p->s.p, p->s.n);
