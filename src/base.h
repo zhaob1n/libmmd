@@ -193,7 +193,7 @@ static inline void buf_freep(Buf *b) { free(b->p); }
 #define AUTOCLOSE [[gnu::cleanup(fclosep)]]
 #define AUTO_BUF [[gnu::cleanup(buf_freep)]]
 #define TAKE_PTR(p) ({ auto take_ = (p); (p) = nullptr; take_; })
-static inline Buf buf_take(Buf *b) { Buf r = *b; *b = (Buf){}; return r; }
+static inline Buf buf_take(Buf b[static 1]) { Buf r = *b; *b = (Buf){}; return r; }
 
 bool buf_reserve_slow(Buf *b, size_t extra);
 static inline bool buf_reserve(Buf *b, size_t extra) {
@@ -216,8 +216,8 @@ static inline void buf_ch(Buf *b, char c) {
     b->p[b->n++] = c;
 }
 void buf_num(Buf *b, double v);  /* fast fixed 2-decimal, trimmed */
-void buf_pt(Buf *b, double x, double y); /* "x,y" with buf_num formatting, one reserve */
-void buf_int(Buf *b, int64_t v);
+void buf_pt(Buf b[static 1], double x, double y); /* "x,y" with buf_num formatting, one reserve */
+void buf_int(Buf b[static 1], int64_t v);
 void buf_xml(Buf *b, Str s);     /* XML-escape text, handles mermaid #entity; */
 
 #ifdef MMD_PROFILE
