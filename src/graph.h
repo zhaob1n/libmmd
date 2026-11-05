@@ -81,13 +81,14 @@ enum { EF_ANIM = 1u, EF_ANIM_SLOW = 2u, EF_LOOPPTS = 4u /* self-loop routed as a
                                     size_t *err_off, char msg[static 160]);
 [[nodiscard]] mmd_status flow_layout(Graph *g);
 [[nodiscard]] mmd_status flow_svg(const Graph *g, Buf *out);
+/* mermaid flowchart.curve name -> CURVE_* (unknown => basis) */
 uint8_t flow_curve_kind(Str name);
 /* self-loop k (0-based, nested outward) on the right side of a node: cubic with both controls at +r,
  * so it bulges SELFLOOP_BULGE*r beyond the node side */
 static inline double selfloop_r(unsigned k) { return 40 + 18 * (double)k; }
 static inline double selfloop_u(unsigned k) { return 20 + 8 * (double)k; }
 constexpr double SELFLOOP_BULGE = 0.75;
-constexpr double SELFLOOP_GAP = 6; /* mermaid flowchart.curve name -> CURVE_* (unknown => basis) */
+constexpr double SELFLOOP_GAP = 6;
 void node_size(Graph *g, size_t v);
 
 #endif
