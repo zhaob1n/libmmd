@@ -22,10 +22,10 @@ typedef struct NS {
     const uint32_t *cedges; size_t ncE;
 } NS;
 
-static inline int32_t slack(const NS *s, uint32_t e) { return s->rank[s->ev[e]] - s->rank[s->eu[e]] - s->minlen[e]; }
-static inline int32_t other(const NS *s, uint32_t e, int32_t v) { return s->eu[e] == v ? s->ev[e] : s->eu[e]; }
+static inline int32_t slack(const NS s[static 1], uint32_t e) { return s->rank[s->ev[e]] - s->rank[s->eu[e]] - s->minlen[e]; }
+static inline int32_t other(const NS s[static 1], uint32_t e, int32_t v) { return s->eu[e] == v ? s->ev[e] : s->eu[e]; }
 
-static size_t tight_tree(NS *s) {
+static size_t tight_tree(NS s[static 1]) {
     size_t sp = 0, cnt = 0;
     for (size_t i = 0; i < s->nc; i++) if (s->intree_v[s->comp[i]]) { s->stk[sp++] = (uint32_t)s->comp[i]; cnt++; }
     while (sp) {
@@ -46,7 +46,7 @@ static size_t tight_tree(NS *s) {
 
 /* iterative DFS over tree edges from `root` (keeping pe[root]): low/lim from `next`,
  * preorder written to order[pos..] */
-static void low_lim(NS *s, int32_t root, int32_t next, size_t pos) {
+static void low_lim(NS s[static 1], int32_t root, int32_t next, size_t pos) {
     size_t sp = 0, no = pos;
     s->stk[sp++] = (uint32_t)root;
     s->it[root] = s->ioff[root];
@@ -77,7 +77,7 @@ static void low_lim(NS *s, int32_t root, int32_t next, size_t pos) {
 }
 
 /* cut values for preorder segment [a, b), children before parents; order[a] is the subtree root */
-static void cut_values(NS *s, size_t a, size_t b) {
+static void cut_values(NS s[static 1], size_t a, size_t b) {
     for (size_t i = b; i-- > a + 1;) {
         int32_t c = (int32_t)s->order[i];
         uint32_t pe = (uint32_t)s->pe[c];
@@ -96,7 +96,7 @@ static void cut_values(NS *s, size_t a, size_t b) {
 }
 
 /* graphviz-style incremental low/lim: unchanged subtrees are skipped */
-static void dfs_range(NS *s, int32_t root, int32_t par, int32_t low) {
+static void dfs_range(NS s[static 1], int32_t root, int32_t par, int32_t low) {
     if (s->pe[root] == par && s->low[root] == low) return;
     size_t sp = 0;
     int32_t next = low;
@@ -124,7 +124,7 @@ static void dfs_range(NS *s, int32_t root, int32_t par, int32_t low) {
 }
 
 /* enumerate subtree(v) into buf via tree edges; returns count */
-static size_t subtree(NS *s, int32_t v, uint32_t *buf) {
+static size_t subtree(NS s[static 1], int32_t v, uint32_t *buf) {
     size_t n = 0, sp = 0;
     buf[n++] = (uint32_t)v;
     s->stk[sp++] = (uint32_t)v;
@@ -141,7 +141,7 @@ static size_t subtree(NS *s, int32_t v, uint32_t *buf) {
     return n;
 }
 
-static void invalidate_path(NS *s, int32_t lca, int32_t v) {
+static void invalidate_path(NS s[static 1], int32_t lca, int32_t v) {
     for (;;) {
         if (s->low[v] == -1) break;
         s->low[v] = -1;
@@ -152,11 +152,11 @@ static void invalidate_path(NS *s, int32_t lca, int32_t v) {
     }
 }
 
-static inline bool in_sub(const NS *s, int32_t v, int32_t root) {
+static inline bool in_sub(const NS s[static 1], int32_t v, int32_t root) {
     return s->low[root] <= s->lim[v] && s->lim[v] <= s->lim[root];
 }
 
-static int32_t tree_update(NS *s, int32_t v, int32_t w, int64_t cv, bool dir) {
+static int32_t tree_update(NS s[static 1], int32_t v, int32_t w, int64_t cv, bool dir) {
     while (!in_sub(s, w, v)) {
         uint32_t e = (uint32_t)s->pe[v];
         bool d = s->eu[e] == v ? dir : !dir;
@@ -167,11 +167,11 @@ static int32_t tree_update(NS *s, int32_t v, int32_t w, int64_t cv, bool dir) {
     return v;
 }
 
-static inline bool is_desc(const NS *s, int32_t v, int32_t root) {
+static inline bool is_desc(const NS s[static 1], int32_t v, int32_t root) {
     return s->low[root] <= s->lim[v] && s->lim[v] <= s->lim[root];
 }
 
-static void run_component(NS *s, size_t max_iter) {
+static void run_component(NS s[static 1], size_t max_iter) {
 #ifdef MMD_PROFILE
     double t0 = ns_now();
     size_t iters = 0;
@@ -328,17 +328,17 @@ typedef struct FAS {
     int32_t maxd;
 } FAS;
 
-static inline int32_t fas_bucket(const FAS *f, int32_t v) {
+static inline int32_t fas_bucket(const FAS f[static 1], int32_t v) {
     if (f->out[v] == 0) return 0;
     if (f->in[v] == 0) return 1;
     return 2 + f->out[v] - f->in[v] + f->maxd;
 }
-static inline void fas_unlink(FAS *f, int32_t v) {
+static inline void fas_unlink(FAS f[static 1], int32_t v) {
     int32_t b = f->bk[v];
     if (f->prv[v] >= 0) f->nxt[f->prv[v]] = f->nxt[v]; else f->head[b] = f->nxt[v];
     if (f->nxt[v] >= 0) f->prv[f->nxt[v]] = f->prv[v];
 }
-static inline void fas_link(FAS *f, int32_t v) {
+static inline void fas_link(FAS f[static 1], int32_t v) {
     int32_t b = fas_bucket(f, v);
     f->bk[v] = b;
     f->prv[v] = -1;
