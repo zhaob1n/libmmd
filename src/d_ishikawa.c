@@ -37,7 +37,7 @@ typedef struct IS {
     size_t ne, ny;
 } IS;
 
-static void line(IS *s, double x1, double y1, double x2, double y2, const char *cls) {
+static void line(IS s[static 1], double x1, double y1, double x2, double y2, const char cls[static 1]) {
     buf_lit(s->b, "<line class=\""); buf_cstr(s->b, cls);
     buf_lit(s->b, "\" x1=\""); buf_num(s->b, x1); buf_lit(s->b, "\" y1=\""); buf_num(s->b, y1);
     buf_lit(s->b, "\" x2=\""); buf_num(s->b, x2); buf_lit(s->b, "\" y2=\""); buf_num(s->b, y2);
@@ -45,13 +45,13 @@ static void line(IS *s, double x1, double y1, double x2, double y2, const char *
     bb_add(&s->bb, fmin(x1, x2), fmin(y1, y2), fmax(x1, x2), fmax(y1, y2));
 }
 
-static size_t count_desc(const IS *s, uint32_t v) {
+static size_t count_desc(const IS s[static 1], uint32_t v) {
     size_t t = 0;
     for (uint32_t k = 0; k < s->nd[v].nc; k++) t += 1 + count_desc(s, s->kids[s->nd[v].c0 + k]);
     return t;
 }
 
-static void walk(IS *s, uint32_t v, int32_t pid, uint32_t depth, int dir) {
+static void walk(IS s[static 1], uint32_t v, int32_t pid, uint32_t depth, int dir) {
     const INode *n = &s->nd[v];
     for (uint32_t q = 0; q < n->nc; q++) {
         uint32_t c = s->kids[n->c0 + (dir < 0 ? n->nc - 1 - q : q)];
@@ -66,7 +66,7 @@ static void walk(IS *s, uint32_t v, int32_t pid, uint32_t depth, int dir) {
 static double lerp(double a, double b, double t) { return a + (b - a) * t; }
 
 /* draws one cause and its sub-tree; returns leftmost text x */
-static double branch(IS *s, uint32_t v, double sx, double sy, int dir, double len) {
+static double branch(IS s[static 1], uint32_t v, double sx, double sy, int dir, double len) {
     const INode *n = &s->nd[v];
     double ll = len * (n->nc ? 1 : 0.2), dx = -s->cosA * ll, dy = s->sinA * ll * dir, ex = sx + dx, ey = sy + dy;
     line(s, sx, sy, ex, ey, "isp");
