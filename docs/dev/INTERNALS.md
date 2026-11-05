@@ -165,7 +165,7 @@ Main gains came from incremental network simplex (rank cycles 449k → 231k) and
 Build with `-DMMD_PROFILE` to get per-phase cycle counters. See bench/results_v13.txt and bench/prof13/.
 
 ## Toolchain
-- Builds use `-std=gnu2y` when the compiler accepts it (clang), else `gnu23` (gcc-14). Code must compile warning-free under both, so C2y-only syntax (`_Countof`, `if` declarations) is avoided; `countof` is a macro in `src/base.h`.
+- Builds use `-std=gnu2y -fms-extensions -Wno-microsoft-anon-tag` with clang 23 (default) and gcc-16 (`make both`). Code must compile warning-free under both.
 - Byte-identity gate: `bench/eq/cmp.sh build/mmd` must print `bad=0`.
-- Before writing a string helper, check `src/base.h` (`str_sub`/`str_from`/`str_span`, `str_split`, `str_cat`/`STR_CAT`, `buf_cstr`), `src/text.h` (`label_br_len`) and `src/dgraph.h`.
+- Before writing a string helper, check `src/base.h` (`str_sub`/`str_from`/`str_span`, `str_split`, `str_cat`/`STR_CAT`, `buf_cstr`), `src/text.h` (`label_br_len`) and `src/dgraph.h` (`dg_unquote`, `dg_css_ok`, `dg_arrowhead`). Literal config keys go through `dcfg_get_str(S("..."))`.
 - Resource release uses `[[gnu::cleanup]]` via `src/base.h`: `AUTOFREE` (free), `AUTO_BUF` (Buf), `AUTO_ARENA` (Arena), `AUTOCLOSE` (FILE). No hand-written frees or goto-cleanup; return ownership with `TAKE_PTR(p)` / `buf_take(&b)`. Never `goto` past a cleanup variable's declaration (clang errors, gcc silently skips it): declare them before the first jump.

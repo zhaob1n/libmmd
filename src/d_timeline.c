@@ -57,7 +57,6 @@ static void tl_node(Buf *out, double x, double y, double w, double h, Str t, siz
 }
 
 DIAG_FN(timeline_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;

@@ -67,9 +67,9 @@ static void wavy(Buf *b, double W, double H, int64_t seed, double amp, bool vert
 }
 
 static void text(Buf *b, const char *s, double x, double y, const char *cls, const char *base) {
-    buf_lit(b, "<text class=\""); buf_put(b, strlen(cls), cls); buf_lit(b, "\" x=\""); buf_num(b, x);
+    buf_lit(b, "<text class=\""); buf_cstr(b, cls); buf_lit(b, "\" x=\""); buf_num(b, x);
     buf_lit(b, "\" y=\""); buf_num(b, y); buf_lit(b, "\" text-anchor=\"middle\" dominant-baseline=\"");
-    buf_put(b, strlen(base), base); buf_lit(b, "\">");
+    buf_cstr(b, base); buf_lit(b, "\">");
     buf_xml(b, (Str){.p = s, .n = strlen(s)});
     buf_lit(b, "</text>");
 }
@@ -79,10 +79,8 @@ static int dom_of(Str w) {
     return -1;
 }
 
-static Str unq(Str s) { return dg_unquote(s, true); }
 
 DIAG_FN(cynefin_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str ln;
     size_t lo;
@@ -103,7 +101,7 @@ DIAG_FN(cynefin_render) {
             Str sb = str_trim((Str){.p = rest.p, .n = c ? (size_t)(c - rest.p) : rest.n});
             int da = dom_of(sa), db = dom_of(sb);
             if (da < 0 || db < 0) return diag_fail(err_off, msg, lo, "transition needs two domain names");
-            Str lab = c ? unq((Str){.p = c + 1, .n = rest.n - (size_t)(c + 1 - rest.p)}) : (Str){};
+            Str lab = c ? dg_unquote((Str){.p = c + 1, .n = rest.n - (size_t)(c + 1 - rest.p)}, true) : (Str){};
             if (da != db && !VEC_PUSH(a, &trs, ((CTr){(unsigned)da, (unsigned)db, lab}))) return MMD_ERR_NOMEM;
             continue;
         }
@@ -111,7 +109,7 @@ DIAG_FN(cynefin_render) {
         if (d >= 0) { cur = d; continue; }
         if (cur < 0) return diag_fail(err_off, msg, lo, "item outside a domain block");
         bool ok;
-        Str lab = label_normalize(a, unq(ln), &ok);
+        Str lab = label_normalize(a, dg_unquote(ln, true), &ok);
         if (!ok) return MMD_ERR_NOMEM;
         if (!VEC_PUSH(a, &items, ((CItem){(unsigned)cur, lab}))) return MMD_ERR_NOMEM;
     }
@@ -141,7 +139,7 @@ DIAG_FN(cynefin_render) {
     for (int d = 0; d < CF; d++) {
         buf_lit(&b, "<rect x=\""); buf_num(&b, L[d][2]); buf_lit(&b, "\" y=\""); buf_num(&b, L[d][3]);
         buf_lit(&b, "\" width=\""); buf_num(&b, hw); buf_lit(&b, "\" height=\""); buf_num(&b, hh);
-        buf_lit(&b, "\" fill=\""); buf_put(&b, strlen(bg[d]), bg[d]); buf_lit(&b, "\" fill-opacity=\"0.4\" stroke=\"none\"/>");
+        buf_lit(&b, "\" fill=\""); buf_cstr(&b, bg[d]); buf_lit(&b, "\" fill-opacity=\"0.4\" stroke=\"none\"/>");
     }
     wavy(&b, W, H, seed, amp, true);
     wavy(&b, W, H, seed + 100, amp, false);
@@ -154,7 +152,7 @@ DIAG_FN(cynefin_render) {
     double rx = W * 0.15, ry = H * 0.15;
     buf_lit(&b, "<path class=\"ccf\" d=\"M"); buf_pt(&b, cx - rx, hh); buf_lit(&b, " A"); buf_pt(&b, rx, ry);
     buf_lit(&b, " 0 1,1 "); buf_pt(&b, cx + rx, hh); buf_lit(&b, " A"); buf_pt(&b, rx, ry); buf_lit(&b, " 0 1,1 ");
-    buf_pt(&b, cx - rx, hh); buf_lit(&b, " Z\" fill=\""); buf_put(&b, strlen(bg[CF]), bg[CF]); buf_lit(&b, "\" fill-opacity=\"0.5\"/>");
+    buf_pt(&b, cx - rx, hh); buf_lit(&b, " Z\" fill=\""); buf_cstr(&b, bg[CF]); buf_lit(&b, "\" fill-opacity=\"0.5\"/>");
     for (int d = 0; d < CF; d++) text(&b, CAP[d], L[d][0], desc ? L[d][1] - 30 : L[d][1], "cdl", "middle");
     text(&b, CAP[CF], W / 2, desc ? H / 2 - 10 : H / 2, "cdl", "middle");
     if (desc) {
@@ -177,7 +175,7 @@ DIAG_FN(cynefin_render) {
             buf_lit(&b, "<rect class=\""); if (over) buf_lit(&b, "cio"); else buf_lit(&b, "cit");
             buf_lit(&b, "\" x=\""); buf_num(&b, x); buf_lit(&b, "\" y=\""); buf_num(&b, y);
             buf_lit(&b, "\" width=\""); buf_num(&b, bw); buf_lit(&b, "\" height=\"26\" rx=\"4\" ry=\"4\" fill=\"");
-            buf_put(&b, strlen(bg[d]), bg[d]); buf_lit(&b, "\"/>");
+            buf_cstr(&b, bg[d]); buf_lit(&b, "\"/>");
             dg_text(&b, lab, 12, x + bw / 2, y + 13, "middle", "citt");
             shown++;
         }

@@ -7,13 +7,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdcountof.h>
 #include <string.h>
 
-/* element count of a real array; a pointer argument is a compile error */
-#define countof(a)                                                                             \
-    (sizeof(a) / sizeof((a)[0]) +                                                              \
-     0 * sizeof(struct { static_assert(!__builtin_types_compatible_p(typeof(a), typeof(&(a)[0])), \
-                                       "countof on a pointer"); int x_; }))
 #define MMD_LIKELY(x) __builtin_expect(!!(x), 1)
 #define MMD_UNLIKELY(x) __builtin_expect(!!(x), 0)
 
@@ -213,7 +209,8 @@ static inline void buf_put_(Buf *b, size_t n, const char s[static n]) {
 #define buf_put(b, n, s) do { size_t n_ = (n); if (n_) buf_put_((b), n_, (s)); } while (0)
 static inline void buf_str(Buf *b, Str s) { if (s.n) buf_put(b, s.n, s.p); }
 static inline void buf_cstr(Buf *b, const char *s) { buf_put(b, strlen(s), s); }
-#define buf_lit(b, lit) buf_put((b), sizeof(lit) - 1, (lit))
+/* append a string literal; countof() rejects a pointer at compile time */
+#define buf_lit(b, lit) buf_put((b), countof(lit) - 1, (lit))
 static inline void buf_ch(Buf *b, char c) {
     if (!buf_reserve(b, 1)) return;
     b->p[b->n++] = c;

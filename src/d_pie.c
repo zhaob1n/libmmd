@@ -131,9 +131,9 @@ DIAG_FN(pie_render) {
         const char *col = dcfg_pal("pie", i % countof(COLORS) + 1, COLORS[i % countof(COLORS)]);
         if (frac >= 1 - 1e-12) {
             buf_lit(out, "<circle class=\"slice\" cx=\""); buf_num(out, CX); buf_lit(out, "\" cy=\""); buf_num(out, CY);
-            buf_lit(out, "\" r=\""); buf_num(out, R); buf_lit(out, "\" fill=\""); buf_put(out, strlen(col), col); buf_lit(out, "\"/>");
+            buf_lit(out, "\" r=\""); buf_num(out, R); buf_lit(out, "\" fill=\""); buf_cstr(out, col); buf_lit(out, "\"/>");
         } else if (frac > 0) {
-            buf_lit(out, "<path class=\"slice\" fill=\""); buf_put(out, strlen(col), col); buf_lit(out, "\" d=\"M");
+            buf_lit(out, "<path class=\"slice\" fill=\""); buf_cstr(out, col); buf_lit(out, "\" d=\"M");
             dg_pt(out, CX, CY); buf_ch(out, 'L'); dg_pt(out, CX + R * sin(ang), CY - R * cos(ang));
             buf_lit(out, "A"); buf_num(out, R); buf_ch(out, ','); buf_num(out, R);
             if (frac > 0.5) buf_lit(out, " 0 1 1 "); else buf_lit(out, " 0 0 1 ");
@@ -158,7 +158,7 @@ DIAG_FN(pie_render) {
     for (size_t i = 0; i < sl.n; i++, ly += 22) {
         const char *col = dcfg_pal("pie", i % countof(COLORS) + 1, COLORS[i % countof(COLORS)]);
         buf_lit(out, "<rect width=\"18\" height=\"18\" x=\""); buf_num(out, LEGX); buf_lit(out, "\" y=\"");
-        buf_num(out, ly); buf_lit(out, "\" fill=\""); buf_put(out, strlen(col), col); buf_lit(out, "\" stroke=\"#000\"/>");
+        buf_num(out, ly); buf_lit(out, "\" fill=\""); buf_cstr(out, col); buf_lit(out, "\" stroke=\"#000\"/>");
         Str lab = sl.v[i].label;
         if (show) {
             int len = snprintf(fill, sizeof fill, " [%g]", sl.v[i].v);

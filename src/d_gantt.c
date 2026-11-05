@@ -269,7 +269,6 @@ DIAG_FN(gantt_render) {
     VEC(Str) secs = {};
     VEC(Task) tv = {};
     VEC(Str) exraw = {};
-    (void)fs;
     while (dg_next_line(&it, &line, &lo)) {
         Str rest = line, w = dg_word(&rest);
         rest = str_trim(rest);

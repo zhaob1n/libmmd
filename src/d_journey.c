@@ -41,7 +41,6 @@ static void face(Buf *b, double cx, double cy, double score) {
 }
 
 DIAG_FN(journey_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;
@@ -119,7 +118,7 @@ DIAG_FN(journey_render) {
     for (size_t i = 0; i < actors.n; i++) {
         double y = 60 + (double)i * 20;
         buf_lit(out, "<circle class=\"adot\" r=\"7\" cx=\"20\" cy=\""); buf_num(out, y);
-        buf_lit(out, "\" fill=\""); buf_put(out, strlen(ACTCOL[i % countof(ACTCOL)]), ACTCOL[i % countof(ACTCOL)]);
+        buf_lit(out, "\" fill=\""); buf_cstr(out, ACTCOL[i % countof(ACTCOL)]);
         buf_lit(out, "\"/>");
         dg_text(out, actors.v[i], 14, 40, y, "start", "tx");
     }
@@ -147,7 +146,7 @@ DIAG_FN(journey_render) {
             uint32_t ai = refs.v[t->a0 + k];
             buf_lit(out, "<circle class=\"adot\" r=\"7\" cx=\""); buf_num(out, x + 14 + k * 10);
             buf_lit(out, "\" cy=\""); buf_num(out, TY); buf_lit(out, "\" fill=\"");
-            buf_put(out, strlen(ACTCOL[ai % countof(ACTCOL)]), ACTCOL[ai % countof(ACTCOL)]);
+            buf_cstr(out, ACTCOL[ai % countof(ACTCOL)]);
             buf_lit(out, "\"/>");
         }
     }

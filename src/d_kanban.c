@@ -17,7 +17,6 @@ static constexpr char CSS[] =
     "#mermaid .km{font-size:12px;fill:#666;}#mermaid .kp{stroke-width:4px;}";
 static constexpr char COLF[][8] = {"#ECECFF", "#ffffde", "#e8f4ea", "#fde8e8", "#e8f0fd", "#f8e8fd"};
 
-static Str unq(Str s) { return dg_unquote(s, true); }
 /* `id[label]`, `[label]`, `id(label)` or text; returns label, strips/parses @{..} into *meta */
 static Str node_label(Str s, Str *meta) {
     *meta = (Str){};
@@ -35,14 +34,13 @@ static Str node_label(Str s, Str *meta) {
             while (k < s.n && (s.p[k] == '[' || s.p[k] == '(' || s.p[k] == '{')) k++;
             size_t e = s.n;
             while (e > k && (s.p[e - 1] == ']' || s.p[e - 1] == ')' || s.p[e - 1] == '}')) e--;
-            return unq((Str){.p = s.p + k, .n = e - k});
+            return dg_unquote((Str){.p = s.p + k, .n = e - k}, true);
         }
     }
-    return unq(s);
+    return dg_unquote(s, true);
 }
 
 DIAG_FN(kanban_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;
@@ -69,7 +67,7 @@ DIAG_FN(kanban_render) {
             m = cm ? (Str){.p = cm + 1, .n = m.n - L - 1} : (Str){};
             const char *col = memchr(kv.p, ':', kv.n);
             if (!col) continue;
-            Str key = str_trim((Str){.p = kv.p, .n = (size_t)(col - kv.p)}), val = unq((Str){.p = col + 1, .n = kv.n - (size_t)(col + 1 - kv.p)});
+            Str key = str_trim((Str){.p = kv.p, .n = (size_t)(col - kv.p)}), val = dg_unquote((Str){.p = col + 1, .n = kv.n - (size_t)(col + 1 - kv.p)}, true);
             if (str_eq(key, S("assigned"))) k.assigned = val;
             else if (str_eq(key, S("ticket"))) k.ticket = val;
             else if (str_eq(key, S("priority"))) k.priority = val;
@@ -112,7 +110,7 @@ DIAG_FN(kanban_render) {
         dg_rect_fill(out, x, top, CW, ch[c] + 5, 5, "kc", fill); /* mermaid sizes each column to its cards */
         Str t = dg_wrap(a, cols.v[c], 16, CW - 20);
         const char *lc = dcfg_pal("cScaleLabel", ci, "");
-        if (*lc) { buf_lit(out, "<g font-size=\"16px\" fill=\""); buf_put(out, strlen(lc), lc); buf_lit(out, "\">"); }
+        if (*lc) { buf_lit(out, "<g font-size=\"16px\" fill=\""); buf_cstr(out, lc); buf_lit(out, "\">"); }
         dg_text(out, t.p ? t : cols.v[c], 16, x + CW / 2, top + 13, "middle", *lc ? nullptr : "kt");
         if (*lc) buf_lit(out, "</g>");
         cy[c] = top + 28;
@@ -127,7 +125,7 @@ DIAG_FN(kanban_render) {
         else if (str_eq(k->priority, S("Low"))) pc = "blue";
         else if (str_eq(k->priority, S("Very Low"))) pc = "lightblue";
         if (pc) {
-            buf_lit(out, "<line class=\"kp\" stroke=\""); buf_put(out, strlen(pc), pc); buf_lit(out, "\" x1=\"");
+            buf_lit(out, "<line class=\"kp\" stroke=\""); buf_cstr(out, pc); buf_lit(out, "\" x1=\"");
             buf_num(out, x + 2); buf_lit(out, "\" y1=\""); buf_num(out, y + 3); buf_lit(out, "\" x2=\""); buf_num(out, x + 2);
             buf_lit(out, "\" y2=\""); buf_num(out, y + k->h - 3); buf_lit(out, "\"/>");
         }

@@ -30,6 +30,8 @@ constexpr BBox BB_EMPTY = {.x0 = 1e300, .y0 = 1e300, .x1 = -1e300, .y1 = -1e300}
 /* bbox of laid-out nodes, edge points, edge labels and clusters */
 [[nodiscard]] BBox dg_bbox(const Graph *g);
 void dg_pt(Buf *b, double x, double y);
+/* filled 10-long arrowhead at tip, pointing away from from; half = half the base width */
+void dg_arrowhead(Buf *b, const char *cls, const double tip[static 2], const double from[static 2], double half);
 /* d3 curveBasis through n points */
 void dg_basis(Buf *b, size_t n, const double P[static 2 * n]);
 /* path data for edge e (basis curve, or a loop for self edges) */

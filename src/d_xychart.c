@@ -18,7 +18,6 @@ static constexpr char PAL[][8] = {"#ECECFF", "#8493A6", "#FFC3A0", "#DCDDE1", "#
                                   "#D1A36F", "#C3CDE6", "#FFB6C1", "#496078", "#F8F3E3"};
 static constexpr char LINEPAL[][8] = {"#8493A6", "#FF7F50", "#3c9a3c", "#7b52ab", "#c0392b"};
 
-static Str unq(Str s) { return dg_unquote(s, false); }
 /* optional leading quoted or bare title, then rest */
 static Str take_title(Str *s) {
     Str t = str_trim(*s);
@@ -68,7 +67,7 @@ typedef VEC(Str) StrVec;
             i = (size_t)(q - s.p) + 1;
         }
         while (i < s.n && s.p[i] != ',') i++;
-        Str it = unq((Str){.p = s.p + st, .n = i - st});
+        Str it = dg_unquote((Str){.p = s.p + st, .n = i - st}, false);
         if (it.n || i < s.n) if (!VEC_PUSH(a, v, it)) { *oom = true; return false; }
         i++;
     }
@@ -84,7 +83,6 @@ static size_t fmt_num(double v, size_t cap, char b[static cap]) {
 }
 
 DIAG_FN(xychart_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;
@@ -104,7 +102,7 @@ DIAG_FN(xychart_render) {
     bool xr = false, yr = false, oom = false;
     while (dg_next_line(&it, &line, &lo)) {
         Str rest = line, w = dg_word(&rest);
-        if (str_eq(w, S("title"))) { title = unq(rest); continue; }
+        if (str_eq(w, S("title"))) { title = dg_unquote(rest, false); continue; }
         if (str_starts(w, S("acc"))) continue;
         if (str_eq(w, S("x-axis")) || str_eq(w, S("y-axis"))) {
             bool isx = w.p[0] == 'x';
@@ -202,7 +200,7 @@ DIAG_FN(xychart_render) {
     for (size_t s = 0; s < ser.n; s++) {
         if (!ser.v[s].line) continue;
         const char *col = ser.v[s].col = dcfg_list("xyChart.plotColorPalette", s, LINEPAL[li++ % countof(LINEPAL)]);
-        buf_lit(out, "<path class=\"ln\" stroke=\""); buf_put(out, strlen(col), col); buf_lit(out, "\" d=\"");
+        buf_lit(out, "<path class=\"ln\" stroke=\""); buf_cstr(out, col); buf_lit(out, "\" d=\"");
         for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
             double v = vals.v[ser.v[s].v0 + k];
             buf_ch(out, k ? 'L' : 'M');
@@ -215,7 +213,7 @@ DIAG_FN(xychart_render) {
             Str l = labs.v[ser.v[s].v0 + k];
             if (!l.n) continue;
             double p = VPOS(vals.v[ser.v[s].v0 + k]), c = CPOS(k);
-            buf_lit(out, "<g font-size=\"12\" fill=\""); buf_put(out, strlen(ser.v[s].col), ser.v[s].col); buf_lit(out, "\">");
+            buf_lit(out, "<g font-size=\"12\" fill=\""); buf_cstr(out, ser.v[s].col); buf_lit(out, "\">");
             if (horiz) dg_text(out, l, 12, p + 6, c, "start", nullptr);
             else dg_text(out, l, 12, c, p - 10, "middle", nullptr);
             buf_lit(out, "</g>");
@@ -244,7 +242,7 @@ DIAG_FN(xychart_render) {
         double ly = oy + 10;
         for (size_t s = 0; s < ser.n; s++) {
             if (!ser.v[s].name.n) continue;
-            if (ser.v[s].line) { buf_lit(out, "<path class=\"ln\" stroke=\""); buf_put(out, strlen(ser.v[s].col), ser.v[s].col);
+            if (ser.v[s].line) { buf_lit(out, "<path class=\"ln\" stroke=\""); buf_cstr(out, ser.v[s].col);
                 buf_lit(out, "\" d=\"M"); dg_pt(out, ox + pw + 20, ly); buf_ch(out, 'L'); dg_pt(out, ox + pw + 36, ly); buf_lit(out, "\"/>"); }
             else dg_rect_fill(out, ox + pw + 22, ly - 6, 12, 12, 0, "lg", ser.v[s].col);
             dg_text(out, ser.v[s].name, 14, ox + pw + 42, ly, "start", "tl");

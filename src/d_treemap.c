@@ -125,16 +125,14 @@ static void put_c(Buf *out, const char *pfx, size_t i) {
     for (size_t k = 0; k < countof(TMI); k++) if (TMI[k] == i) def = tab[k];
     if (lab) def = i == 0 || i == 3 ? "#fff" : "#000"; /* default theme: cScaleLabel0/3 = invert(labelTextColor) */
     const char *c = dcfg_pal(pfx, i, def);
-    buf_put(out, strlen(c), c);
+    buf_cstr(out, c);
 }
-static Str unq(Str s) { return dg_unquote(s, true); }
 static void fmt_val(double v, size_t cap, char b[static cap], size_t *len) {
     int k = fabs(v - round(v)) < 1e-9 ? snprintf(b, cap, "%.0f", v) : snprintf(b, cap, "%.2f", v);
     *len = k < 0 ? 0 : (size_t)k < cap ? (size_t)k : cap - 1;
 }
 
 DIAG_FN(treemap_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;
@@ -183,7 +181,7 @@ DIAG_FN(treemap_render) {
             else if (r.n) return diag_fail(err_off, msg, (size_t)(r.p - src), "expected ':' value");
         } else {
             for (size_t i = s.n; i-- > 0;) if (s.p[i] == ':') { ce = i; break; }
-            t.label = unq((Str){.p = s.p, .n = ce == SIZE_MAX ? s.n : ce});
+            t.label = dg_unquote((Str){.p = s.p, .n = ce == SIZE_MAX ? s.n : ce}, true);
         }
         if (ce != SIZE_MAX) {
             Str vs = str_trim((Str){.p = s.p + ce + 1, .n = s.n - ce - 1});
@@ -251,7 +249,7 @@ DIAG_FN(treemap_render) {
     if (!(bb.x1 > bb.x0)) bb = (BBox){0, 0, W, H + top};
     if (!buf_reserve(out, 2048 + v.n * 600)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, dcfg_num("treemap.diagramPadding", 8), "treemap", CSS);
-    bool showv = !str_eq(dcfg_get("treemap.showValues"), S("false"));
+    bool showv = !str_eq(dcfg_get_str(S("treemap.showValues")), S("false"));
     char nb_[40];
     size_t nl;
     for (size_t k = 1; k < nb; k++) { /* sections */

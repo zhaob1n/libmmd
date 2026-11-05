@@ -55,7 +55,7 @@ static constexpr char TV_STROKE[][33] = {"themeVariables.emUiStroke", "themeVari
     "themeVariables.emReadModelStroke", "themeVariables.emCommandStroke", "themeVariables.emEventStroke"};
 
 static void put_col(Buf *b, Str v, const char *def) {
-    if (dg_css_ok(v)) buf_xml(b, v); else buf_put(b, strlen(def), def);
+    if (dg_css_ok(v)) buf_xml(b, v); else buf_cstr(b, def);
 }
 
 /* does segment (x0,y0)-(x1,y1) pass through a box other than frames a and b? (Liang-Barsky clip) */
@@ -97,7 +97,6 @@ static unsigned code_lines(Str d, double maxw, double *wout) {
 }
 
 DIAG_FN(eventmodeling_render) {
-    (void)fs, (void)title;
     LineIt it = {.s = src, .n = n, .i = off};
     Str ln;
     size_t lo;
@@ -268,8 +267,8 @@ DIAG_FN(eventmodeling_render) {
         const Lane *L = &ln_.v[ord[k]];
         buf_lit(&b, "<g class=\"em-swimlane\"><rect x=\"0\" y=\""); buf_num(&b, L->y);
         buf_lit(&b, "\" rx=\"3\" width=\""); buf_num(&b, maxr + LANE_PAD); buf_lit(&b, "\" height=\""); buf_num(&b, L->h);
-        buf_lit(&b, "\" fill=\""); put_col(&b, dcfg_get("themeVariables.emSwimlaneBackgroundOdd"), "rgb(250,250,250)");
-        buf_lit(&b, "\" stroke=\""); put_col(&b, dcfg_get("themeVariables.emSwimlaneBackgroundStroke"), "rgb(240,240,240)");
+        buf_lit(&b, "\" fill=\""); put_col(&b, dcfg_get_str(S("themeVariables.emSwimlaneBackgroundOdd")), "rgb(250,250,250)");
+        buf_lit(&b, "\" stroke=\""); put_col(&b, dcfg_get_str(S("themeVariables.emSwimlaneBackgroundStroke")), "rgb(240,240,240)");
         buf_lit(&b, "\"/><text font-weight=\"bold\" class=\"em-lane\" x=\"30\" y=\""); buf_num(&b, L->y + 30);
         buf_lit(&b, "\">"); buf_xml(&b, L->label); buf_lit(&b, "</text></g>");
         bb_add(&bb, 0, L->y, maxr + LANE_PAD, L->y + L->h);
@@ -319,7 +318,7 @@ DIAG_FN(eventmodeling_render) {
         buf_lit(&b, "</g>");
     }
     /* relations */
-    Str rs = dcfg_get("themeVariables.emRelationStroke");
+    Str rs = dcfg_get_str(S("themeVariables.emRelationStroke"));
     for (size_t i = 0; i < fr.n; i++) {
         const Frame *t = &fr.v[i];
         int srcs[EM_MAXREF];
@@ -369,7 +368,7 @@ DIAG_FN(eventmodeling_render) {
         }
     }
     buf_lit(&b, "<defs><marker id=\"em-arrowhead\" markerWidth=\"10\" markerHeight=\"7\" refX=\"10\" refY=\"3.5\" orient=\"auto\"><polygon points=\"0 0, 10 3.5, 0 7\" fill=\"");
-    put_col(&b, dcfg_get("themeVariables.emArrowhead"), "#333333");
+    put_col(&b, dcfg_get_str(S("themeVariables.emArrowhead")), "#333333");
     buf_lit(&b, "\"/></marker></defs>");
     double pad = dcfg_num("eventmodeling.padding", 30);
     if (!(pad >= 0 && pad < 1000)) pad = 30;

@@ -3,10 +3,7 @@ ifeq ($(origin CC),default)
 CC := $(HOME)/.local/bin/clang
 endif
 IS_CLANG := $(shell $(CC) --version 2>/dev/null | grep -qi clang && echo 1)
-WARN := -Wall -Wextra
-ifeq ($(IS_CLANG),1)
-WARN += -Wno-microsoft-anon-tag
-endif
+WARN := -Wall -Wextra -Wno-microsoft-anon-tag
 # Opt-in tuning: make MARCH=native, make LTO=1, make pgo (two-stage profile-guided build)
 OPT ?= -O2
 MARCH ?=
@@ -45,9 +42,7 @@ else
 CFLAGS += -fprofile-use=$(PGO_USE) -fprofile-correction -Wno-missing-profile
 endif
 endif
-# gnu2y where the compiler knows it (clang, gcc >= 15); gcc-14 stops at gnu23.
-STD := $(or $(STD),$(shell $(CC) -std=gnu2y -E -x c /dev/null >/dev/null 2>&1 && echo gnu2y || echo gnu23))
-CFLAGS += -std=$(STD) -fms-extensions -fPIC -fvisibility=hidden $(WARN) -Iinclude -Isrc
+CFLAGS += -std=gnu2y -fms-extensions -fPIC -fvisibility=hidden $(WARN) -Iinclude -Isrc
 LDLIBS = -lm
 BUILD ?= build
 DIAG_SRCS := $(wildcard src/d_*.c)
@@ -104,7 +99,7 @@ test: all $(BUILD)/test-shared
 
 both:
 	$(MAKE) CC=$(HOME)/.local/bin/clang BUILD=build
-	$(MAKE) CC=gcc-14 BUILD=build-gcc
+	$(MAKE) CC=gcc-16 BUILD=build-gcc
 
 asan:
 	$(MAKE) BUILD=build-asan OPT="-O1 -fsanitize=address,undefined -fno-omit-frame-pointer" LDLIBS="-lm -fsanitize=address,undefined"

@@ -42,7 +42,6 @@ static void id_label(Str *s, Str *id, Str *label) {
 static double axis_angle(size_t k, size_t na) { return 2 * M_PI * (double)k / (double)na - M_PI / 2; }
 
 DIAG_FN(radar_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;
@@ -156,8 +155,8 @@ DIAG_FN(radar_render) {
             double v = vals.v[cv.v[c].v0 + k], r = R * fmin(fmax((v - vmin) / (vmax - vmin), 0), 1);
             P[2 * k] = CX + r * cos(axis_angle(k, na)), P[2 * k + 1] = cy + r * sin(axis_angle(k, na));
         }
-        buf_lit(out, "<path class=\"cv\" fill=\""); buf_put(out, strlen(col), col); buf_lit(out, "\" stroke=\"");
-        buf_put(out, strlen(col), col); buf_lit(out, "\" d=\"M");
+        buf_lit(out, "<path class=\"cv\" fill=\""); buf_cstr(out, col); buf_lit(out, "\" stroke=\"");
+        buf_cstr(out, col); buf_lit(out, "\" d=\"M");
         dg_pt(out, P[0], P[1]);
         for (size_t k = 0; k < m; k++) { /* closed cardinal spline, tension 0.17 */
             size_t i0 = (k + m - 1) % m, i1 = k, i2 = (k + 1) % m, i3 = (k + 2) % m;

@@ -41,17 +41,12 @@ static bool next_arg(Str in, size_t *i, Str *out) {
     return true;
 }
 
-static Str unq(Str s) {
-    s = str_trim(s);
-    if (s.n >= 2 && s.p[0] == '"' && s.p[s.n - 1] == '"') s = (Str){.p = s.p + 1, .n = s.n - 2};
-    return s;
-}
 
 /* split `( a, "b, c", d )`; positional only, $named skipped */
 static size_t args(Str in, size_t max, Str out[static max]) {
     size_t k = 0, i = 0;
     for (Str a; next_arg(in, &i, &a);)
-        if (!(a.n && a.p[0] == '$') && k < max) out[k++] = unq(a);
+        if (!(a.n && a.p[0] == '$') && k < max) out[k++] = dg_unquote(a, false);
     return k;
 }
 
@@ -61,7 +56,7 @@ static Str named(Str in, Str key) {
     for (Str a; next_arg(in, &i, &a);) {
         if (a.n > key.n + 1 && a.p[0] == '$' && !memcmp(a.p + 1, key.p, key.n)) {
             Str r = str_trim((Str){.p = a.p + 1 + key.n, .n = a.n - 1 - key.n});
-            if (r.n && r.p[0] == '=') return unq((Str){.p = r.p + 1, .n = r.n - 1});
+            if (r.n && r.p[0] == '=') return dg_unquote((Str){.p = r.p + 1, .n = r.n - 1}, false);
         }
     }
     return (Str){};
@@ -202,14 +197,6 @@ static void lay(Lay *L, Bnd *P, int32_t parent, unsigned depth) {
     }
 }
 
-static void arrowhead(Buf *b, const double *A, const double *B) { /* tip at A, coming from B */
-    double dx = A[0] - B[0], dy = A[1] - B[1], L = sqrt(dx * dx + dy * dy);
-    if (L < 1e-9) return;
-    dx /= L, dy /= L;
-    buf_lit(b, "<path class=\"crh\" d=\"M"); buf_pt(b, A[0], A[1]); buf_ch(b, 'L');
-    buf_pt(b, A[0] - dx * 10 - dy * 4, A[1] - dy * 10 + dx * 4); buf_ch(b, 'L');
-    buf_pt(b, A[0] - dx * 10 + dy * 4, A[1] - dy * 10 - dx * 4); buf_lit(b, "z\"/>");
-}
 
 constexpr double C4_NF = 14;     /* c4 element name */
 constexpr double C4_TF = 10.5;   /* [type] 0.75em */
@@ -637,8 +624,8 @@ DIAG_FN(c4_render) {
         buf_lit(out, " d=\"M"); buf_pt(out, P[0], P[1]);
         if (bent) { buf_ch(out, 'Q'); buf_pt(out, Q0[0], Q0[1]); buf_ch(out, ' '); } else buf_ch(out, 'L');
         buf_pt(out, P[2], P[3]); buf_lit(out, "\"/>");
-        arrowhead(out, P + 2, bent ? Q0 : P);
-        if (cr.v[e].bi) arrowhead(out, P, bent ? Q0 : P + 2);
+        dg_arrowhead(out, "crh", P + 2, bent ? Q0 : P, 4);
+        if (cr.v[e].bi) dg_arrowhead(out, "crh", P, bent ? Q0 : P + 2, 4);
         if (lc) buf_lit(out, "</g>");
     }
     for (size_t v = 0; v < g.nn; v++) {

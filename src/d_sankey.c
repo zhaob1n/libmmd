@@ -50,7 +50,6 @@ static constexpr char PAL[][8] = {"#4e79a7", "#f28e2c", "#e15759", "#76b7b2", "#
 }
 
 DIAG_FN(sankey_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;
@@ -267,7 +266,7 @@ DIAG_FN(sankey_render) {
         const SLink *l = &L[i];
         double x0 = N[l->s].x + NW, x1 = N[l->t].x, xm = (x0 + x1) / 2;
         const char *col = PAL[l->s % countof(PAL)];
-        buf_lit(out, "<path class=\"sl\" stroke=\""); buf_put(out, strlen(col), col);
+        buf_lit(out, "<path class=\"sl\" stroke=\""); buf_cstr(out, col);
         buf_lit(out, "\" stroke-width=\""); buf_num(out, fmax(1, l->v * ky)); buf_lit(out, "\" d=\"M");
         dg_pt(out, x0, l->y0); buf_ch(out, 'C'); dg_pt(out, xm, l->y0); buf_ch(out, ' '); dg_pt(out, xm, l->y1);
         buf_ch(out, ' '); dg_pt(out, x1, l->y1); buf_lit(out, "\"/>");

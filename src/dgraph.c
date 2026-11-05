@@ -150,6 +150,14 @@ BBox dg_bbox(const Graph *g) {
 }
 
 void dg_pt(Buf *b, double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
+void dg_arrowhead(Buf *b, const char *cls, const double tip[static 2], const double from[static 2], double half) {
+    double dx = tip[0] - from[0], dy = tip[1] - from[1], L = sqrt(dx * dx + dy * dy);
+    if (L < 1e-9) return;
+    dx /= L, dy /= L;
+    buf_lit(b, "<path class=\""); buf_cstr(b, cls); buf_lit(b, "\" d=\"M"); buf_pt(b, tip[0], tip[1]); buf_ch(b, 'L');
+    buf_pt(b, tip[0] - dx * 10 - dy * half, tip[1] - dy * 10 + dx * half); buf_ch(b, 'L');
+    buf_pt(b, tip[0] - dx * 10 + dy * half, tip[1] - dy * 10 - dx * half); buf_lit(b, "z\"/>");
+}
 
 void dg_basis(Buf *b, size_t n, const double P[static 2 * n]) {
     double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
@@ -208,9 +216,9 @@ void dg_text_lh(Buf *b, Str s, double lh, double x, double cy, const char *ancho
     pos = 0;
     while (label_next_line(s, &pos, &ln)) {
         buf_lit(b, "<text");
-        if (cls) { buf_lit(b, " class=\""); buf_put(b, strlen(cls), cls); buf_ch(b, '"'); }
+        if (cls) { buf_lit(b, " class=\""); buf_cstr(b, cls); buf_ch(b, '"'); }
         buf_lit(b, " x=\""); buf_num(b, x); buf_lit(b, "\" y=\""); buf_num(b, y);
-        buf_lit(b, "\" text-anchor=\""); buf_put(b, strlen(anchor), anchor);
+        buf_lit(b, "\" text-anchor=\""); buf_cstr(b, anchor);
         buf_lit(b, "\" dominant-baseline=\"central\">");
         if (rich_needed(ln)) { bool bo = false, it = false; rich_emit_line(b, ln, &bo, &it); }
         else buf_xml(b, ln);
@@ -240,7 +248,7 @@ void dg_head(Buf *b, BBox bb, double m, const char *kind, size_t ncss, const cha
 
 void dg_rect(Buf *b, double x, double y, double w, double h, double rx, const char *cls) {
     buf_lit(b, "<rect");
-    if (cls) { buf_lit(b, " class=\""); buf_put(b, strlen(cls), cls); buf_ch(b, '"'); }
+    if (cls) { buf_lit(b, " class=\""); buf_cstr(b, cls); buf_ch(b, '"'); }
     buf_lit(b, " x=\""); buf_num(b, x); buf_lit(b, "\" y=\""); buf_num(b, y);
     buf_lit(b, "\" width=\""); buf_num(b, w); buf_lit(b, "\" height=\""); buf_num(b, h);
     if (rx > 0) { buf_lit(b, "\" rx=\""); buf_num(b, rx); }
@@ -249,7 +257,7 @@ void dg_rect(Buf *b, double x, double y, double w, double h, double rx, const ch
 
 void dg_line(Buf *b, double x1, double y1, double x2, double y2, const char *cls) {
     buf_lit(b, "<line");
-    if (cls) { buf_lit(b, " class=\""); buf_put(b, strlen(cls), cls); buf_ch(b, '"'); }
+    if (cls) { buf_lit(b, " class=\""); buf_cstr(b, cls); buf_ch(b, '"'); }
     buf_lit(b, " x1=\""); buf_num(b, x1); buf_lit(b, "\" y1=\""); buf_num(b, y1);
     buf_lit(b, "\" x2=\""); buf_num(b, x2); buf_lit(b, "\" y2=\""); buf_num(b, y2); buf_lit(b, "\"/>");
 }
@@ -330,18 +338,18 @@ bool dg_parse_num(Str s, double *out) {
 
 void dg_text_open(Buf *b, double x, double cy, const char *anchor, const char *cls) {
     buf_lit(b, "<text");
-    if (cls) { buf_lit(b, " class=\""); buf_put(b, strlen(cls), cls); buf_ch(b, '"'); }
+    if (cls) { buf_lit(b, " class=\""); buf_cstr(b, cls); buf_ch(b, '"'); }
     buf_lit(b, " x=\""); buf_num(b, x); buf_lit(b, "\" y=\""); buf_num(b, cy);
-    buf_lit(b, "\" text-anchor=\""); buf_put(b, strlen(anchor), anchor);
+    buf_lit(b, "\" text-anchor=\""); buf_cstr(b, anchor);
     buf_lit(b, "\" dominant-baseline=\"central\">");
 }
 void dg_rect_fill(Buf *b, double x, double y, double w, double h, double rx, const char *cls, const char *fill) {
     buf_lit(b, "<rect");
-    if (cls) { buf_lit(b, " class=\""); buf_put(b, strlen(cls), cls); buf_ch(b, '"'); }
+    if (cls) { buf_lit(b, " class=\""); buf_cstr(b, cls); buf_ch(b, '"'); }
     buf_lit(b, " x=\""); buf_num(b, x); buf_lit(b, "\" y=\""); buf_num(b, y);
     buf_lit(b, "\" width=\""); buf_num(b, w < 0 ? 0 : w); buf_lit(b, "\" height=\""); buf_num(b, h < 0 ? 0 : h);
     if (rx > 0) { buf_lit(b, "\" rx=\""); buf_num(b, rx); }
-    if (fill) { buf_lit(b, "\" fill=\""); buf_put(b, strlen(fill), fill); }
+    if (fill) { buf_lit(b, "\" fill=\""); buf_cstr(b, fill); }
     buf_lit(b, "\"/>");
 }
 const char *dg_palette(size_t i) {
@@ -406,9 +414,9 @@ unsigned dg_tspans(Buf *b, BBox *bb, Str s, double fs, double lh, double x, doub
     }
     if (centre) y -= (k - 1) * lh / 2;
     buf_lit(b, "<text");
-    if (cls) { buf_lit(b, " class=\""); buf_put(b, strlen(cls), cls); buf_ch(b, '"'); }
+    if (cls) { buf_lit(b, " class=\""); buf_cstr(b, cls); buf_ch(b, '"'); }
     buf_lit(b, " x=\""); buf_num(b, x); buf_lit(b, "\" y=\""); buf_num(b, y);
-    buf_lit(b, "\" text-anchor=\""); buf_put(b, strlen(anchor), anchor); buf_ch(b, '"');
+    buf_lit(b, "\" text-anchor=\""); buf_cstr(b, anchor); buf_ch(b, '"');
     if (base == TB_MIDDLE) buf_lit(b, " dominant-baseline=\"central\"");
     else if (base == TB_HANG) buf_lit(b, " dominant-baseline=\"hanging\"");
     buf_ch(b, '>');

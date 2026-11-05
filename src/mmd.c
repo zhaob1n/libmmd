@@ -180,16 +180,16 @@ static mmd_status render(Arena *ap, Buf *bp, size_t n, const char *src, const mm
         /* config: flowchart.nodeSpacing / rankSpacing (init or frontmatter; API options win), cycleRemoval */
         if (!(opt && opt->node_spacing > 0)) g.node_sep = dcfg_num("flowchart.nodeSpacing", g.node_sep);
         if (!(opt && opt->rank_spacing > 0)) g.rank_sep = dcfg_num("flowchart.rankSpacing", g.rank_sep);
-        Str cr = dcfg_get("flowchart.cycleRemoval");
+        Str cr = dcfg_get_str(S("flowchart.cycleRemoval"));
         g.acyclicer = str_eq(cr, S("dfs")) ? MMD_ACYC_DFS : str_eq(cr, S("greedy")) ? MMD_ACYC_GREEDY : MMD_ACYC_AUTO;
         if (g.flags & MMD_F_FAS_DFS) g.acyclicer = MMD_ACYC_DFS;
         if (g.flags & MMD_F_FAS_GREEDY) g.acyclicer = MMD_ACYC_GREEDY;
-        Str om = dcfg_get("flowchart.order");
+        Str om = dcfg_get_str(S("flowchart.order"));
         g.order_mode = str_eq(om, S("dagre")) ? MMD_ORDER_DAGRE : str_eq(om, S("fast")) ? MMD_ORDER_FAST : MMD_ORDER_AUTO;
         const char *oe = getenv("MMD_ORDER");
         if (oe && *oe == 'd') g.order_mode = MMD_ORDER_DAGRE;
         if (oe && *oe == 'f') g.order_mode = MMD_ORDER_FAST;
-        Str cv = dcfg_get("flowchart.curve");
+        Str cv = dcfg_get_str(S("flowchart.curve"));
         g.curve = flow_curve_kind(cv);
         PMARK("setup");
         if ((st = flow_parse(&g, n, src, off, &eoff, msg))) goto fail;
