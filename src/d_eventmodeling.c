@@ -47,11 +47,11 @@ static int kind_of(Str t) {
 }
 static int group_of(int k) { return k <= 1 ? 0 : k <= 3 ? 1 : 2; }
 
-static const char *const FILL[] = {"white", "#edb3f6", "#d3f1a2", "#bcd6fe", "#ffb778"};
-static const char *const STROKE[] = {"#dbdada", "#b88cbf", "#a3b732", "#679ac3", "#c19a0f"};
-static const char *const TV_FILL[] = {"themeVariables.emUiFill", "themeVariables.emProcessorFill",
+static constexpr char FILL[][8] = {"white", "#edb3f6", "#d3f1a2", "#bcd6fe", "#ffb778"};
+static constexpr char STROKE[][8] = {"#dbdada", "#b88cbf", "#a3b732", "#679ac3", "#c19a0f"};
+static constexpr char TV_FILL[][31] = {"themeVariables.emUiFill", "themeVariables.emProcessorFill",
     "themeVariables.emReadModelFill", "themeVariables.emCommandFill", "themeVariables.emEventFill"};
-static const char *const TV_STROKE[] = {"themeVariables.emUiStroke", "themeVariables.emProcessorStroke",
+static constexpr char TV_STROKE[][33] = {"themeVariables.emUiStroke", "themeVariables.emProcessorStroke",
     "themeVariables.emReadModelStroke", "themeVariables.emCommandStroke", "themeVariables.emEventStroke"};
 
 static void put_col(Buf *b, Str v, const char *def) {
@@ -200,8 +200,8 @@ DIAG_FN(eventmodeling_render) {
             ns = (Str){.p = f->ent.p, .n = (size_t)(dot - f->ent.p)}, nm = (Str){.p = dot + 1, .n = f->ent.n - ns.n - 1};
         f->ent = nm;
         int grp = group_of(f->kind), idx = grp * 100;
-        static const char *const LBL[] = {"UI/Automation", "Command/Read Model", "Events"};
-        static const char *const PFX[] = {"UI/A: ", "C/RM: ", "Stream: "};
+        static constexpr char LBL[][19] = {"UI/Automation", "Command/Read Model", "Events"};
+        static constexpr char PFX[][9] = {"UI/A: ", "C/RM: ", "Stream: "};
         Str label = {.p = LBL[grp], .n = strlen(LBL[grp])};
         int found = -1;
         if (ns.n) for (size_t k = 0; k < ln_.n; k++) if (str_eq(ln_.v[k].ns, ns)) { found = (int)k; break; }

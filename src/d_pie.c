@@ -14,7 +14,7 @@ static constexpr char CSS[] =
     "#mermaid .outer{fill:none;stroke:#000;stroke-width:2px;}"
     "#mermaid .pct{font-size:17px;}#mermaid .ttl{font-size:25px;}";
 /* mermaid default theme pie1..pie12 (hsl adjustments of primary/secondary/tertiary) */
-static const char *const COLORS[] = {"#ececff", "#ffffde", "#b5ff20", "#b9b9ff", "#ffff45", "#d7ff86", "#ff86ff", "#20ffff", "#ff2020", "#ff20ff", "#20ff8f", "#ff5353"};
+static constexpr char COLORS[][8] = {"#ececff", "#ffffde", "#b5ff20", "#b9b9ff", "#ffff45", "#d7ff86", "#ff86ff", "#20ffff", "#ff2020", "#ff20ff", "#20ff8f", "#ff5353"};
 
 DIAG_FN(pie_render) {
     LineIt it = {.s = src, .n = n, .i = off};

@@ -23,8 +23,8 @@ static constexpr char CSS[] =
     "#mermaid .tbox{stroke:#666;stroke-width:1px;}#mermaid .axis{stroke:#000;stroke-width:4px;}"
     "#mermaid .ttl{font-size:20px;font-weight:bold;}#mermaid .tx{font-size:14px;}"
     "#mermaid .adot{stroke:#000;stroke-width:1px;}";
-static const char *const SECCOL[] = {"#ECECFF", "#ffffde", "#f5ffe0", "#e0f0ff", "#ffe0f0", "#e0ffe8"};
-static const char *const ACTCOL[] = {"#8FBC8F", "#7CFC00", "#00FFFF", "#20B2AA", "#B0E0E6", "#FFFFE0", "#FFB6C1", "#87CEFA"};
+static constexpr char SECCOL[][8] = {"#ECECFF", "#ffffde", "#f5ffe0", "#e0f0ff", "#ffe0f0", "#e0ffe8"};
+static constexpr char ACTCOL[][8] = {"#8FBC8F", "#7CFC00", "#00FFFF", "#20B2AA", "#B0E0E6", "#FFFFE0", "#FFB6C1", "#87CEFA"};
 
 static void face(Buf *b, double cx, double cy, double score) {
     buf_lit(b, "<circle class=\"face\" cx=\""); buf_num(b, cx); buf_lit(b, "\" cy=\""); buf_num(b, cy);

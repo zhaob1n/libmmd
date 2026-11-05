@@ -11,11 +11,12 @@
 typedef struct RInfo { Str kind, f[4]; bool elem; } RInfo; /* f: id,text,risk,verify | type,docref */
 typedef struct RRel { Str type; } RRel;
 
-static const struct { const char *kw, *disp; } KINDS[] = {
+typedef struct ReqKind { char kw[23], disp[24]; } ReqKind;
+static constexpr ReqKind KINDS[] = {
     {"requirement", "Requirement"}, {"functionalRequirement", "Functional Requirement"},
     {"interfaceRequirement", "Interface Requirement"}, {"performanceRequirement", "Performance Requirement"},
     {"physicalRequirement", "Physical Requirement"}, {"designConstraint", "Design Constraint"}, {"element", "Element"}};
-static const char *const RELS[] = {"contains", "copies", "derives", "satisfies", "verifies", "refines", "traces"};
+static constexpr char RELS[][10] = {"contains", "copies", "derives", "satisfies", "verifies", "refines", "traces"};
 
 static constexpr char CSS[] =
     "#mermaid .rq{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#mermaid .rqd{stroke:#9370DB;stroke-width:1px;}"
@@ -121,8 +122,8 @@ DIAG_FN(requirement_render) {
     if (body != NONE) return diag_fail(err_off, msg, n, "unterminated block (missing '}')");
     if (!g.nn) return diag_fail(err_off, msg, off, "requirement diagram is empty");
     double rfs = 14, lh = rfs * 1.5;
-    static const char *const RLAB[] = {"ID: ", "Text: ", "Risk: ", "Verification: "};
-    static const char *const ELAB[] = {"Type: ", "Doc Ref: "};
+    static constexpr char RLAB[][15] = {"ID: ", "Text: ", "Risk: ", "Verification: "};
+    static constexpr char ELAB[][10] = {"Type: ", "Doc Ref: "};
     for (size_t v = 0; v < g.nn; v++) {
         RInfo *r = &ri.v[v];
         if (!r->kind.n) r->kind = S("Element"), r->elem = true; /* referenced only */

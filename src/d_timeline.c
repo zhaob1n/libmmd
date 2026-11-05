@@ -15,7 +15,7 @@ static constexpr char CSS[] =
     "#mermaid .ttl{font-size:20px;font-weight:bold;}#mermaid .tx{font-size:14px;}"
     "#mermaid .tl4{font-size:4ex;font-weight:bold;}#mermaid .t16{font-size:16px;}#mermaid .nl{stroke:none;}"
     "#mermaid .dl{stroke:#000;stroke-width:2px;stroke-dasharray:5 5;}#mermaid .ax4{stroke:#000;stroke-width:4px;}";
-static const char *const COL[] = {"#8686ff", "#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2",
+static constexpr char COL[][8] = {"#8686ff", "#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2",
                                   "#ff8686", "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"}; /* mermaid cScale */
 
 static void push_events(Arena *a, Str s, void *evp, bool *oom) {

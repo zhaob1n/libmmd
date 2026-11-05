@@ -23,10 +23,10 @@ static constexpr char CSS[] =
     "#mermaid .sv{font-size:10px;font-style:italic;}"
     "#mermaid .sec{fill-opacity:.6;stroke-width:2px;stroke-opacity:.4;}#mermaid .ttl{font-size:16px;fill:#333;}";
 /* mermaid 11 default cScale (hsl(h,100%,~76%)): sections fill .6 opacity, leaves .3 with a 3px same-colour border */
-static const char *const SEC[] = {"#8686ff", "#ffff78", "#d7ff86", "#86c2ff", "#86ffff", "#86ffc2", "#ff86ff", "#ff8686"};
-static const char *const SECD[] = {"#3939ff", "#ffff2c", "#b5ff20", "#399cff", "#39ffff", "#39ff9c", "#ff39ff", "#ff3939"};
+static constexpr char SEC[][8] = {"#8686ff", "#ffff78", "#d7ff86", "#86c2ff", "#86ffff", "#86ffc2", "#ff86ff", "#ff8686"};
+static constexpr char SECD[][8] = {"#3939ff", "#ffff2c", "#b5ff20", "#399cff", "#39ffff", "#39ff9c", "#ff39ff", "#ff3939"};
 static constexpr unsigned char TMI[] = {0, 1, 2, 11, 10, 9, 4, 6}; /* SEC[k] == cScale[TMI[k]] */
-static const char *const SECT[] = {"#fff", "#000", "#000", "#000", "#000", "#000", "#000", "#000"};
+static constexpr char SECT[][8] = {"#fff", "#000", "#000", "#000", "#000", "#000", "#000", "#000"};
 
 /* ---- d3-hierarchy 3 treemap() port: squarify (ratio phi), paddings, .round(true) ---- */
 static void dice(TNode *V, const uint32_t *ch, size_t n, double sum, double x0, double y0, double x1, double y1) {
@@ -120,7 +120,7 @@ static void put_c(Buf *out, const char *pfx, size_t i) {
         if (i == 0) { buf_lit(out, "transparent"); return; }
         i--;
     } else i %= 12;
-    const char *const *tab = lab ? SECT : !strcmp(pfx, "cScale") ? SEC : SECD;
+    const char (*tab)[8] = lab ? SECT : !strcmp(pfx, "cScale") ? SEC : SECD;
     const char *def = tab[i % countof(SEC)];
     for (size_t k = 0; k < countof(TMI); k++) if (TMI[k] == i) def = tab[k];
     if (lab) def = i == 0 || i == 3 ? "#fff" : "#000"; /* default theme: cScaleLabel0/3 = invert(labelTextColor) */

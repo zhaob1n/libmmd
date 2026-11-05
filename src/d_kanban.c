@@ -15,7 +15,7 @@ static constexpr char CSS[] =
     "#mermaid .kc{stroke:#9370DB;stroke-width:1px;}#mermaid .kt{font-size:16px;fill:#333;}"
     "#mermaid .ki{fill:#fff;stroke:#9370DB;stroke-width:1px;}#mermaid .kl{font-size:16px;fill:#333;}"
     "#mermaid .km{font-size:12px;fill:#666;}#mermaid .kp{stroke-width:4px;}";
-static const char *const COLF[] = {"#ECECFF", "#ffffde", "#e8f4ea", "#fde8e8", "#e8f0fd", "#f8e8fd"};
+static constexpr char COLF[][8] = {"#ECECFF", "#ffffde", "#e8f4ea", "#fde8e8", "#e8f0fd", "#f8e8fd"};
 
 static Str unq(Str s) { return dg_unquote(s, true); }
 /* `id[label]`, `[label]`, `id(label)` or text; returns label, strips/parses @{..} into *meta */

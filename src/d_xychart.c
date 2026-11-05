@@ -14,9 +14,9 @@ static constexpr char CSS[] =
     "#mermaid .ax{stroke:#131300;stroke-width:2px;}#mermaid .tk{stroke:#131300;stroke-width:2px;}"
     "#mermaid .tl{font-size:14px;fill:#131300;}#mermaid .at{font-size:16px;fill:#131300;}"
     "#mermaid .ttl{font-size:20px;fill:#131300;}#mermaid .ln{fill:none;stroke-width:2px;}#mermaid .lg{stroke:#131300;stroke-width:.5px;}";
-static const char *const PAL[] = {"#ECECFF", "#8493A6", "#FFC3A0", "#DCDDE1", "#B8E994",
+static constexpr char PAL[][8] = {"#ECECFF", "#8493A6", "#FFC3A0", "#DCDDE1", "#B8E994",
                                   "#D1A36F", "#C3CDE6", "#FFB6C1", "#496078", "#F8F3E3"};
-static const char *const LINEPAL[] = {"#8493A6", "#FF7F50", "#3c9a3c", "#7b52ab", "#c0392b"};
+static constexpr char LINEPAL[][8] = {"#8493A6", "#FF7F50", "#3c9a3c", "#7b52ab", "#c0392b"};
 
 static Str unq(Str s) { return dg_unquote(s, false); }
 /* optional leading quoted or bare title, then rest */

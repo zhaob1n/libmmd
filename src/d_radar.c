@@ -11,7 +11,7 @@
 
 typedef struct Axis { Str id, label; } Axis;
 /* mermaid 11 default cScale (radarCurve-N) */
-static const char *const COL[] = {"#8686ff", "#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2", "#ff8686", "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"};
+static constexpr char COL[][8] = {"#8686ff", "#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2", "#ff8686", "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"};
 typedef struct Curve { Str id, label; uint32_t v0; } Curve;
 
 static constexpr char CSS[] =

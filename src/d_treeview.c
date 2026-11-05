@@ -21,8 +21,8 @@ typedef struct TNode {
     double y, h, labx, labr;
 } TNode;
 
-static const char FOLDER[] = "M10.59 4.59A2 2 0 0 0 9.17 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.17z";
-static const char FILEP[] = "M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.83a2 2 0 0 0-.59-1.42l-4.82-4.82A2 2 0 0 0 13.17 2H6Zm7.5 1.9l4.6 4.6h-3.6a1 1 0 0 1-1-1V3.9Z";
+static constexpr char FOLDER[] = "M10.59 4.59A2 2 0 0 0 9.17 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.17z";
+static constexpr char FILEP[] = "M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.83a2 2 0 0 0-.59-1.42l-4.82-4.82A2 2 0 0 0 13.17 2H6Zm7.5 1.9l4.6 4.6h-3.6a1 1 0 0 1-1-1V3.9Z";
 
 /* UTF-8 box-drawing chars used by the preprocessor: ─━│┃└┗├┣ (all E2 94 xx) */
 static int box_kind(const char *p, size_t left) { /* 1 branch, 2 dash, 3 vertical, 0 none */

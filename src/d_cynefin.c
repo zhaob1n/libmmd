@@ -12,13 +12,15 @@
 #include "text.h"
 
 enum { CX, CD, CH, CL, CF, ND }; /* complex complicated chaotic clear confusion (draw order) */
-static const char *const NAME[ND] = {"complex", "complicated", "chaotic", "clear", "confusion"};
-static const char *const CAP[ND] = {"Complex", "Complicated", "Chaotic", "Clear", "Confusion"};
-static const char *const MODEL[ND] = {"Probe \u2192 Sense \u2192 Respond", "Sense \u2192 Analyse \u2192 Respond",
+static constexpr char NAME[ND][12] = {"complex", "complicated", "chaotic", "clear", "confusion"};
+static constexpr char CAP[ND][12] = {"Complex", "Complicated", "Chaotic", "Clear", "Confusion"};
+static constexpr char MODEL[ND][33] = {"Probe \u2192 Sense \u2192 Respond", "Sense \u2192 Analyse \u2192 Respond",
                                       "Act \u2192 Sense \u2192 Respond", "Sense \u2192 Categorise \u2192 Respond", ""};
-static const char *const PRACT[ND] = {"Emergent Practices", "Good Practices", "Novel Practices", "Best Practices", "Disorder"};
-static const char *const BG[ND] = {"#E8F5E9", "#E3F2FD", "#FBE9E7", "#FFF8E1", "#F3E5F5"};
-static const char *const BGKEY[ND] = {"complexBg", "complicatedBg", "chaoticBg", "clearBg", "confusionBg"};
+static constexpr char PRACT[ND][19] = {"Emergent Practices", "Good Practices", "Novel Practices", "Best Practices", "Disorder"};
+static constexpr char BG[ND][8] = {"#E8F5E9", "#E3F2FD", "#FBE9E7", "#FFF8E1", "#F3E5F5"};
+static constexpr char BGKEY[ND][40] = {"themeVariables.cynefin.complexBg", "themeVariables.cynefin.complicatedBg",
+                                       "themeVariables.cynefin.chaoticBg", "themeVariables.cynefin.clearBg",
+                                       "themeVariables.cynefin.confusionBg"};
 
 typedef struct CItem { unsigned dom; Str label; } CItem;
 typedef struct CTr { unsigned a, b; Str label; } CTr;
@@ -121,9 +123,7 @@ DIAG_FN(cynefin_render) {
     int64_t seed = cfg_seed != 0 && isfinite(cfg_seed) && fabs(cfg_seed) < 1e15 ? (int64_t)cfg_seed : hash_id("my-svg");
     const char *bg[ND];
     for (int d = 0; d < ND; d++) {
-        char key[48];
-        snprintf(key, sizeof key, "themeVariables.cynefin.%s", BGKEY[d]);
-        Str v = dcfg_get(key);
+        Str v = dcfg_get(BGKEY[d]);
         bg[d] = BG[d];
         if (v.n && v.n < 40 && v.p[0] == '#') {
             char *c = arena_alloc(a, v.n + 1, 1);

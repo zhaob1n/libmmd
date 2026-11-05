@@ -15,7 +15,7 @@ typedef struct SLink { uint32_t s, t; double v, y0, y1; } SLink;
 
 static constexpr char CSS[] =
     "#mermaid .sl{fill:none;stroke-opacity:.5;}#mermaid .sn{stroke:none;}#mermaid .st{font-size:14px;fill:#333;}";
-static const char *const PAL[] = {"#4e79a7", "#f28e2c", "#e15759", "#76b7b2", "#59a14f", "#edc949",
+static constexpr char PAL[][8] = {"#4e79a7", "#f28e2c", "#e15759", "#76b7b2", "#59a14f", "#edc949",
                                   "#af7aa1", "#ff9da7", "#9c755f", "#bab0ab"};
 
 /* one CSV field from s (advances); quoted fields unescape "" into arena memory */

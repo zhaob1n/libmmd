@@ -19,8 +19,8 @@ static constexpr char CSS[] =
     "#mermaid .bn{font-size:14px;fill:#000;}#mermaid .bnx{fill:inherit;}#mermaid .tg{font-size:10px;fill:#131300;}"
     "#mermaid .tgb{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#mermaid .ttl{font-size:18px;}";
 /* mermaid 11 default theme git0..git7 (hsl(h, 100%, 46.27%)) and their branch-label text colours */
-static const char *const COL[] = {"#0000ec", "#dede00", "#9dec00", "#0076ec", "#00ecec", "#00ec76", "#ec00ec", "#ec0000"};
-static const char *const LTXT[] = {"#fff", "#000", "#000", "#fff", "#000", "#000", "#000", "#000"};
+static constexpr char COL[][8] = {"#0000ec", "#dede00", "#9dec00", "#0076ec", "#00ecec", "#00ec76", "#ec00ec", "#ec0000"};
+static constexpr char LTXT[][5] = {"#fff", "#000", "#000", "#fff", "#000", "#000", "#000", "#000"};
 
 typedef struct Attr { Str id, tag, msg, parent; uint8_t type; double order; bool has_type, has_order; } Attr;
 static bool attrs(Str s, Attr *at) {

@@ -18,8 +18,8 @@ typedef struct VText { unsigned mask; Str id, label; } VText;
 typedef struct VStyle { Str fill, fop, stroke, sw, color; } VStyle;
 typedef struct VSty { Str key; unsigned mask; VStyle s; } VSty;
 
-static const char *const PAL[8] = {"#5353ff", "#ffff45", "#b5ff20", "#ff53ff", "#53ffff", "#45ff45", "#ff5353", "#45ffff"};
-static const char *const PALT[8] = {"#0000b9", "#abab00", "#598600", "#b900b9", "#00b9b9", "#00ab00", "#b90000", "#00abab"};
+static constexpr char PAL[8][8] = {"#5353ff", "#ffff45", "#b5ff20", "#ff53ff", "#53ffff", "#45ff45", "#ff5353", "#45ffff"};
+static constexpr char PALT[8][8] = {"#0000b9", "#abab00", "#598600", "#b900b9", "#00b9b9", "#00ab00", "#b90000", "#00abab"};
 
 static constexpr char CSS[] = "#mermaid .vt{fill:#333;}#mermaid .vl{fill:#333;}#mermaid .vn{fill:#333;}";
 

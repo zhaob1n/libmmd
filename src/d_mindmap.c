@@ -27,11 +27,11 @@ typedef struct MNode {
 static constexpr char CSS[] = "#mermaid .mt{font-size:16px;}#mermaid .me{fill:none;}"
                               "#mermaid .ic{fill:#fff;stroke:#333;stroke-width:1px;}#mermaid .ict{font-size:11px;font-weight:bold;fill:#333;}";
 /* mermaid 11 default cScale (section k uses cScale[k+1]; root is the darker primary), darker strokes for borders */
-static const char *const SEC[] = {"#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2", "#ff8686",
+static constexpr char SEC[][8] = {"#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2", "#ff8686",
                                   "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"};
-static const char *const SECS[] = {"#cccc33", "#99cc33", "#7f33cc", "#cc33cc", "#cc3380", "#cc3333",
+static constexpr char SECS[][8] = {"#cccc33", "#99cc33", "#7f33cc", "#cc33cc", "#cc3380", "#cc3333",
                                    "#cc8033", "#80cc33", "#33cc80", "#33cccc", "#337fcc"};
-static const bool SECW[] = {false, false, true, false, false, false, false, false, false, false, false}; /* white text */
+static constexpr bool SECW[] = {false, false, true, false, false, false, false, false, false, false, false}; /* white text */
 
 static bool parse_node(Str s, Str *label, uint8_t *shape) {
     static const struct { const char *o, *c; uint8_t sh; } SH[] = {
