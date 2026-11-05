@@ -65,15 +65,6 @@ bool rich_needed(Str s) {
     return false;
 }
 
-static bool is_br(Str s, size_t i, size_t *len) {
-    if (i + 4 > s.n || s.p[i] != '<' || (s.p[i + 1] | 32) != 'b' || (s.p[i + 2] | 32) != 'r') return false;
-    size_t j = i + 3;
-    while (j < s.n && s.p[j] == ' ') j++;
-    if (j < s.n && s.p[j] == '/') j++;
-    if (j < s.n && s.p[j] == '>') { *len = j + 1 - i; return true; }
-    return false;
-}
-
 Str rich_normalize(Arena *a, Str raw, bool *ok) {
     Str s = str_trim(raw);
     if (!(s.n >= 4 && s.p[0] == '"' && s.p[s.n - 1] == '"' && s.p[1] == '`' && s.p[s.n - 2] == '`'))
@@ -87,7 +78,7 @@ Str rich_normalize(Arena *a, Str raw, bool *ok) {
     for (size_t i = 0; i < s.n; i++) {
         char c = s.p[i];
         size_t bl = 0;
-        if (c == '<' && is_br(s, i, &bl)) { o[k++] = '\n'; i += bl - 1; continue; }
+        if (c == '<' && (bl = label_br_len(s, i))) { o[k++] = '\n'; i += bl - 1; continue; }
         if (c == '*' || c == '_') {
             bool dbl = i + 1 < s.n && s.p[i + 1] == c;
             /* intra-word underscores are literal (snake_case) */

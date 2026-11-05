@@ -90,14 +90,12 @@ double text_width(Str s, double fs) {
     return ceil((double)acc * fs * 64.0 / 2048.0 - 1e-9) / 64.0;
 }
 
-static bool is_br(Str s, size_t i, size_t *len) {
-    /* <br>, <br/>, <br />, case-insensitive */
-    if (i + 4 > s.n || s.p[i] != '<' || (s.p[i + 1] | 32) != 'b' || (s.p[i + 2] | 32) != 'r') return false;
+size_t label_br_len(Str s, size_t i) {
+    if (i + 4 > s.n || s.p[i] != '<' || (s.p[i + 1] | 32) != 'b' || (s.p[i + 2] | 32) != 'r') return 0;
     size_t j = i + 3;
     while (j < s.n && s.p[j] == ' ') j++;
     if (j < s.n && s.p[j] == '/') j++;
-    if (j < s.n && s.p[j] == '>') { *len = j + 1 - i; return true; }
-    return false;
+    return j < s.n && s.p[j] == '>' ? j + 1 - i : 0;
 }
 
 Str label_normalize(Arena *a, Str raw, bool *ok) {
@@ -120,7 +118,7 @@ Str label_normalize(Arena *a, Str raw, bool *ok) {
     for (size_t i = 0; i < s.n; i++) {
         size_t bl = 0;
         char c = s.p[i];
-        if (c == '<' && is_br(s, i, &bl)) { o[k++] = '\n'; i += bl - 1; continue; }
+        if (c == '<' && (bl = label_br_len(s, i))) { o[k++] = '\n'; i += bl - 1; continue; }
         if (md && (c == '*' || c == '_')) continue; /* basic markdown: drop emphasis markers */
         if (md && c == '\n') {
             while (k && o[k - 1] == ' ') k--;

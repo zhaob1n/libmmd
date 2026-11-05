@@ -12,6 +12,8 @@
 void label_measure(Str s, double fs, double *w, unsigned *lines);
 [[nodiscard]] double text_width_os(Str s, double fs);
 void label_measure_f(Str s, double fs, double (*meas)(Str, double), double *w, unsigned *lines);
+/* length of a <br>, <br/> or <br /> tag (any case) at s[i], else 0 */
+[[nodiscard]] size_t label_br_len(Str s, size_t i);
 /* iterate lines: returns next line, advances *pos; false at end */
 bool label_next_line(Str s, size_t *pos, Str *line);
 #endif
