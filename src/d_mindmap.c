@@ -170,7 +170,7 @@ static void mm_pair(const MNode V[], size_t i, size_t j, double margin, double f
 }
 
 /* SVG endpoint arc (rotation ignored; mermaid's are circular or ~1 degree) sampled into bb */
-static void arc_bb(BBox *bb, double x1, double y1, double rx, double ry, bool large, bool sweep, double x2, double y2) {
+static void arc_bb(BBox bb[static 1], double x1, double y1, double rx, double ry, bool large, bool sweep, double x2, double y2) {
     double dx = (x1 - x2) / 2, dy = (y1 - y2) / 2;
     if (rx <= 0 || ry <= 0 || (dx == 0 && dy == 0)) { bb_add(bb, fmin(x1, x2), fmin(y1, y2), fmax(x1, x2), fmax(y1, y2)); return; }
     double lam = dx * dx / (rx * rx) + dy * dy / (ry * ry);
@@ -187,7 +187,7 @@ static void arc_bb(BBox *bb, double x1, double y1, double rx, double ry, bool la
     }
 }
 /* mermaid cloud.ts / bang.ts outlines (relative arcs from the top-left corner) */
-static void scallop(Buf *out, BBox *bb, const MNode *m) {
+static void scallop(Buf *out, BBox *bb, const MNode m[static 1]) {
     double w = m->w, h = m->h, x = m->x - w / 2, y = m->y - h / 2;
     double A[16][4]; /* rx ry dx dy */
     int n = 0, sw;
