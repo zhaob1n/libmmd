@@ -23,7 +23,7 @@ static const Theme THEMES[] = {
 static_assert(countof(THEMES) == MMD_THEME_NEUTRAL + 1, "theme table covers mmd_theme");
 
 
-static void emit_css(Buf *b, const Theme *t) {
+static void emit_css(Buf b[static 1], const Theme t[static 1]) {
     buf_lit(b, "#mermaid{font-family:"); buf_cstr(b, t->font); buf_lit(b, ";font-size:16px;fill:"); buf_cstr(b, t->text); buf_lit(b, ";}");
     buf_lit(b, "#mermaid .node rect,#mermaid .node circle,#mermaid .node ellipse,#mermaid .node polygon,#mermaid .node path{fill:");
     buf_cstr(b, t->node_fill); buf_lit(b, ";stroke:"); buf_cstr(b, t->node_stroke); buf_lit(b, ";stroke-width:1px;}");
@@ -64,7 +64,7 @@ static constexpr char DEFS[] =
     "</defs>";
 
 /* emit css list "a:b,c:d" as "a:b;c:d" ; text=true picks color->fill only */
-static void css_out(Buf *b, Str css, bool text) {
+static void css_out(Buf b[static 1], Str css, bool text) {
     size_t i = 0;
     while (i < css.n) {
         size_t st = i;
@@ -93,13 +93,13 @@ static void css_out(Buf *b, Str css, bool text) {
     }
 }
 
-static Str find_classdef(const Graph *g, Str name) {
+static Str find_classdef(const Graph g[static 1], Str name) {
     for (size_t i = 0; i < g->classdefs.n; i++)
         if (str_eq(g->classdefs.v[i].name, name)) return g->classdefs.v[i].css;
     return (Str){};
 }
 
-static void style_attr(Buf *b, const Graph *g, Str classes, Str style, bool text, bool node) {
+static void style_attr(Buf b[static 1], const Graph g[static 1], Str classes, Str style, bool text, bool node) {
     size_t mark = b->n;
     buf_lit(b, " style=\"");
     size_t body = b->n;
@@ -117,7 +117,7 @@ static void style_attr(Buf *b, const Graph *g, Str classes, Str style, bool text
     buf_ch(b, '"');
 }
 
-static void text_lines(Buf *b, Str lab, double fs, double cx, double cy, const char *cls) {
+static void text_lines(Buf b[static 1], Str lab, double fs, double cx, double cy, const char *cls) {
     unsigned k = 0;
     size_t pos = 0;
     Str ln;
@@ -146,14 +146,14 @@ static void text_lines(Buf *b, Str lab, double fs, double cx, double cy, const c
     buf_lit(b, "</text>");
 }
 
-static void pt(Buf *b, double x, double y) { buf_pt(b, x, y); }
-static void poly(Buf *b, size_t n, const double xy[static 2 * n]) {
+static void pt(Buf b[static 1], double x, double y) { buf_pt(b, x, y); }
+static void poly(Buf b[static 1], size_t n, const double xy[static 2 * n]) {
     buf_lit(b, "<polygon points=\"");
     for (size_t i = 0; i < n; i++) { if (i) buf_ch(b, ' '); pt(b, xy[2 * i], xy[2 * i + 1]); }
     buf_ch(b, '"');
 }
 
-static void node_shape(Buf *b, const Graph *g, size_t v) {
+static void node_shape(Buf b[static 1], const Graph g[static 1], size_t v) {
     double w = g->nw[v], h = g->nh[v], hw = w / 2, hh = h / 2;
     switch (g->nshape[v]) {
     case SH_RECT: case SH_ROUND: case SH_STADIUM: case SH_SUBROUTINE: {
@@ -210,7 +210,7 @@ uint8_t flow_curve_kind(Str c) {
 }
 
 /* d3 curveLinear / curveStep* / curveCardinal(tension 0) */
-static void other_path(Buf *b, uint8_t kind, size_t n, const double P[static 2 * n]) {
+static void other_path(Buf b[static 1], uint8_t kind, size_t n, const double P[static 2 * n]) {
     if (!n) return;
     buf_ch(b, 'M'); pt(b, P[0], P[1]);
     for (size_t i = 1; i < n; i++) {
@@ -238,7 +238,7 @@ static void other_path(Buf *b, uint8_t kind, size_t n, const double P[static 2 *
 }
 
 /* d3 curveBasis */
-static void basis_path(Buf *b, size_t n, const double P[static 2 * n]) {
+static void basis_path(Buf b[static 1], size_t n, const double P[static 2 * n]) {
     double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
     unsigned st = 0;
     for (size_t i = 0; i < n; i++) {
@@ -279,14 +279,14 @@ static const char *marker_name(Arrow a, bool end) {
 }
 
 typedef struct BBox { double x0, y0, x1, y1; } BBox;
-static inline void bb_add(BBox *bb, double x0, double y0, double x1, double y1) {
+static inline void bb_add(BBox bb[static 1], double x0, double y0, double x1, double y1) {
     if (x0 < bb->x0) bb->x0 = x0;
     if (y0 < bb->y0) bb->y0 = y0;
     if (x1 > bb->x1) bb->x1 = x1;
     if (y1 > bb->y1) bb->y1 = y1;
 }
 
-mmd_status flow_svg(const Graph *g, Buf *b) {
+mmd_status flow_svg(const Graph g[static 1], Buf b[static 1]) {
     double fs = g->font_size;
     BBox bb = {INFINITY, INFINITY, -INFINITY, -INFINITY};
     for (size_t v = 0; v < g->nn; v++) {
