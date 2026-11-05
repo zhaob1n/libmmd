@@ -99,7 +99,7 @@ static Str find_classdef(const Graph g[static 1], Str name) {
     return (Str){};
 }
 
-static void style_attr(Buf b[static 1], const Graph g[static 1], Str classes, Str style, bool text, bool node) {
+static void style_attr(Buf b[restrict static 1], const Graph g[restrict static 1], Str classes, Str style, bool text, bool node) {
     size_t mark = b->n;
     buf_lit(b, " style=\"");
     size_t body = b->n;
@@ -117,7 +117,7 @@ static void style_attr(Buf b[static 1], const Graph g[static 1], Str classes, St
     buf_ch(b, '"');
 }
 
-static void text_lines(Buf b[static 1], Str lab, double fs, double cx, double cy, const char *cls) {
+static void text_lines(Buf b[restrict static 1], Str lab, double fs, double cx, double cy, const char *restrict cls) {
     unsigned k = 0;
     size_t pos = 0;
     Str ln;
@@ -147,13 +147,13 @@ static void text_lines(Buf b[static 1], Str lab, double fs, double cx, double cy
 }
 
 static void pt(Buf b[static 1], double x, double y) { buf_pt(b, x, y); }
-static void poly(Buf b[static 1], size_t n, const double xy[static 2 * n]) {
+static void poly(Buf b[restrict static 1], size_t n, const double xy[restrict static 2 * n]) {
     buf_lit(b, "<polygon points=\"");
     for (size_t i = 0; i < n; i++) { if (i) buf_ch(b, ' '); pt(b, xy[2 * i], xy[2 * i + 1]); }
     buf_ch(b, '"');
 }
 
-static void node_shape(Buf b[static 1], const Graph g[static 1], size_t v) {
+static void node_shape(Buf b[restrict static 1], const Graph g[restrict static 1], size_t v) {
     double w = g->nw[v], h = g->nh[v], hw = w / 2, hh = h / 2;
     switch (g->nshape[v]) {
     case SH_RECT: case SH_ROUND: case SH_STADIUM: case SH_SUBROUTINE: {
@@ -238,7 +238,7 @@ static void other_path(Buf b[static 1], uint8_t kind, size_t n, const double P[s
 }
 
 /* d3 curveBasis */
-static void basis_path(Buf b[static 1], size_t n, const double P[static 2 * n]) {
+static void basis_path(Buf b[restrict static 1], size_t n, const double P[restrict static 2 * n]) {
     double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
     unsigned st = 0;
     for (size_t i = 0; i < n; i++) {
@@ -286,7 +286,7 @@ static inline void bb_add(BBox bb[static 1], double x0, double y0, double x1, do
     if (y1 > bb->y1) bb->y1 = y1;
 }
 
-mmd_status flow_svg(const Graph g[static 1], Buf b[static 1]) {
+mmd_status flow_svg(const Graph g[restrict static 1], Buf b[restrict static 1]) {
     double fs = g->font_size;
     BBox bb = {INFINITY, INFINITY, -INFINITY, -INFINITY};
     for (size_t v = 0; v < g->nn; v++) {

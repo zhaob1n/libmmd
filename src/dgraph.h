@@ -29,22 +29,26 @@ static inline void bb_add(BBox bb[static 1], double x0, double y0, double x1, do
 constexpr BBox BB_EMPTY = {.x0 = 1e300, .y0 = 1e300, .x1 = -1e300, .y1 = -1e300};
 /* bbox of laid-out nodes, edge points, edge labels and clusters */
 [[nodiscard]] BBox dg_bbox(const Graph g[static 1]);
-void dg_pt(Buf b[static 1], double x, double y);
+void dg_pt(Buf b[restrict static 1], double x, double y);
 /* filled 10-long arrowhead at tip, pointing away from from; half = half the base width */
-void dg_arrowhead(Buf b[static 1], const char cls[static 1], const double tip[static 2], const double from[static 2], double half);
+void dg_arrowhead(Buf b[restrict static 1], const char cls[restrict static 1], const double tip[restrict static 2],
+                  const double from[restrict static 2], double half);
 /* d3 curveBasis through n points */
-void dg_basis(Buf b[static 1], size_t n, const double P[static 2 * n]);
+void dg_basis(Buf b[restrict static 1], size_t n, const double P[restrict static 2 * n]);
 /* path data for edge e (basis curve, or a loop for self edges) */
-void dg_edge_d(Buf b[static 1], const Graph g[static 1], size_t e);
+void dg_edge_d(Buf b[restrict static 1], const Graph g[restrict static 1], size_t e);
 /* centred multi-line text; anchor "middle"/"start"/"end"; cls may be nullptr */
-void dg_text(Buf b[static 1], Str s, double fs, double x, double cy, const char anchor[static 1], const char *cls);
+void dg_text(Buf b[restrict static 1], Str s, double fs, double x, double cy, const char anchor[restrict static 1],
+             const char *restrict cls);
 /* dg_text with an explicit row pitch (font size comes from the class) */
-void dg_text_lh(Buf b[static 1], Str s, double lh, double x, double cy, const char anchor[static 1], const char *cls);
+void dg_text_lh(Buf b[restrict static 1], Str s, double lh, double x, double cy, const char anchor[restrict static 1],
+                const char *restrict cls);
 /* svg root with viewBox, <style>, white background */
-void dg_head(Buf b[static 1], BBox bb, double margin, const char kind[static 1], size_t ncss, const char css[static ncss]);
+void dg_head(Buf b[restrict static 1], BBox bb, double margin, const char kind[restrict static 1], size_t ncss,
+             const char css[restrict static ncss]);
 #define DG_HEAD(b, bb, m, kind, css) dg_head((b), (bb), (m), (kind), sizeof(css) - 1, (css))
-void dg_rect(Buf b[static 1], double x, double y, double w, double h, double rx, const char *cls);
-void dg_line(Buf b[static 1], double x1, double y1, double x2, double y2, const char *cls);
+void dg_rect(Buf b[restrict static 1], double x, double y, double w, double h, double rx, const char *restrict cls);
+void dg_line(Buf b[restrict static 1], double x1, double y1, double x2, double y2, const char *restrict cls);
 
 /* tiny line scanner shared by line-oriented diagram parsers */
 typedef struct LineIt { const char *s; size_t n, i, lstart; } LineIt;
@@ -70,22 +74,23 @@ static inline bool dg_css_ok(Str v) {
 typedef enum TBase { TB_ALPHA, TB_MIDDLE, TB_HANG } TBase;
 /* mermaid drawMultilineText: lines ('\n' or <br>) as tspans, first at y (block centred when
  * centre is true); grows *bb (nullable) with an estimated text box. Returns the line count. */
-unsigned dg_tspans(Buf b[static 1], BBox *bb, Str s, double fs, double lh, double x, double y, bool centre,
-                   const char anchor[static 1], TBase base, const char *cls);
+unsigned dg_tspans(Buf b[restrict static 1], BBox *restrict bb, Str s, double fs, double lh, double x, double y, bool centre,
+                   const char anchor[restrict static 1], TBase base, const char *restrict cls);
 /* estimated bbox of such a text block (same arguments) */
 [[nodiscard]] BBox dg_tbox(Str s, double fs, double lh, double x, double y, bool centre, const char anchor[static 1], TBase base);
 /* greedy word wrap at maxc characters per line (mermaid wrapText), '\n'-joined; {} on OOM */
 [[nodiscard]] Str dg_wrapc(Arena a[static 1], Str s, size_t maxc);
 /* svg head for bb + margin, then body, then </svg>; frees body */
-[[nodiscard]] mmd_status dg_finish(Buf out[static 1], Buf body[static 1], BBox bb, double m,
-                                   const char kind[static 1], size_t ncss, const char css[static ncss]);
+[[nodiscard]] mmd_status dg_finish(Buf out[restrict static 1], Buf body[restrict static 1], BBox bb, double m,
+                                   const char kind[restrict static 1], size_t ncss, const char css[restrict static ncss]);
 #define DG_FINISH(o, body, bb, m, kind, css) dg_finish((o), (body), (bb), (m), (kind), sizeof(css) - 1, (css))
 #endif
 
 /* opening <text> tag (caller writes the content and "</text>") */
-void dg_text_open(Buf b[static 1], double x, double cy, const char anchor[static 1], const char *cls);
+void dg_text_open(Buf b[restrict static 1], double x, double cy, const char anchor[restrict static 1], const char *restrict cls);
 /* rect with explicit fill (nullptr = class only) */
-void dg_rect_fill(Buf b[static 1], double x, double y, double w, double h, double rx, const char *cls, const char *fill);
+void dg_rect_fill(Buf b[restrict static 1], double x, double y, double w, double h, double rx, const char *restrict cls,
+                  const char *restrict fill);
 /* palette of mermaid default theme accents, cycling */
 [[nodiscard]] const char *dg_palette(size_t i);
 /* normalise (<br>, quotes) then greedily word-wrap to maxw; nullptr-safe: returns {} on OOM */
