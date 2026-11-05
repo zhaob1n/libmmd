@@ -169,20 +169,20 @@ static const char *parse_link(W *w, Str ln, bool *matched, Str *from_out, Str *t
 }
 
 /* ---- drawing helpers ---- */
-static void bs(Buf *b, const char *s) { buf_put(b, strlen(s), s); }
-static void attr(Buf *b, const char *k, double v) {
-    buf_ch(b, ' '); buf_put(b, strlen(k), k); buf_lit(b, "=\""); buf_num(b, v); buf_ch(b, '"');
+#define attr(b, k, v) attr_((b), S(k), (v))
+static void attr_(Buf *b, Str k, double v) {
+    buf_ch(b, ' '); buf_str(b, k); buf_lit(b, "=\""); buf_num(b, v); buf_ch(b, '"');
 }
-static void line(Buf *b, double x1, double y1, double x2, double y2, const char *extra) {
+static void line(Buf *b, double x1, double y1, double x2, double y2, Str extra) {
     buf_lit(b, "<line"); attr(b, "x1", x1); attr(b, "y1", y1); attr(b, "x2", x2); attr(b, "y2", y2);
-    buf_put(b, strlen(extra), extra); buf_lit(b, "/>");
+    buf_str(b, extra); buf_lit(b, "/>");
 }
-static void circle(Buf *b, double cx, double cy, double r, const char *extra) {
+static void circle(Buf *b, double cx, double cy, double r, Str extra) {
     buf_lit(b, "<circle"); attr(b, "cx", cx); attr(b, "cy", cy); attr(b, "r", r);
-    buf_put(b, strlen(extra), extra); buf_lit(b, "/>");
+    buf_str(b, extra); buf_lit(b, "/>");
 }
-static void text(Buf *b, double x, double y, const char *extra, Str s) {
-    buf_lit(b, "<text"); attr(b, "x", x); attr(b, "y", y); buf_put(b, strlen(extra), extra); buf_ch(b, '>');
+static void text(Buf *b, double x, double y, Str extra, Str s) {
+    buf_lit(b, "<text"); attr(b, "x", x); attr(b, "y", y); buf_str(b, extra); buf_ch(b, '>');
     buf_xml(b, s); buf_lit(b, "</text>");
 }
 
@@ -377,17 +377,17 @@ DIAG_FN(wardley_render) {
     Buf b = {};
     buf_lit(&b, "<g class=\"wardley-map\"><rect class=\"wardley-background\""); attr(&b, "width", W_); attr(&b, "height", H);
     buf_lit(&b, " fill=\"white\"/>");
-    if (ttl.n) text(&b, W_ / 2, PAD / 2, " class=\"wardley-title\" fill=\"" TXT "\" font-size=\"12.6\" font-weight=\"bold\" text-anchor=\"middle\" dominant-baseline=\"middle\"", ttl);
+    if (ttl.n) text(&b, W_ / 2, PAD / 2, S(" class=\"wardley-title\" fill=\"" TXT "\" font-size=\"12.6\" font-weight=\"bold\" text-anchor=\"middle\" dominant-baseline=\"middle\""), ttl);
     buf_lit(&b, "<g class=\"wardley-axes\">");
-    line(&b, PAD, H - PAD, W_ - PAD, H - PAD, " stroke=\"" STK "\" stroke-width=\"1\"");
-    line(&b, PAD, PAD, PAD, H - PAD, " stroke=\"" STK "\" stroke-width=\"1\"");
-    text(&b, PAD + cw / 2, H - PAD / 4, " class=\"wardley-axis-label\" fill=\"" TXT "\" font-size=\"12\" font-weight=\"bold\" text-anchor=\"middle\"", S("Evolution"));
+    line(&b, PAD, H - PAD, W_ - PAD, H - PAD, S(" stroke=\"" STK "\" stroke-width=\"1\""));
+    line(&b, PAD, PAD, PAD, H - PAD, S(" stroke=\"" STK "\" stroke-width=\"1\""));
+    text(&b, PAD + cw / 2, H - PAD / 4, S(" class=\"wardley-axis-label\" fill=\"" TXT "\" font-size=\"12\" font-weight=\"bold\" text-anchor=\"middle\""), S("Evolution"));
     {
         char tr[96];
-        snprintf(tr, sizeof tr, " transform=\"rotate(-90 %g %g)\"", PAD / 3, PAD + ch / 2);
+        int tn = snprintf(tr, sizeof tr, " transform=\"rotate(-90 %g %g)\"", PAD / 3, PAD + ch / 2);
         buf_lit(&b, "<text class=\"wardley-axis-label\""); attr(&b, "x", PAD / 3); attr(&b, "y", PAD + ch / 2);
         buf_lit(&b, " fill=\"" TXT "\" font-size=\"12\" font-weight=\"bold\" text-anchor=\"middle\"");
-        buf_put(&b, strlen(tr), tr); buf_lit(&b, ">Visibility</text>");
+        buf_put(&b, tn > 0 && (size_t)tn < sizeof tr ? (size_t)tn : strlen(tr), tr); buf_lit(&b, ">Visibility</text>");
     }
     buf_lit(&b, "</g><g class=\"wardley-stages\">");
     static const Str DEF[] = {S("Genesis"), S("Custom Built"), S("Product"), S("Commodity")};
@@ -398,8 +398,8 @@ DIAG_FN(wardley_render) {
         double st = useb ? prev : (double)i / (double)ns, en = useb ? w.bounds.v[i] : (double)(i + 1) / (double)ns;
         prev = en;
         double sx = PAD + st * cw, ex = PAD + en * cw;
-        if (i > 0) line(&b, sx, PAD, sx, H - PAD, " stroke=\"#000\" stroke-width=\"1\" stroke-dasharray=\"5 5\" opacity=\"0.8\"");
-        text(&b, (sx + ex) / 2, H - PAD / 1.5, " class=\"wardley-stage-label\" fill=\"" TXT "\" font-size=\"10\" text-anchor=\"middle\"", w.stages.n ? w.stages.v[i] : DEF[i]);
+        if (i > 0) line(&b, sx, PAD, sx, H - PAD, S(" stroke=\"#000\" stroke-width=\"1\" stroke-dasharray=\"5 5\" opacity=\"0.8\""));
+        text(&b, (sx + ex) / 2, H - PAD / 1.5, S(" class=\"wardley-stage-label\" fill=\"" TXT "\" font-size=\"10\" text-anchor=\"middle\""), w.stages.n ? w.stages.v[i] : DEF[i]);
     }
     buf_lit(&b, "</g>");
     /* pipelines */
@@ -420,7 +420,7 @@ DIAG_FN(wardley_render) {
             }
             for (size_t k = 0; k + 1 < pp->n; k++)
                 line(&pl, w.nodes.v[ord[k]].px, w.nodes.v[ord[k]].py, w.nodes.v[ord[k + 1]].px, w.nodes.v[ord[k + 1]].py,
-                     " class=\"wardley-pipeline-evolution-link\" stroke=\"" STK "\" stroke-width=\"1\" stroke-dasharray=\"4 4\"");
+                     S(" class=\"wardley-pipeline-evolution-link\" stroke=\"" STK "\" stroke-width=\"1\" stroke-dasharray=\"4 4\""));
             double mn = INFINITY, mx = -INFINITY, y = 0;
             for (size_t k = 0; k < pp->n; k++) mn = fmin(mn, w.nodes.v[pp->first + k].px), mx = fmax(mx, w.nodes.v[pp->first + k].px), y = w.nodes.v[pp->first + k].py;
             double hh = NR * 4, top = y - hh / 2;
@@ -497,7 +497,7 @@ DIAG_FN(wardley_render) {
             if (d < 1e-9) d = 1e-9; /* mermaid divides by zero here (NaN); keep finite */
             if (pass == 0) {
                 double rs = s->pparent ? sq / sqrt(2) : NR, rt = t->pparent ? sq / sqrt(2) : NR;
-                bs(&b, lk->dashed ? "<line class=\"wardley-link wardley-link--dashed\"" : "<line class=\"wardley-link\"");
+                buf_lit(&b, "<line class=\"wardley-link"); if (lk->dashed) buf_lit(&b, " wardley-link--dashed"); buf_ch(&b, '"');
                 attr(&b, "x1", s->px + dx / d * rs); attr(&b, "y1", s->py + dy / d * rs);
                 attr(&b, "x2", t->px - dx / d * rt); attr(&b, "y2", t->py - dy / d * rt);
                 buf_lit(&b, " stroke=\"" STK "\" stroke-width=\"1\"");
@@ -542,10 +542,10 @@ DIAG_FN(wardley_render) {
                 double ang = atan2(dy, dx) * 180 / M_PI;
                 if (ang > 90 || ang < -90) ang += 180;
                 char tr[128];
-                snprintf(tr, sizeof tr, " transform=\"rotate(%.4g %.2f %.2f)\"", ang, lx, ly);
+                int tn = snprintf(tr, sizeof tr, " transform=\"rotate(%.4g %.2f %.2f)\"", ang, lx, ly);
                 buf_lit(&b, "<text class=\"wardley-link-label\""); attr(&b, "x", lx); attr(&b, "y", ly);
                 buf_lit(&b, " fill=\"" TXT "\" font-size=\"10\" text-anchor=\"middle\" dominant-baseline=\"middle\"");
-                buf_put(&b, strlen(tr), tr); buf_ch(&b, '>'); buf_xml(&b, lk->label); buf_lit(&b, "</text>");
+                buf_put(&b, tn > 0 && (size_t)tn < sizeof tr ? (size_t)tn : strlen(tr), tr); buf_ch(&b, '>'); buf_xml(&b, lk->label); buf_lit(&b, "</text>");
             }
         }
     buf_lit(&b, "</g><g class=\"wardley-trends\">");
@@ -553,28 +553,28 @@ DIAG_FN(wardley_render) {
         WNode *o = &w.nodes.v[w.trends.v[k].num];
         double tx = PX(w.trends.v[k].x), ty = PY(w.trends.v[k].y), dx = tx - o->px, dy = ty - o->py, d = sqrt(dx * dx + dy * dy), sb = NR + 2;
         double x2 = d > sb ? tx - dx / d * sb : tx, y2 = d > sb ? ty - dy / d * sb : ty;
-        line(&b, o->px, o->py, x2, y2, " class=\"wardley-trend\" stroke=\"#dc3545\" stroke-width=\"1\" stroke-dasharray=\"4 4\" marker-end=\"url(#mermaid-arrow)\"");
+        line(&b, o->px, o->py, x2, y2, S(" class=\"wardley-trend\" stroke=\"#dc3545\" stroke-width=\"1\" stroke-dasharray=\"4 4\" marker-end=\"url(#mermaid-arrow)\""));
     }
     buf_lit(&b, "</g><g class=\"wardley-nodes\">");
     const double tr = NR * 1.2, c6 = cos(M_PI / 6), s6 = sin(M_PI / 6);
     for (size_t i = 0; i < w.nodes.n; i++) {
         WNode *nd = &w.nodes.v[i];
         double x = nd->px, y = nd->py;
-        bs(&b, nd->k == WK_ANCHOR ? "<g class=\"wardley-node wardley-node--anchor\">"
-                    : nd->k == WK_COMP ? "<g class=\"wardley-node wardley-node--component\">"
-                                       : "<g class=\"wardley-node wardley-node--pipeline-component\">");
-        static const char *const OV[] = {"", " class=\"wardley-build-overlay\" fill=\"#eee\" stroke=\"#000\" stroke-width=\"1\"",
-            " class=\"wardley-buy-overlay\" fill=\"#ccc\" stroke=\"" STK "\" stroke-width=\"1\"",
-            " class=\"wardley-outsource-overlay\" fill=\"#666\" stroke=\"" STK "\" stroke-width=\"1\"",
-            " class=\"wardley-market-overlay\" fill=\"white\" stroke=\"" STK "\" stroke-width=\"1\""};
+        buf_lit(&b, "<g class=\"wardley-node wardley-node--");
+        buf_str(&b, nd->k == WK_ANCHOR ? S("anchor") : nd->k == WK_COMP ? S("component") : S("pipeline-component"));
+        buf_lit(&b, "\">");
+        static const Str OV[] = {S(""), S(" class=\"wardley-build-overlay\" fill=\"#eee\" stroke=\"#000\" stroke-width=\"1\""),
+            S(" class=\"wardley-buy-overlay\" fill=\"#ccc\" stroke=\"" STK "\" stroke-width=\"1\""),
+            S(" class=\"wardley-outsource-overlay\" fill=\"#666\" stroke=\"" STK "\" stroke-width=\"1\""),
+            S(" class=\"wardley-market-overlay\" fill=\"white\" stroke=\"" STK "\" stroke-width=\"1\"")};
         if (nd->ss) circle(&b, x, y, NR * 2, OV[nd->ss]);
-        if (!nd->pparent && nd->ss != SS_MARKET && nd->k != WK_ANCHOR) circle(&b, x, y, NR, " fill=\"white\" stroke=\"" STK "\" stroke-width=\"1\"");
+        if (!nd->pparent && nd->ss != SS_MARKET && nd->k != WK_ANCHOR) circle(&b, x, y, NR, S(" fill=\"white\" stroke=\"" STK "\" stroke-width=\"1\""));
         if (nd->ss == SS_MARKET) {
-            const char *ml = " class=\"wardley-market-line\" stroke=\"" STK "\" stroke-width=\"1\"";
+            Str ml = S(" class=\"wardley-market-line\" stroke=\"" STK "\" stroke-width=\"1\"");
             line(&b, x, y - tr, x - tr * c6, y + tr * s6, ml);
             line(&b, x - tr * c6, y + tr * s6, x + tr * c6, y + tr * s6, ml);
             line(&b, x + tr * c6, y + tr * s6, x, y - tr, ml);
-            const char *md = " class=\"wardley-market-dot\" fill=\"white\" stroke=\"" STK "\" stroke-width=\"2\"";
+            Str md = S(" class=\"wardley-market-dot\" fill=\"white\" stroke=\"" STK "\" stroke-width=\"2\"");
             circle(&b, x, y - tr, NR * 0.7, md);
             circle(&b, x - tr * c6, y + tr * s6, NR * 0.7, md);
             circle(&b, x + tr * c6, y + tr * s6, NR * 0.7, md);
@@ -585,21 +585,21 @@ DIAG_FN(wardley_render) {
         }
         if (nd->inertia) {
             double o = (nd->pparent ? sq / 2 : NR) + 15 + (nd->ss ? NR + 10 : 0), lh = nd->pparent ? sq : NR * 2;
-            line(&b, x + o, y - lh / 2, x + o, y + lh / 2, " class=\"wardley-inertia\" stroke=\"" STK "\" stroke-width=\"6\"");
+            line(&b, x + o, y - lh / 2, x + o, y + lh / 2, S(" class=\"wardley-inertia\" stroke=\"" STK "\" stroke-width=\"6\""));
         }
         if (nd->k == WK_ANCHOR)
             text(&b, x + (nd->has_lo ? nd->lox : 0), y + (nd->has_lo ? nd->loy : -3),
-                 " class=\"wardley-node-label\" fill=\"#000\" font-size=\"10\" font-weight=\"bold\" text-anchor=\"middle\" dominant-baseline=\"middle\"", nd->label);
+                 S(" class=\"wardley-node-label\" fill=\"#000\" font-size=\"10\" font-weight=\"bold\" text-anchor=\"middle\" dominant-baseline=\"middle\""), nd->label);
         else {
             double ox = nd->has_lo ? nd->lox : lbo[6 * i], oy = nd->has_lo ? nd->loy : lbo[6 * i + 1];
             if (!nd->has_lo && lbo[6 * i + 4] > lbo[6 * i + 2]) { /* far placement: leader to the nearest box point */
                 const double *B = lbo + 6 * i + 2;
                 double qx = fmin(fmax(x, B[0]), B[2]), qy = fmin(fmax(y, B[1]), B[3]), vx = qx - x, vy = qy - y, l = hypot(vx, vy);
                 double rr = NR + (nd->ss ? NR : 0) + 1;
-                if (l > 3.2 * NLO + rr) line(&b, x + vx / l * rr, y + vy / l * rr, qx - vx / l * 2, qy - vy / l * 2, " class=\"wardley-leader\" stroke=\"#999\" stroke-width=\"0.75\"");
+                if (l > 3.2 * NLO + rr) line(&b, x + vx / l * rr, y + vy / l * rr, qx - vx / l * 2, qy - vy / l * 2, S(" class=\"wardley-leader\" stroke=\"#999\" stroke-width=\"0.75\""));
             }
-            text(&b, x + ox, y + oy, halo[i] ? " class=\"wardley-node-label\" fill=\"" TXT "\" font-size=\"10\" font-weight=\"normal\" text-anchor=\"start\" dominant-baseline=\"auto\" stroke=\"white\" stroke-width=\"3\" stroke-linejoin=\"round\" paint-order=\"stroke\""
-                                             : " class=\"wardley-node-label\" fill=\"" TXT "\" font-size=\"10\" font-weight=\"normal\" text-anchor=\"start\" dominant-baseline=\"auto\"", nd->label);
+            text(&b, x + ox, y + oy, halo[i] ? S(" class=\"wardley-node-label\" fill=\"" TXT "\" font-size=\"10\" font-weight=\"normal\" text-anchor=\"start\" dominant-baseline=\"auto\" stroke=\"white\" stroke-width=\"3\" stroke-linejoin=\"round\" paint-order=\"stroke\"")
+                                             : S(" class=\"wardley-node-label\" fill=\"" TXT "\" font-size=\"10\" font-weight=\"normal\" text-anchor=\"start\" dominant-baseline=\"auto\""), nd->label);
         }
         buf_lit(&b, "</g>");
     }
@@ -610,8 +610,8 @@ DIAG_FN(wardley_render) {
             char nb[16];
             int nl = snprintf(nb, sizeof nb, "%u", w.ann.v[k].num);
             buf_lit(&b, "<g class=\"wardley-annotation\">");
-            circle(&b, PX(w.ann.v[k].x), PY(w.ann.v[k].y), 10, " fill=\"white\" stroke=\"" STK "\" stroke-width=\"1.5\"");
-            text(&b, PX(w.ann.v[k].x), PY(w.ann.v[k].y), " text-anchor=\"middle\" dominant-baseline=\"central\" font-size=\"10\" fill=\"" TXT "\" font-weight=\"bold\"", (Str){.p = nb, .n = (size_t)nl});
+            circle(&b, PX(w.ann.v[k].x), PY(w.ann.v[k].y), 10, S(" fill=\"white\" stroke=\"" STK "\" stroke-width=\"1.5\""));
+            text(&b, PX(w.ann.v[k].x), PY(w.ann.v[k].y), S(" text-anchor=\"middle\" dominant-baseline=\"central\" font-size=\"10\" fill=\"" TXT "\" font-weight=\"bold\""), (Str){.p = nb, .n = (size_t)nl});
             buf_lit(&b, "</g>");
         }
         if (w.has_box) {
@@ -643,7 +643,7 @@ DIAG_FN(wardley_render) {
                 attr(&b, "width", bw); attr(&b, "height", bh);
                 buf_lit(&b, " fill=\"white\" stroke=\"" STK "\" stroke-width=\"1.5\" rx=\"4\" ry=\"4\"/>");
                 for (size_t k = 0; k < m; k++)
-                    text(&b, bx + 10, by + 10 + (double)(k + 1) * 16, " font-size=\"11\" fill=\"" TXT "\" text-anchor=\"start\" dominant-baseline=\"middle\"", lines[k]);
+                    text(&b, bx + 10, by + 10 + (double)(k + 1) * 16, S(" font-size=\"11\" fill=\"" TXT "\" text-anchor=\"start\" dominant-baseline=\"middle\""), lines[k]);
                 buf_lit(&b, "</g>");
             }
         }
@@ -652,24 +652,24 @@ DIAG_FN(wardley_render) {
     if (w.notes.n) {
         buf_lit(&b, "<g class=\"wardley-notes\">");
         for (size_t k = 0; k < w.notes.n; k++)
-            text(&b, fmax(2, fmin(PX(w.notes.v[k].x), W_ - 4 - text_width(w.notes.v[k].s, 11) * 1.05)), PY(w.notes.v[k].y), " text-anchor=\"start\" font-size=\"11\" fill=\"" TXT "\" font-weight=\"bold\"", w.notes.v[k].s);
+            text(&b, fmax(2, fmin(PX(w.notes.v[k].x), W_ - 4 - text_width(w.notes.v[k].s, 11) * 1.05)), PY(w.notes.v[k].y), S(" text-anchor=\"start\" font-size=\"11\" fill=\"" TXT "\" font-weight=\"bold\""), w.notes.v[k].s);
         buf_lit(&b, "</g>");
     }
     for (int dir = 0; dir < 2; dir++) {
         const WPt *v = dir ? w.dec.v : w.acc.v;
         size_t cnt = dir ? w.dec.n : w.acc.n;
         if (!cnt) continue;
-        bs(&b, dir ? "<g class=\"wardley-deaccelerators\">" : "<g class=\"wardley-accelerators\">");
+        buf_str(&b, dir ? S("<g class=\"wardley-deaccelerators\">") : S("<g class=\"wardley-accelerators\">"));
         for (size_t k = 0; k < cnt; k++) {
             double x = PX(v[k].x), y = PY(v[k].y);
             double P[7][2] = {{0, -15}, {40, -15}, {40, -23}, {60, 0}, {40, 23}, {40, 15}, {0, 15}};
             buf_lit(&b, "<path d=\"");
             for (int q = 0; q < 7; q++) {
-                bs(&b, q ? " L " : "M ");
+                buf_str(&b, q ? S(" L ") : S("M "));
                 buf_num(&b, x + (dir ? 60 - P[q][0] : P[q][0])); buf_ch(&b, ' '); buf_num(&b, y + P[q][1]);
             }
             buf_lit(&b, " Z\" fill=\"white\" stroke=\"" STK "\" stroke-width=\"1\"/>");
-            text(&b, x + 30, y + 30, " text-anchor=\"middle\" font-size=\"10\" fill=\"" TXT "\" font-weight=\"bold\"", v[k].s);
+            text(&b, x + 30, y + 30, S(" text-anchor=\"middle\" font-size=\"10\" fill=\"" TXT "\" font-weight=\"bold\""), v[k].s);
         }
         buf_lit(&b, "</g>");
     }
