@@ -453,7 +453,7 @@ static constexpr Ent ENTS[] = {
     return 0;
 }
 
-void buf_xml(Buf b[static 1], Str s) {
+void buf_xml(Buf b[restrict static 1], Str s) {
     size_t i = 0, run = 0;
     while (i < s.n) {
         i = scan_xml_plain(s.n, s.p, i); /* bulk-skip bytes needing no escape */
