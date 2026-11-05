@@ -453,7 +453,10 @@ DIAG_FN(seq_render) {
             if (j + 4 <= off && memcmp(src + j, "true", 4) == 0) p.wrap = true;
         }
     mmd_status st = MMD_OK;
-    Buf back = {}, mid = {}, front = {};
+    AUTO_BUF Buf back = {};
+    AUTO_BUF Buf mid = {};
+    AUTO_BUF Buf front = {};
+    AUTO_BUF Buf boxes = {};
     /* skip header line */
     const char *nl = memchr(src + off, '\n', n - off);
     size_t i = nl ? (size_t)(nl - src) + 1 : n;
@@ -727,7 +730,6 @@ DIAG_FN(seq_render) {
         if (!pa[k].created) actor_box(&back, &pa[k], title_h, fs);
         if (pa[k].y1 <= 0) actor_box(&front, &pa[k], bottom, fs);
     }
-    Buf boxes = {};
     for (size_t bi = 0; bi < p.boxes.n; bi++) {
         double x0 = INFINITY, x1 = -INFINITY;
         for (size_t k = 0; k < P; k++)
@@ -748,7 +750,7 @@ DIAG_FN(seq_render) {
         buf_lit(&boxes, "\"/>");
         if (bx->label.n) text_(&boxes, bx->label, fs, (x0 + x1) / 2, by + lh / 2 + 4, "middle", "box-label");
     }
-    if (back.oom || mid.oom || front.oom || boxes.oom) { free(boxes.p); st = MMD_ERR_NOMEM; goto done; }
+    if (back.oom || mid.oom || front.oom || boxes.oom) { st = MMD_ERR_NOMEM; goto done; }
     double m = 50, vx = minx - m, vy = -10, vw = maxx - minx + 2 * m, vh = bottom + ACT_H + 21; /* diagramMarginX 50, diagramMarginY 10 (+1 as mermaid-cli emits) */
     buf_lit(out, "<svg xmlns=\"http://www.w3.org/2000/svg\" id=\"mermaid\" class=\"sequence\" width=\"");
     buf_num(out, vw); buf_lit(out, "\" height=\""); buf_num(out, vh); buf_lit(out, "\" viewBox=\"");
@@ -766,16 +768,12 @@ DIAG_FN(seq_render) {
     buf_lit(out, "\"/>");
     if (p.title.n) text_(out, p.title, 18, (minx + maxx) / 2, 15, "middle", "title");
     buf_put(out, boxes.n, boxes.p ? boxes.p : "");
-    free(boxes.p);
     buf_put(out, back.n, back.p ? back.p : "");
     buf_put(out, mid.n, mid.p ? mid.p : "");
     buf_put(out, front.n, front.p ? front.p : "");
     buf_lit(out, "</svg>\n");
     if (out->oom) st = MMD_ERR_NOMEM;
 done:
-    free(back.p);
-    free(mid.p);
-    free(front.p);
     *err_off = p.err;
     return st;
 }
