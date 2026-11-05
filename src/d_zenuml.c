@@ -79,14 +79,9 @@ typedef struct ZT {
 
 static bool idch(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || (unsigned char)c >= 0x80; }
 
-static Str unq(Str s) {
-    s = str_trim(s);
-    if (s.n >= 2 && (s.p[0] == '"' || s.p[0] == '\'') && s.p[s.n - 1] == s.p[0]) s.p++, s.n -= 2;
-    return s;
-}
 
 static int32_t part(ZT *z, Str name, uint8_t icon) {
-    name = unq(name);
+    name = dg_unquote(name, true);
     for (size_t i = 1; i < z->P.n; i++)
         if (str_eq(z->P.v[i].name, name)) {
             if (icon) z->P.v[i].icon = icon;
@@ -229,7 +224,7 @@ static void stmt(ZT *z, Str s, bool block) {
     for (size_t i = 0; i < countof(CT); i++)
         if (kw(s, CT[i].k, &r)) {
             Str c = paren(r);
-            open_frag(z, CT[i].frag, c.n ? (CT[i].cond && c.p[0] != '"' ? cat3(z, S("[ "), c, S(" ]")) : unq(c)) : (Str){}, block);
+            open_frag(z, CT[i].frag, c.n ? (CT[i].cond && c.p[0] != '"' ? cat3(z, S("[ "), c, S(" ]")) : dg_unquote(c, true)) : (Str){}, block);
             return;
         }
     if (kw(s, S("title"), &r)) { z->title = r; return; }
@@ -311,8 +306,8 @@ static void stmt(ZT *z, Str s, bool block) {
     if (isnew) {
         t = part(z, assign.n ? cat3(z, S(""), assign, S(":")) : (Str){}, 0); /* placeholder name, fixed below */
         Part *p = &z->P.v[t];
-        p->name = assign.n ? assign : unq(target);
-        p->label = assign.n ? cat3(z, S(""), assign, S("")) : unq(target);
+        p->name = assign.n ? assign : dg_unquote(target, true);
+        p->label = assign.n ? cat3(z, S(""), assign, S("")) : dg_unquote(target, true);
         if (assign.n) {
             char *q = ANEW(z->a, char, assign.n + 1 + target.n);
             if (!q) { z->oom = true; return; }

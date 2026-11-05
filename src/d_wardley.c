@@ -39,11 +39,6 @@ typedef struct W {
     double boxx, boxy;
 } W;
 
-static Str unq(Str s) {
-    s = str_trim(s);
-    if (s.n >= 2 && s.p[0] == '"' && s.p[s.n - 1] == '"') s.p++, s.n -= 2;
-    return s;
-}
 static bool pct(double v, double *o) {
     double r = v <= 1 ? v * 100 : v;
     if (!(r >= 0 && r <= 100)) return false;
@@ -162,7 +157,7 @@ static const char *parse_link(W *w, Str ln, bool *matched, Str *from_out, Str *t
                 if (!lk->label.n) lk->label = str_trim((Str){.p = to.p + sc + 1, .n = to.n - sc - 1});
                 to.n = sc;
             }
-            *from_out = unq((Str){.p = ln.p, .n = i}), *to_out = unq(to);
+            *from_out = dg_unquote((Str){.p = ln.p, .n = i}, false), *to_out = dg_unquote(to, false);
             if (!from_out->n || !to_out->n) return "link needs two components";
             (void)w;
             return nullptr;
@@ -244,7 +239,7 @@ DIAG_FN(wardley_render) {
             if (str_eq(ln, S("}"))) { pipe = -1; continue; }
             if (!str_eq(kw, S("component"))) FAIL("expected component or '}' in pipeline");
             size_t bi = find_br(r);
-            Str name = unq((Str){.p = r.p, .n = bi});
+            Str name = dg_unquote((Str){.p = r.p, .n = bi}, false);
             Str rest = {.p = r.p + bi, .n = r.n - bi};
             double e, dummy;
             if (!name.n || brack(&rest, &e, &dummy) != 1) FAIL("expected pipeline component \"name\" [evolution]");
@@ -300,7 +295,7 @@ DIAG_FN(wardley_render) {
         }
         if (str_eq(kw, S("anchor")) || str_eq(kw, S("component"))) {
             size_t bi = find_br(r);
-            Str name = unq((Str){.p = r.p, .n = bi});
+            Str name = dg_unquote((Str){.p = r.p, .n = bi}, false);
             Str rest = {.p = r.p + bi, .n = r.n - bi};
             double v, e;
             if (!name.n || brack(&rest, &v, &e) != 2) FAIL("expected name [visibility, evolution]");
@@ -314,7 +309,7 @@ DIAG_FN(wardley_render) {
         if (str_eq(kw, S("pipeline"))) {
             Str nm = str_trim(r);
             if (!nm.n || nm.p[nm.n - 1] != '{') FAIL("expected pipeline Name {");
-            nm = unq((Str){.p = nm.p, .n = nm.n - 1});
+            nm = dg_unquote((Str){.p = nm.p, .n = nm.n - 1}, false);
             ptrdiff_t pi = node_find(&w, nm);
             if (pi < 0) FAIL("pipeline must reference an existing component");
             w.nodes.v[pi].pparent = true;
@@ -328,7 +323,7 @@ DIAG_FN(wardley_render) {
             while (sp > 0 && t.p[sp - 1] != ' ' && t.p[sp - 1] != '\t') sp--;
             double tv, tp;
             if (!sp || !dg_parse_num((Str){.p = t.p + sp, .n = t.n - sp}, &tv) || !pct(tv, &tp)) FAIL("expected evolve Name target");
-            ptrdiff_t ni = node_find(&w, unq((Str){.p = t.p, .n = sp}));
+            ptrdiff_t ni = node_find(&w, dg_unquote((Str){.p = t.p, .n = sp}, false));
             if (ni >= 0) {
                 bool dup = false;
                 for (size_t k = 0; k < w.trends.n; k++) if (w.trends.v[k].num == (unsigned)ni) w.trends.v[k].x = tp, dup = true;
@@ -338,7 +333,7 @@ DIAG_FN(wardley_render) {
         }
         if (str_eq(kw, S("note")) || str_eq(kw, S("accelerator")) || str_eq(kw, S("deaccelerator"))) {
             size_t bi = find_br(r);
-            Str name = unq((Str){.p = r.p, .n = bi});
+            Str name = dg_unquote((Str){.p = r.p, .n = bi}, false);
             Str rest = {.p = r.p + bi, .n = r.n - bi};
             double v, e;
             WPt p = {.s = name};
@@ -362,7 +357,7 @@ DIAG_FN(wardley_render) {
             double v, e;
             WPt p = {.num = (unsigned)num};
             if (brack(&rest, &v, &e) != 2 || !pct(e, &p.x) || !pct(v, &p.y)) FAIL("expected annotation N,[x, y] \"text\"");
-            p.s = unq(rest);
+            p.s = dg_unquote(rest, false);
             if (!VEC_PUSH(a, &w.ann, p)) return MMD_ERR_NOMEM;
             continue;
         }

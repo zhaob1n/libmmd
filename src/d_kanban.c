@@ -17,7 +17,6 @@ static constexpr char CSS[] =
     "#mermaid .km{font-size:12px;fill:#666;}#mermaid .kp{stroke-width:4px;}";
 static constexpr char COLF[][8] = {"#ECECFF", "#ffffde", "#e8f4ea", "#fde8e8", "#e8f0fd", "#f8e8fd"};
 
-static Str unq(Str s) { return dg_unquote(s, true); }
 /* `id[label]`, `[label]`, `id(label)` or text; returns label, strips/parses @{..} into *meta */
 static Str node_label(Str s, Str *meta) {
     *meta = (Str){};
@@ -35,10 +34,10 @@ static Str node_label(Str s, Str *meta) {
             while (k < s.n && (s.p[k] == '[' || s.p[k] == '(' || s.p[k] == '{')) k++;
             size_t e = s.n;
             while (e > k && (s.p[e - 1] == ']' || s.p[e - 1] == ')' || s.p[e - 1] == '}')) e--;
-            return unq((Str){.p = s.p + k, .n = e - k});
+            return dg_unquote((Str){.p = s.p + k, .n = e - k}, true);
         }
     }
-    return unq(s);
+    return dg_unquote(s, true);
 }
 
 DIAG_FN(kanban_render) {
@@ -69,7 +68,7 @@ DIAG_FN(kanban_render) {
             m = cm ? (Str){.p = cm + 1, .n = m.n - L - 1} : (Str){};
             const char *col = memchr(kv.p, ':', kv.n);
             if (!col) continue;
-            Str key = str_trim((Str){.p = kv.p, .n = (size_t)(col - kv.p)}), val = unq((Str){.p = col + 1, .n = kv.n - (size_t)(col + 1 - kv.p)});
+            Str key = str_trim((Str){.p = kv.p, .n = (size_t)(col - kv.p)}), val = dg_unquote((Str){.p = col + 1, .n = kv.n - (size_t)(col + 1 - kv.p)}, true);
             if (str_eq(key, S("assigned"))) k.assigned = val;
             else if (str_eq(key, S("ticket"))) k.ticket = val;
             else if (str_eq(key, S("priority"))) k.priority = val;

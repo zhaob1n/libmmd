@@ -127,7 +127,6 @@ static void put_c(Buf *out, const char *pfx, size_t i) {
     const char *c = dcfg_pal(pfx, i, def);
     buf_put(out, strlen(c), c);
 }
-static Str unq(Str s) { return dg_unquote(s, true); }
 static void fmt_val(double v, size_t cap, char b[static cap], size_t *len) {
     int k = fabs(v - round(v)) < 1e-9 ? snprintf(b, cap, "%.0f", v) : snprintf(b, cap, "%.2f", v);
     *len = k < 0 ? 0 : (size_t)k < cap ? (size_t)k : cap - 1;
@@ -183,7 +182,7 @@ DIAG_FN(treemap_render) {
             else if (r.n) return diag_fail(err_off, msg, (size_t)(r.p - src), "expected ':' value");
         } else {
             for (size_t i = s.n; i-- > 0;) if (s.p[i] == ':') { ce = i; break; }
-            t.label = unq((Str){.p = s.p, .n = ce == SIZE_MAX ? s.n : ce});
+            t.label = dg_unquote((Str){.p = s.p, .n = ce == SIZE_MAX ? s.n : ce}, true);
         }
         if (ce != SIZE_MAX) {
             Str vs = str_trim((Str){.p = s.p + ce + 1, .n = s.n - ce - 1});

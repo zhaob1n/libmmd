@@ -18,7 +18,6 @@ static constexpr char PAL[][8] = {"#ECECFF", "#8493A6", "#FFC3A0", "#DCDDE1", "#
                                   "#D1A36F", "#C3CDE6", "#FFB6C1", "#496078", "#F8F3E3"};
 static constexpr char LINEPAL[][8] = {"#8493A6", "#FF7F50", "#3c9a3c", "#7b52ab", "#c0392b"};
 
-static Str unq(Str s) { return dg_unquote(s, false); }
 /* optional leading quoted or bare title, then rest */
 static Str take_title(Str *s) {
     Str t = str_trim(*s);
@@ -68,7 +67,7 @@ typedef VEC(Str) StrVec;
             i = (size_t)(q - s.p) + 1;
         }
         while (i < s.n && s.p[i] != ',') i++;
-        Str it = unq((Str){.p = s.p + st, .n = i - st});
+        Str it = dg_unquote((Str){.p = s.p + st, .n = i - st}, false);
         if (it.n || i < s.n) if (!VEC_PUSH(a, v, it)) { *oom = true; return false; }
         i++;
     }
@@ -104,7 +103,7 @@ DIAG_FN(xychart_render) {
     bool xr = false, yr = false, oom = false;
     while (dg_next_line(&it, &line, &lo)) {
         Str rest = line, w = dg_word(&rest);
-        if (str_eq(w, S("title"))) { title = unq(rest); continue; }
+        if (str_eq(w, S("title"))) { title = dg_unquote(rest, false); continue; }
         if (str_starts(w, S("acc"))) continue;
         if (str_eq(w, S("x-axis")) || str_eq(w, S("y-axis"))) {
             bool isx = w.p[0] == 'x';

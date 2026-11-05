@@ -41,17 +41,12 @@ static bool next_arg(Str in, size_t *i, Str *out) {
     return true;
 }
 
-static Str unq(Str s) {
-    s = str_trim(s);
-    if (s.n >= 2 && s.p[0] == '"' && s.p[s.n - 1] == '"') s = (Str){.p = s.p + 1, .n = s.n - 2};
-    return s;
-}
 
 /* split `( a, "b, c", d )`; positional only, $named skipped */
 static size_t args(Str in, size_t max, Str out[static max]) {
     size_t k = 0, i = 0;
     for (Str a; next_arg(in, &i, &a);)
-        if (!(a.n && a.p[0] == '$') && k < max) out[k++] = unq(a);
+        if (!(a.n && a.p[0] == '$') && k < max) out[k++] = dg_unquote(a, false);
     return k;
 }
 
@@ -61,7 +56,7 @@ static Str named(Str in, Str key) {
     for (Str a; next_arg(in, &i, &a);) {
         if (a.n > key.n + 1 && a.p[0] == '$' && !memcmp(a.p + 1, key.p, key.n)) {
             Str r = str_trim((Str){.p = a.p + 1 + key.n, .n = a.n - 1 - key.n});
-            if (r.n && r.p[0] == '=') return unq((Str){.p = r.p + 1, .n = r.n - 1});
+            if (r.n && r.p[0] == '=') return dg_unquote((Str){.p = r.p + 1, .n = r.n - 1}, false);
         }
     }
     return (Str){};

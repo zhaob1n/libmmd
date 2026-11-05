@@ -23,7 +23,6 @@ static constexpr char CSS[] =
     "#mermaid .rr{fill:none;stroke:#333;stroke-width:1px;stroke-dasharray:10,7;}#mermaid .rr.c{stroke-dasharray:none;}"
     "#mermaid .rh{fill:#333;}#mermaid .rl{fill:#fff;opacity:.9;}#mermaid .rn{font-weight:bold;}#mermaid .rt{font-size:14px;}";
 
-static Str unq(Str s) { return dg_unquote(s, false); }
 static Str cap(Arena *a, Str s) { /* Medium / Test: capitalise like mermaid */
     if (!s.n || !(s.p[0] >= 'a' && s.p[0] <= 'z')) return s;
     char *o = ANEW(a, char, s.n);
@@ -59,7 +58,7 @@ DIAG_FN(requirement_render) {
             if (str_eq(line, S("}"))) { body = NONE; continue; }
             const char *c = memchr(line.p, ':', line.n);
             if (!c) return diag_fail(err_off, msg, lo, "expected 'key: value'");
-            Str k = str_trim((Str){.p = line.p, .n = (size_t)(c - line.p)}), v = unq((Str){.p = c + 1, .n = line.n - (size_t)(c + 1 - line.p)});
+            Str k = str_trim((Str){.p = line.p, .n = (size_t)(c - line.p)}), v = dg_unquote((Str){.p = c + 1, .n = line.n - (size_t)(c + 1 - line.p)}, false);
             RInfo *r = &ri.v[body];
             int slot = -1;
             if (r->elem) slot = str_ieq(k, S("type")) ? 0 : str_ieq(k, S("docref")) ? 1 : -1;
@@ -80,7 +79,7 @@ DIAG_FN(requirement_render) {
             if (w.n == strlen(KINDS[k].kw) && !memcmp(w.p, KINDS[k].kw, w.n)) kind = k;
         l = str_trim(l);
         if (kind < countof(KINDS) && l.n && l.p[l.n - 1] == '{') {
-            Str name = unq((Str){.p = l.p, .n = l.n - 1});
+            Str name = dg_unquote((Str){.p = l.p, .n = l.n - 1}, false);
             if (!name.n) return diag_fail(err_off, msg, lo, "expected requirement name");
             bool fresh;
             int32_t v = dg_node(&g, name, &fresh);
@@ -101,9 +100,9 @@ DIAG_FN(requirement_render) {
             if (d1 && !d2 && q[0] == '-' && (rev || q[1] == '>')) { d2 = q; break; }
         }
         if (!d1 || !d2) return diag_fail(err_off, msg, lo, "expected requirement, element or relation");
-        Str A = unq((Str){.p = s, .n = (size_t)(d1 - s)});
+        Str A = dg_unquote((Str){.p = s, .n = (size_t)(d1 - s)}, false);
         Str rel = str_trim((Str){.p = d1 + (rev ? 2 : 1), .n = (size_t)(d2 - d1 - (rev ? 2 : 1))});
-        Str B = unq((Str){.p = d2 + (rev ? 1 : 2), .n = (size_t)(e - d2 - (rev ? 1 : 2))});
+        Str B = dg_unquote((Str){.p = d2 + (rev ? 1 : 2), .n = (size_t)(e - d2 - (rev ? 1 : 2))}, false);
         bool okr = false;
         for (size_t k = 0; k < countof(RELS); k++) okr |= rel.n == strlen(RELS[k]) && !memcmp(rel.p, RELS[k], rel.n);
         if (!okr) return diag_fail(err_off, msg, lo, "unknown relationship type");

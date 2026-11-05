@@ -23,7 +23,6 @@ static constexpr char PALT[8][8] = {"#0000b9", "#abab00", "#598600", "#b900b9", 
 
 static constexpr char CSS[] = "#mermaid .vt{fill:#333;}#mermaid .vl{fill:#333;}#mermaid .vn{fill:#333;}";
 
-static Str unq(Str s) { return dg_unquote(s, false); }
 
 static double lens(double r1, double r2, double d) { /* area of intersection of two circles */
     if (d >= r1 + r2) return 0;
@@ -127,7 +126,7 @@ DIAG_FN(venn_render) {
     unsigned cur = 0;
     while (dg_next_line(&it, &ln, &lo)) {
         Str r = ln, w = dg_word(&r);
-        if (str_eq(w, S("title"))) { title = unq(r); continue; }
+        if (str_eq(w, S("title"))) { title = dg_unquote(r, false); continue; }
         bool block;
         if (dcfg_is_acc(ln, &block)) continue;
         bool is_set = str_eq(w, S("set")), is_un = str_eq(w, S("union")), is_tx = str_eq(w, S("text"));
@@ -140,7 +139,7 @@ DIAG_FN(venn_render) {
             for (size_t a0 = 0; a0 < targ.n;) {
                 size_t b0 = a0;
                 while (b0 < targ.n && targ.p[b0] != ',') b0++;
-                int si = set_idx(ns, ids, unq((Str){.p = targ.p + a0, .n = b0 - a0}));
+                int si = set_idx(ns, ids, dg_unquote((Str){.p = targ.p + a0, .n = b0 - a0}, false));
                 if (si >= 0) s.mask |= 1u << si;
                 else s.mask |= 1u << 31;
                 a0 = b0 + 1;
@@ -152,7 +151,7 @@ DIAG_FN(venn_render) {
                 Str f = {.p = rest.p + a0, .n = b0 - a0};
                 const char *c = memchr(f.p, ':', f.n);
                 if (c) {
-                    Str k2 = str_trim((Str){.p = f.p, .n = (size_t)(c - f.p)}), v = unq((Str){.p = c + 1, .n = f.n - (size_t)(c + 1 - f.p)});
+                    Str k2 = str_trim((Str){.p = f.p, .n = (size_t)(c - f.p)}), v = dg_unquote((Str){.p = c + 1, .n = f.n - (size_t)(c + 1 - f.p)}, false);
                     if (safe_val(v)) {
                         if (str_eq(k2, S("fill"))) s.s.fill = v;
                         else if (str_eq(k2, S("fill-opacity"))) s.s.fop = v;
@@ -177,7 +176,7 @@ DIAG_FN(venn_render) {
         if (rest.n && rest.p[0] == '[') {
             const char *e = memchr(rest.p, ']', rest.n);
             if (!e) return diag_fail(err_off, msg, lo, "unclosed [");
-            lab = unq((Str){.p = rest.p + 1, .n = (size_t)(e - rest.p - 1)}), has_label = true;
+            lab = dg_unquote((Str){.p = rest.p + 1, .n = (size_t)(e - rest.p - 1)}, false), has_label = true;
             rest = str_trim((Str){.p = e + 1, .n = rest.n - (size_t)(e + 1 - rest.p)});
         }
         double size = NAN;
@@ -187,7 +186,7 @@ DIAG_FN(venn_render) {
         }
         if (is_tx) {
             if (!cur) return diag_fail(err_off, msg, lo, "text requires a set");
-            Str id = unq(idl);
+            Str id = dg_unquote(idl, false);
             if (!id.n) return diag_fail(err_off, msg, lo, "text needs an identifier");
             if (!VEC_PUSH(a, &tx, ((VText){cur, id, has_label ? lab : id}))) return MMD_ERR_NOMEM;
             continue;
@@ -196,7 +195,7 @@ DIAG_FN(venn_render) {
         for (size_t a0 = 0; a0 < idl.n;) {
             size_t b0 = a0;
             while (b0 < idl.n && idl.p[b0] != ',') b0++;
-            Str id = unq((Str){.p = idl.p + a0, .n = b0 - a0});
+            Str id = dg_unquote((Str){.p = idl.p + a0, .n = b0 - a0}, false);
             a0 = b0 + 1;
             if (!id.n) return diag_fail(err_off, msg, lo, "empty identifier");
             int si = set_idx(ns, ids, id);

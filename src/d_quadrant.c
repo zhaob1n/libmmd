@@ -54,7 +54,6 @@ static void axis_pair(Str s, Str *lo, Str *hi) {
         }
     *lo = str_trim(s), *hi = (Str){};
 }
-static Str unq(Str s) { return dg_unquote(s, false); }
 
 DIAG_FN(quadrant_render) {
     (void)fs;
@@ -95,7 +94,7 @@ DIAG_FN(quadrant_render) {
             if (!c2) return diag_fail(err_off, msg, lo, "expected ':' before point");
             cn = str_trim((Str){.p = col + 3, .n = (size_t)(c2 - col - 3)});
         }
-        p.name = unq(p.name);
+        p.name = dg_unquote(p.name, false);
         Str in = {.p = br + 1, .n = (size_t)(ke - br - 1)};
         const char *cm = memchr(in.p, ',', in.n);
         if (!cm || !dg_parse_num((Str){.p = in.p, .n = (size_t)(cm - in.p)}, &p.x) ||

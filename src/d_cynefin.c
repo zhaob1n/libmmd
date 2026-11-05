@@ -79,7 +79,6 @@ static int dom_of(Str w) {
     return -1;
 }
 
-static Str unq(Str s) { return dg_unquote(s, true); }
 
 DIAG_FN(cynefin_render) {
     (void)fs;
@@ -103,7 +102,7 @@ DIAG_FN(cynefin_render) {
             Str sb = str_trim((Str){.p = rest.p, .n = c ? (size_t)(c - rest.p) : rest.n});
             int da = dom_of(sa), db = dom_of(sb);
             if (da < 0 || db < 0) return diag_fail(err_off, msg, lo, "transition needs two domain names");
-            Str lab = c ? unq((Str){.p = c + 1, .n = rest.n - (size_t)(c + 1 - rest.p)}) : (Str){};
+            Str lab = c ? dg_unquote((Str){.p = c + 1, .n = rest.n - (size_t)(c + 1 - rest.p)}, true) : (Str){};
             if (da != db && !VEC_PUSH(a, &trs, ((CTr){(unsigned)da, (unsigned)db, lab}))) return MMD_ERR_NOMEM;
             continue;
         }
@@ -111,7 +110,7 @@ DIAG_FN(cynefin_render) {
         if (d >= 0) { cur = d; continue; }
         if (cur < 0) return diag_fail(err_off, msg, lo, "item outside a domain block");
         bool ok;
-        Str lab = label_normalize(a, unq(ln), &ok);
+        Str lab = label_normalize(a, dg_unquote(ln, true), &ok);
         if (!ok) return MMD_ERR_NOMEM;
         if (!VEC_PUSH(a, &items, ((CItem){(unsigned)cur, lab}))) return MMD_ERR_NOMEM;
     }

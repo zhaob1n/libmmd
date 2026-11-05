@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #include "dcfg.h"
+#include "dgraph.h"
 #include "mmd.h"
 
 #include <math.h>
@@ -94,11 +95,6 @@ static void jp_skip(JP *p, int depth) { /* skip a balanced {..} or [..] */
     }
 }
 
-static Str unq(Str v) {
-    v = str_trim(v);
-    if (v.n >= 2 && (v.p[0] == '"' || v.p[0] == '\'') && v.p[v.n - 1] == v.p[0]) v.p++, v.n -= 2;
-    return v;
-}
 
 /* ---- YAML subset: block mappings by indentation, '#' comments, inline {} mappings ---- */
 static void yaml(Str s) {
@@ -126,7 +122,7 @@ static void yaml(Str s) {
         const char *c = memchr(t.p, ':', t.n);
         if (!c) continue;
         while (sp > 0 && ind[sp - 1] >= in) sp--;
-        Str k = unq((Str){.p = t.p, .n = (size_t)(c - t.p)});
+        Str k = dg_unquote((Str){.p = t.p, .n = (size_t)(c - t.p)}, true);
         Str v = str_trim((Str){.p = c + 1, .n = t.n - (size_t)(c - t.p) - 1});
         Str pre = sp ? stack[sp - 1] : (Str){};
         Str full = join(pre, k);
@@ -135,7 +131,7 @@ static void yaml(Str s) {
         } else if (v.p[0] == '{') {
             JP p = {.s = v.p, .n = v.n};
             jp_obj(&p, full, 1);
-        } else kv_put(full, unq(v));
+        } else kv_put(full, dg_unquote(v, true));
     }
 }
 
@@ -143,7 +139,7 @@ static void directive(Str body) { /* text after "%%{" up to "}%%" */
     body = str_trim(body);
     const char *c = memchr(body.p, ':', body.n);
     if (!c) return;
-    Str name = unq((Str){.p = body.p, .n = (size_t)(c - body.p)});
+    Str name = dg_unquote((Str){.p = body.p, .n = (size_t)(c - body.p)}, true);
     if (!str_eq(name, S("init")) && !str_eq(name, S("initialize"))) return;
     JP p = {.s = c + 1, .n = body.n - (size_t)(c + 1 - body.p)};
     jp_ws(&p);
