@@ -40,8 +40,8 @@ typedef DIAG_FN((*DiagFn));
 [[nodiscard]] DIAG_FN(wardley_render);
 /* swimlane-beta: flowchart parse/draw with a lane layout (d_swimlanes.c) */
 struct Graph;
-[[nodiscard]] mmd_status swim_layout(struct Graph *g, Str **keep);
-[[nodiscard]] mmd_status swim_titles(const struct Graph *g, const Str *keep, Buf *b);
+[[nodiscard]] mmd_status swim_layout(struct Graph *g, Str *keep[static 1]);
+[[nodiscard]] mmd_status swim_titles(const struct Graph *g, const Str *keep, Buf b[static 1]);
 
 /* keyword -> renderer, nullptr when not a diagram type handled here */
 [[nodiscard]] DiagFn diag_lookup(Str kw);

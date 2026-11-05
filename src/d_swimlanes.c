@@ -15,13 +15,13 @@ constexpr double SW_TITLE = 32; /* drawn title rect (layout band is 36) */
 
 /* cost of an orthogonal route Q (n points, (main, cross) space): segments through other nodes or running along
  * an already routed edge segment */
-static bool boxy(const Graph *g, int32_t v) {
+static bool boxy(const Graph g[static 1], int32_t v) {
     Shape s = g->nshape ? g->nshape[v] : SH_RECT;
     return s == SH_RECT || s == SH_ROUND || s == SH_SUBROUTINE;
 }
 
 /* how far the outline reaches at fraction r (0 centre, 1 edge) across a side, for legs offset off-centre */
-static double reach(const Graph *g, int32_t v, double r) {
+static double reach(const Graph g[static 1], int32_t v, double r) {
     Shape s = g->nshape ? g->nshape[v] : SH_RECT;
     r = fmin(fabs(r), 1);
     if (s == SH_RHOMBUS) return 1 - r;
@@ -29,7 +29,7 @@ static double reach(const Graph *g, int32_t v, double r) {
     return 1;
 }
 
-static double route_cost(const Graph *g, bool horiz, int32_t f, int32_t t, size_t ecur, uint32_t n, const double Q[static 2 * n]) {
+static double route_cost(const Graph g[static 1], bool horiz, int32_t f, int32_t t, size_t ecur, uint32_t n, const double Q[static 2 * n]) {
     double c = 0;
     for (uint32_t k = 0; k + 1 < n; k++) {
         double u0 = fmin(Q[2 * k], Q[2 * k + 2]), u1 = fmax(Q[2 * k], Q[2 * k + 2]);
@@ -61,7 +61,7 @@ static double route_cost(const Graph *g, bool horiz, int32_t f, int32_t t, size_
     return c;
 }
 
-static int32_t top_lane(const Graph *g, int32_t s) {
+static int32_t top_lane(const Graph g[static 1], int32_t s) {
     while (s != NONE && g->sparent[s] != NONE) s = g->sparent[s];
     return s;
 }
@@ -102,7 +102,7 @@ static Str cat_key(Arena *a, Str p0, Str p1, Str p2, Str p3) {
     return (Str){s, k};
 }
 
-mmd_status swim_layout(Graph *g, Str **keep) {
+mmd_status swim_layout(Graph *g, Str *keep[static 1]) {
     Arena *a = g->arena;
     size_t nn = g->nn, ns = g->ns, ne = g->ne;
     bool horiz = g->dir == DIR_LR || g->dir == DIR_RL; /* lanes are rows */
@@ -408,7 +408,7 @@ mmd_status swim_layout(Graph *g, Str **keep) {
 }
 
 /* Insert the rotated lane titles of row lanes before </svg>. */
-mmd_status swim_titles(const Graph *g, const Str *keep, Buf *b) {
+mmd_status swim_titles(const Graph *g, const Str *keep, Buf b[static 1]) {
     bool horiz = g->dir == DIR_LR || g->dir == DIR_RL;
     if (!horiz || b->n < 6) return MMD_OK;
     AUTO_BUF Buf t = {};
