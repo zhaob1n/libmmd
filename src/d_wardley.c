@@ -39,14 +39,14 @@ typedef struct W {
     double boxx, boxy;
 } W;
 
-static bool pct(double v, double *o) {
+static bool pct(double v, double o[static 1]) {
     double r = v <= 1 ? v * 100 : v;
     if (!(r >= 0 && r <= 100)) return false;
     *o = r;
     return true;
 }
 /* "[a, b]" at the start of s (after spaces); advances s */
-static int brack(Str *s, double *a, double *b) {
+static int brack(Str s[static 1], double a[static 1], double b[static 1]) {
     Str t = str_trim(*s);
     if (!t.n || t.p[0] != '[') return 0;
     size_t e = 1;
@@ -75,14 +75,14 @@ static size_t find_br(Str s) {
     }
     return s.n;
 }
-static ptrdiff_t node_find(const W *w, Str name) {
+static ptrdiff_t node_find(const W w[static 1], Str name) {
     for (size_t i = 0; i < w->nodes.n; i++) if (str_eq(w->nodes.v[i].id, name)) return (ptrdiff_t)i;
     for (size_t i = 0; i < w->nodes.n; i++) if (str_eq(w->nodes.v[i].label, name)) return (ptrdiff_t)i;
     return -1;
 }
 
 /* component tail: "label [x, y]" and "(build|buy|outsource|market|inertia)" decorators */
-static const char *decorators(Str r, WNode *nd) {
+static const char *decorators(Str r, WNode nd[static 1]) {
     for (;;) {
         r = str_trim(r);
         if (!r.n) return nullptr;
@@ -114,7 +114,7 @@ static const char *decorators(Str r, WNode *nd) {
 /* error-message sentinel for allocation failure (compared by address) */
 static const char OOM[] = "out of memory";
 
-static const char *add_node(W *w, WNode nd) {
+static const char *add_node(W w[static 1], WNode nd) {
     ptrdiff_t e = -1;
     for (size_t i = 0; i < w->nodes.n; i++) if (str_eq(w->nodes.v[i].id, nd.id)) e = (ptrdiff_t)i;
     if (e >= 0) { w->nodes.v[e] = nd; return nullptr; }
@@ -124,7 +124,7 @@ static const char *add_node(W *w, WNode nd) {
 /* link operators, longest first */
 static const Str OPS[] = {S("+<>"), S("-.->"), S("+<"), S("+>"), S("->"), S("+'")};
 
-static const char *parse_link(W *w, Str ln, bool *matched, Str *from_out, Str *to_out, WLink *lk) {
+static const char *parse_link(W w[static 1], Str ln, bool matched[static 1], Str from_out[static 1], Str to_out[static 1], WLink lk[static 1]) {
     *matched = false;
     bool q = false;
     for (size_t i = 0; i < ln.n; i++) {
@@ -168,26 +168,26 @@ static const char *parse_link(W *w, Str ln, bool *matched, Str *from_out, Str *t
 
 /* ---- drawing helpers ---- */
 #define attr(b, k, v) attr_((b), S(k), (v))
-static void attr_(Buf *b, Str k, double v) {
+static void attr_(Buf b[static 1], Str k, double v) {
     buf_ch(b, ' '); buf_str(b, k); buf_lit(b, "=\""); buf_num(b, v); buf_ch(b, '"');
 }
-static void line(Buf *b, double x1, double y1, double x2, double y2, Str extra) {
+static void line(Buf b[static 1], double x1, double y1, double x2, double y2, Str extra) {
     buf_lit(b, "<line"); attr(b, "x1", x1); attr(b, "y1", y1); attr(b, "x2", x2); attr(b, "y2", y2);
     buf_str(b, extra); buf_lit(b, "/>");
 }
-static void circle(Buf *b, double cx, double cy, double r, Str extra) {
+static void circle(Buf b[static 1], double cx, double cy, double r, Str extra) {
     buf_lit(b, "<circle"); attr(b, "cx", cx); attr(b, "cy", cy); attr(b, "r", r);
     buf_str(b, extra); buf_lit(b, "/>");
 }
-static void text(Buf *b, double x, double y, Str extra, Str s) {
+static void text(Buf b[static 1], double x, double y, Str extra, Str s) {
     buf_lit(b, "<text"); attr(b, "x", x); attr(b, "y", y); buf_str(b, extra); buf_ch(b, '>');
     buf_xml(b, s); buf_lit(b, "</text>");
 }
 
 constexpr double PAD = 48;
 /* map coordinates (0..100, evolution left->right, visibility bottom->top) to SVG pixels */
-static double px(const W *w, double v) { return PAD + v / 100 * (w->width - 2 * PAD); }
-static double py(const W *w, double v) { return w->height - PAD - v / 100 * (w->height - 2 * PAD); }
+static double px(const W w[static 1], double v) { return PAD + v / 100 * (w->width - 2 * PAD); }
+static double py(const W w[static 1], double v) { return w->height - PAD - v / 100 * (w->height - 2 * PAD); }
 constexpr double NR = 6;
 constexpr double NLO = 8;
 /* hits of segment (x0,y0)-(x1,y1) with box b (x0 y0 x1 y1), sampled */
@@ -213,7 +213,7 @@ static double seg_box_hits(double x0, double y0, double x1, double y1, const dou
 #define STK "#333333"
 
 /* parse error at off, or MMD_ERR_NOMEM when a helper reported OOM */
-[[nodiscard]] static mmd_status wfail(size_t *err_off, char msg[static 160], size_t off, const char *m) {
+[[nodiscard]] static mmd_status wfail(size_t err_off[static 1], char msg[static 160], size_t off, const char *m) {
     return m == OOM ? MMD_ERR_NOMEM : diag_fail(err_off, msg, off, m);
 }
 
