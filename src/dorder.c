@@ -355,19 +355,20 @@ typedef struct Heap { size_t n; void *p[48]; } Heap;
     if (p) h->p[h->n++] = p;
     return p;
 }
-static void heap_free(Heap *h) {
+/* [[gnu::cleanup]] handlers */
+static void heap_release(Heap *h) {
     for (size_t i = 0; i < h->n; i++) free(h->p[i]);
     h->n = 0;
 }
+static void ctx_release(Ctx *c) { free(c->ent), free(c->lk); }
 
 bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
     size_t V = d->V, S = d->S, R = d->R, NS = V + S;
     DT(t_start);
-    Ctx c = {.d = d, .V = V, .S = S, .NS = NS};
-    bool ok = false;
+    [[gnu::cleanup(ctx_release)]] Ctx c = {.d = d, .V = V, .S = S, .NS = NS};
     /* small graphs: scratch from the render arena (no per-call malloc/free churn); large ones use
      * tracked malloc blocks (see Heap) so the render arena does not keep their peak */
-    Heap heap = {};
+    [[gnu::cleanup(heap_release)]] Heap heap = {};
     bool small = NS <= 1024 && S <= 32;
 #define SA(p, n) (small ? ANEW(A, typeof(*(p)), (n)) : heap_new(&heap, (n), sizeof *(p)))
     uint32_t *rioff = SA(rioff, R + 2), *ri = nullptr, *dstk = nullptr, *dit = nullptr;
@@ -411,7 +412,7 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
     if (!rioff || !c.nx || !c.khead || !c.ktail || !c.knext || !c.mtag || !c.mix || !c.sub || !c.ord || !c.src ||
         !c.outl || !c.sbuf || !c.stmp || !c.cga || !c.cgb || !c.cgbits || !c.prev || !c.ptag || !dstk || !dit ||
         !vis || !best || !tree || !fbc || !fsi || !fui || !ver || !pva || !pvb || !pcc || !mcgh || !mst || !mcgn || !msnap || !mout)
-        goto done;
+        return false;
     memset(rioff, 0, (R + 2) * sizeof *rioff);
     memset(c.mtag, 0, NS * sizeof *c.mtag);
     memset(c.cgbits, 0, ((S * S + 63) / 64 + 1) * sizeof *c.cgbits);
@@ -427,10 +428,10 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
     }
     for (size_t r = 0; r < R; r++) rioff[r + 1] += rioff[r];
     ri = SA(ri, rioff[R] + 1);
-    if (!ri) goto done;
+    if (!ri) return false;
     {
         uint32_t *tmpf = R <= NS ? c.ord : SA(tmpf, R);
-        if (!tmpf) goto done;
+        if (!tmpf) return false;
         for (size_t r = 0; r < R; r++) tmpf[r] = rioff[r];
         for (size_t q = 0; q < d->nn; q++) {
             uint32_t x = d->nord[q];
@@ -441,7 +442,7 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
     /* initOrder: DFS from simple nodes sorted (stably) by rank, successors in dagre order */
     {
         uint32_t *fillp = SA(fillp, R + 1);
-        if (!fillp) goto done;
+        if (!fillp) return false;
         for (size_t r = 0; r < R; r++) fillp[r] = d->loff[r];
         for (size_t r = 0; r < R; r++)
             for (uint32_t q = rioff[r]; q < rioff[r + 1]; q++) {
@@ -516,7 +517,7 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
                 uint32_t cgn0 = c.cgn;
                 uint64_t cgh0 = c.cgh;
                 Res rr = sort_subgraph(&c, (int32_t)S);
-                if (c.oom) goto done;
+                if (c.oom) return false;
                 uint32_t i = 0;
                 for (int32_t x = rr.head; x >= 0 && i < w; x = c.nx[x]) mo[i++] = x;
                 memcpy(snap, d->lay + nlo, nw * sizeof *snap);
@@ -572,10 +573,6 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
 #ifdef MMD_PROFILE
     if (getenv("MMD_PROFV")) fprintf(stderr, "  dtime init=%.1f sweeps=%.1f cc=%.1f us R=%zu V=%zu E=%u\n", t_init - t_start, t_sw, t_cc, R, V, d->soff[V]);
 #endif
-    ok = true;
-done:
 #undef SA
-    heap_free(&heap);
-    free(c.ent); free(c.lk);
-    return ok;
+    return true;
 }
