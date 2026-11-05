@@ -388,7 +388,8 @@ static void nest_dfs(Ctx c[static 1], uint32_t x) {
 
 typedef struct HE { uint64_t k; int32_t e; } HE;
 
-bool dagre_rank(Arena A[static 1], const DRankIn in[static 1], int32_t rank[], int32_t top[], int32_t bot[], int32_t corder[]) {
+bool dagre_rank(Arena A[restrict static 1], const DRankIn in[restrict static 1], int32_t rank[restrict], int32_t top[restrict],
+                int32_t bot[restrict], int32_t corder[restrict]) {
     size_t N = in->N, S = in->S, NR = in->nreal;
     size_t M = NR + 1 + 2 * S;
     size_t kn = in->koff[S + 1];
