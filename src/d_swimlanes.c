@@ -3,6 +3,7 @@
  * (rows for LR/RL, columns for TB/BT) with a rotated title band, nodes sit in rank columns where only
  * intra-lane edges advance the rank (cross-lane edges may stay in the same column, as in mermaid),
  * and edges are routed orthogonally. */
+#define _GNU_SOURCE
 #include <ctype.h>
 #include <math.h>
 #include <stdlib.h>
@@ -78,16 +79,15 @@ static int key_cmp(Str a, Str b) {
     return 0;
 }
 
-static const Str *sort_keys;
-static int idx_cmp(const void *x, const void *y) {
+static int idx_cmp(const void *x, const void *y, void *keys) {
     int32_t i = *(const int32_t *)x, j = *(const int32_t *)y;
-    int c = key_cmp(sort_keys[i], sort_keys[j]);
+    const Str *k = keys;
+    int c = key_cmp(k[i], k[j]);
     return c ? c : i - j;
 }
 static void sort_idx(size_t n, int32_t v[static n], const Str *keys) { /* n >= 1 */
     if (n == 1) return;
-    sort_keys = keys;
-    qsort(v, n, sizeof *v, idx_cmp);
+    qsort_r(v, n, sizeof *v, idx_cmp, (void *)keys);
 }
 
 static Str cat_key(Arena *a, Str p0, Str p1, Str p2, Str p3) {
