@@ -593,7 +593,6 @@ static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, 
         }
     }
     PMARK("bk-conf");
-    size_t E = L->soff[V];
     size_t maxdeg = 1;
     for (size_t v = 0; v < V; v++) {
         size_t d1 = L->poff[v + 1] - L->poff[v], d2 = L->soff[v + 1] - L->soff[v];
@@ -607,16 +606,15 @@ static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, 
         .xs = ANEW(A, double, V), .nbuf = ANEW(A, int32_t, maxdeg),
     };
     double *xss[4];
-    for (unsigned k = 0; k < 4; k++) xss[k] = ANEW(A, double, V);
+    for (size_t k = 0; k < countof(xss); k++) xss[k] = ANEW(A, double, V);
     if (!W.root || !W.align || !W.posl || !W.order || !W.indeg || !W.qbuf || !W.boff || !W.bidx ||
         !W.bw || !W.xs || !W.nbuf || !xss[0] || !xss[1] || !xss[2] || !xss[3])
         return false;
-    (void)E;
     double *sepv = ANEW(A, double, V + 1);
     if (!sepv) return false;
     for (size_t r = 0; r < R; r++)
         for (size_t i = L->loff[r] + 1; i < L->loff[r + 1]; i++) sepv[i] = sep(L, L->lay[i - 1], L->lay[i]);
-    for (unsigned k = 0; k < 4; k++) { (void)bk_pass(L, &conf, k < 2, (k & 1u) == 0, &W, sepv, xss[k]); PMARK("bk-pass"); }
+    for (size_t k = 0; k < countof(xss); k++) { (void)bk_pass(L, &conf, k < 2, (k & 1u) == 0, &W, sepv, xss[k]); PMARK("bk-pass"); }
     /* align to the narrowest layout */
     double mins[4], maxs[4], best = INFINITY;
     unsigned bi = 0;
@@ -781,7 +779,7 @@ static mmd_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
         }
     for (size_t i = 0; i < nrevord; i++) if (DV(revord[i]) && !inseq[revord[i]]) eseq[ne++] = revord[i], inseq[revord[i]] = 1;
     /* g.nodes(): subgraphs in reverse closing order, then vertices; array-index ids first */
-    size_t nn = 0, nc = 0;
+    size_t nn = 0;
     {
         /* iterative post-order over the cluster forest with children in ascending index */
         uint32_t *post = kid; /* reuse */
@@ -802,10 +800,8 @@ static mmd_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
             }
         }
         for (size_t i = np; i-- > 0;) nord[nn++] = (uint32_t)V + post[i];
-        nc = nn;
     }
     for (size_t v = 0; v < N; v++) if (L->rank[v] >= 0) nord[nn++] = (uint32_t)v;
-    size_t nbeg = nn;
     { /* stable: integer-like keys first, ascending */
         size_t a = 0;
         uint32_t *tmp = ANEW(A, uint32_t, nn + 1);
@@ -820,8 +816,6 @@ static mmd_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
         for (size_t i = 0; i < nn; i++) if (ikey[nord[i]] < 0) tmp[a++] = nord[i];
         memcpy(nord, tmp, nn * sizeof *nord);
     }
-    (void)nc;
-    (void)nbeg;
     for (size_t i = 0; i < L->nco; i++) /* nestingGraph _bt/_bb, in creation order */
         for (unsigned k = 0; k < 2; k++) {
             size_t d = L->tbase + 2 * i + k;
