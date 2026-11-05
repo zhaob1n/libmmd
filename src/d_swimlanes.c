@@ -90,7 +90,7 @@ static void sort_idx(size_t n, int32_t v[static n], const Str *keys) { /* n >= 1
     qsort_r(v, n, sizeof *v, idx_cmp, (void *)keys);
 }
 
-static Str cat_key(Arena *a, Str p0, Str p1, Str p2, Str p3) {
+static Str cat_key(Arena a[static 1], Str p0, Str p1, Str p2, Str p3) {
     size_t n = 11 + p1.n + 1 + p2.n + 1 + p3.n;
     char *s = ANEW(a, char, n + 1);
     if (!s) return (Str){};

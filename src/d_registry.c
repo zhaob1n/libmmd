@@ -2,7 +2,7 @@
 
 #include "diagrams.h"
 
-mmd_status diag_fail(size_t *err_off, char msg[static 160], size_t off, const char *m) {
+mmd_status diag_fail(size_t err_off[static 1], char msg[static 160], size_t off, const char m[static 1]) {
     *err_off = off;
     snprintf(msg, 160, "%s", m);
     return MMD_ERR_SYNTAX;

@@ -35,7 +35,7 @@ enum { BK_CALL, BK_CTRL, BK_NONE };
 typedef struct Blk { uint8_t kind; bool returned; int32_t callee, caller, ev; Str ret, num; int cnt; } Blk;
 
 /* Consecutive `//` lines form one multi-line comment; `**bold**` markers are dropped. */
-static Str cm_join(Arena *a, Str prev, Str cm, bool oom[static 1]) {
+static Str cm_join(Arena a[static 1], Str prev, Str cm, bool oom[static 1]) {
     size_t n = prev.n + (prev.n ? 1 : 0) + cm.n;
     char *p = ANEW(a, char, n + 1);
     if (!p) { *oom = true; return prev; }

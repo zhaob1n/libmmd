@@ -61,7 +61,7 @@ static void squarify(TNode *V, size_t n, const uint32_t ch[static n], double val
         value -= sum, i0 = i1;
     }
 }
-static int by_val_desc(const uint32_t *a, const uint32_t b[static 1], const TNode *V) {
+static int by_val_desc(const uint32_t a[static 1], const uint32_t b[static 1], const TNode *V) {
     double x = V[*a].v, y = V[*b].v;
     return (x < y) - (x > y);
 }
