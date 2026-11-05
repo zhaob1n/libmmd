@@ -383,7 +383,7 @@ DIAG_FN(wardley_render) {
     double W_ = w.width, H = w.height, cw = W_ - 2 * PAD, ch = H - 2 * PAD, sq = NR * 1.6;
     for (size_t i = 0; i < w.nodes.n; i++) w.nodes.v[i].px = px(&w, w.nodes.v[i].x), w.nodes.v[i].py = py(&w, w.nodes.v[i].y);
 
-    Buf b = {};
+    AUTO_BUF Buf b = {};
     buf_lit(&b, "<g class=\"wardley-map\"><rect class=\"wardley-background\""); attr(&b, "width", W_); attr(&b, "height", H);
     buf_lit(&b, " fill=\"white\"/>");
     if (ttl.n) text(&b, W_ / 2, PAD / 2, S(" class=\"wardley-title\" fill=\"" TXT "\" font-size=\"12.6\" font-weight=\"bold\" text-anchor=\"middle\" dominant-baseline=\"middle\""), ttl);
@@ -413,7 +413,7 @@ DIAG_FN(wardley_render) {
     buf_lit(&b, "</g>");
     /* pipelines */
     if (w.pipes.n) {
-        Buf pl = {};
+        AUTO_BUF Buf pl = {};
         buf_lit(&b, "<g class=\"wardley-pipelines\">");
         buf_lit(&pl, "<g class=\"wardley-pipeline-links\">");
         for (size_t p = 0; p < w.pipes.n; p++) {
@@ -421,7 +421,7 @@ DIAG_FN(wardley_render) {
             if (!pp->n) continue;
             /* sort component indices by x (insertion sort, small) */
             size_t *ord = ANEW(a, size_t, pp->n);
-            if (!ord) { free(b.p), free(pl.p); return MMD_ERR_NOMEM; }
+            if (!ord) return MMD_ERR_NOMEM;
             for (size_t k = 0; k < pp->n; k++) {
                 size_t v = pp->first + k, j = k;
                 while (j > 0 && w.nodes.v[ord[j - 1]].x > w.nodes.v[v].x) ord[j] = ord[j - 1], j--;
@@ -441,13 +441,12 @@ DIAG_FN(wardley_render) {
         buf_lit(&b, "</g>");
         buf_lit(&pl, "</g>");
         buf_put(&b, pl.n, pl.p);
-        free(pl.p);
     }
     /* component labels without a user offset: the default up-right spot, or the first of a few
      * alternatives that keeps clear of links, trends, other nodes, earlier labels and the canvas */
     double *lbo = ANEW(a, double, 6 * w.nodes.n + 1); /* ox, oy, box x0 y0 x1 y1 */
     uint8_t *halo = ANEW(a, uint8_t, w.nodes.n + 1); /* label still crosses a line: white halo behind the text */
-    if (!lbo || !halo) { free(b.p); return MMD_ERR_NOMEM; }
+    if (!lbo || !halo) return MMD_ERR_NOMEM;
     memset(halo, 0, w.nodes.n + 1);
     for (size_t i = 0; i < w.nodes.n; i++) {
         WNode *nd = &w.nodes.v[i];
@@ -492,7 +491,7 @@ DIAG_FN(wardley_render) {
     /* links */
     double *LL = ANEW(a, double, 4 * w.links.n + 4); /* placed link-label boxes */
     size_t nll = 0;
-    if (!LL) { free(b.p); return MMD_ERR_NOMEM; }
+    if (!LL) return MMD_ERR_NOMEM;
     buf_lit(&b, "<g class=\"wardley-links\">");
     for (size_t pass = 0; pass < 2; pass++)
         for (size_t l = 0; l < w.links.n; l++) {
@@ -626,7 +625,7 @@ DIAG_FN(wardley_render) {
         if (w.has_box) {
             /* sorted (stable) by number, only those with text */
             size_t *ord = ANEW(a, size_t, w.ann.n), m = 0;
-            if (!ord) { free(b.p); return MMD_ERR_NOMEM; }
+            if (!ord) return MMD_ERR_NOMEM;
             for (size_t k = 0; k < w.ann.n; k++) {
                 if (!w.ann.v[k].s.n) continue;
                 size_t j = m++;
@@ -636,11 +635,11 @@ DIAG_FN(wardley_render) {
             if (m) {
                 double maxw = 0;
                 Str *lines = ANEW(a, Str, m);
-                if (!lines) { free(b.p); return MMD_ERR_NOMEM; }
+                if (!lines) return MMD_ERR_NOMEM;
                 for (size_t k = 0; k < m; k++) {
                     WPt *p = &w.ann.v[ord[k]];
                     char *o = ANEW(a, char, p->s.n + 16);
-                    if (!o) { free(b.p); return MMD_ERR_NOMEM; }
+                    if (!o) return MMD_ERR_NOMEM;
                     int pl = snprintf(o, 16, "%u. ", p->num);
                     memcpy(o + pl, p->s.p, p->s.n);
                     lines[k] = (Str){.p = o, .n = (size_t)pl + p->s.n};

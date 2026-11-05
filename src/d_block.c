@@ -636,7 +636,8 @@ DIAG_FN(block_render) {
         if (y0 < y1) bb.y0 = y0 - top, bb.y1 = y1;
     }
     /* edges go to their own buffer first: gap routes and their labels may widen the viewBox */
-    Buf ebuf = {}, *eb = &ebuf;
+    AUTO_BUF Buf ebuf = {};
+    Buf *eb = &ebuf;
     double *LBX = ANEW(a, double, 4 * ev.n + 4);
     size_t nlb = 0;
     if (!LBX) return MMD_ERR_NOMEM;
@@ -794,7 +795,7 @@ DIAG_FN(block_render) {
             dg_text(eb, ev.v[e].label, fs * 0.875, mx, my, "middle", "bt\" font-size=\"14");
         }
     }
-    if (eb->oom) { free(ebuf.p); return MMD_ERR_NOMEM; }
+    if (eb->oom) return MMD_ERR_NOMEM;
     if (!buf_reserve(out, 2048 + nb * 400 + ev.n * 300)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 5, "block", CSS);
     buf_lit(out, DEFS);
@@ -879,7 +880,6 @@ DIAG_FN(block_render) {
         buf_lit(out, "</g>");
     }
     buf_put(out, ebuf.n, ebuf.p);
-    free(ebuf.p);
     buf_lit(out, "</svg>\n");
     return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }
