@@ -213,7 +213,7 @@ static double seg_box_hits(double x0, double y0, double x1, double y1, const dou
 #define STK "#333333"
 
 /* parse error at off, or MMD_ERR_NOMEM when a helper reported OOM */
-[[nodiscard]] static mmd_status wfail(size_t err_off[static 1], char msg[static 160], size_t off, const char *m) {
+[[nodiscard]] static mmd_status wfail(size_t err_off[static 1], char msg[static 160], size_t off, const char m[static 1]) {
     return m == OOM ? MMD_ERR_NOMEM : diag_fail(err_off, msg, off, m);
 }
 
