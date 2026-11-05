@@ -65,7 +65,7 @@ bool rich_needed(Str s) {
     return false;
 }
 
-Str rich_normalize(Arena *a, Str raw, bool ok[static 1]) {
+Str rich_normalize(Arena a[static 1], Str raw, bool ok[static 1]) {
     Str s = str_trim(raw);
     if (!(s.n >= 4 && s.p[0] == '"' && s.p[s.n - 1] == '"' && s.p[1] == '`' && s.p[s.n - 2] == '`'))
         return label_normalize(a, raw, ok);
@@ -138,7 +138,7 @@ void rich_measure(Str s, double fs, double w[static 1], unsigned lines[static 1]
     *lines = cnt;
 }
 
-Str rich_wrap(Arena *a, Str s, double fs, double maxw, bool ok[static 1]) {
+Str rich_wrap(Arena a[static 1], Str s, double fs, double maxw, bool ok[static 1]) {
     *ok = true;
     if (!s.n || s.p[0] != RICH_MD) return s;
     double w;
