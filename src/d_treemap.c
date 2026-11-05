@@ -30,11 +30,11 @@ static constexpr char SECT[][8] = {"#fff", "#000", "#000", "#000", "#000", "#000
 
 /* ---- d3-hierarchy 3 treemap() port: squarify (ratio phi), paddings, .round(true) ---- */
 static void dice(TNode *V, size_t n, const uint32_t ch[static n], double sum, double x0, double y0, double x1, double y1) {
-    double k = sum ? (x1 - x0) / sum : 0;
+    double k = sum != 0 ? (x1 - x0) / sum : 0;
     for (size_t i = 0; i < n; i++) { TNode *t = &V[ch[i]]; t->y = y0, t->h = y1, t->x = x0, t->w = x0 += t->v * k; }
 }
 static void slice(TNode *V, size_t n, const uint32_t ch[static n], double sum, double x0, double y0, double x1, double y1) {
-    double k = sum ? (y1 - y0) / sum : 0;
+    double k = sum != 0 ? (y1 - y0) / sum : 0;
     for (size_t i = 0; i < n; i++) { TNode *t = &V[ch[i]]; t->x = x0, t->w = x1, t->y = y0, t->h = y0 += t->v * k; }
 }
 /* x,y,w,h hold x0,y0,x1,y1 during layout */
@@ -43,7 +43,7 @@ static void squarify(TNode *V, size_t n, const uint32_t ch[static n], double val
     size_t i0 = 0, i1 = 0;
     while (i0 < n) {
         double dx = x1 - x0, dy = y1 - y0, sum;
-        do sum = V[ch[i1++]].v; while (!sum && i1 < n);
+        do sum = V[ch[i1++]].v; while (sum == 0 && i1 < n);
         double mn = sum, mx = sum, alpha = fmax(dy / dx, dx / dy) / (value * ratio), beta = sum * sum * alpha;
         double minr = fmax(mx / beta, beta / mn);
         for (; i1 < n; ++i1) {
@@ -56,8 +56,8 @@ static void squarify(TNode *V, size_t n, const uint32_t ch[static n], double val
             if (nr > minr) { sum -= nv; break; }
             minr = nr;
         }
-        if (dx < dy) { double yy = value ? y0 + dy * sum / value : y1; dice(V, i1 - i0, ch + i0, sum, x0, y0, x1, yy); if (value) y0 = yy; }
-        else { double xx = value ? x0 + dx * sum / value : x1; slice(V, i1 - i0, ch + i0, sum, x0, y0, xx, y1); if (value) x0 = xx; }
+        if (dx < dy) { double yy = value != 0 ? y0 + dy * sum / value : y1; dice(V, i1 - i0, ch + i0, sum, x0, y0, x1, yy); if (value != 0) y0 = yy; }
+        else { double xx = value != 0 ? x0 + dx * sum / value : x1; slice(V, i1 - i0, ch + i0, sum, x0, y0, xx, y1); if (value != 0) x0 = xx; }
         value -= sum, i0 = i1;
     }
 }
@@ -269,8 +269,8 @@ DIAG_FN(treemap_render) {
         if (uc && uc->stroke.n) buf_xml(out, uc->stroke); else put_c(out, "cScalePeer", fi);
         buf_lit(out, "\"/>");
         /* header label: x+6, clipped/ellipsised to the space left of the value */
-        double room = fmax(15, showv && t->v ? t->w - 10 - 30 - 10 - 6 : t->w - 12);
-        bool sv = showv && t->v; /* narrow header: the value keeps what's left after real room for the label */
+        double room = fmax(15, showv && t->v != 0 ? t->w - 10 - 30 - 10 - 6 : t->w - 12);
+        bool sv = showv && t->v != 0; /* narrow header: the value keeps what's left after real room for the label */
         if (sv) {
             fmt_val(t->v, sizeof nb_, nb_, &nl);
             double vw = text_width((Str){.p = nb_, .n = nl}, 10);
@@ -331,7 +331,7 @@ DIAG_FN(treemap_render) {
         char cl[64];
         snprintf(cl, sizeof cl, "ln\" font-size=\"%.0f", f);
         dg_text(out, t->label, f, t->x + t->w / 2, t->y + t->h / 2, "middle", cl);
-        if (showv && t->v) {
+        if (showv && t->v != 0) {
             fmt_val(t->v, sizeof nb_, nb_, &nl);
             Str vs = {.p = nb_, .n = nl};
             double vt = t->h / 2 + f / 2 + sp; /* dominant-baseline: hanging */

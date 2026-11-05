@@ -34,8 +34,8 @@ static constexpr char SECS[][8] = {"#cccc33", "#99cc33", "#7f33cc", "#cc33cc", "
 static constexpr bool SECW[] = {false, false, true, false, false, false, false, false, false, false, false}; /* white text */
 
 static bool parse_node(Str s, Str *label, uint8_t *shape) {
-    typedef struct { char o[3], c[3]; uint8_t sh; } Shape;
-    static constexpr Shape SH[] = {
+    typedef struct { char o[3], c[3]; uint8_t sh; } Delim;
+    static constexpr Delim SH[] = {
         {"((", "))", M_CIR}, {"))", "((", M_BANG}, {"{{", "}}", M_HEX}, {"[", "]", M_SQ},
         {"(", ")", M_RND}, {")", "(", M_CLOUD}};
     for (size_t i = 0; i < s.n; i++)
@@ -173,7 +173,7 @@ static void mm_pair(const MNode V[], size_t i, size_t j, double margin, double f
 /* SVG endpoint arc (rotation ignored; mermaid's are circular or ~1 degree) sampled into bb */
 static void arc_bb(BBox *bb, double x1, double y1, double rx, double ry, bool large, bool sweep, double x2, double y2) {
     double dx = (x1 - x2) / 2, dy = (y1 - y2) / 2;
-    if (rx <= 0 || ry <= 0 || (!dx && !dy)) { bb_add(bb, fmin(x1, x2), fmin(y1, y2), fmax(x1, x2), fmax(y1, y2)); return; }
+    if (rx <= 0 || ry <= 0 || (dx == 0 && dy == 0)) { bb_add(bb, fmin(x1, x2), fmin(y1, y2), fmax(x1, x2), fmax(y1, y2)); return; }
     double lam = dx * dx / (rx * rx) + dy * dy / (ry * ry);
     if (lam > 1) rx *= sqrt(lam), ry *= sqrt(lam);
     double num = rx * rx * ry * ry - rx * rx * dy * dy - ry * ry * dx * dx, den = rx * rx * dy * dy + ry * ry * dx * dx;

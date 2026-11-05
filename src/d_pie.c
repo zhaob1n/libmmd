@@ -115,7 +115,7 @@ DIAG_FN(pie_render) {
     double ty = -14; /* title baseline: above any outside label near 12 o'clock */
     for (size_t i = 0; i < sl.n; i++) if (LO[i] && fabs(LX[i] - CX) < 120) ty = fmin(ty, LY[i] - 22);
     if (title.n) bb.y0 = fmin(bb.y0, ty - 26);
-    bb.y0 = fmin(bb.y0, CY - sl.n * 22 / 2.0 - 4), bb.y1 = fmax(bb.y1, CY + sl.n * 22 / 2.0 + 4); /* tall legends */
+    bb.y0 = fmin(bb.y0, CY - (double)(sl.n * 22) / 2.0 - 4), bb.y1 = fmax(bb.y1, CY + (double)(sl.n * 22) / 2.0 + 4); /* tall legends */
     if (!buf_reserve(out, 2048 + sl.n * 600)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 8, "pie", CSS);
     if (title.n) dg_text(out, title, 25, CX, ty, "middle", "ttl");
@@ -154,7 +154,7 @@ DIAG_FN(pie_render) {
     }
     buf_lit(out, "<circle class=\"outer\" cx=\""); buf_num(out, CX); buf_lit(out, "\" cy=\""); buf_num(out, CY);
     buf_lit(out, "\" r=\""); buf_num(out, R + 1); buf_lit(out, "\"/>");
-    double ly = CY - sl.n * 22 / 2.0;
+    double ly = CY - (double)(sl.n * 22) / 2.0;
     for (size_t i = 0; i < sl.n; i++, ly += 22) {
         const char *col = dcfg_pal("pie", i % countof(COLORS) + 1, COLORS[i % countof(COLORS)]);
         buf_lit(out, "<rect width=\"18\" height=\"18\" x=\""); buf_num(out, LEGX); buf_lit(out, "\" y=\"");

@@ -117,7 +117,7 @@ DIAG_FN(journey_render) {
     DG_HEAD(out, bb, 0, "journey", CSS);
     if (title.n) dg_text(out, title, 20, left, 25, "start", "ttl");
     for (size_t i = 0; i < actors.n; i++) {
-        double y = 60 + i * 20;
+        double y = 60 + (double)i * 20;
         buf_lit(out, "<circle class=\"adot\" r=\"7\" cx=\"20\" cy=\""); buf_num(out, y);
         buf_lit(out, "\" fill=\""); buf_put(out, strlen(ACTCOL[i % countof(ACTCOL)]), ACTCOL[i % countof(ACTCOL)]);
         buf_lit(out, "\"/>");
@@ -126,7 +126,7 @@ DIAG_FN(journey_render) {
     for (size_t i = 0; i < tk.n;) { /* section headers span their tasks */
         size_t j = i;
         while (j < tk.n && tk.v[j].sec == tk.v[i].sec) j++;
-        double x = left + i * (TW + TM), w = (j - i) * (TW + TM) - TM;
+        double x = left + (double)i * (TW + TM), w = (double)(j - i) * (TW + TM) - TM;
         const char *col = dcfg_pal("fillType", tk.v[i].sec % countof(SECCOL), SECCOL[tk.v[i].sec % countof(SECCOL)]);
         if (secs.n) {
             dg_rect_fill(out, x, SY, w, BOX, 3, "tbox", col);
@@ -136,7 +136,7 @@ DIAG_FN(journey_render) {
     }
     for (size_t i = 0; i < tk.n; i++) {
         const JTask *t = &tk.v[i];
-        double x = left + i * (TW + TM), cx = x + TW / 2;
+        double x = left + (double)i * (TW + TM), cx = x + TW / 2;
         double s = t->score < 0 ? 0 : t->score > 5 ? 5 : t->score, fy = FACE0 + (5 - s) * 30;
         dg_line(out, cx, TY, cx, LINE_END, "tl");
         dg_rect_fill(out, x, TY, TW, BOX, 3, "tbox", dcfg_pal("fillType", t->sec % countof(SECCOL), SECCOL[t->sec % countof(SECCOL)]));
