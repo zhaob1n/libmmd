@@ -99,6 +99,19 @@ static inline Str str_trim(Str s) {
     return s;
 }
 static inline bool str_starts(Str s, Str pre) { return s.n >= pre.n && memcmp(s.p, pre.p, pre.n) == 0; }
+/* s[i, j); callers guarantee i <= j <= s.n */
+static inline Str str_sub(Str s, size_t i, size_t j) { return (Str){.p = s.p + i, .n = j - i}; }
+static inline Str str_from(Str s, size_t i) { return (Str){.p = s.p + i, .n = s.n - i}; }
+/* [b, e) within one string */
+static inline Str str_span(const char *b, const char *e) { return (Str){.p = b, .n = (size_t)(e - b)}; }
+/* split at the first c: *head before it, *tail after it; false (outputs untouched) when absent */
+static inline bool str_split(Str s, char c, Str *head, Str *tail) {
+    const char *m = s.n ? memchr(s.p, c, s.n) : nullptr;
+    if (!m) return false;
+    *head = str_span(s.p, m);
+    *tail = str_span(m + 1, s.p + s.n);
+    return true;
+}
 
 /* ---- arena ---- */
 typedef struct ArenaBlock ArenaBlock;
@@ -138,6 +151,9 @@ void arena_free(Arena *a);
 /* Drop all allocations but keep (coalesced) memory for reuse. */
 void arena_reset(Arena *a);
 [[nodiscard]] Str arena_strdup(Arena *a, Str s);
+/* concatenation of n views, NUL-terminated; {} on OOM */
+[[nodiscard]] Str str_cat(Arena *a, size_t n, const Str parts[static n]);
+#define STR_CAT(a, ...) str_cat((a), countof(((const Str[]){__VA_ARGS__})), (const Str[]){__VA_ARGS__})
 
 #define ANEW(a, T, n) arena_alloc_array((a), (n), sizeof(T), alignof(T))
 
