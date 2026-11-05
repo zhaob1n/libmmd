@@ -92,7 +92,7 @@ static bool cmp_bias(const Ent *a, const Ent *b, bool bias, bool *tie) { /* a be
     *tie = true; /* result depends on biasRight */
     return bias ? a->i > b->i : a->i < b->i;
 }
-static void msort(Ent **a, Ent **t, size_t n, bool bias, bool *tie) { /* stable merge sort, like TimSort's result */
+static void msort(size_t n, Ent **a, Ent **t, bool bias, bool *tie) { /* stable merge sort, like TimSort's result */
     if (n < 2) return;
     if (n <= 12) {
         for (size_t i = 1; i < n; i++) {
@@ -104,8 +104,8 @@ static void msort(Ent **a, Ent **t, size_t n, bool bias, bool *tie) { /* stable 
         return;
     }
     size_t h = n / 2;
-    msort(a, t, h, bias, tie);
-    msort(a + h, t, n - h, bias, tie);
+    msort(h, a, t, bias, tie);
+    msort(n - h, a + h, t, bias, tie);
     size_t i = 0, j = h, k = 0;
     while (i < h && j < n) t[k++] = cmp_bias(a[j], a[i], bias, tie) ? a[j++] : a[i++];
     while (i < h) t[k++] = a[i++];
@@ -248,7 +248,7 @@ expand:;
         size_t w = 0;
         for (uint32_t j = n; j-- > 0;) if (bk[j]) uns[w++] = bk[j];
     }
-    msort(srt, c->stmp, nsort, c->bias, &c->tie);
+    msort(nsort, srt, c->stmp, c->bias, &c->tie);
     double sum = 0, wt = 0;
     uint32_t vsi = 0;
     while (nun && uns[nun - 1]->i <= vsi) { Ent *u = uns[--nun]; res_push(c, &out, u->head, u->tail, u->len); vsi++; }
