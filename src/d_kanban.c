@@ -41,7 +41,6 @@ static Str node_label(Str s, Str *meta) {
 }
 
 DIAG_FN(kanban_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;

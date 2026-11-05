@@ -113,7 +113,6 @@ static Str nl_next(Str t, size_t *i) { /* next '\n'-separated line from *i; *i p
 }
 
 DIAG_FN(venn_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str ln;
     size_t lo;

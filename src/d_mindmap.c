@@ -221,7 +221,6 @@ static void scallop(Buf *out, BBox *bb, const MNode *m) {
 }
 
 DIAG_FN(mindmap_render) {
-    (void)fs, (void)title;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;

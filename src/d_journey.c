@@ -41,7 +41,6 @@ static void face(Buf *b, double cx, double cy, double score) {
 }
 
 DIAG_FN(journey_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;

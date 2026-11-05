@@ -133,7 +133,6 @@ static void fmt_val(double v, size_t cap, char b[static cap], size_t *len) {
 }
 
 DIAG_FN(treemap_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;

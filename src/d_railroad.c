@@ -474,7 +474,6 @@ static void draw(DC *c, const RNode *r, double ox, double oy) {
 typedef struct Rule { Str name; RNode *def; } Rule;
 
 DIAG_FN(railroad_render) {
-    (void)fs, (void)title;
     LineIt it = {.s = src, .n = n, .i = off};
     Str ln;
     size_t lo;

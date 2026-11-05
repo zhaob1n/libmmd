@@ -114,7 +114,6 @@ static double branch(IS *s, uint32_t v, double sx, double sy, int dir, double le
 }
 
 DIAG_FN(ishikawa_render) {
-    (void)title;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line_;
     size_t lo;

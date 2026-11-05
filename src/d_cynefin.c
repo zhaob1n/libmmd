@@ -81,7 +81,6 @@ static int dom_of(Str w) {
 
 
 DIAG_FN(cynefin_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str ln;
     size_t lo;

@@ -83,7 +83,6 @@ static size_t fmt_num(double v, size_t cap, char b[static cap]) {
 }
 
 DIAG_FN(xychart_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;

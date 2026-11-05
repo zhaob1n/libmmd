@@ -36,7 +36,6 @@ static int box_kind(size_t left, const char *p) { /* 1 branch, 2 dash, 3 vertica
 }
 
 DIAG_FN(treeview_render) {
-    (void)fs, (void)title;
     LineIt it = {.s = src, .n = n, .i = off};
     Str ln;
     size_t lo;

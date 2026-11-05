@@ -218,7 +218,6 @@ static double seg_box_hits(double x0, double y0, double x1, double y1, const dou
 }
 
 DIAG_FN(wardley_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str ln;
     size_t lo;

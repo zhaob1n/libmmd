@@ -25,7 +25,6 @@ static constexpr char CSS[] =
 }
 
 DIAG_FN(packet_render) {
-    (void)fs;
     const uint32_t BPR = (uint32_t)fmin(fmax(dcfg_num("packet.bitsPerRow", 32), 1), 256);
     constexpr double BW = 32;
     constexpr double RH = 32;

@@ -97,7 +97,6 @@ static unsigned code_lines(Str d, double maxw, double *wout) {
 }
 
 DIAG_FN(eventmodeling_render) {
-    (void)fs, (void)title;
     LineIt it = {.s = src, .n = n, .i = off};
     Str ln;
     size_t lo;

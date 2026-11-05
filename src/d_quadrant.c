@@ -56,7 +56,6 @@ static void axis_pair(Str s, Str *lo, Str *hi) {
 }
 
 DIAG_FN(quadrant_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;

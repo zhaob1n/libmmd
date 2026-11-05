@@ -42,7 +42,6 @@ static void id_label(Str *s, Str *id, Str *label) {
 static double axis_angle(size_t k, size_t na) { return 2 * M_PI * (double)k / (double)na - M_PI / 2; }
 
 DIAG_FN(radar_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;

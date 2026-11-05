@@ -418,7 +418,6 @@ static void arrow(Buf *o, double x1, double x2, double y, uint8_t mk) {
 }
 
 DIAG_FN(zenuml_render) {
-    (void)fs;
     ZT z = {.a = a, .starter = -1};
     if (!VEC_PUSH(a, &z.P, (Part){.icon = IC_ACTOR, .create_ev = -1})) return MMD_ERR_NOMEM;
     size_t i = off;

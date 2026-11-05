@@ -67,7 +67,6 @@ static double mm_order(size_t i) {
 }
 
 DIAG_FN(gitgraph_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;

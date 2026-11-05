@@ -50,7 +50,6 @@ static constexpr char PAL[][8] = {"#4e79a7", "#f28e2c", "#e15759", "#76b7b2", "#
 }
 
 DIAG_FN(sankey_render) {
-    (void)fs;
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;
