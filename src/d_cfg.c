@@ -41,10 +41,10 @@ static Str join(Str pre, Str k) {
 /* ---- relaxed JSON: quoted or bare keys/values, nested objects flattened, arrays skipped ---- */
 typedef struct JP { const char *s; size_t n, i; } JP;
 
-static void jp_ws(JP *p) {
+static void jp_ws(JP p[static 1]) {
     while (p->i < p->n && (is_sp(p->s[p->i]) || p->s[p->i] == '\n')) p->i++;
 }
-static Str jp_atom(JP *p) {
+static Str jp_atom(JP p[static 1]) {
     jp_ws(p);
     if (p->i >= p->n) return (Str){};
     char q = p->s[p->i];
@@ -59,8 +59,8 @@ static Str jp_atom(JP *p) {
     while (p->i < p->n && !strchr(",:{}[]\n", p->s[p->i])) p->i++;
     return str_trim((Str){.p = p->s + b, .n = p->i - b});
 }
-static void jp_skip(JP *p, int depth);
-static void jp_obj(JP *p, Str pre, int depth) { /* at '{' */
+static void jp_skip(JP p[static 1], int depth);
+static void jp_obj(JP p[static 1], Str pre, int depth) { /* at '{' */
     p->i++;
     while (p->i < p->n) {
         jp_ws(p);
@@ -82,7 +82,7 @@ static void jp_obj(JP *p, Str pre, int depth) { /* at '{' */
         if (p->i == i0) p->i++; /* guarantee progress */
     }
 }
-static void jp_skip(JP *p, int depth) { /* skip a balanced {..} or [..] */
+static void jp_skip(JP p[static 1], int depth) { /* skip a balanced {..} or [..] */
     (void)depth;
     int d = 0;
     while (p->i < p->n) {
@@ -146,7 +146,7 @@ static void directive(Str body) { /* text after "%%{" up to "}%%" */
     if (p.i < p.n && p.s[p.i] == '{') jp_obj(&p, (Str){}, 1);
 }
 
-bool dcfg_is_acc(Str t, bool *block) {
+bool dcfg_is_acc(Str t, bool block[static 1]) {
     *block = false;
     if (str_starts(t, S("accTitle")) || str_starts(t, S("accDescr"))) {
         Str r = str_trim((Str){.p = t.p + 8, .n = t.n - 8});
@@ -156,7 +156,7 @@ bool dcfg_is_acc(Str t, bool *block) {
     return false;
 }
 
-void dcfg_begin(Arena *a, size_t n, const char src[static n], size_t off) {
+void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t off) {
     cur = (DCfg){};
     cur_a = a, cur_cap = 0;
     size_t i = 0;
@@ -227,7 +227,7 @@ Str dcfg_get_str(Str key) {
 
 Str dcfg_get(const char *key) { return dcfg_get_str((Str){.p = key, .n = strlen(key)}); }
 
-double dcfg_num(const char *key, double def) {
+double dcfg_num(const char key[static 1], double def) {
     Str v = dcfg_get(key);
     if (!v.n || v.n > 31) return def;
     char tmp[32];
@@ -239,7 +239,7 @@ double dcfg_num(const char *key, double def) {
     return d;
 }
 
-bool dcfg_bool(const char *key, bool def) {
+bool dcfg_bool(const char key[static 1], bool def) {
     Str v = dcfg_get(key);
     if (str_eq(v, S("true"))) return true;
     if (str_eq(v, S("false"))) return false;
@@ -299,14 +299,14 @@ static const char *ring_str(Str v, const char def[static 1]) {
     return o;
 }
 
-const char *dcfg_pal(const char *prefix, size_t i, const char def[static 1]) {
+const char *dcfg_pal(const char prefix[static 1], size_t i, const char def[static 1]) {
     if (!cur.n && cur_theme <= MMD_THEME_DEFAULT) return def;
     char var[48];
     snprintf(var, sizeof var, "%s%zu", prefix, i);
     return ring_str(dcfg_tv(var), def);
 }
 
-const char *dcfg_list(const char *var, size_t i, const char def[static 1]) {
+const char *dcfg_list(const char var[static 1], size_t i, const char def[static 1]) {
     if (!cur.n && cur_theme <= MMD_THEME_DEFAULT) return def;
     Str v = dcfg_tv(var);
     size_t cnt = v.n ? 1 : 0;
@@ -520,7 +520,7 @@ static const TV TVS[] = {
     {"c4", "lineColor", "#mermaid .cb{stroke:$;}"},
 };
 
-void dcfg_theme_css(Buf *b, const char *kind) {
+void dcfg_theme_css(Buf b[static 1], const char kind[static 1]) {
     if (!cur.n && cur_theme <= MMD_THEME_DEFAULT) return;
     for (size_t i = 0; i < countof(TVS); i++) {
         if (strcmp(TVS[i].kind, "*") && strcmp(TVS[i].kind, kind)) continue;
@@ -531,7 +531,7 @@ void dcfg_theme_css(Buf *b, const char *kind) {
     }
 }
 
-void dcfg_svg_aria(Buf *b) {
+void dcfg_svg_aria(Buf b[static 1]) {
     if (cur.acc_title.n) buf_lit(b, "\" aria-labelledby=\"chart-title-mermaid");
     if (cur.acc_descr.n) buf_lit(b, "\" aria-describedby=\"chart-desc-mermaid");
     buf_lit(b, "\">");
