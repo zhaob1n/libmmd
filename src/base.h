@@ -124,8 +124,9 @@ typedef struct Arena {
     size_t last_size;
 } Arena;
 
-[[nodiscard]] void *arena_alloc_slow(Arena a[static 1], size_t size, size_t align);
-[[nodiscard]] static inline void *arena_alloc(Arena a[static 1], size_t size, size_t align) {
+[[nodiscard, gnu::malloc, gnu::alloc_size(2)]] void *arena_alloc_slow(Arena a[static 1], size_t size, size_t align);
+/* fresh, unaliased storage; arena_grow is not malloc-like (it may return old in place) */
+[[nodiscard, gnu::malloc, gnu::alloc_size(2)]] static inline void *arena_alloc(Arena a[static 1], size_t size, size_t align) {
     ArenaBlock *b = a->head;
     if (b) { /* bump fast path */
         size_t off = (b->used + (align - 1)) & ~(align - 1);
@@ -138,7 +139,8 @@ typedef struct Arena {
     }
     return arena_alloc_slow(a, size, align);
 }
-[[nodiscard]] static inline void *arena_alloc_array(Arena a[static 1], size_t n, size_t size, size_t align) {
+[[nodiscard, gnu::malloc, gnu::alloc_size(2, 3)]]
+static inline void *arena_alloc_array(Arena a[static 1], size_t n, size_t size, size_t align) {
     size_t total = 0;
     if (ckd_mul(&total, n, size)) return nullptr;
     return arena_alloc(a, total ? total : 1, align);
