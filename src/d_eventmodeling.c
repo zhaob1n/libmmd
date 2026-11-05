@@ -54,13 +54,8 @@ static const char *const TV_FILL[] = {"themeVariables.emUiFill", "themeVariables
 static const char *const TV_STROKE[] = {"themeVariables.emUiStroke", "themeVariables.emProcessorStroke",
     "themeVariables.emReadModelStroke", "themeVariables.emCommandStroke", "themeVariables.emEventStroke"};
 
-static bool css_ok(Str v) {
-    if (!v.n || v.n > 40) return false;
-    for (size_t i = 0; i < v.n; i++) if (strchr(";{}<>\"'\\", v.p[i])) return false;
-    return true;
-}
 static void put_col(Buf *b, Str v, const char *def) {
-    if (css_ok(v)) buf_xml(b, v); else buf_put(b, strlen(def), def);
+    if (dg_css_ok(v)) buf_xml(b, v); else buf_put(b, strlen(def), def);
 }
 
 /* does segment (x0,y0)-(x1,y1) pass through a box other than frames a and b? (Liang-Barsky clip) */

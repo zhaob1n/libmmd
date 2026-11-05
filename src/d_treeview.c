@@ -35,12 +35,6 @@ static int box_kind(const char *p, size_t left) { /* 1 branch, 2 dash, 3 vertica
     }
 }
 
-static bool css_ok(Str v) {
-    if (!v.n || v.n > 40) return false;
-    for (size_t i = 0; i < v.n; i++) if (strchr(";{}<>\"'\\", v.p[i])) return false;
-    return true;
-}
-
 DIAG_FN(treeview_render) {
     (void)fs, (void)title;
     LineIt it = {.s = src, .n = n, .i = off};
@@ -184,7 +178,7 @@ DIAG_FN(treeview_render) {
         double ix = ind + px, lx = ix + (want ? 18 : 0);
         if (t->cls.n) {
             buf_lit(&b, "<g class=\"");
-            if (css_ok(t->cls)) buf_xml(&b, t->cls);
+            if (dg_css_ok(t->cls)) buf_xml(&b, t->cls);
             buf_lit(&b, "\">");
         } else buf_lit(&b, "<g>");
         if (want) {
@@ -259,7 +253,7 @@ DIAG_FN(treeview_render) {
     free(hb.p), free(b.p);
     if (oom) { free(body.p); return MMD_ERR_NOMEM; }
     char css[640];
-    Str lc = css_ok(lcol) ? lcol : S("black"), nc = css_ok(lncol) ? lncol : S("black");
+    Str lc = dg_css_ok(lcol) ? lcol : S("black"), nc = dg_css_ok(lncol) ? lncol : S("black");
     snprintf(css, sizeof css,
              "#mermaid .tl{font-size:%gpx;fill:%.*s;white-space:pre;}#mermaid .td{font-weight:bold;}"
              "#mermaid .tln{stroke:%.*s;stroke-width:%g;}#mermaid .tic{color:#546e7a;}#mermaid .tii{fill:#546e7a;}"
