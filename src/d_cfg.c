@@ -219,7 +219,7 @@ void dcfg_begin(Arena *a, size_t n, const char src[static n], size_t off) {
     }
 }
 
-static int cur_theme; /* MMD_THEME_* chosen by CLI option or init/frontmatter */
+static thread_local int cur_theme; /* MMD_THEME_* chosen by CLI option or init/frontmatter */
 void dcfg_end(void) { cur_theme = 0; cur = (DCfg){}; cur_a = nullptr; cur_cap = 0; }
 const DCfg *dcfg_cur(void) { return &cur; }
 
