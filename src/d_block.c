@@ -284,6 +284,29 @@ static size_t uniq(double *v, size_t n) {
     for (size_t i = 0; i < n; i++) if (!k || v[i] - v[k - 1] > 0.5) v[k++] = v[i];
     return k;
 }
+/* binary min-heap of states keyed by dist[] (lazy deletion: stale entries are popped and re-relaxed) */
+static void heap_push(uint32_t hp[], size_t *hn, const double dist[], uint32_t v) {
+    size_t i = (*hn)++;
+    hp[i] = v;
+    for (; i && dist[hp[(i - 1) / 2]] > dist[hp[i]]; i = (i - 1) / 2) {
+        uint32_t t = hp[i]; hp[i] = hp[(i - 1) / 2]; hp[(i - 1) / 2] = t;
+    }
+}
+
+static uint32_t heap_pop(uint32_t hp[], size_t *hn, const double dist[]) {
+    uint32_t u = hp[0];
+    size_t n = --*hn;
+    hp[0] = hp[n];
+    for (size_t i = 0;;) {
+        size_t l = 2 * i + 1, r = l + 1, m = i;
+        if (l < n && dist[hp[l]] < dist[hp[m]]) m = l;
+        if (r < n && dist[hp[r]] < dist[hp[m]]) m = r;
+        if (m == i) break;
+        uint32_t t = hp[i]; hp[i] = hp[m]; hp[m] = t; i = m;
+    }
+    return u;
+}
+
 /* deviate from mermaid: an edge with no clear straight or bent path runs orthogonally along the gaps
  * between blocks (Dijkstra over the gap centre lines, bends penalised). P gets up to 64 points, clipped
  * to the rectangles of s and t; returns the count, 0 when there is no route */
@@ -305,31 +328,33 @@ static size_t gap_route(Arena *a, const Blk *B, size_t nb, const Blk *s, const B
     uint32_t *prev = ANEW(a, uint32_t, NS), *hp = ANEW(a, uint32_t, 4 * NS + 4);
     uint8_t *ok = ANEW(a, uint8_t, N);
     if (!dist || !prev || !hp || !ok) return 0;
+    /* obstacles once, then which grid points and which grid segments (by midpoint) are free:
+     * hfree[i] = segment i -> i+ny (next x), vfree[i] = segment i -> i+1 (next y) */
+    uint32_t *obs = ANEW(a, uint32_t, nb + 1);
+    uint8_t *hfree = ANEW(a, uint8_t, N), *vfree = ANEW(a, uint8_t, N);
+    if (!obs || !hfree || !vfree) return 0;
+    size_t nobs = 0;
+    for (size_t j = 1; j < nb; j++) if (obstacle(&B[j], s, t)) obs[nobs++] = (uint32_t)j;
     for (size_t i = 0; i < N; i++) {
-        double x = xs[i / ny], y = ys[i % ny];
-        ok[i] = 1;
-        for (size_t j = 1; j < nb && ok[i]; j++) if (obstacle(&B[j], s, t) && in_rect(&B[j], x, y, -1)) ok[i] = 0;
+        size_t xi = i / ny, yi = i % ny;
+        double x = xs[xi], y = ys[yi], hx = xi + 1 < nx ? (x + xs[xi + 1]) / 2 : 0, vy = yi + 1 < ny ? (y + ys[yi + 1]) / 2 : 0;
+        ok[i] = hfree[i] = vfree[i] = 1;
+        for (size_t j = 0; j < nobs; j++) {
+            const Blk *o = &B[obs[j]];
+            if (in_rect(o, x, y, -1)) ok[i] = 0;
+            if (xi + 1 < nx && in_rect(o, hx, y, -1)) hfree[i] = 0;
+            if (yi + 1 < ny && in_rect(o, x, vy, -1)) vfree[i] = 0;
+        }
     }
     for (size_t i = 0; i < NS; i++) dist[i] = HUGE_VAL, prev[i] = UINT32_MAX;
     size_t si = 0, ti = 0, hn = 0;
     for (size_t i = 0; i < nx; i++) { if (fabs(xs[i] - sx) < 0.3) si = i * ny; if (fabs(xs[i] - tx) < 0.3) ti = i * ny; }
     for (size_t j = 0; j < ny; j++) { if (fabs(ys[j] - sy) < 0.3) si += j; if (fabs(ys[j] - ty) < 0.3) ti += j; }
     static const int DX[4] = {1, -1, 0, 0}, DY[4] = {0, 0, 1, -1};
-    /* binary heap of states keyed by dist (lazy deletion) */
-#define HPUSH(st) do { uint32_t _v = (uint32_t)(st); size_t _i = hn++; hp[_i] = _v; \
-        while (_i && dist[hp[(_i - 1) / 2]] > dist[hp[_i]]) { uint32_t _t = hp[_i]; hp[_i] = hp[(_i - 1) / 2]; hp[(_i - 1) / 2] = _t; _i = (_i - 1) / 2; } } while (0)
-    for (int d = 0; d < 4; d++) { dist[4 * si + d] = 0; if (hn < 4 * NS) HPUSH(4 * si + d); }
+    for (uint32_t d = 0; d < 4; d++) { dist[4 * si + d] = 0; if (hn < 4 * NS) heap_push(hp, &hn, dist, (uint32_t)(4 * si) + d); }
     size_t goal = SIZE_MAX;
     while (hn) {
-        uint32_t u = hp[0];
-        hp[0] = hp[--hn];
-        for (size_t i = 0;;) {
-            size_t l = 2 * i + 1, r = l + 1, m = i;
-            if (l < hn && dist[hp[l]] < dist[hp[m]]) m = l;
-            if (r < hn && dist[hp[r]] < dist[hp[m]]) m = r;
-            if (m == i) break;
-            uint32_t tmp = hp[i]; hp[i] = hp[m]; hp[m] = tmp; i = m;
-        }
+        uint32_t u = heap_pop(hp, &hn, dist);
         size_t node = u / 4, d0 = u % 4;
         if (node == ti) { goal = u; break; }
         size_t xi = node / ny, yi = node % ny;
@@ -338,16 +363,13 @@ static size_t gap_route(Arena *a, const Blk *B, size_t nb, const Blk *s, const B
             if (X < 0 || Y < 0 || (size_t)X >= nx || (size_t)Y >= ny) continue;
             size_t v = (size_t)X * ny + (size_t)Y;
             if (!ok[v] && v != ti) continue;
-            double mx = (xs[xi] + xs[X]) / 2, my = (ys[yi] + ys[Y]) / 2; /* segment midpoint must be free too */
-            bool blk = false;
-            for (size_t j = 1; j < nb && !blk; j++) if (obstacle(&B[j], s, t) && in_rect(&B[j], mx, my, -1)) blk = true;
-            if (blk) continue;
+            size_t lo = v < node ? v : node; /* segment midpoint must be free too */
+            if (!(DX[d] ? hfree[lo] : vfree[lo])) continue;
             double nd = dist[u] + fabs(xs[X] - xs[xi]) + fabs(ys[Y] - ys[yi]) + ((size_t)d != d0 && node != si ? 30 : 0);
             uint32_t w = (uint32_t)(4 * v + (size_t)d);
-            if (nd < dist[w] - 1e-9 && hn < 4 * NS) { dist[w] = nd, prev[w] = u; HPUSH(w); }
+            if (nd < dist[w] - 1e-9 && hn < 4 * NS) { dist[w] = nd, prev[w] = u; heap_push(hp, &hn, dist, w); }
         }
     }
-#undef HPUSH
     if (goal == SIZE_MAX) return 0;
     /* walk back, keep the corners */
     size_t k = 0;
@@ -614,7 +636,8 @@ DIAG_FN(block_render) {
         if (y0 < y1) bb.y0 = y0 - top, bb.y1 = y1;
     }
     /* edges go to their own buffer first: gap routes and their labels may widen the viewBox */
-    Buf ebuf = {}, *eb = &ebuf;
+    AUTO_BUF Buf ebuf = {};
+    Buf *eb = &ebuf;
     double *LBX = ANEW(a, double, 4 * ev.n + 4);
     size_t nlb = 0;
     if (!LBX) return MMD_ERR_NOMEM;
@@ -629,8 +652,8 @@ DIAG_FN(block_render) {
         double x0, y0, x1, y1;
         if (s == t) { /* self edge: a loop on the right side, label right of it (room reserved in gx) */
             double X = s->x + s->w, Y = s->y + s->h / 2, q = fmin(10, s->h / 4);
-            buf_lit(eb, "<path class=\"be\" fill=\"none\" d=\"M"); dg_pt(eb, X, Y - q); buf_ch(eb, 'C'); dg_pt(eb, X + 28, Y - q - 14);
-            buf_ch(eb, ' '); dg_pt(eb, X + 28, Y + q + 14); buf_ch(eb, ' '); dg_pt(eb, X, Y + q); buf_ch(eb, '"');
+            buf_lit(eb, "<path class=\"be\" fill=\"none\" d=\"M"); buf_pt(eb, X, Y - q); buf_ch(eb, 'C'); buf_pt(eb, X + 28, Y - q - 14);
+            buf_ch(eb, ' '); buf_pt(eb, X + 28, Y + q + 14); buf_ch(eb, ' '); buf_pt(eb, X, Y + q); buf_ch(eb, '"');
             if (ev.v[e].arrow) buf_lit(eb, " marker-end=\"url(#blk-ae)\"");
             buf_lit(eb, "/>");
             if (ev.v[e].label.n) {
@@ -676,13 +699,13 @@ DIAG_FN(block_render) {
         if (rn >= 2) {
             for (size_t i = 0; i < rn; i++)
                 bb.x0 = fmin(bb.x0, RP[2 * i] - 1), bb.x1 = fmax(bb.x1, RP[2 * i] + 1), bb.y0 = fmin(bb.y0, RP[2 * i + 1] - 1), bb.y1 = fmax(bb.y1, RP[2 * i + 1] + 1);
-            dg_pt(eb, RP[0], RP[1]);
-            for (size_t i = 1; i < rn; i++) { buf_ch(eb, 'L'); dg_pt(eb, RP[2 * i], RP[2 * i + 1]); }
+            buf_pt(eb, RP[0], RP[1]);
+            for (size_t i = 1; i < rn; i++) { buf_ch(eb, 'L'); buf_pt(eb, RP[2 * i], RP[2 * i + 1]); }
             buf_lit(eb, "\" fill=\"none");
         } else {
-            dg_pt(eb, x0, y0);
-            if (bent) { buf_ch(eb, 'Q'); dg_pt(eb, qx, qy); buf_ch(eb, ' '); } else buf_ch(eb, 'L');
-            dg_pt(eb, x1, y1);
+            buf_pt(eb, x0, y0);
+            if (bent) { buf_ch(eb, 'Q'); buf_pt(eb, qx, qy); buf_ch(eb, ' '); } else buf_ch(eb, 'L');
+            buf_pt(eb, x1, y1);
         }
         buf_ch(eb, '"');
         if (bent) buf_lit(eb, " fill=\"none\"");
@@ -728,7 +751,7 @@ DIAG_FN(block_render) {
                         bb.x0 = fmin(bb.x0, mx - tw / 2 - 2), bb.x1 = fmax(bb.x1, mx + tw / 2 + 2);
                         bb.y0 = fmin(bb.y0, my - fs * 0.6), bb.y1 = fmax(bb.y1, my + fs * 0.6);
                         buf_lit(eb, "<path class=\"leader\" d=\"M");
-                        dg_pt(eb, ax, ay); buf_ch(eb, 'L'); dg_pt(eb, mx, my);
+                        buf_pt(eb, ax, ay); buf_ch(eb, 'L'); buf_pt(eb, mx, my);
                         buf_lit(eb, "\" stroke=\"#999\" stroke-width=\"1\" stroke-dasharray=\"2 2\" fill=\"none\"/>");
                     }
                 }
@@ -772,7 +795,7 @@ DIAG_FN(block_render) {
             dg_text(eb, ev.v[e].label, fs * 0.875, mx, my, "middle", "bt\" font-size=\"14");
         }
     }
-    if (eb->oom) { free(ebuf.p); return MMD_ERR_NOMEM; }
+    if (eb->oom) return MMD_ERR_NOMEM;
     if (!buf_reserve(out, 2048 + nb * 400 + ev.n * 300)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 5, "block", CSS);
     buf_lit(out, DEFS);
@@ -817,7 +840,7 @@ DIAG_FN(block_render) {
             for (size_t j = 0; j < k; j++) {
                 double u = neg ? L - U[j] : U[j];
                 if (j) buf_ch(out, ' ');
-                if (vert) dg_pt(out, cx + Vv[j], y + u); else dg_pt(out, x + u, cy + Vv[j]);
+                if (vert) buf_pt(out, cx + Vv[j], y + u); else buf_pt(out, x + u, cy + Vv[j]);
             }
             buf_lit(out, "\"/>");
             break;
@@ -830,13 +853,13 @@ DIAG_FN(block_render) {
             else if (b->shape == BS_ASYM) { double e = h / 3, q[] = {x, y, x + w, y, x + w, y + h, x, y + h, x + e, cy}; k = 5; memcpy(P_, q, sizeof q); }
             else { para_pts(b->shape, x, y, w, h, P_); k = 4; }
             buf_lit(out, "<polygon class=\"bn\" points=\"");
-            for (size_t j = 0; j < k; j++) { if (j) buf_ch(out, ' '); dg_pt(out, P_[2 * j], P_[2 * j + 1]); }
+            for (size_t j = 0; j < k; j++) { if (j) buf_ch(out, ' '); buf_pt(out, P_[2 * j], P_[2 * j + 1]); }
             buf_lit(out, "\"/>");
             break;
         }
         case BS_CYL: {
             double ry = w / 2 / (2.5 + w / 50); /* mermaid cylinder */
-            buf_lit(out, "<path class=\"bn\" d=\"M"); dg_pt(out, x, y + ry);
+            buf_lit(out, "<path class=\"bn\" d=\"M"); buf_pt(out, x, y + ry);
             buf_lit(out, "a"); buf_num(out, w / 2); buf_ch(out, ','); buf_num(out, ry); buf_lit(out, " 0 0 0 "); buf_num(out, w); buf_lit(out, ",0");
             buf_lit(out, "a"); buf_num(out, w / 2); buf_ch(out, ','); buf_num(out, ry); buf_lit(out, " 0 0 0 "); buf_num(out, -w); buf_lit(out, ",0");
             buf_lit(out, "v"); buf_num(out, h - 2 * ry);
@@ -857,7 +880,6 @@ DIAG_FN(block_render) {
         buf_lit(out, "</g>");
     }
     buf_put(out, ebuf.n, ebuf.p);
-    free(ebuf.p);
     buf_lit(out, "</svg>\n");
     return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

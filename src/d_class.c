@@ -427,16 +427,16 @@ static constexpr char DEFS[] =
     "<marker id=\"cl-lolli-e\" viewBox=\"0 0 14 14\" refX=\"13\" refY=\"7\" markerWidth=\"14\" markerHeight=\"14\" markerUnits=\"userSpaceOnUse\" orient=\"auto\"><circle cx=\"7\" cy=\"7\" r=\"6\" fill=\"#fff\" stroke=\"#333\"/></marker>"
     "</defs>";
 
-static const char *mark_id(RMark m, bool end) {
+static Str mark_id(RMark m, bool end) {
     switch (m) {
-    case RM_EXT: return end ? "cl-ext-e" : "cl-ext-s";
-    case RM_COMP: return end ? "cl-comp-e" : "cl-comp-s";
-    case RM_AGG: return end ? "cl-agg-e" : "cl-agg-s";
-    case RM_ARROW: return end ? "cl-arrow-e" : "cl-arrow-s";
-    case RM_LOLLI: return end ? "cl-lolli-e" : "cl-lolli-s";
+    case RM_EXT: return end ? S("cl-ext-e") : S("cl-ext-s");
+    case RM_COMP: return end ? S("cl-comp-e") : S("cl-comp-s");
+    case RM_AGG: return end ? S("cl-agg-e") : S("cl-agg-s");
+    case RM_ARROW: return end ? S("cl-arrow-e") : S("cl-arrow-s");
+    case RM_LOLLI: return end ? S("cl-lolli-e") : S("cl-lolli-s");
     case RM_NONE: break;
     }
-    return nullptr;
+    return (Str){};
 }
 
 constexpr double CPAD = 12;   /* config.class.padding */
@@ -465,10 +465,10 @@ static void card_label(Buf *b, const Graph *g, const double *P, uint32_t np, boo
     if (L < 1e-9) return;
     dx /= L, dy /= L;
     double hw = (double)t.n * fs * 0.3 + 2, hh = fs * 0.6, x = 0, y = 0, best = HUGE_VAL;
-    static const double C[][2] = {{22, 12}, {22, -12}, {14, 12}, {14, -12}, {30, 12}, {30, -12}, {40, 12}, {40, -12}, {52, 12}, {52, -12},
+    static constexpr double C[][2] = {{22, 12}, {22, -12}, {14, 12}, {14, -12}, {30, 12}, {30, -12}, {40, 12}, {40, -12}, {52, 12}, {52, -12},
         {22, 28}, {22, -28}, {40, 28}, {40, -28}, {64, 12}, {64, -12}, {14, 40}, {14, -40}, {52, 28}, {52, -28},
         {80, 12}, {80, -12}, {30, 44}, {30, -44}, {80, 30}, {80, -30}, {100, 12}, {100, -12}}; /* later: wider fans */
-    for (unsigned c = 0; c < sizeof C / sizeof *C; c++) {
+    for (unsigned c = 0; c < countof(C); c++) {
         double cx = P0[0] + dx * C[c][0] - dy * C[c][1], cy = P0[1] + dy * C[c][0] + dx * C[c][1], sc = c < 10 ? c * 0.5 : 8 + c;
         for (size_t q = 0; q < g->ne; q++)
             if (g->elabel[q].n) sc += 8 * ov_area(cx, cy, hw, hh, g->elx[q], g->ely[q], g->elw[q] / 2 + 5, g->elh[q] / 2 + 1); /* text on text reads worst; keep a gap so words do not join */
@@ -556,9 +556,9 @@ DIAG_FN(class_render) {
         buf_lit(out, "\" d=\"");
         dg_edge_d(out, g, e);
         buf_ch(out, '"');
-        const char *ms_ = mark_id(r->ma, false), *me = mark_id(r->mb, true);
-        if (ms_) { buf_lit(out, " marker-start=\"url(#"); buf_put(out, strlen(ms_), ms_); buf_lit(out, ")\""); }
-        if (me) { buf_lit(out, " marker-end=\"url(#"); buf_put(out, strlen(me), me); buf_lit(out, ")\""); }
+        Str ms = mark_id(r->ma, false), me = mark_id(r->mb, true);
+        if (ms.n) { buf_lit(out, " marker-start=\"url(#"); buf_str(out, ms); buf_lit(out, ")\""); }
+        if (me.n) { buf_lit(out, " marker-end=\"url(#"); buf_str(out, me); buf_lit(out, ")\""); }
         buf_lit(out, "/>");
         uint32_t np = g->eptn[e];
         if (np >= 2) {

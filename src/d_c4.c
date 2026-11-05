@@ -14,7 +14,7 @@
 #include "text.h"
 
 enum { K_PERSON, K_SYSTEM, K_CONTAINER, K_COMPONENT };
-static const char *const C4_TY[4] = {"Person", "Software System", "Container", "Component"};
+static const Str C4_TY[4] = {S("Person"), S("Software System"), S("Container"), S("Component")};
 enum { F_PLAIN, F_DB, F_QUEUE };
 typedef struct CInfo { Str stereo, techn, descr; uint8_t kind, form; bool ext; } CInfo;
 typedef struct CRel { Str techn; bool bi; } CRel;
@@ -28,8 +28,18 @@ static constexpr char CSS[] =
     "#mermaid .cbt{font-weight:bold;font-size:14px;fill:#444;}#mermaid .cbs{font-size:12px;fill:#444;}"
     "#mermaid .cr{fill:none;stroke:#444;stroke-width:1px;}#mermaid .crh{fill:#444;}#mermaid .crl{font-size:13px;fill:#444;}"
     "#mermaid .crt{font-size:12px;font-style:italic;fill:#444;}#mermaid .crx{fill:inherit;}#mermaid .crc .cr{stroke:inherit;}#mermaid .crc .crh{fill:inherit;}";
-static const char *const FILL[2][4] = {{"#08427B", "#1168BD", "#438DD5", "#85BBF0"}, {"#686868", "#999999", "#B3B3B3", "#E6E6E6"}};
-static const char *const STROKE[2][4] = {{"#073B6F", "#3C7FC0", "#3C7FC0", "#78A8D8"}, {"#8A8A8A", "#8A8A8A", "#A6A6A6", "#D0D0D0"}};
+static const Str FILL[2][4] = {{S("#08427B"), S("#1168BD"), S("#438DD5"), S("#85BBF0")}, {S("#686868"), S("#999999"), S("#B3B3B3"), S("#E6E6E6")}};
+static const Str STROKE[2][4] = {{S("#073B6F"), S("#3C7FC0"), S("#3C7FC0"), S("#78A8D8")}, {S("#8A8A8A"), S("#8A8A8A"), S("#A6A6A6"), S("#D0D0D0")}};
+
+/* next comma-separated argument of in from *i on, commas inside "..." kept; false when exhausted */
+static bool next_arg(Str in, size_t *i, Str *out) {
+    if (*i > in.n) return false;
+    size_t st = *i, j = st;
+    for (bool q = false; j < in.n && (in.p[j] != ',' || q); j++) q ^= in.p[j] == '"';
+    *out = str_trim((Str){.p = in.p + st, .n = j - st});
+    *i = j + 1;
+    return true;
+}
 
 static Str unq(Str s) {
     s = str_trim(s);
@@ -39,32 +49,19 @@ static Str unq(Str s) {
 
 /* split `( a, "b, c", d )`; positional only, $named skipped */
 static size_t args(Str in, size_t max, Str out[static max]) {
-    size_t k = 0, st = 0;
-    bool q = false;
-    for (size_t i = 0; i <= in.n; i++) {
-        if (i < in.n && in.p[i] == '"') q = !q;
-        if (i == in.n || (in.p[i] == ',' && !q)) {
-            Str a = str_trim((Str){.p = in.p + st, .n = i - st});
-            if (!(a.n && a.p[0] == '$') && k < max) out[k++] = unq(a);
-            st = i + 1;
-        }
-    }
+    size_t k = 0, i = 0;
+    for (Str a; next_arg(in, &i, &a);)
+        if (!(a.n && a.p[0] == '$') && k < max) out[k++] = unq(a);
     return k;
 }
 
 /* value of `$key=...` among the args, unquoted; empty if absent */
-static Str named(Str in, const char *key) {
-    size_t kl = strlen(key), st = 0;
-    bool q = false;
-    for (size_t i = 0; i <= in.n; i++) {
-        if (i < in.n && in.p[i] == '"') q = !q;
-        if (i == in.n || (in.p[i] == ',' && !q)) {
-            Str a = str_trim((Str){.p = in.p + st, .n = i - st});
-            if (a.n > kl + 1 && a.p[0] == '$' && !memcmp(a.p + 1, key, kl)) {
-                Str r = str_trim((Str){.p = a.p + 1 + kl, .n = a.n - 1 - kl});
-                if (r.n && r.p[0] == '=') return unq((Str){.p = r.p + 1, .n = r.n - 1});
-            }
-            st = i + 1;
+static Str named(Str in, Str key) {
+    size_t i = 0;
+    for (Str a; next_arg(in, &i, &a);) {
+        if (a.n > key.n + 1 && a.p[0] == '$' && !memcmp(a.p + 1, key.p, key.n)) {
+            Str r = str_trim((Str){.p = a.p + 1 + key.n, .n = a.n - 1 - key.n});
+            if (r.n && r.p[0] == '=') return unq((Str){.p = r.p + 1, .n = r.n - 1});
         }
     }
     return (Str){};
@@ -205,15 +202,13 @@ static void lay(Lay *L, Bnd *P, int32_t parent, unsigned depth) {
     }
 }
 
-static bool is(Str s, const char *lit) { return s.n == strlen(lit) && !memcmp(s.p, lit, s.n); }
-
 static void arrowhead(Buf *b, const double *A, const double *B) { /* tip at A, coming from B */
     double dx = A[0] - B[0], dy = A[1] - B[1], L = sqrt(dx * dx + dy * dy);
     if (L < 1e-9) return;
     dx /= L, dy /= L;
-    buf_lit(b, "<path class=\"crh\" d=\"M"); dg_pt(b, A[0], A[1]); buf_ch(b, 'L');
-    dg_pt(b, A[0] - dx * 10 - dy * 4, A[1] - dy * 10 + dx * 4); buf_ch(b, 'L');
-    dg_pt(b, A[0] - dx * 10 + dy * 4, A[1] - dy * 10 - dx * 4); buf_lit(b, "z\"/>");
+    buf_lit(b, "<path class=\"crh\" d=\"M"); buf_pt(b, A[0], A[1]); buf_ch(b, 'L');
+    buf_pt(b, A[0] - dx * 10 - dy * 4, A[1] - dy * 10 + dx * 4); buf_ch(b, 'L');
+    buf_pt(b, A[0] - dx * 10 + dy * 4, A[1] - dy * 10 - dx * 4); buf_lit(b, "z\"/>");
 }
 
 constexpr double C4_NF = 14;     /* c4 element name */
@@ -268,44 +263,44 @@ DIAG_FN(c4_render) {
         Str A[8];
         size_t na = args((Str){.p = lp + 1, .n = (size_t)(rp - lp - 1)}, 8, A);
         Str raw = {.p = lp + 1, .n = (size_t)(rp - lp - 1)};
-        if (is(mac, "UpdateLayoutConfig")) {
+        if (str_eq(mac, S("UpdateLayoutConfig"))) {
             double v;
-            Str a1 = named(raw, "c4ShapeInRow"), a2 = named(raw, "c4BoundaryInRow");
+            Str a1 = named(raw, S("c4ShapeInRow")), a2 = named(raw, S("c4BoundaryInRow"));
             if (a1.n && dg_parse_num(a1, &v) && v >= 1 && v <= 64) shape_row = (unsigned)v;
             if (a2.n && dg_parse_num(a2, &v) && v >= 1 && v <= 64) box_row = (unsigned)v;
             continue;
         }
-        if (is(mac, "UpdateElementStyle")) {
-            if (na && !VEC_PUSH(a, &es, ((EStyle){A[0], named(raw, "bgColor"), named(raw, "fontColor"), named(raw, "borderColor")}))) return MMD_ERR_NOMEM;
+        if (str_eq(mac, S("UpdateElementStyle"))) {
+            if (na && !VEC_PUSH(a, &es, ((EStyle){A[0], named(raw, S("bgColor")), named(raw, S("fontColor")), named(raw, S("borderColor"))}))) return MMD_ERR_NOMEM;
             continue;
         }
-        if (is(mac, "UpdateRelStyle")) {
+        if (str_eq(mac, S("UpdateRelStyle"))) {
             double ox = 0, oy = 0;
-            Str sx_ = named(raw, "offsetX"), sy_ = named(raw, "offsetY");
+            Str sx_ = named(raw, S("offsetX")), sy_ = named(raw, S("offsetY"));
             if (sx_.n && (!dg_parse_num(sx_, &ox) || fabs(ox) > 1e4)) ox = 0;
             if (sy_.n && (!dg_parse_num(sy_, &oy) || fabs(oy) > 1e4)) oy = 0;
-            if (na >= 2 && !VEC_PUSH(a, &rs, ((RStyle){A[0], A[1], named(raw, "textColor"), named(raw, "lineColor"), ox, oy}))) return MMD_ERR_NOMEM;
+            if (na >= 2 && !VEC_PUSH(a, &rs, ((RStyle){A[0], A[1], named(raw, S("textColor")), named(raw, S("lineColor")), ox, oy}))) return MMD_ERR_NOMEM;
             continue;
         }
-        if (str_starts(mac, S("Update")) || is(mac, "AddElementTag") || is(mac, "AddRelTag") || is(mac, "AddBoundaryTag")) continue;
+        if (str_starts(mac, S("Update")) || str_eq(mac, S("AddElementTag")) || str_eq(mac, S("AddRelTag")) || str_eq(mac, S("AddBoundaryTag"))) continue;
         int32_t parent = depth ? stack[depth - 1] : NONE;
-        if (str_starts(mac, S("Rel")) || is(mac, "BiRel")) {
-            size_t b0 = is(mac, "RelIndex") ? 1 : 0;
+        if (str_starts(mac, S("Rel")) || str_eq(mac, S("BiRel"))) {
+            size_t b0 = str_eq(mac, S("RelIndex")) ? 1 : 0;
             if (na < b0 + 3) return diag_fail(err_off, msg, lo, "Rel needs from, to, label");
             if (!A[b0].n || !A[b0 + 1].n) return diag_fail(err_off, msg, lo, "empty Rel endpoint");
             int32_t va = dg_node(&g, A[b0], nullptr), vb = va == NONE ? NONE : dg_node(&g, A[b0 + 1], nullptr);
             if (vb == NONE) return MMD_ERR_NOMEM;
-            if (is(mac, "Rel_Back")) { int32_t t = va; va = vb; vb = t; }
+            if (str_eq(mac, S("Rel_Back"))) { int32_t t = va; va = vb; vb = t; }
             if (dg_edge(&g, va, vb, A[b0 + 2]) == NONE) return MMD_ERR_NOMEM;
             g.eend[g.ne - 1] = AH_NONE;
-            if (!VEC_PUSH(a, &cr, ((CRel){.techn = na > b0 + 3 ? A[b0 + 3] : (Str){}, .bi = is(mac, "BiRel")}))) return MMD_ERR_NOMEM;
+            if (!VEC_PUSH(a, &cr, ((CRel){.techn = na > b0 + 3 ? A[b0 + 3] : (Str){}, .bi = str_eq(mac, S("BiRel"))}))) return MMD_ERR_NOMEM;
             continue;
         }
         if (open) {
             if (!na || !A[0].n) return diag_fail(err_off, msg, lo, "boundary needs an alias");
             if (depth >= countof(stack)) return diag_fail(err_off, msg, lo, "boundaries nested too deeply");
-            Str type = na > 2 ? A[2] : is(mac, "Enterprise_Boundary") ? S("Enterprise") : is(mac, "System_Boundary") ? S("System")
-                     : is(mac, "Container_Boundary") ? S("Container") : str_starts(mac, S("Node")) || is(mac, "Deployment_Node") ? S("") : S("");
+            Str type = na > 2 ? A[2] : str_eq(mac, S("Enterprise_Boundary")) ? S("Enterprise") : str_eq(mac, S("System_Boundary")) ? S("System")
+                     : str_eq(mac, S("Container_Boundary")) ? S("Container") : str_starts(mac, S("Node")) || str_eq(mac, S("Deployment_Node")) ? S("") : S("");
             Str t2 = na > 1 ? A[1] : A[0];
             if (type.n) {
                 char *b = ANEW(a, char, t2.n + type.n + 4);
@@ -330,10 +325,10 @@ DIAG_FN(c4_render) {
         Str base = info.ext ? (Str){.p = m.p, .n = m.n - 4} : m;
         if (base.n > 2 && !memcmp(base.p + base.n - 2, "Db", 2)) info.form = F_DB;
         if (base.n > 5 && !memcmp(base.p + base.n - 5, "Queue", 5)) info.form = F_QUEUE;
-        static const char *const OK[] = {"Person", "System", "SystemDb", "SystemQueue", "Container", "ContainerDb", "ContainerQueue",
-                                         "Component", "ComponentDb", "ComponentQueue"};
+        static const Str OK[] = {S("Person"), S("System"), S("SystemDb"), S("SystemQueue"), S("Container"), S("ContainerDb"), S("ContainerQueue"),
+                                         S("Component"), S("ComponentDb"), S("ComponentQueue")};
         bool ok = false;
-        for (size_t k = 0; k < countof(OK); k++) ok |= is(base, OK[k]);
+        for (size_t k = 0; k < countof(OK); k++) ok |= str_eq(base, OK[k]);
         if (!ok) return diag_fail(err_off, msg, lo, "unknown C4 element");
         if (info.ext) {
             char *s = ANEW(a, char, info.stereo.n + 9);
@@ -375,12 +370,13 @@ DIAG_FN(c4_render) {
         label_measure_f(dn[v], C4_NF, text_width_os, &tw, &nl);
         w = fmax(w, tw + w - ww);
         { /* mermaid 11 type line: [Person], [Software System], [Container: techn]; wrapped like the rest */
-            size_t kl = strlen(C4_TY[c->kind]), n = kl + 3 + (c->techn.n ? c->techn.n + 2 : 0);
+            Str ty = C4_TY[c->kind];
+            size_t n = ty.n + 3 + (c->techn.n ? c->techn.n + 2 : 0);
             char *t = ANEW(a, char, n);
             if (!t) return MMD_ERR_NOMEM;
             size_t k = 0;
             t[k++] = '[';
-            memcpy(t + k, C4_TY[c->kind], kl), k += kl;
+            memcpy(t + k, ty.p, ty.n), k += ty.n;
             if (c->techn.n) t[k++] = ':', t[k++] = ' ', memcpy(t + k, c->techn.p, c->techn.n), k += c->techn.n;
             t[k++] = ']';
             dt[v] = dg_wrapf(a, (Str){.p = t, .n = k}, C4_TF, ww, text_width_os);
@@ -638,9 +634,9 @@ DIAG_FN(c4_render) {
         bool lc = rst[e] && color_ok(rst[e]->line);
         if (lc) { buf_lit(out, "<g class=\"crc\" stroke=\""); put_attr(out, rst[e]->line); buf_lit(out, "\" fill=\""); put_attr(out, rst[e]->line); buf_lit(out, "\">"); }
         buf_lit(out, "<path class=\"cr\"");
-        buf_lit(out, " d=\"M"); dg_pt(out, P[0], P[1]);
-        if (bent) { buf_ch(out, 'Q'); dg_pt(out, Q0[0], Q0[1]); buf_ch(out, ' '); } else buf_ch(out, 'L');
-        dg_pt(out, P[2], P[3]); buf_lit(out, "\"/>");
+        buf_lit(out, " d=\"M"); buf_pt(out, P[0], P[1]);
+        if (bent) { buf_ch(out, 'Q'); buf_pt(out, Q0[0], Q0[1]); buf_ch(out, ' '); } else buf_ch(out, 'L');
+        buf_pt(out, P[2], P[3]); buf_lit(out, "\"/>");
         arrowhead(out, P + 2, bent ? Q0 : P);
         if (cr.v[e].bi) arrowhead(out, P, bent ? Q0 : P + 2);
         if (lc) buf_lit(out, "</g>");
@@ -648,35 +644,35 @@ DIAG_FN(c4_render) {
     for (size_t v = 0; v < g.nn; v++) {
         const CInfo *c = &ci.v[v];
         double w = g.nw[v], h = g.nh[v], x0 = g.nx[v] - w / 2, y0 = g.ny[v] - h / 2, cx = g.nx[v];
-        const char *fill = FILL[c->ext][c->kind], *stroke = STROKE[c->ext][c->kind];
-        bool dark = !(c->kind == K_COMPONENT);
+                bool dark = !(c->kind == K_COMPONENT);
         const EStyle *u = nst[v];
-        Str fill_s = u && color_ok(u->bg) ? u->bg : (Str){.p = fill, .n = strlen(fill)};
-        Str stroke_s = u && color_ok(u->border) ? u->border : (Str){.p = stroke, .n = strlen(stroke)};
+        Str fill_s = u && color_ok(u->bg) ? u->bg : FILL[c->ext][c->kind];
+        Str stroke_s = u && color_ok(u->border) ? u->border : STROKE[c->ext][c->kind];
         buf_lit(out, "<g class=\"c4-element\" fill=\"");
         if (u && color_ok(u->font)) put_attr(out, u->font);
-        else buf_put(out, strlen(dark ? "#fff" : "#000"), dark ? "#fff" : "#000");
+        else if (dark) buf_lit(out, "#fff");
+        else buf_lit(out, "#000");
         buf_lit(out, "\">");
         double lt = g.ny[v] - lab[v] / 2; /* label stack top */
         if (c->form == F_DB) {
             double ry = cyl_r(w);
             buf_lit(out, "<path fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
-            buf_lit(out, "\" d=\"M"); dg_pt(out, x0, y0 + ry);
+            buf_lit(out, "\" d=\"M"); buf_pt(out, x0, y0 + ry);
             buf_lit(out, "a"); buf_num(out, w / 2); buf_ch(out, ','); buf_num(out, ry); buf_lit(out, " 0 0 1 "); buf_num(out, w); buf_lit(out, ",0");
             buf_lit(out, "v"); buf_num(out, h - 2 * ry);
             buf_lit(out, "a"); buf_num(out, w / 2); buf_ch(out, ','); buf_num(out, ry); buf_lit(out, " 0 0 1 "); buf_num(out, -w); buf_lit(out, ",0");
-            buf_lit(out, "z M"); dg_pt(out, x0, y0 + ry);
+            buf_lit(out, "z M"); buf_pt(out, x0, y0 + ry);
             buf_lit(out, "a"); buf_num(out, w / 2); buf_ch(out, ','); buf_num(out, ry); buf_lit(out, " 0 0 0 "); buf_num(out, w); buf_lit(out, ",0\"/>");
             lt = y0 + 1.5 * ry + (h - 1.5 * ry - lab[v]) / 2;
         } else if (c->form == F_QUEUE) {
             double rx = h / 2 / (2.5 + h / 50);
             buf_lit(out, "<path fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
-            buf_lit(out, "\" d=\"M"); dg_pt(out, x0 + rx, y0);
+            buf_lit(out, "\" d=\"M"); buf_pt(out, x0 + rx, y0);
             buf_lit(out, "h"); buf_num(out, w - 2 * rx);
             buf_lit(out, "a"); buf_num(out, rx); buf_ch(out, ','); buf_num(out, h / 2); buf_lit(out, " 0 0 1 0,"); buf_num(out, h);
             buf_lit(out, "h"); buf_num(out, -(w - 2 * rx));
             buf_lit(out, "a"); buf_num(out, rx); buf_ch(out, ','); buf_num(out, h / 2); buf_lit(out, " 0 0 1 0,"); buf_num(out, -h);
-            buf_lit(out, "z M"); dg_pt(out, x0 + w - rx, y0);
+            buf_lit(out, "z M"); buf_pt(out, x0 + w - rx, y0);
             buf_lit(out, "a"); buf_num(out, rx); buf_ch(out, ','); buf_num(out, h / 2); buf_lit(out, " 0 0 0 0,"); buf_num(out, h); buf_lit(out, "\"/>");
         } else if (c->kind == K_PERSON) { /* mermaid 11: rounded body with a large head circle above it */
             double r = head_r(w), by = y0 + 2 * r - 0.27 * r, bh = h - (by - y0);

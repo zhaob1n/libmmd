@@ -259,9 +259,9 @@ DIAG_FN(gantt_render) {
     if (!dg_next_line(&it, &line, &lo)) return diag_fail(err_off, msg, off, "empty gantt");
     GCtx c = {.a = a, .fmt = S("YYYY-MM-DD")};
     Str axis = S("%Y-%m-%d"), tick = {}, today_style = {};
-    bool compact = str_starts(dcfg_get("gantt.displayMode"), S("compact")) || str_starts(dcfg_get("displayMode"), S("compact"));
+    bool compact = str_starts(dcfg_get_str(S("gantt.displayMode")), S("compact")) || str_starts(dcfg_get_str(S("displayMode")), S("compact"));
     { /* config defaults; in-diagram axisFormat/tickInterval lines override */
-        Str ca = dcfg_get("gantt.axisFormat"), ct = dcfg_get("gantt.tickInterval");
+        Str ca = dcfg_get_str(S("gantt.axisFormat")), ct = dcfg_get_str(S("gantt.tickInterval"));
         if (ca.n && ca.n <= 64) axis = ca;
         if (ct.n && ct.n <= 32) tick = ct;
     }
@@ -302,9 +302,9 @@ DIAG_FN(gantt_render) {
         }
         if (str_eq(w, S("weekend"))) { c.fri_weekend = str_eq(dg_word(&rest), S("friday")); continue; }
         if (str_eq(w, S("weekday"))) {
-            static const char *const WD[] = {"sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"};
+            static const Str WD[] = {S("sunday"), S("monday"), S("tuesday"), S("wednesday"), S("thursday"), S("friday"), S("saturday")};
             Str d = dg_word(&rest);
-            for (int k = 0; k < 7; k++) if (str_eq(d, (Str){.p = WD[k], .n = strlen(WD[k])})) week_start = k;
+            for (int k = 0; k < (int)countof(WD); k++) if (str_eq(d, WD[k])) week_start = k;
             continue;
         }
         if (str_starts(w, S("displayMode"))) { /* "displayMode: compact" / "displayMode compact" */
@@ -405,10 +405,10 @@ DIAG_FN(gantt_render) {
         size_t k = 0;
         while (k < tick.n && (unsigned)(tick.p[k] - '0') < 10u) k++;
         Str u = {.p = tick.p + k, .n = tick.n - k};
-        static const char *const U[] = {"millisecond", "second", "minute", "hour", "day", "week", "month"};
+        static const Str U[] = {S("millisecond"), S("second"), S("minute"), S("hour"), S("day"), S("week"), S("month")};
         bool ok = k && tick.p[0] != '0';
         size_t j = 0;
-        while (j < countof(U) && !str_eq(u, (Str){.p = U[j], .n = strlen(U[j])})) j++;
+        while (j < countof(U) && !str_eq(u, U[j])) j++;
         if (!ok || j == countof(U)) tick = (Str){};
     }
     if (tick.n) {
@@ -468,7 +468,7 @@ DIAG_FN(gantt_render) {
     /* width: mermaid-cli renders into an 800px page with an 8px body margin, so the container is 784px wide */
     char lab[96];
     double W = 784, maxlab = 0;
-    { Str uw = dcfg_get("gantt.useWidth"); double v; if (uw.n && dg_parse_num(uw, &v) && v >= 100 && v <= 20000) W = v; }
+    { Str uw = dcfg_get_str(S("gantt.useWidth")); double v; if (uw.n && dg_parse_num(uw, &v) && v >= 100 && v <= 20000) W = v; }
     /* tick times; d3 day intervals restart at each month (... Jan 29, Jan 31, Feb 01) */
     double TK[600];
     size_t ntk = 0;
@@ -540,7 +540,7 @@ DIAG_FN(gantt_render) {
         const Task *t = &tv.v[i];
         double y = TOP + row[i] * (BH + GAP), x0 = round(left + (t->t0 - lo_t) * sc), x1 = round(left + (t->t1 - lo_t) * sc); /* d3 scaleTime().rangeRound */
         char cls[40];
-        snprintf(cls, sizeof cls, "task%s%s%s", t->tags & T_CRIT ? " crit" : "", t->tags & T_DONE ? " done" : "",
+        int ncls = snprintf(cls, sizeof cls, "task%s%s%s", t->tags & T_CRIT ? " crit" : "", t->tags & T_DONE ? " done" : "",
                  t->tags & T_ACTIVE ? " active" : "");
         if (t->tags & T_VERT) {
             dg_line(out, x0, gy0, x0, gy1, "vert");
@@ -549,9 +549,9 @@ DIAG_FN(gantt_render) {
         }
         if (t->tags & T_MILE) {
             double s = BH * 0.75 / 2, cy = y + BH / 2;
-            buf_lit(out, "<path class=\""); buf_put(out, strlen(cls), cls); buf_lit(out, "\" d=\"M");
-            dg_pt(out, x0, cy - s); buf_ch(out, 'L'); dg_pt(out, x0 + s, cy); buf_ch(out, 'L'); dg_pt(out, x0, cy + s);
-            buf_ch(out, 'L'); dg_pt(out, x0 - s, cy); buf_lit(out, "Z\"/>");
+            buf_lit(out, "<path class=\""); buf_put(out, (size_t)ncls, cls); buf_lit(out, "\" d=\"M");
+            buf_pt(out, x0, cy - s); buf_ch(out, 'L'); buf_pt(out, x0 + s, cy); buf_ch(out, 'L'); buf_pt(out, x0, cy + s);
+            buf_ch(out, 'L'); buf_pt(out, x0 - s, cy); buf_lit(out, "Z\"/>");
             /* label past the right edge would be clipped: put it left of the diamond */
             if (x0 + s + 5 + text_width(t->name, 11) <= W) dg_text(out, t->name, 11, x0 + s + 5, cy, "start", "tout");
             else dg_text(out, t->name, 11, x0 - s - 5, cy, "end", "tout");
