@@ -2166,8 +2166,6 @@ static int32_t seg_hit_m(Router *R, double px, double py, double qx, double qy, 
     if (cx1 >= G->gw) cx1 = G->gw - 1;
     if (cy1 >= G->gh) cy1 = G->gh - 1;
     if (++R->cur == 0) { memset(R->stamp, 0, R->g->nn * sizeof *R->stamp); R->cur = 1; }
-    int32_t hit = NONE;
-    double bt = 2;
     double dy = qy - py, idy = fabs(dy) > 1e-12 ? 1 / dy : 0;
     for (size_t cy = cy0; cy <= cy1; cy++) {
         /* x-extent of the segment inside this row band: only those cells can be touched */
@@ -2193,11 +2191,10 @@ static int32_t seg_hit_m(Router *R, double px, double py, double qx, double qy, 
                 Box b = R->nb[v];
                 b.x0 += sh, b.y0 += sh, b.x1 -= sh, b.y1 -= sh; /* grazing along a side is fine */
                 if (hx < b.x0 || lx > b.x1 || hy < b.y0 || ly > b.y1) continue;
-                double t = seg_box(px, py, qx, qy, &b);
-                if (t >= 0 && t < bt) return (int32_t)v; /* any hit suffices */
+                if (seg_box(px, py, qx, qy, &b) >= 0) return (int32_t)v; /* any hit suffices */
             }
     }
-    return hit;
+    return NONE;
 }
 
 static int32_t seg_hit(Router *R, double px, double py, double qx, double qy, int32_t s1, int32_t s2) {
