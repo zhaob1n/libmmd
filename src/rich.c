@@ -151,7 +151,7 @@ Str rich_wrap(Arena *a, Str s, double fs, double maxw, bool *ok) {
     o[s.n] = 0;
     /* greedy: replace a space with '\n' when the line would overflow */
     size_t ls = 0, last_sp = SIZE_MAX;
-    bool bold = false, bold_ls = false;
+    bool bold_ls = false;
     for (size_t i = 0; i <= s.n; i++) {
         if (i < s.n && o[i] != ' ' && o[i] != '\n') continue;
         bool b2 = bold_ls;
@@ -170,7 +170,6 @@ Str rich_wrap(Arena *a, Str s, double fs, double maxw, bool *ok) {
         if (o[i] == '\n') { bold_ls = b2; ls = i + 1; last_sp = SIZE_MAX; }
         else last_sp = i;
     }
-    (void)bold;
     return (Str){.p = o, .n = s.n};
 }
 
