@@ -170,18 +170,16 @@ static bool kw(Str s, Str k, Str *rest) {
     *rest = str_trim((Str){.p = s.p + k.n, .n = s.n - k.n});
     return true;
 }
+/* arena concatenation that records OOM in z */
+static Str z_oom(ZT *z, Str s) {
+    if (!s.p) z->oom = true;
+    return s;
+}
+#define ZCAT(z, ...) z_oom((z), STR_CAT((z)->a, __VA_ARGS__))
 static Str paren(Str s) {
     s = str_trim(s);
     if (s.n >= 2 && s.p[0] == '(' && s.p[s.n - 1] == ')') s.p++, s.n -= 2;
     return str_trim(s);
-}
-static Str cat3(ZT *z, Str a, Str m, Str b) {
-    char *p = ANEW(z->a, char, a.n + m.n + b.n + 1);
-    if (!p) { z->oom = true; return (Str){}; }
-    if (a.n) memcpy(p, a.p, a.n);
-    if (m.n) memcpy(p + a.n, m.p, m.n);
-    if (b.n) memcpy(p + a.n + m.n, b.p, b.n);
-    return (Str){.p = p, .n = a.n + m.n + b.n};
 }
 
 static void open_frag(ZT *z, Str label, Str cond, bool block) {
@@ -209,8 +207,8 @@ static void stmt(ZT *z, Str s, bool block) {
             push(z, z->last_ctrl);
         }
         Str c, lab;
-        if (s.p[0] == 'e') lab = kw(r, S("if"), &c) ? cat3(z, S("[ "), paren(c), S(" ]")) : S("[else]");
-        else if (s.p[0] == 'c') lab = cat3(z, S("catch "), paren(r), S(""));
+        if (s.p[0] == 'e') lab = kw(r, S("if"), &c) ? ZCAT(z, S("[ "), paren(c), S(" ]")) : S("[else]");
+        else if (s.p[0] == 'c') lab = ZCAT(z, S("catch "), paren(r));
         else lab = S("finally");
         if (z->sp && z->st[z->sp - 1].kind == BK_CTRL) ev(z, (Ev){.k = E_SEC, .cond = lab, .ref = z->st[z->sp - 1].ev});
         if (!block) close_block(z);
@@ -224,7 +222,7 @@ static void stmt(ZT *z, Str s, bool block) {
     for (size_t i = 0; i < countof(CT); i++)
         if (kw(s, CT[i].k, &r)) {
             Str c = paren(r);
-            open_frag(z, CT[i].frag, c.n ? (CT[i].cond && c.p[0] != '"' ? cat3(z, S("[ "), c, S(" ]")) : dg_unquote(c, true)) : (Str){}, block);
+            open_frag(z, CT[i].frag, c.n ? (CT[i].cond && c.p[0] != '"' ? ZCAT(z, S("[ "), c, S(" ]")) : dg_unquote(c, true)) : (Str){}, block);
             return;
         }
     if (kw(s, S("title"), &r)) { z->title = r; return; }
@@ -304,10 +302,10 @@ static void stmt(ZT *z, Str s, bool block) {
     int32_t t;
     uint8_t mk = M_SYNC;
     if (isnew) {
-        t = part(z, assign.n ? cat3(z, S(""), assign, S(":")) : (Str){}, 0); /* placeholder name, fixed below */
+        t = part(z, assign.n ? ZCAT(z, assign, S(":")) : (Str){}, 0); /* placeholder name, fixed below */
         Part *p = &z->P.v[t];
         p->name = assign.n ? assign : dg_unquote(target, true);
-        p->label = assign.n ? cat3(z, S(""), assign, S("")) : dg_unquote(target, true);
+        p->label = assign.n ? ZCAT(z, assign) : dg_unquote(target, true);
         if (assign.n) {
             char *q = ANEW(z->a, char, assign.n + 1 + target.n);
             if (!q) { z->oom = true; return; }
@@ -316,7 +314,7 @@ static void stmt(ZT *z, Str s, bool block) {
         }
         p->create_ev = (int32_t)z->E.n;
         Str args = paren(tail);
-        label = args.n ? cat3(z, S("« "), args, S(" »")) : S("«create»");
+        label = args.n ? ZCAT(z, S("« "), args, S(" »")) : S("«create»");
         mk = M_CREATE;
     } else {
         t = part(z, target, 0);

@@ -32,15 +32,6 @@ static mmd_status sfail(StP *p, size_t off, const char *m) { return diag_fail(p-
 
 static int32_t cur_scope(const StP *p) { return p->depth ? p->stk[p->depth - 1].region : NONE; }
 
-static Str cat3(Arena *A, Str a, Str b, Str c) {
-    char *o = arena_alloc(A, a.n + b.n + c.n + 1, 1);
-    if (!o) return (Str){};
-    if (a.n) memcpy(o, a.p, a.n);
-    if (b.n) memcpy(o + a.n, b.p, b.n);
-    if (c.n) memcpy(o + a.n + b.n, c.p, c.n);
-    return (Str){.p = o, .n = a.n + b.n + c.n};
-}
-
 [[nodiscard]] static int32_t state(StP *p, Str id, SKind k) {
     bool fresh;
     int32_t v = dg_node(&p->g, id, &fresh);
@@ -70,7 +61,7 @@ static Str cat3(Arena *A, Str a, Str b, Str c) {
     if (str_eq(id, S("[*]"))) {
         int32_t sc = cur_scope(p);
         Str scope = sc == NONE ? S("") : p->g.sid[sc];
-        Str nid = cat3(p->A, scope, S("\x01"), src ? S("start") : S("end"));
+        Str nid = STR_CAT(p->A, scope, S("\x01"), src ? S("start") : S("end"));
         if (!nid.n) return NONE;
         return state(p, nid, src ? SK_START : SK_END);
     }
@@ -101,7 +92,7 @@ static mmd_status new_region(StP *p, size_t off) {
     Frame *f = &p->stk[p->depth - 1];
     char buf[24];
     if (f->nregions == 1) { /* move existing children into region 0 */
-        Str id = cat3(p->A, g->sid[f->comp], S("\x02r0"), S(""));
+        Str id = STR_CAT(p->A, g->sid[f->comp], S("\x02r0"));
         int32_t r0 = id.n ? dg_cluster(g, id, (Str){}, f->comp) : NONE;
         if (r0 == NONE) return MMD_ERR_NOMEM;
         g->sclass[r0] = S("region");
@@ -109,7 +100,7 @@ static mmd_status new_region(StP *p, size_t off) {
         for (size_t s = 0; s < g->ns; s++) if ((int32_t)s != r0 && g->sparent[s] == f->comp) g->sparent[s] = r0;
     }
     int len = snprintf(buf, sizeof buf, "\x02r%u", f->nregions++);
-    Str id = cat3(p->A, g->sid[f->comp], (Str){.p = buf, .n = (size_t)len}, S(""));
+    Str id = STR_CAT(p->A, g->sid[f->comp], (Str){.p = buf, .n = (size_t)len});
     int32_t r = id.n ? dg_cluster(g, id, (Str){}, f->comp) : NONE;
     if (r == NONE) return MMD_ERR_NOMEM;
     g->sclass[r] = S("region");
@@ -127,7 +118,7 @@ static mmd_status add_desc(StP *p, int32_t v, Str d) {
        on an aliased state, gives the title + divider shape */
     if (!dst->n && str_eq(p->g.nlabel[v], p->g.nid[v])) { p->g.nlabel[v] = d; return MMD_OK; }
     if (!dst->n) { *dst = d; return MMD_OK; }
-    *dst = cat3(p->A, *dst, S("\n"), d);
+    *dst = STR_CAT(p->A, *dst, S("\n"), d);
     return dst->n ? MMD_OK : MMD_ERR_NOMEM;
 }
 
@@ -407,7 +398,7 @@ typedef struct ElemList { Scope *s; size_t cnt, cap; } ElemList;
         if (r == NONE ? nv != v || p->ccl.v[nv] != NONE : p->ccl.v[nv] != r) continue;
         char tag[24];
         int len = snprintf(tag, sizeof tag, "----note-%zu", i);
-        Str nid = cat3(p->A, r == NONE ? g->nid[nv] : g->sid[r], (Str){.p = tag, .n = (size_t)len}, S(""));
+        Str nid = STR_CAT(p->A, r == NONE ? g->nid[nv] : g->sid[r], (Str){.p = tag, .n = (size_t)len});
         if (!nid.n) return MMD_ERR_NOMEM;
         mmd_status st = add_elem(c, el, NOTE_EL0 + (int32_t)i, nid, c->ntw[i], c->nth[i], SH_RECT);
         if (st != MMD_OK) return st;
@@ -471,7 +462,7 @@ static mmd_status layout_scope(Ctx *c, int32_t cl) {
         int32_t sv = dg_find(lg, r == NONE ? g->nid[v] : g->sid[r]);
         if (sv == NONE) continue;
         { /* mermaid wraps each note in its own (invisible) noteGroup cluster */
-            int32_t gc = dg_cluster(lg, cat3(p->A, lg->nid[lv], S("----parent"), S("")), (Str){}, NONE);
+            int32_t gc = dg_cluster(lg, STR_CAT(p->A, lg->nid[lv], S("----parent")), (Str){}, NONE);
             if (gc == NONE) return MMD_ERR_NOMEM;
             lg->nparent[lv] = gc;
         }
