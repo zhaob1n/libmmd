@@ -76,7 +76,7 @@ static inline uint64_t hash_str(Str s) {
         (arr) = na_;                                                                          \
     } while (0)
 
-[[nodiscard]] static bool node_grow(Graph *g) {
+[[nodiscard]] static bool node_grow(Graph g[static 1]) {
     size_t oc = g->ncap, nc = oc ? oc * 2 : 64;
     Arena *A = g->arena;
     GROW(A, g->nid, oc, nc); GROW(A, g->nlabel, oc, nc); GROW(A, g->nclass, oc, nc);
@@ -85,7 +85,7 @@ static inline uint64_t hash_str(Str s) {
     g->ncap = nc;
     return true;
 }
-[[nodiscard]] static bool edge_grow(Graph *g) {
+[[nodiscard]] static bool edge_grow(Graph g[static 1]) {
     size_t oc = g->ecap, nc = oc ? oc * 2 : 64;
     Arena *A = g->arena;
     GROW(A, g->efrom, oc, nc); GROW(A, g->eto, oc, nc); GROW(A, g->elabel, oc, nc);
@@ -94,7 +94,7 @@ static inline uint64_t hash_str(Str s) {
     g->ecap = nc;
     return true;
 }
-[[nodiscard]] static bool sg_grow(Graph *g) {
+[[nodiscard]] static bool sg_grow(Graph g[static 1]) {
     size_t oc = g->scap, nc = oc ? oc * 2 : 16;
     Arena *A = g->arena;
     GROW(A, g->sid, oc, nc); GROW(A, g->stitle, oc, nc); GROW(A, g->sclass, oc, nc);
@@ -104,7 +104,7 @@ static inline uint64_t hash_str(Str s) {
     return true;
 }
 
-[[nodiscard]] static bool htab_rehash(Graph *g) {
+[[nodiscard]] static bool htab_rehash(Graph g[static 1]) {
     size_t nc = g->hcap ? g->hcap * 2 : 128;
     uint32_t *t = ANEW(g->arena, uint32_t, nc);
     if (!t) return false;
@@ -120,7 +120,7 @@ static inline uint64_t hash_str(Str s) {
 }
 
 /* returns index or NONE on OOM */
-static int32_t intern(Graph *g, Str id) {
+static int32_t intern(Graph g[static 1], Str id) {
     if (g->hcap) {
         size_t h = hash_str(id) & (g->hcap - 1);
         for (;;) {
@@ -147,13 +147,13 @@ static int32_t intern(Graph *g, Str id) {
     return (int32_t)v;
 }
 
-static int32_t find_sg(const Graph *g, Str id) {
+static int32_t find_sg(const Graph g[static 1], Str id) {
     for (size_t i = 0; i < g->ns; i++)
         if (str_eq(g->sid[i], id)) return (int32_t)i;
     return NONE;
 }
 
-[[nodiscard]] static bool append_css(Arena *a, Str *dst, Str add) {
+[[nodiscard]] static bool append_css(Arena a[static 1], Str dst[static 1], Str add) {
     add = str_trim(add);
     while (add.n && add.p[add.n - 1] == ';') add.n--;
     if (!add.n) return true;
@@ -166,7 +166,7 @@ static int32_t find_sg(const Graph *g, Str id) {
     *dst = (Str){.p = o, .n = dst->n + add.n + 1};
     return true;
 }
-[[nodiscard]] static bool append_class(Arena *a, Str *dst, Str add) {
+[[nodiscard]] static bool append_class(Arena a[static 1], Str dst[static 1], Str add) {
     if (!dst->n) { *dst = add; return true; }
     char *o = arena_alloc(a, dst->n + add.n + 2, 1);
     if (!o) return false;
@@ -195,7 +195,7 @@ static constexpr ShapeTok SHAPES[] = {
     ST("{{", "}}", SH_HEXAGON), ST("{", "}", SH_RHOMBUS),     ST(">", "]", SH_ASYM),
 };
 
-static mmd_status parse_shape_text(P p[static 1], Graph *g, int32_t v) {
+static mmd_status parse_shape_text(P p[static 1], Graph g[static 1], int32_t v) {
     char c0 = pk(p, 0);
     if (c0 != '(' && c0 != '[' && c0 != '{' && c0 != '>') return MMD_OK;
     const ShapeTok *t = nullptr;
@@ -252,7 +252,7 @@ static Shape shape_by_name(Str n) {
 }
 
 /* A@{ shape: x, label: "y" } (v11 syntax, basic) */
-static mmd_status parse_at_shape(P p[static 1], Graph *g, int32_t v) {
+static mmd_status parse_at_shape(P p[static 1], Graph g[static 1], int32_t v) {
     p->i += 2;
     size_t st = p->i;
     const char *e = memchr(p->s + st, '}', p->n - st);
@@ -421,7 +421,7 @@ static mmd_status parse_link(P p[static 1], Link l[static 1]) {
     return MMD_OK;
 }
 
-[[nodiscard]] static bool add_edge(Graph *g, int32_t a, int32_t b, const Link l[static 1]) {
+[[nodiscard]] static bool add_edge(Graph g[static 1], int32_t a, int32_t b, const Link l[static 1]) {
     if (g->ne == g->ecap && !edge_grow(g)) return false;
     size_t e = g->ne++;
     g->efrom[e] = a;
@@ -436,7 +436,7 @@ static mmd_status parse_link(P p[static 1], Link l[static 1]) {
     return true;
 }
 
-static int32_t find_edge_id(const Graph *g, Str id) {
+static int32_t find_edge_id(const Graph g[static 1], Str id) {
     for (size_t e = 0; e < g->ne; e++)
         if (g->eid[e].n && str_eq(g->eid[e], id)) return (int32_t)e;
     return NONE;
