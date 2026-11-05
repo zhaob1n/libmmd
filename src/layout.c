@@ -673,11 +673,13 @@ static void reverse_pts(size_t np, double P[static 2 * np]) {
 }
 
 /* polyline starts outside box and ends inside it: cut at the first entry. Returns new count. */
+static inline bool pt_in_box(const double p[static 2], double x0, double y0, double x1, double y1) {
+    return p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1;
+}
 static size_t clip_poly_box(size_t np, double P[static 2 * np], double x0, double y0, double x1, double y1) {
-    #define INSIDE(i) (P[2 * (i)] >= x0 && P[2 * (i)] <= x1 && P[2 * (i) + 1] >= y0 && P[2 * (i) + 1] <= y1)
-    if (np < 2 || INSIDE(0)) return np;
+    if (np < 2 || pt_in_box(P, x0, y0, x1, y1)) return np;
     size_t j = 1;
-    while (j < np && !INSIDE(j)) j++;
+    while (j < np && !pt_in_box(&P[2 * j], x0, y0, x1, y1)) j++;
     if (j == np) return np;
     double px = P[2 * j - 2], py = P[2 * j - 1], dx = P[2 * j] - px, dy = P[2 * j + 1] - py, t = 0;
     if (px < x0 && dx > 0) t = dmax(t, (x0 - px) / dx);
@@ -686,7 +688,6 @@ static size_t clip_poly_box(size_t np, double P[static 2 * np], double x0, doubl
     if (py > y1 && dy < 0) t = dmax(t, (y1 - py) / dy);
     P[2 * j] = px + dx * t, P[2 * j + 1] = py + dy * t;
     return j + 1;
-    #undef INSIDE
 }
 
 typedef struct PortKey { double k1, k2; uint32_t e; } PortKey;
@@ -1109,7 +1110,7 @@ static mmd_status layout_core(Graph *g) {
     }
 #ifdef MMD_RANKDUMP
     if (getenv("MMD_DUMPGRAPH")) {
-        static const char *DN[] = {"TB", "BT", "LR", "RL"};
+        static const char *const DN[] = {"TB", "BT", "LR", "RL"};
         FILE *F = fopen(getenv("MMD_DUMPGRAPH"), "w");
         if (!F) goto nodump;
         fprintf(F, "{\"dir\":\"%s\",\"nodesep\":%g,\"ranksep\":%g,\"clusters\":[", DN[g->dir], g->node_sep, g->rank_sep);
