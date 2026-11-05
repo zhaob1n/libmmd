@@ -33,7 +33,7 @@ static Str cap(Arena *a, Str s) { /* Medium / Test: capitalise like mermaid */
     return (Str){.p = o, .n = s.n};
 }
 
-static void arrowhead(Buf *b, const double *P, uint32_t np) {
+static void arrowhead(Buf *b, uint32_t np, const double *P) {
     if (np < 2) return;
     const double *A = P + 2 * (np - 1), *B = P + 2 * (np - 2);
     double dx = A[0] - B[0], dy = A[1] - B[1], L = sqrt(dx * dx + dy * dy);
@@ -161,7 +161,7 @@ DIAG_FN(requirement_render) {
                 dg_line(out, cx - 8, cy, cx + 8, cy, "rqd");
                 dg_line(out, cx, cy - 8, cx, cy + 8, "rqd");
             }
-        } else arrowhead(out, P, g.eptn[e]);
+        } else arrowhead(out, g.eptn[e], P);
         dg_rect(out, g.elx[e] - g.elw[e] / 2, g.ely[e] - g.elh[e] / 2, g.elw[e], g.elh[e], 0, "rl");
         { /* mermaid draws relation labels on a light grey plate */
             double lw, lh;

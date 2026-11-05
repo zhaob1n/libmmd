@@ -93,7 +93,8 @@ static void glyph(Buf *b, Str icon, double x, double y, double s) { /* x,y top-l
 }
 
 /* do the polyline's segments cross a service box (icon + label)? the endpoints' own boxes count except on the segment leaving / entering them. summed overlap */
-static double path_hits(size_t np, const double *P, size_t nn, const ANode *N, const double *cx, const double *cy, const double *hw, uint32_t a, uint32_t b, char pa, char pb) {
+static double path_hits(size_t np, const double P[static 2 * np], size_t nn, const ANode N[static nn], const double cx[static nn],
+                        const double cy[static nn], const double hw[static nn], uint32_t a, uint32_t b, char pa, char pb) {
     double h = 0;
     for (size_t i = 0; i + 1 < np; i++) {
         double x0 = fmin(P[2 * i], P[2 * i + 2]), x1 = fmax(P[2 * i], P[2 * i + 2]), y0 = fmin(P[2 * i + 1], P[2 * i + 3]), y1 = fmax(P[2 * i + 1], P[2 * i + 3]);
@@ -110,7 +111,7 @@ static double path_hits(size_t np, const double *P, size_t nn, const ANode *N, c
 }
 
 /* collinear overlap (within 3px) of the polyline with already-routed segments SG[4*i] */
-static double path_shared(size_t np, const double *P, size_t ns, const double *SG) {
+static double path_shared(size_t np, const double P[static 2 * np], size_t ns, const double *SG) {
     double o = 0;
     for (size_t i = 0; i + 1 < np; i++)
         for (size_t j = 0; j < ns; j++) {

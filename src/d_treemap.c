@@ -29,16 +29,16 @@ static constexpr unsigned char TMI[] = {0, 1, 2, 11, 10, 9, 4, 6}; /* SEC[k] == 
 static constexpr char SECT[][8] = {"#fff", "#000", "#000", "#000", "#000", "#000", "#000", "#000"};
 
 /* ---- d3-hierarchy 3 treemap() port: squarify (ratio phi), paddings, .round(true) ---- */
-static void dice(TNode *V, const uint32_t *ch, size_t n, double sum, double x0, double y0, double x1, double y1) {
+static void dice(TNode *V, size_t n, const uint32_t ch[static n], double sum, double x0, double y0, double x1, double y1) {
     double k = sum ? (x1 - x0) / sum : 0;
     for (size_t i = 0; i < n; i++) { TNode *t = &V[ch[i]]; t->y = y0, t->h = y1, t->x = x0, t->w = x0 += t->v * k; }
 }
-static void slice(TNode *V, const uint32_t *ch, size_t n, double sum, double x0, double y0, double x1, double y1) {
+static void slice(TNode *V, size_t n, const uint32_t ch[static n], double sum, double x0, double y0, double x1, double y1) {
     double k = sum ? (y1 - y0) / sum : 0;
     for (size_t i = 0; i < n; i++) { TNode *t = &V[ch[i]]; t->x = x0, t->w = x1, t->y = y0, t->h = y0 += t->v * k; }
 }
 /* x,y,w,h hold x0,y0,x1,y1 during layout */
-static void squarify(TNode *V, const uint32_t *ch, size_t n, double value, double x0, double y0, double x1, double y1) {
+static void squarify(TNode *V, size_t n, const uint32_t ch[static n], double value, double x0, double y0, double x1, double y1) {
     const double ratio = (1 + sqrt(5.0)) / 2;
     size_t i0 = 0, i1 = 0;
     while (i0 < n) {
@@ -56,8 +56,8 @@ static void squarify(TNode *V, const uint32_t *ch, size_t n, double value, doubl
             if (nr > minr) { sum -= nv; break; }
             minr = nr;
         }
-        if (dx < dy) { double yy = value ? y0 + dy * sum / value : y1; dice(V, ch + i0, i1 - i0, sum, x0, y0, x1, yy); if (value) y0 = yy; }
-        else { double xx = value ? x0 + dx * sum / value : x1; slice(V, ch + i0, i1 - i0, sum, x0, y0, xx, y1); if (value) x0 = xx; }
+        if (dx < dy) { double yy = value ? y0 + dy * sum / value : y1; dice(V, i1 - i0, ch + i0, sum, x0, y0, x1, yy); if (value) y0 = yy; }
+        else { double xx = value ? x0 + dx * sum / value : x1; slice(V, i1 - i0, ch + i0, sum, x0, y0, xx, y1); if (value) x0 = xx; }
         value -= sum, i0 = i1;
     }
 }
@@ -95,7 +95,7 @@ static void position(TNode *V, uint32_t *tmp, uint32_t id, double p, double inne
     if (y1 < y0) y0 = y1 = (y0 + y1) / 2;
     size_t k = 0;
     for (uint32_t c = t->first; c != UINT32_MAX; c = V[c].next) tmp[k++] = c;
-    squarify(V, tmp, k, t->v, x0, y0, x1, y1);
+    squarify(V, k, tmp, t->v, x0, y0, x1, y1);
     for (uint32_t c = t->first; c != UINT32_MAX; c = V[c].next) position(V, tmp + k, c, q, inner);
 }
 

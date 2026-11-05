@@ -25,7 +25,7 @@ static constexpr char FOLDER[] = "M10.59 4.59A2 2 0 0 0 9.17 4H4a2 2 0 0 0-2 2v1
 static constexpr char FILEP[] = "M6 2a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.83a2 2 0 0 0-.59-1.42l-4.82-4.82A2 2 0 0 0 13.17 2H6Zm7.5 1.9l4.6 4.6h-3.6a1 1 0 0 1-1-1V3.9Z";
 
 /* UTF-8 box-drawing chars used by the preprocessor: ─━│┃└┗├┣ (all E2 94 xx) */
-static int box_kind(const char *p, size_t left) { /* 1 branch, 2 dash, 3 vertical, 0 none */
+static int box_kind(size_t left, const char *p) { /* 1 branch, 2 dash, 3 vertical, 0 none */
     if (left < 3 || (unsigned char)p[0] != 0xE2 || (unsigned char)p[1] != 0x94) return 0;
     switch ((unsigned char)p[2]) {
     case 0x94: case 0x97: case 0x9c: case 0xa3: return 1;
@@ -51,7 +51,7 @@ DIAG_FN(treeview_render) {
             while (ls > 0 && src[ls - 1] != '\n') ls--;
             size_t col = 0;
             for (size_t p = ls; p < n && src[p] != '\n'; ) {
-                int k = box_kind(src + p, n - p);
+                int k = box_kind(n - p, src + p);
                 if (k) boxm = true;
                 if (k == 1 && !segw && col > 0) segw = col;
                 if (k == 1) break;
@@ -80,11 +80,11 @@ DIAG_FN(treeview_render) {
             size_t col = 0, p = ls;
             bool found = false, onlydec = true;
             while (p < n && src[p] != '\n') {
-                int k = box_kind(src + p, n - p);
+                int k = box_kind(n - p, src + p);
                 if (k == 1) {
                     level = (int)lround((double)col / (double)segw) + 1;
                     p += 3;
-                    while (box_kind(src + p, n - p) == 2) p += 3;
+                    while (box_kind(n - p, src + p) == 2) p += 3;
                     while (p < n && src[p] == ' ') p++;
                     found = true;
                     break;
