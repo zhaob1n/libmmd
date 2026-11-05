@@ -70,7 +70,7 @@ static mmd_theme parse_theme_after(Str s) {
     return MMD_THEME_AUTO;
 }
 
-static void apply_cfg_text(Config *c, Str s) {
+static void apply_cfg_text(Config c[static 1], Str s) {
     double v;
     mmd_theme t = parse_theme_after(s);
     if (t != MMD_THEME_AUTO) c->theme = t;
@@ -78,7 +78,7 @@ static void apply_cfg_text(Config *c, Str s) {
     if ((v = parse_num_after(s, S("rankSpacing"))) > 0) c->rank_sep = v;
 }
 
-static bool next_line(Str src, size_t *i, Str *line) {
+static bool next_line(Str src, size_t i[static 1], Str line[static 1]) {
     if (*i >= src.n) return false;
     const char *nl = memchr(src.p + *i, '\n', src.n - *i);
     size_t e = nl ? (size_t)(nl - src.p) : src.n;
@@ -88,7 +88,7 @@ static bool next_line(Str src, size_t *i, Str *line) {
 }
 
 /* skip frontmatter, directives, blank lines and comments; return offset of diagram keyword */
-static size_t preamble(Str src, Config *c) {
+static size_t preamble(Str src, Config c[static 1]) {
     size_t i = 0;
     if (src.n >= 3 && memcmp(src.p, "\xEF\xBB\xBF", 3) == 0) i = 3;
     size_t save = i;

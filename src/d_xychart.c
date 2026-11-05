@@ -19,7 +19,7 @@ static constexpr char PAL[][8] = {"#ECECFF", "#8493A6", "#FFC3A0", "#DCDDE1", "#
 static constexpr char LINEPAL[][8] = {"#8493A6", "#FF7F50", "#3c9a3c", "#7b52ab", "#c0392b"};
 
 /* optional leading quoted or bare title, then rest */
-static Str take_title(Str *s) {
+static Str take_title(Str s[static 1]) {
     Str t = str_trim(*s);
     if (t.n && t.p[0] == '"') {
         const char *q = memchr(t.p + 1, '"', t.n - 1);
@@ -43,7 +43,7 @@ static Str take_title(Str *s) {
     *s = (Str){.p = cut, .n = t.n - (size_t)(cut - t.p)};
     return str_trim((Str){.p = head.p, .n = (size_t)(cut - head.p)});
 }
-[[nodiscard]] static bool range(Str s, double *lo, double *hi) {
+[[nodiscard]] static bool range(Str s, double lo[static 1], double hi[static 1]) {
     s = str_trim(s);
     for (size_t i = 0; i + 3 <= s.n; i++)
         if (!memcmp(s.p + i, "-->", 3))
@@ -53,7 +53,7 @@ static Str take_title(Str *s) {
 /* "[a, "b, c", d]" -> items */
 typedef VEC(Str) StrVec;
 
-[[nodiscard]] static bool list(Arena *a, Str s, StrVec *v, bool *oom) {
+[[nodiscard]] static bool list(Arena a[static 1], Str s, StrVec v[static 1], bool oom[static 1]) {
     s = str_trim(s);
     if (s.n < 2 || s.p[0] != '[' || s.p[s.n - 1] != ']') return false;
     s = (Str){.p = s.p + 1, .n = s.n - 2};

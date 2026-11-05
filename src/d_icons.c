@@ -21,7 +21,7 @@ static Str strip(Str s, const char *pre) {
     return s.n > l && !memcmp(s.p, pre, l) ? (Str){.p = s.p + l, .n = s.n - l} : s;
 }
 
-bool icon_draw(Buf *b, Str name, double x, double y, double s, const char *cls) {
+bool icon_draw(Buf b[static 1], Str name, double x, double y, double s, const char cls[static 1]) {
     name = str_trim(name);
     const IconPath *ic = nullptr;
     bool fa = false;

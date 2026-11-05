@@ -27,7 +27,7 @@ static inline bool fa_name_ch(char c) {
     return (unsigned)((c | 32) - 'a') < 26u || (unsigned)(c - '0') < 10u || c == '-';
 }
 
-size_t rich_fa_token(Str s, size_t i, uint32_t *cp) {
+size_t rich_fa_token(Str s, size_t i, uint32_t cp[static 1]) {
     /* fa:fa-x  fab:fa-x  fas:fa-x  far:fa-x  fal:fa-x  fak:fa-x */
     size_t j = i;
     if (j + 6 > s.n || s.p[j] != 'f' || s.p[j + 1] != 'a') return 0;
@@ -65,7 +65,7 @@ bool rich_needed(Str s) {
     return false;
 }
 
-Str rich_normalize(Arena *a, Str raw, bool *ok) {
+Str rich_normalize(Arena *a, Str raw, bool ok[static 1]) {
     Str s = str_trim(raw);
     if (!(s.n >= 4 && s.p[0] == '"' && s.p[s.n - 1] == '"' && s.p[1] == '`' && s.p[s.n - 2] == '`'))
         return label_normalize(a, raw, ok);
@@ -100,7 +100,7 @@ Str rich_normalize(Arena *a, Str raw, bool *ok) {
 }
 
 /* width of one line, honouring bold toggles and fa tokens */
-static double line_width(Str ln, double fs, bool *bold) {
+static double line_width(Str ln, double fs, bool bold[static 1]) {
     double w = 0;
     size_t i = 0, run = 0;
     while (i < ln.n) {
@@ -122,7 +122,7 @@ static double line_width(Str ln, double fs, bool *bold) {
     return w + (*bold ? rw * 1.08 : rw);
 }
 
-void rich_measure(Str s, double fs, double *w, unsigned *lines) {
+void rich_measure(Str s, double fs, double w[static 1], unsigned lines[static 1]) {
     double mw = 0;
     unsigned cnt = 0;
     size_t pos = 0;
@@ -138,7 +138,7 @@ void rich_measure(Str s, double fs, double *w, unsigned *lines) {
     *lines = cnt;
 }
 
-Str rich_wrap(Arena *a, Str s, double fs, double maxw, bool *ok) {
+Str rich_wrap(Arena *a, Str s, double fs, double maxw, bool ok[static 1]) {
     *ok = true;
     if (!s.n || s.p[0] != RICH_MD) return s;
     double w;
@@ -173,7 +173,7 @@ Str rich_wrap(Arena *a, Str s, double fs, double maxw, bool *ok) {
     return (Str){.p = o, .n = s.n};
 }
 
-static void put_cp(Buf *b, uint32_t cp) {
+static void put_cp(Buf b[static 1], uint32_t cp) {
     char t[8];
     static constexpr char HEX[] = "0123456789abcdef";
     size_t k = 0;
@@ -183,7 +183,7 @@ static void put_cp(Buf *b, uint32_t cp) {
     buf_ch(b, ';');
 }
 
-static void open_span(Buf *b, bool bold, bool ital) {
+static void open_span(Buf b[static 1], bool bold, bool ital) {
     if (!bold && !ital) return;
     buf_lit(b, "<tspan");
     if (bold) buf_lit(b, " font-weight=\"bold\"");
@@ -191,7 +191,7 @@ static void open_span(Buf *b, bool bold, bool ital) {
     buf_ch(b, '>');
 }
 
-void rich_emit_line(Buf *b, Str ln, bool *bold, bool *ital) {
+void rich_emit_line(Buf b[static 1], Str ln, bool bold[static 1], bool ital[static 1]) {
     open_span(b, *bold, *ital);
     size_t i = 0, run = 0;
     while (i < ln.n) {

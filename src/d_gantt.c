@@ -36,7 +36,7 @@ static int64_t days_from_civil(int64_t y, unsigned m, unsigned d) {
     unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
     return era * 146097 + (int64_t)doe - 719468;
 }
-static void civil_from_days(int64_t z, int64_t *y, unsigned *m, unsigned *d) {
+static void civil_from_days(int64_t z, int64_t y[static 1], unsigned m[static 1], unsigned d[static 1]) {
     z += 719468;
     int64_t era = (z >= 0 ? z : z - 146096) / 146097;
     unsigned doe = (unsigned)(z - era * 146097), yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
@@ -47,7 +47,7 @@ static void civil_from_days(int64_t z, int64_t *y, unsigned *m, unsigned *d) {
 }
 
 /* parse s according to a dayjs-like format (YYYY YY MM M DD D HH H mm m ss s SSS X x, literals) */
-static bool parse_date(Str fmt, Str s, double *out) {
+static bool parse_date(Str fmt, Str s, double out[static 1]) {
     s = str_trim(s);
     int64_t y = 1970;
     unsigned mo = 1, d = 1, h = 0, mi = 0, se = 0, ms = 0;
@@ -119,7 +119,7 @@ static double add_months(double t, double n) {
 }
 
 /* "3d", "1.5h", "2w", "1M", "1y", "500ms" -> adds to t; false when not a duration */
-static bool add_duration(Str s, double t, double *out) {
+static bool add_duration(Str s, double t, double out[static 1]) {
     s = str_trim(s);
     size_t i = 0;
     while (i < s.n && ((unsigned)(s.p[i] - '0') < 10u || s.p[i] == '.')) i++;
@@ -140,7 +140,7 @@ static bool add_duration(Str s, double t, double *out) {
     return true;
 }
 
-static bool excluded(const GCtx *c, double day) {
+static bool excluded(const GCtx c[static 1], double day) {
     if (c->ex_weekends) {
         int64_t wd = ((int64_t)day % 7 + 7 + 4) % 7; /* 1970-01-01 was a Thursday (4) */
         if (c->fri_weekend ? (wd == 5 || wd == 6) : (wd == 0 || wd == 6)) return true;
@@ -149,7 +149,7 @@ static bool excluded(const GCtx *c, double day) {
     return false;
 }
 /* mermaid pushes the end of a task forward by the excluded days inside it */
-static double fix_excludes(const GCtx *c, double t0, double t1) {
+static double fix_excludes(const GCtx c[static 1], double t0, double t1) {
     if (!c->ex_weekends && !c->exdays.n) return t1;
     double d = floor(t0 / DAY);
     for (int guard = 0; d * DAY < t1 && guard < 100000; d++, guard++)
@@ -157,13 +157,13 @@ static double fix_excludes(const GCtx *c, double t0, double t1) {
     return t1;
 }
 
-static Task *find_id(const GCtx *c, Str id) {
+static Task *find_id(const GCtx c[static 1], Str id) {
     for (size_t i = 0; i < c->nt; i++) if (c->t[i].id.n && str_eq(c->t[i].id, id)) return &c->t[i];
     return nullptr;
 }
-static bool resolve(GCtx *c, size_t i);
+static bool resolve(GCtx c[static 1], size_t i);
 /* "after a b": latest end; "until a": earliest start */
-static bool ref_time(GCtx *c, Str list, bool want_end, double *out) {
+static bool ref_time(GCtx c[static 1], Str list, bool want_end, double out[static 1]) {
     bool any = false;
     double best = want_end ? -1e300 : 1e300;
     for (Str w = dg_word(&list); w.n; w = dg_word(&list)) {
@@ -176,7 +176,7 @@ static bool ref_time(GCtx *c, Str list, bool want_end, double *out) {
     if (any) *out = best;
     return any;
 }
-static bool resolve(GCtx *c, size_t i) {
+static bool resolve(GCtx c[static 1], size_t i) {
     Task *t = &c->t[i];
     if (t->state == 2) return true;
     if (t->state == 1) return false; /* cycle */

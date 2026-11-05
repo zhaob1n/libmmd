@@ -28,7 +28,7 @@ typedef struct EP {
     unsigned sgn;
 } EP;
 
-[[nodiscard]] static int32_t ent(EP *p, Str ref) {
+[[nodiscard]] static int32_t ent(EP p[static 1], Str ref) {
     ref = str_trim(ref);
     Str label = {}, cls = {};
     for (size_t k = 0; k + 3 < ref.n; k++) /* ENTITY:::cls (also ENTITY[label]:::cls) */
@@ -83,7 +83,7 @@ static constexpr CardTok WCARD[] = { /* word forms, longest first */
 };
 
 /* symbolic: A <lc>(--|..)<rc> B ; word form: A <card> (to|optionally to) <card> B */
-[[nodiscard]] static bool parse_rel(Str l, Str *a, Str *b, ERel *r, Str *label) {
+[[nodiscard]] static bool parse_rel(Str l, Str a[static 1], Str b[static 1], ERel r[static 1], Str label[static 1]) {
     const char *c = nullptr;
     bool inq = false;
     for (size_t k = 0; k < l.n; k++) {
@@ -138,7 +138,7 @@ static constexpr CardTok WCARD[] = { /* word forms, longest first */
     return false;
 }
 
-[[nodiscard]] static mmd_status parse(EP *p, LineIt *it) {
+[[nodiscard]] static mmd_status parse(EP p[static 1], LineIt it[static 1]) {
     Graph *g = &p->g;
     Str line;
     size_t off;
@@ -244,7 +244,7 @@ static constexpr CardTok WCARD[] = { /* word forms, longest first */
 }
 
 /* re-open the just-written <rect .../> and add classDef / style css (later wins, as in mermaid) */
-static void ent_style(Buf *b, const EP *p, Str cls, Str sty) {
+static void ent_style(Buf b[static 1], const EP p[static 1], Str cls, Str sty) {
     Str css[2] = {{}, sty};
     for (size_t i = 0; cls.n && i < p->cdefs.n; i++)
         if (str_eq(p->cdefs.v[i].name, cls)) css[0] = p->cdefs.v[i].css;
@@ -273,7 +273,7 @@ static constexpr char CSS[] =
 
 
 /* crow's foot at P (entity boundary) pointing outward along unit (ux,uy) */
-static void card_mark(Buf *b, double px, double py, double ux, double uy, Card c) {
+static void card_mark(Buf b[static 1], double px, double py, double ux, double uy, Card c) {
     double nx = -uy, ny = ux;
     #define AT(d, s) px + ux * (d) + nx * (s), py + uy * (d) + ny * (s)
     buf_lit(b, "<path class=\"mk\" d=\"");

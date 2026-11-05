@@ -43,7 +43,7 @@ static bool idc(char c, bool first, Gram g) {
     return (c >= '0' && c <= '9') || (c == '-' && g == G_ABNF);
 }
 
-static void skip_ws(RP *p) {
+static void skip_ws(RP p[static 1]) {
     for (;;) {
         while (p->i < p->n && (p->s[p->i] == ' ' || p->s[p->i] == '\t' || p->s[p->i] == '\n' || p->s[p->i] == '\r')) p->i++;
         if (p->g == G_EBNF && p->i + 1 < p->n && p->s[p->i] == '(' && p->s[p->i + 1] == '*') {
@@ -64,7 +64,7 @@ static void skip_ws(RP *p) {
     }
 }
 
-static Tok peek(RP *p) {
+static Tok peek(RP p[static 1]) {
     skip_ws(p);
     Tok t = {.k = T_EOF, .off = p->i};
     if (p->i >= p->n) return t;
@@ -111,7 +111,7 @@ static Tok peek(RP *p) {
     t.k = T_PUNCT, t.s = (Str){.p = p->s + p->i, .n = 1};
     return t;
 }
-static void adv(RP *p, Tok t) {
+static void adv(RP p[static 1], Tok t) {
     p->i = t.off + t.s.n;
     if (t.k == T_STR && t.s.p != p->s + t.off) p->i = t.off + t.s.n + 2; /* quotes */
     if (t.k == T_SPECIAL) {
@@ -122,25 +122,25 @@ static void adv(RP *p, Tok t) {
     }
 }
 static bool is_p(Tok t, Str c) { return t.k == T_PUNCT && str_eq(t.s, c); }
-static RNode *fail_at(RP *p, Tok t, const char *m) {
+static RNode *fail_at(RP p[static 1], Tok t, const char m[static 1]) {
     if (!p->err) p->err = m, p->eoff = t.off;
     return nullptr;
 }
 
-static RNode *mk(RP *p, RKind k, Str s) {
+static RNode *mk(RP p[static 1], RKind k, Str s) {
     RNode *r = ANEW(p->a, RNode, 1);
     if (!r) { p->err = "out of memory"; return nullptr; }
     *r = (RNode){.k = k, .s = s};
     return r;
 }
-static bool add(RP *p, RNode *par, RNode *c) {
+static bool add(RP p[static 1], RNode *par, RNode *c) {
     RNode **nk = ANEW(p->a, RNode *, par->nk + 1);
     if (!nk) { p->err = "out of memory"; return false; }
     if (par->nk) memcpy(nk, par->kid, par->nk * sizeof *nk);
     nk[par->nk++] = c, par->kid = nk;
     return true;
 }
-static RNode *wrap1(RP *p, RKind k, RNode *c, uint8_t min) {
+static RNode *wrap1(RP p[static 1], RKind k, RNode *c, uint8_t min) {
     if (!c) return nullptr;
     RNode *r = mk(p, k, (Str){});
     if (!r || !add(p, r, c)) return nullptr;
@@ -150,10 +150,10 @@ static RNode *wrap1(RP *p, RKind k, RNode *c, uint8_t min) {
 /* collapse single-child seq/choice like mermaid's transforms */
 static RNode *collapse(RNode *r) { return r && (r->k == RN_SEQ || r->k == RN_CHOICE) && r->nk == 1 ? r->kid[0] : r; }
 
-static RNode *p_choice(RP *p);
+static RNode *p_choice(RP p[static 1]);
 
 /* is the next token the start of a new rule (name followed by a definition operator)? */
-static bool rule_start(RP *p) {
+static bool rule_start(RP p[static 1]) {
     size_t save = p->i;
     Tok t = peek(p);
     bool r = false;
@@ -166,7 +166,7 @@ static bool rule_start(RP *p) {
     return r;
 }
 
-static RNode *p_primary(RP *p) {
+static RNode *p_primary(RP p[static 1]) {
     Tok t = peek(p);
     if (++p->depth > 200) return fail_at(p, t, "expression nested too deeply");
     RNode *r = nullptr;
@@ -225,7 +225,7 @@ static RNode *p_primary(RP *p) {
 }
 
 /* one sequence element with its grammar's prefix/postfix operators */
-static RNode *p_term(RP *p) {
+static RNode *p_term(RP p[static 1]) {
     Tok t = peek(p);
     if (p->g == G_ABNF && (t.k == T_NUM || is_p(t, S("*")))) { /* repeat prefix: n, n*m, *m, * */
         unsigned mn = 0, mx = 0;
@@ -283,7 +283,7 @@ static RNode *p_term(RP *p) {
     return r;
 }
 
-static bool seq_end(RP *p, Tok t) {
+static bool seq_end(RP p[static 1], Tok t) {
     if (t.k == T_EOF || is_p(t, S(";")) || is_p(t, S(")")) || is_p(t, S("]")) || is_p(t, S("}"))) return true;
     if (p->g == G_EBNF && (is_p(t, S("|")) || (is_p(t, S(".")) ))) return true;
     if ((p->g == G_ABNF || p->g == G_PEG) && is_p(t, S("/"))) return true;
@@ -291,7 +291,7 @@ static bool seq_end(RP *p, Tok t) {
     return rule_start(p);
 }
 
-static RNode *p_seq(RP *p) {
+static RNode *p_seq(RP p[static 1]) {
     RNode *s = mk(p, RN_SEQ, (Str){});
     if (!s) return nullptr;
     Tok t = peek(p);
@@ -305,7 +305,7 @@ static RNode *p_seq(RP *p) {
     return collapse(s);
 }
 
-static RNode *p_choice(RP *p) {
+static RNode *p_choice(RP p[static 1]) {
     RNode *c = mk(p, RN_CHOICE, (Str){});
     if (!c) return nullptr;
     for (;;) {
@@ -336,7 +336,7 @@ static Str label_of(Arena *a, const RNode *r) {
     return (Str){.p = o, .n = r->s.n + 4};
 }
 
-static void measure(Arena *a, RNode *r) {
+static void measure(Arena a[static 1], RNode *r) {
     switch (r->k) {
     case RN_TERM: case RN_NONTERM: case RN_SPECIAL:
     {
@@ -385,7 +385,7 @@ static void P0(Buf *b) { buf_lit(b, "<path class=\"railroad-line\" d=\""); }
 static void P1(Buf *b) { if (b->n && b->p[b->n - 1] == ' ') b->n--; buf_lit(b, "\"/>"); }
 
 /* draw r with its top-left at (ox, oy) */
-static void draw(DC *c, const RNode *r, double ox, double oy) {
+static void draw(DC c[static 1], const RNode *r, double ox, double oy) {
     Buf *b = c->b;
     switch (r->k) {
     case RN_TERM: case RN_NONTERM: case RN_SPECIAL: {

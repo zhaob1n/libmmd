@@ -38,7 +38,7 @@ static constexpr char DEFS[] =
 
 static bool isid(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || (unsigned char)c >= 0x80; }
 
-static uint32_t add_blk(Arena *a, BlkVec *v, uint32_t parent, Blk b) {
+static uint32_t add_blk(Arena a[static 1], BlkVec v[static 1], uint32_t parent, Blk b) {
     b.parent = parent, b.first = b.last = b.next = UINT32_MAX;
     if (!VEC_PUSH(a, v, b)) return UINT32_MAX;
     uint32_t i = (uint32_t)(v->n - 1);
@@ -51,10 +51,10 @@ static uint32_t add_blk(Arena *a, BlkVec *v, uint32_t parent, Blk b) {
 }
 
 typedef struct P { const char *s; size_t i, n; } P;
-static void sp(P *p) { while (p->i < p->n && is_sp(p->s[p->i])) p->i++; }
+static void sp(P p[static 1]) { while (p->i < p->n && is_sp(p->s[p->i])) p->i++; }
 
 /* id + optional shape/label + optional :span. returns false on syntax error */
-static bool node_tok(P *p, Str *id, Str *label, uint8_t *shape, uint32_t *span, bool *has_label) {
+static bool node_tok(P p[static 1], Str id[static 1], Str label[static 1], uint8_t shape[static 1], uint32_t span[static 1], bool has_label[static 1]) {
     size_t st = p->i;
     while (p->i < p->n && isid(p->s[p->i])) p->i++;
     if (p->i == st) return false;
@@ -125,7 +125,7 @@ static bool node_tok(P *p, Str *id, Str *label, uint8_t *shape, uint32_t *span, 
     return true;
 }
 
-static uint32_t find(const BlkVec *v, Str id) {
+static uint32_t find(const BlkVec v[static 1], Str id) {
     for (size_t i = 0; i < v->n; i++) if (!v->v[i].space && !v->v[i].group && str_eq(v->v[i].id, id)) return (uint32_t)i;
     for (size_t i = 0; i < v->n; i++) if (v->v[i].group && str_eq(v->v[i].id, id)) return (uint32_t)i;
     return UINT32_MAX;
@@ -174,7 +174,7 @@ static Str node_css(size_t n, const Str L[static n], Str id) {
     return sty.n ? sty : out;
 }
 /* insert style="css" after every class="bn" written since offset `from` */
-static bool style_shape(Buf *b, size_t from, Str css) {
+static bool style_shape(Buf b[static 1], size_t from, Str css) {
     static constexpr char K[] = "class=\"bn\"";
     for (size_t i = from; i + sizeof K - 1 <= b->n; i++) {
         if (memcmp(b->p + i, K, sizeof K - 1)) continue;
@@ -245,7 +245,7 @@ static size_t outline(const Blk *b, double P[static 80]) {
     return k;
 }
 
-static void clip(const Blk *b, double ox, double oy, double *x, double *y) {
+static void clip(const Blk *b, double ox, double oy, double x[static 1], double y[static 1]) {
     /* first crossing of the ray centre->(ox,oy) with b's outline */
     double P[80], cx = b->x + b->w / 2, cy = b->y + b->h / 2, dx = ox - cx, dy = oy - cy, best = 1;
     size_t k = outline(b, P);
@@ -285,7 +285,7 @@ static size_t uniq(double *v, size_t n) {
     return k;
 }
 /* binary min-heap of states keyed by dist[] (lazy deletion: stale entries are popped and re-relaxed) */
-static void heap_push(uint32_t hp[], size_t *hn, const double dist[], uint32_t v) {
+static void heap_push(uint32_t hp[], size_t hn[static 1], const double dist[], uint32_t v) {
     size_t i = (*hn)++;
     hp[i] = v;
     for (; i && dist[hp[(i - 1) / 2]] > dist[hp[i]]; i = (i - 1) / 2) {
@@ -293,7 +293,7 @@ static void heap_push(uint32_t hp[], size_t *hn, const double dist[], uint32_t v
     }
 }
 
-static uint32_t heap_pop(uint32_t hp[], size_t *hn, const double dist[]) {
+static uint32_t heap_pop(uint32_t hp[], size_t hn[static 1], const double dist[]) {
     uint32_t u = hp[0];
     size_t n = --*hn;
     hp[0] = hp[n];
@@ -310,7 +310,7 @@ static uint32_t heap_pop(uint32_t hp[], size_t *hn, const double dist[]) {
 /* deviate from mermaid: an edge with no clear straight or bent path runs orthogonally along the gaps
  * between blocks (Dijkstra over the gap centre lines, bends penalised). P gets up to 64 points, clipped
  * to the rectangles of s and t; returns the count, 0 when there is no route */
-static size_t gap_route(Arena *a, const Blk *B, size_t nb, const Blk *s, const Blk *t, double *P) {
+static size_t gap_route(Arena a[static 1], const Blk *B, size_t nb, const Blk *s, const Blk *t, double *P) {
     double *xs = ANEW(a, double, 2 * nb + 2), *ys = ANEW(a, double, 2 * nb + 2);
     if (!xs || !ys) return 0;
     size_t nx = 0, ny = 0;

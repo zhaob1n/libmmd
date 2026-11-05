@@ -17,7 +17,7 @@ static constexpr char CSS[] =
     "#mermaid .ql{font-size:16px;fill:#131300;}#mermaid .al{font-size:16px;fill:#131300;}"
     "#mermaid .pl{font-size:12px;fill:#131300;}#mermaid .ttl{font-size:20px;}";
 
-static void parse_style(Str s, QStyle *st) {
+static void parse_style(Str s, QStyle st[static 1]) {
     while (s.n) {
         const char *c = memchr(s.p, ',', s.n);
         size_t k = c ? (size_t)(c - s.p) : s.n;
@@ -45,7 +45,7 @@ static bool safe_color(Str c) {
     return c.n > 0;
 }
 /* split "a --> b" */
-static void axis_pair(Str s, Str *lo, Str *hi) {
+static void axis_pair(Str s, Str lo[static 1], Str hi[static 1]) {
     for (size_t i = 0; i + 3 <= s.n; i++)
         if (!memcmp(s.p + i, "-->", 3)) {
             *lo = str_trim((Str){.p = s.p, .n = i});

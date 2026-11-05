@@ -154,7 +154,7 @@ static inline size_t u64_to_str(uint64_t v, char out[static 24]) {
     return len;
 }
 
-void buf_int(Buf *b, int64_t v) {
+void buf_int(Buf b[static 1], int64_t v) {
     if (!buf_reserve(b, 24)) return;
     char *o = b->p + b->n;
     uint64_t u = (uint64_t)v;
@@ -230,7 +230,7 @@ void buf_num(Buf *b, double v) {
     b->n += fmt_num(b->p + b->n, v);
 }
 
-void buf_pt(Buf *b, double x, double y) {
+void buf_pt(Buf b[static 1], double x, double y) {
     if (!buf_reserve(b, 54)) return;
     char *o = b->p + b->n;
     size_t k = fmt_num(o, x);

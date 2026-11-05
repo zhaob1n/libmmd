@@ -98,7 +98,7 @@ size_t label_br_len(Str s, size_t i) {
     return j < s.n && s.p[j] == '>' ? j + 1 - i : 0;
 }
 
-Str label_normalize(Arena *a, Str raw, bool *ok) {
+Str label_normalize(Arena *a, Str raw, bool ok[static 1]) {
     *ok = true;
     Str s = str_trim(raw);
     bool md = false;
@@ -132,7 +132,7 @@ Str label_normalize(Arena *a, Str raw, bool *ok) {
     return (Str){.p = o, .n = k};
 }
 
-bool label_next_line(Str s, size_t *pos, Str *line) {
+bool label_next_line(Str s, size_t pos[static 1], Str line[static 1]) {
     if (*pos > s.n) return false;
     const char *st = s.p + *pos;
     const char *nl = s.n > *pos ? memchr(st, '\n', s.n - *pos) : nullptr;
@@ -159,7 +159,7 @@ double text_width_os(Str s, double fs) {
     return acc;
 }
 
-void label_measure_f(Str s, double fs, double (*meas)(Str, double), double *w, unsigned *lines) {
+void label_measure_f(Str s, double fs, double (*meas)(Str, double), double w[static 1], unsigned lines[static 1]) {
     size_t pos = 0;
     Str ln;
     double mw = 0;
@@ -169,4 +169,4 @@ void label_measure_f(Str s, double fs, double (*meas)(Str, double), double *w, u
     *w = mw, *lines = k;
 }
 
-void label_measure(Str s, double fs, double *w, unsigned *lines) { label_measure_f(s, fs, text_width, w, lines); }
+void label_measure(Str s, double fs, double w[static 1], unsigned lines[static 1]) { label_measure_f(s, fs, text_width, w, lines); }

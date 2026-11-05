@@ -27,14 +27,14 @@ static constexpr char CSS[] =
 
 typedef struct AAlign { bool col; Str ids; size_t off; } AAlign;
 static bool idc(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || (unsigned char)c >= 0x80; }
-static Str take_id(Str *s) {
+static Str take_id(Str s[static 1]) {
     size_t i = 0;
     while (i < s->n && idc(s->p[i]) && !(s->p[i] == '-' && i + 1 < s->n && s->p[i + 1] == '-')) i++;
     Str r = {.p = s->p, .n = i};
     s->p += i, s->n -= i;
     return r;
 }
-[[nodiscard]] static bool encl(Str *s, char o, char c, Str *out) {
+[[nodiscard]] static bool encl(Str s[static 1], char o, char c, Str out[static 1]) {
     if (!s->n || s->p[0] != o) return true;
     const char *e = memchr(s->p, c, s->n);
     if (!e) return false;
@@ -46,7 +46,7 @@ static int pdx(char p) { return p == 'R' ? 1 : p == 'L' ? -1 : 0; }
 static int pdy(char p) { return p == 'B' ? 1 : p == 'T' ? -1 : 0; }
 static int sgn(int v) { return (v > 0) - (v < 0); }
 
-static void glyph(Buf *b, Str icon, double x, double y, double s) { /* x,y top-left of s×s tile */
+static void glyph(Buf b[static 1], Str icon, double x, double y, double s) { /* x,y top-left of s×s tile */
     double u = s / 80;
     #define P(px, py) dg_pt(b, x + (px) * u, y + (py) * u)
     if (str_eq(icon, S("database"))) {

@@ -31,28 +31,28 @@ constexpr BBox BB_EMPTY = {.x0 = 1e300, .y0 = 1e300, .x1 = -1e300, .y1 = -1e300}
 [[nodiscard]] BBox dg_bbox(const Graph *g);
 void dg_pt(Buf *b, double x, double y);
 /* filled 10-long arrowhead at tip, pointing away from from; half = half the base width */
-void dg_arrowhead(Buf *b, const char *cls, const double tip[static 2], const double from[static 2], double half);
+void dg_arrowhead(Buf b[static 1], const char cls[static 1], const double tip[static 2], const double from[static 2], double half);
 /* d3 curveBasis through n points */
-void dg_basis(Buf *b, size_t n, const double P[static 2 * n]);
+void dg_basis(Buf b[static 1], size_t n, const double P[static 2 * n]);
 /* path data for edge e (basis curve, or a loop for self edges) */
-void dg_edge_d(Buf *b, const Graph *g, size_t e);
+void dg_edge_d(Buf b[static 1], const Graph g[static 1], size_t e);
 /* centred multi-line text; anchor "middle"/"start"/"end"; cls may be nullptr */
-void dg_text(Buf *b, Str s, double fs, double x, double cy, const char *anchor, const char *cls);
+void dg_text(Buf b[static 1], Str s, double fs, double x, double cy, const char anchor[static 1], const char *cls);
 /* dg_text with an explicit row pitch (font size comes from the class) */
-void dg_text_lh(Buf *b, Str s, double lh, double x, double cy, const char *anchor, const char *cls);
+void dg_text_lh(Buf b[static 1], Str s, double lh, double x, double cy, const char anchor[static 1], const char *cls);
 /* svg root with viewBox, <style>, white background */
-void dg_head(Buf *b, BBox bb, double margin, const char *kind, size_t ncss, const char css[static ncss]);
+void dg_head(Buf b[static 1], BBox bb, double margin, const char kind[static 1], size_t ncss, const char css[static ncss]);
 #define DG_HEAD(b, bb, m, kind, css) dg_head((b), (bb), (m), (kind), sizeof(css) - 1, (css))
 void dg_rect(Buf *b, double x, double y, double w, double h, double rx, const char *cls);
-void dg_line(Buf *b, double x1, double y1, double x2, double y2, const char *cls);
+void dg_line(Buf b[static 1], double x1, double y1, double x2, double y2, const char *cls);
 
 /* tiny line scanner shared by line-oriented diagram parsers */
 typedef struct LineIt { const char *s; size_t n, i, lstart; } LineIt;
 /* next non-empty, non-comment trimmed line; *off = offset of its first byte */
-[[nodiscard]] bool dg_next_line(LineIt *it, Str *line, size_t *off);
+[[nodiscard]] bool dg_next_line(LineIt it[static 1], Str line[static 1], size_t off[static 1]);
 /* indentation (columns, tab = 4) of the raw line starting at offset off */
-[[nodiscard]] unsigned dg_indent(const LineIt *it, size_t off);
-[[nodiscard]] Str dg_word(Str *s);
+[[nodiscard]] unsigned dg_indent(const LineIt it[static 1], size_t off);
+[[nodiscard]] Str dg_word(Str s[static 1]);
 /* trim, then drop one pair of matching outer quotes: '"' always, '\'' too when apos */
 static inline Str dg_unquote(Str s, bool apos) {
     s = str_trim(s);
@@ -65,28 +65,28 @@ static inline bool dg_css_ok(Str v) {
     for (size_t i = 0; i < v.n; i++) if (strchr(";{}<>\"'\\", v.p[i])) return false;
     return true;
 }
-[[nodiscard]] bool dg_parse_num(Str s, double *out);
+[[nodiscard]] bool dg_parse_num(Str s, double out[static 1]);
 /* ---- free-form (non-graph) renderers: draw into a body Buf while growing a BBox ---- */
 typedef enum TBase { TB_ALPHA, TB_MIDDLE, TB_HANG } TBase;
 /* mermaid drawMultilineText: lines ('\n' or <br>) as tspans, first at y (block centred when
  * centre is true); grows *bb (nullable) with an estimated text box. Returns the line count. */
 unsigned dg_tspans(Buf *b, BBox *bb, Str s, double fs, double lh, double x, double y, bool centre,
-                   const char *anchor, TBase base, const char *cls);
+                   const char anchor[static 1], TBase base, const char *cls);
 /* estimated bbox of such a text block (same arguments) */
-[[nodiscard]] BBox dg_tbox(Str s, double fs, double lh, double x, double y, bool centre, const char *anchor, TBase base);
+[[nodiscard]] BBox dg_tbox(Str s, double fs, double lh, double x, double y, bool centre, const char anchor[static 1], TBase base);
 /* greedy word wrap at maxc characters per line (mermaid wrapText), '\n'-joined; {} on OOM */
 [[nodiscard]] Str dg_wrapc(Arena *a, Str s, size_t maxc);
 /* svg head for bb + margin, then body, then </svg>; frees body */
-[[nodiscard]] mmd_status dg_finish(Buf *out, Buf *body, BBox bb, double m, const char *kind, size_t ncss, const char css[static ncss]);
+[[nodiscard]] mmd_status dg_finish(Buf out[static 1], Buf body[static 1], BBox bb, double m, const char kind[static 1], size_t ncss, const char css[static ncss]);
 #define DG_FINISH(o, body, bb, m, kind, css) dg_finish((o), (body), (bb), (m), (kind), sizeof(css) - 1, (css))
 #endif
 
 /* opening <text> tag (caller writes the content and "</text>") */
-void dg_text_open(Buf *b, double x, double cy, const char *anchor, const char *cls);
+void dg_text_open(Buf b[static 1], double x, double cy, const char anchor[static 1], const char *cls);
 /* rect with explicit fill (nullptr = class only) */
-void dg_rect_fill(Buf *b, double x, double y, double w, double h, double rx, const char *cls, const char *fill);
+void dg_rect_fill(Buf b[static 1], double x, double y, double w, double h, double rx, const char *cls, const char *fill);
 /* palette of mermaid default theme accents, cycling */
 [[nodiscard]] const char *dg_palette(size_t i);
 /* normalise (<br>, quotes) then greedily word-wrap to maxw; nullptr-safe: returns {} on OOM */
-[[nodiscard]] Str dg_wrap(Arena *a, Str raw, double fs, double maxw);
-[[nodiscard]] Str dg_wrapf(Arena *a, Str raw, double fs, double maxw, double (*meas)(Str, double));
+[[nodiscard]] Str dg_wrap(Arena a[static 1], Str raw, double fs, double maxw);
+[[nodiscard]] Str dg_wrapf(Arena a[static 1], Str raw, double fs, double maxw, double (*meas)(Str, double));

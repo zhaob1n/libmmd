@@ -27,7 +27,7 @@ constexpr double CLUSTER_TITLE = 24.0;
 constexpr double EDGE_SEP = 20.0;
 
 /* measure a label; markdown labels are word-wrapped in place first */
-static void measure(Graph *g, Str *lab, double *w, unsigned *lines) {
+static void measure(Graph *g, Str *lab, double w[static 1], unsigned lines[static 1]) {
     double fs = g->font_size;
     if (lab->n && rich_needed(*lab)) {
         bool ok;
@@ -124,7 +124,7 @@ static void sort_u32_small(size_t n, uint32_t a[static n]) {
 }
 
 /* ---------- crossing counting (Barth/Jünger/Mutzel accumulator via Fenwick) ---------- */
-static uint64_t cross_layer(const Lay *L, size_t r, uint32_t *buf, uint32_t *fen) {
+static uint64_t cross_layer(const Lay L[static 1], size_t r, uint32_t *buf, uint32_t *fen) {
     size_t a0 = L->loff[r], a1 = L->loff[r + 1], b0 = L->loff[r + 1], b1 = L->loff[r + 2];
     size_t m = 0, nb = b1 - b0;
     for (size_t i = a0; i < a1; i++) {
@@ -145,7 +145,7 @@ static uint64_t cross_layer(const Lay *L, size_t r, uint32_t *buf, uint32_t *fen
     return cr;
 }
 
-static uint64_t cross_all(const Lay *L, uint32_t *buf, uint32_t *fen) {
+static uint64_t cross_all(const Lay L[static 1], uint32_t *buf, uint32_t *fen) {
     uint64_t c = 0;
     for (size_t r = 0; r + 1 < L->R; r++) c += cross_layer(L, r, buf, fen);
     return c;
@@ -175,7 +175,7 @@ static void bc_sort(size_t n, BcItem a[static n], BcItem tmp[static n]) {
 
 /* one key per cluster, shared by all layers (mean normalised slot of its members), so sibling clusters keep
  * the same relative order in every layer -> cluster boxes can be made rectangular without overlap */
-static void cluster_keys(const Lay *L, size_t S, double gk[static S + 1], uint32_t cnt[static S + 1]) {
+static void cluster_keys(const Lay L[static 1], size_t S, double gk[static S + 1], uint32_t cnt[static S + 1]) {
     memset(gk, 0, (S + 1) * sizeof *gk);
     memset(cnt, 0, (S + 1) * sizeof *cnt);
     for (size_t r = 0; r < L->R; r++) {
@@ -190,7 +190,7 @@ static void cluster_keys(const Lay *L, size_t S, double gk[static S + 1], uint32
 }
 
 /* ---------- one barycenter sweep over layer r ---------- */
-static void sweep_layer(Lay *L, size_t r, bool down, bool self, BcItem *bcbuf, const double *csum, bool clusters) {
+static void sweep_layer(Lay L[static 1], size_t r, bool down, bool self, BcItem *bcbuf, const double *csum, bool clusters) {
     size_t a = L->loff[r], b = L->loff[r + 1], n = b - a;
     if (n < 2) return;
     const uint32_t *off = down ? L->poff : L->soff, *adj = down ? L->pidx : L->sidx;
@@ -310,7 +310,7 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, BcItem *bcbuf, c
 
 /* returns crossings removed; *budget bounds the pair-cost work (early stop on huge graphs) */
 /* both orders at once: *cuv = crossings with u left of v, *cvu = with v left of u */
-static void pair_cost2(const Lay *L, int32_t u, int32_t v, uint64_t *cuv, uint64_t *cvu) {
+static void pair_cost2(const Lay L[static 1], int32_t u, int32_t v, uint64_t cuv[static 1], uint64_t cvu[static 1]) {
     uint64_t a = 0, b = 0;
     for (unsigned side = 0; side < 2; side++) {
         const uint32_t *off = side ? L->soff : L->poff, *adj = side ? L->sidx : L->pidx;
@@ -324,7 +324,7 @@ static void pair_cost2(const Lay *L, int32_t u, int32_t v, uint64_t *cuv, uint64
     }
     *cuv = a, *cvu = b;
 }
-static uint64_t transpose(Lay *L, int64_t *budget, uint8_t dirty[static L->R + 2]) {
+static uint64_t transpose(Lay L[static 1], int64_t budget[static 1], uint8_t dirty[static L->R + 2]) {
     /* dirty[r+1]: layer r changed in the last pass (dirty[0], dirty[R+1] are sentinels) */
     uint64_t gain = 0;
     memset(dirty, 1, L->R + 2);
@@ -368,7 +368,7 @@ static inline uint64_t pkey(int32_t a, int32_t b) {
     return ((uint64_t)(uint32_t)a << 32 | (uint32_t)b) + 1;
 }
 static inline size_t phash(uint64_t k, size_t cap) { return (size_t)((k * 0x9E3779B97F4A7C15ull) >> 17) & (cap - 1); }
-[[nodiscard]] static bool pset_add(Arena *A, PairSet *s, int32_t a, int32_t b) {
+[[nodiscard]] static bool pset_add(Arena *A, PairSet s[static 1], int32_t a, int32_t b) {
     { uint64_t bk = pkey(a, b) * 0x9E3779B97F4A7C15ull >> 52; s->bloom[bk >> 6] |= 1ull << (bk & 63); }
     if ((s->n + 1) * 2 > s->cap) {
         size_t nc = s->cap ? s->cap * 2 : 64;
@@ -394,7 +394,7 @@ static inline size_t phash(uint64_t k, size_t cap) { return (size_t)((k * 0x9E37
     s->n++;
     return true;
 }
-static inline bool pset_has(const PairSet *s, int32_t a, int32_t b) {
+static inline bool pset_has(const PairSet s[static 1], int32_t a, int32_t b) {
     if (!s->cap) return false;
     uint64_t k = pkey(a, b), bk = k * 0x9E3779B97F4A7C15ull >> 52;
     if (!(s->bloom[bk >> 6] >> (bk & 63) & 1)) return false;
@@ -416,7 +416,7 @@ static int32_t cluster_lca(const Graph *g, const int32_t *depth, int32_t a, int3
     return a;
 }
 
-static double sep(const Lay *L, int32_t u, int32_t v) {
+static double sep(const Lay L[static 1], int32_t u, int32_t v) {
     double s = (L->w[u] + L->w[v]) / 2;
     if (L->rpad) s += L->rpad[u];
     s += (L->dummy[u] ? EDGE_SEP : L->nodesep) / 2 + (L->dummy[v] ? EDGE_SEP : L->nodesep) / 2;
@@ -439,7 +439,7 @@ typedef struct BKWork {
 
 /* vertical alignment + horizontal compaction for one of the 4 variants */
 /* sepv[i]: separation between lay[i-1] and lay[i] (symmetric, so shared by all 4 passes) */
-static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, const double *sepv, double *out) {
+static bool bk_pass(Lay L[static 1], const PairSet conf[static 1], bool up, bool left, BKWork W[static 1], const double *sepv, double *out) {
     size_t V = L->V, R = L->R;
     /* build pass layer order */
     for (size_t r = 0; r < R; r++) {
@@ -532,7 +532,7 @@ static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, 
     return qt > 0 || V == 0;
 }
 
-[[nodiscard]] static bool bk(Lay *L) {
+[[nodiscard]] static bool bk(Lay L[static 1]) {
     size_t V = L->V, R = L->R;
     Arena *A = L->A;
     PairSet conf = {};
@@ -727,7 +727,7 @@ static int64_t js_ikey(Str s) {
 typedef struct SuccRec { int32_t tgt, next; uint32_t cnt, seq; } SuccRec;
 typedef struct SuccSim { SuccRec *r; size_t n, cap; int32_t *head; uint32_t seq; Arena *A; } SuccSim;
 
-static bool succ_add(SuccSim *s, int32_t u, int32_t w) {
+static bool succ_add(SuccSim s[static 1], int32_t u, int32_t w) {
     for (int32_t i = s->head[u]; i >= 0; i = s->r[i].next)
         if (s->r[i].tgt == w && s->r[i].cnt) { s->r[i].cnt++; return true; }
     if (s->n == s->cap) {
@@ -741,18 +741,18 @@ static bool succ_add(SuccSim *s, int32_t u, int32_t w) {
     s->head[u] = (int32_t)s->n++;
     return true;
 }
-static void succ_del(SuccSim *s, int32_t u, int32_t w) {
+static void succ_del(SuccSim s[static 1], int32_t u, int32_t w) {
     for (int32_t i = s->head[u]; i >= 0; i = s->r[i].next)
         if (s->r[i].tgt == w && s->r[i].cnt) { s->r[i].cnt--; return; }
 }
 
 /* dagre (mermaid) order step on our ranks: reconstruct dagre's node order, dummy parents
  * (parentDummyChains) and successor order, then run the faithful order() port. */
-static mmd_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32_t *ef, const int32_t *et,
+static mmd_status dagre_prep_order(Lay L[static 1], const Graph *g, size_t E, const int32_t *ef, const int32_t *et,
                                    const uint8_t *rev, const uint32_t *revord, size_t nrevord, const int32_t *esub,
                                    const int32_t *rank, const uint32_t *choff, const int32_t *cmin,
                                    const int32_t *cmax, const uint32_t *bbase, const int32_t *sdepth,
-                                   uint64_t *bestc) {
+                                   uint64_t bestc[static 1]) {
     Arena *A = L->A;
     size_t N = L->N, V = L->V, S = L->S, NS = V + S;
 #define DV(e) (ef[e] != NONE && et[e] != NONE && ef[e] != et[e])
@@ -925,8 +925,8 @@ static mmd_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
 /* dagre ranking on the nesting graph: node/children/edge orders as mermaid feeds dagre */
 static mmd_status dagre_rank_graph(Arena *A, const Graph *g, size_t N, size_t E, size_t S, const int32_t *ef,
                                    const int32_t *et, const uint8_t *rev, const uint32_t *revord, size_t nrevord,
-                                   const int32_t *esub, const int32_t *mlen, int32_t *rank, int32_t **ctop,
-                                   int32_t **cbot, int32_t **corder, int32_t *elrank) {
+                                   const int32_t *esub, const int32_t *mlen, int32_t *rank, int32_t *ctop[static 1],
+                                   int32_t *cbot[static 1], int32_t *corder[static 1], int32_t *elrank) {
 #define DV(e) (ef[e] != NONE && et[e] != NONE && ef[e] != et[e] && !(g->nflags[ef[e]] & NF_HIDDEN) && \
                !(g->nflags[et[e]] & NF_HIDDEN))
     int64_t *ikey = ANEW(A, int64_t, N + S + 1);
@@ -2058,7 +2058,7 @@ static mmd_status layout_rec(Graph *g, unsigned depth) {
 
 /* ---------- post passes on the final geometry ---------- */
 /* segment p->q vs box: entry parameter in [0,1] or -1 */
-static double seg_box(double px, double py, double qx, double qy, const BBox *b) {
+static double seg_box(double px, double py, double qx, double qy, const BBox b[static 1]) {
     double t0 = 0, t1 = 1, d[2] = {qx - px, qy - py}, p0[2] = {px, py}, lo[2] = {b->x0, b->y0}, hi[2] = {b->x1, b->y1};
     for (unsigned k = 0; k < 2; k++) {
         if (fabs(d[k]) < 1e-12) { if (p0[k] < lo[k] || p0[k] > hi[k]) return -1; continue; }
@@ -2077,7 +2077,7 @@ static double seg_box(double px, double py, double qx, double qy, const BBox *b)
  * boxes; total work is budgeted so huge graphs degrade to the plain layout route. */
 typedef struct Grid { double x0, y0, cs, ics; size_t gw, gh; uint32_t *off, *idx; } Grid;
 
-[[nodiscard]] static bool grid_build(Arena *A, Grid *G, size_t N, const BBox nb[static N + 1], const bool *use) {
+[[nodiscard]] static bool grid_build(Arena *A, Grid G[static 1], size_t N, const BBox nb[static N + 1], const bool *use) {
     double x0 = INFINITY, y0 = INFINITY, x1 = -INFINITY, y1 = -INFINITY, area = 0;
     size_t k = 0;
     for (size_t v = 0; v < N; v++) {
@@ -2126,7 +2126,7 @@ typedef struct Router {
 } Router;
 
 /* first obstacle (other than skip1/skip2) whose interior the segment p->q enters; NONE if clear */
-static int32_t seg_hit_m(Router *R, double px, double py, double qx, double qy, int32_t s1, int32_t s2, double sh) {
+static int32_t seg_hit_m(Router R[static 1], double px, double py, double qx, double qy, int32_t s1, int32_t s2, double sh) {
     const Grid *G = &R->G;
     if (!G->gw) return NONE;
     double lx = dmin(px, qx), hx = dmax(px, qx), ly = dmin(py, qy), hy = dmax(py, qy);
@@ -2167,14 +2167,14 @@ static int32_t seg_hit_m(Router *R, double px, double py, double qx, double qy, 
     return NONE;
 }
 
-static int32_t seg_hit(Router *R, double px, double py, double qx, double qy, int32_t s1, int32_t s2) {
+static int32_t seg_hit(Router R[static 1], double px, double py, double qx, double qy, int32_t s1, int32_t s2) {
     return seg_hit_m(R, px, py, qx, qy, s1, s2, 0.5);
 }
 
 static bool pt_in(const BBox *b, double x, double y) { return x > b->x0 && x < b->x1 && y > b->y0 && y < b->y1; }
 
 /* is (x,y) strictly inside some obstacle other than s1/s2? (one grid cell, no segment test) */
-static bool pt_buried(const Router *R, double x, double y, int32_t s1, int32_t s2) {
+static bool pt_buried(const Router R[static 1], double x, double y, int32_t s1, int32_t s2) {
     const Grid *G = &R->G;
     if (x < G->x0 || y < G->y0) return false;
     size_t cx = (size_t)((x - G->x0) / G->cs), cy = (size_t)((y - G->y0) / G->cs);
@@ -2191,15 +2191,15 @@ static inline double edist(double dx, double dy) { return sqrt(dx * dx + dy * dy
 
 /* indexed binary min-heap over A* keys f = dist + h (ties by index, matching a linear argmin scan) */
 typedef struct VHeap { size_t n; int32_t *h, *at; const double *dist, *hh; } VHeap;
-static inline bool vh_lt(const VHeap *H, int32_t a, int32_t b) {
+static inline bool vh_lt(const VHeap H[static 1], int32_t a, int32_t b) {
     double fa = H->dist[a] + H->hh[a], fb = H->dist[b] + H->hh[b];
     return fa < fb || (fa == fb && a < b);
 }
-static void vh_swap(VHeap *H, size_t i, size_t j) {
+static void vh_swap(VHeap H[static 1], size_t i, size_t j) {
     int32_t t = H->h[i]; H->h[i] = H->h[j], H->h[j] = t;
     H->at[H->h[i]] = (int32_t)i, H->at[H->h[j]] = (int32_t)j;
 }
-static void vh_fix(VHeap *H, size_t i) {
+static void vh_fix(VHeap H[static 1], size_t i) {
     while (i && vh_lt(H, H->h[i], H->h[(i - 1) / 2])) vh_swap(H, i, (i - 1) / 2), i = (i - 1) / 2;
     for (;;) {
         size_t l = 2 * i + 1, r = l + 1, m = i;
@@ -2209,11 +2209,11 @@ static void vh_fix(VHeap *H, size_t i) {
         vh_swap(H, i, m), i = m;
     }
 }
-static void vh_set(VHeap *H, int32_t v) { /* insert or re-key */
+static void vh_set(VHeap H[static 1], int32_t v) { /* insert or re-key */
     if (H->at[v] < 0) { H->h[H->n] = v, H->at[v] = (int32_t)H->n, H->n++; }
     vh_fix(H, (size_t)H->at[v]);
 }
-static void vh_del(VHeap *H, int32_t v) {
+static void vh_del(VHeap H[static 1], int32_t v) {
     size_t i = (size_t)H->at[v];
     H->n--;
     if (i != H->n) { H->h[i] = H->h[H->n], H->at[H->h[i]] = (int32_t)i; }
@@ -2221,7 +2221,7 @@ static void vh_del(VHeap *H, int32_t v) {
     if (i < H->n) vh_fix(H, i);
 }
 
-static int vis_path(Router *R, Arena *A, double sx, double sy, double tx, double ty, int32_t s1, int32_t s2,
+static int vis_path(Router R[static 1], Arena *A, double sx, double sy, double tx, double ty, int32_t s1, int32_t s2,
                     size_t cap, double out[static 2 * cap]) {
     const Graph *g = R->g;
     double pad = 0;
@@ -2329,7 +2329,7 @@ static int vis_path(Router *R, Arena *A, double sx, double sy, double tx, double
 }
 
 /* cheap detour: hug one side of the single blocking box (2 corners). Returns corner count or -1. */
-static int side_path(Router *R, double sx, double sy, double tx, double ty, int32_t s1, int32_t s2,
+static int side_path(Router R[static 1], double sx, double sy, double tx, double ty, int32_t s1, int32_t s2,
                      double out[static 4]) {
     int32_t h = seg_hit(R, sx, sy, tx, ty, s1, s2);
     if (h == NONE) return 0;
@@ -2640,7 +2640,7 @@ static inline QPiece qpiece(uint32_t np, const double P[static 2 * np], uint32_t
         .ex = i + 3 == np ? p2[0] : (p1[0] + p2[0]) / 2, .ey = i + 3 == np ? p2[1] : (p1[1] + p2[1]) / 2,
     };
 }
-static inline void qpiece_at(const QPiece *q, double t, double *x, double *y) {
+static inline void qpiece_at(const QPiece q[static 1], double t, double x[static 1], double y[static 1]) {
     double u = 1 - t;
     *x = u * u * q->sx + 2 * u * t * q->cx + t * t * q->ex;
     *y = u * u * q->sy + 2 * u * t * q->cy + t * t * q->ey;
@@ -2862,7 +2862,7 @@ static bool is_loop(const Graph *g, size_t e) {
 }
 
 #define LGROW(T, f, n) do { T *t_ = ANEW(A, T, (n) + 1); if (!t_) return MMD_ERR_NOMEM; memcpy(t_, sv->f, N * sizeof *t_); g->f = t_; } while (0)
-static mmd_status loops_expand(Graph *g, LoopSave *sv) {
+static mmd_status loops_expand(Graph *g, LoopSave sv[static 1]) {
     *sv = (LoopSave){};
     if (!loop_dagre(g)) return MMD_OK;
     size_t K = 0, N = g->nn, E = g->ne;
@@ -2932,7 +2932,7 @@ static mmd_status loops_expand(Graph *g, LoopSave *sv) {
 }
 #undef LGROW
 
-static mmd_status loops_collapse(Graph *g, const LoopSave *sv) {
+static mmd_status loops_collapse(Graph *g, const LoopSave sv[static 1]) {
     if (!sv->K) return MMD_OK;
     Arena *A = g->arena;
     size_t E = sv->E;

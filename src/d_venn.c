@@ -105,7 +105,7 @@ static bool safe_val(Str v) {
     return true;
 }
 
-static Str nl_next(Str t, size_t *i) { /* next '\n'-separated line from *i; *i past the end when done */
+static Str nl_next(Str t, size_t i[static 1]) { /* next '\n'-separated line from *i; *i past the end when done */
     size_t s = *i, e = s;
     while (e < t.n && t.p[e] != '\n') e++;
     *i = e + 1;

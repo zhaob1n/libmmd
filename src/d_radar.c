@@ -21,7 +21,7 @@ static constexpr char CSS[] =
     "#mermaid .lb{fill-opacity:.5;}#mermaid .ttl{font-size:16px;fill:#333;font-weight:bold;}";
 
 /* id or id["label"] at the front of s */
-static void id_label(Str *s, Str *id, Str *label) {
+static void id_label(Str s[static 1], Str id[static 1], Str label[static 1]) {
     *s = str_trim(*s);
     size_t i = 0;
     while (i < s->n && s->p[i] != '[' && s->p[i] != ',' && s->p[i] != '{' && s->p[i] != ' ') i++;

@@ -20,7 +20,7 @@ static constexpr char COL[][8] = {"#8686ff", "#ffff78", "#d7ff86", "#c286ff", "#
 
 typedef VEC(Str) StrVec;
 
-static void push_events(Arena *a, Str s, StrVec *ev, bool *oom) {
+static void push_events(Arena a[static 1], Str s, StrVec ev[static 1], bool oom[static 1]) {
     while (s.n) {
         const char *c = memchr(s.p, ':', s.n);
         size_t k = c ? (size_t)(c - s.p) : s.n;
@@ -31,7 +31,7 @@ static void push_events(Arena *a, Str s, StrVec *ev, bool *oom) {
 }
 
 /* mermaid timeline wrap(): words joined until the line exceeds `width` at 16px; <br> forces a break */
-static Str tl_wrap(Arena *a, Str s, double width) { return dg_wrap(a, s, 16, width); }
+static Str tl_wrap(Arena a[static 1], Str s, double width) { return dg_wrap(a, s, 16, width); }
 /* getVirtualNodeHeight: bbox.height + 16*1.1*0.5 + padding(20); a 16px line box is 17px, extra lines 1.1em */
 static double tl_vh(Str w, double pad) {
     double tw;
@@ -41,7 +41,7 @@ static double tl_vh(Str w, double pad) {
     return 17 + (nl - 1) * 17.6 + 8.8 + pad;
 }
 /* drawNode + defaultBkg: rounded-top path, bottom line, text block from padding/2 + 1em */
-static void tl_node(Buf *out, double x, double y, double w, double h, Str t, size_t ci, double pad) {
+static void tl_node(Buf out[static 1], double x, double y, double w, double h, Str t, size_t ci, double pad) {
     const char *fill = dcfg_pal("cScale", ci, COL[ci]);
     buf_lit(out, "<g transform=\"translate("); buf_num(out, x); buf_lit(out, ","); buf_num(out, y); buf_lit(out, ")\">");
     buf_lit(out, "<path class=\"box\" fill=\""); buf_str(out, (Str){.p = fill, .n = strlen(fill)});

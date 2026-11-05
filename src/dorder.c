@@ -42,7 +42,7 @@ typedef struct Ctx {
     bool oom;
 } Ctx;
 
-static int32_t new_ent(Ctx *c) {
+static int32_t new_ent(Ctx c[static 1]) {
     if (c->etop == c->ecap) {
         size_t nc = c->ecap ? 2 * c->ecap : 64;
         size_t bytes;
@@ -52,7 +52,7 @@ static int32_t new_ent(Ctx *c) {
     }
     return (int32_t)c->etop++;
 }
-static int32_t new_lk(Ctx *c, int32_t e, int32_t next) {
+static int32_t new_lk(Ctx c[static 1], int32_t e, int32_t next) {
     if (c->ltop == c->lcap) {
         size_t nc = c->lcap ? 2 * c->lcap : 64;
         size_t bytes;
@@ -65,7 +65,7 @@ static int32_t new_lk(Ctx *c, int32_t e, int32_t next) {
 }
 
 /* resolve-conflicts.js mergeEntries */
-static void merge_ent(Ctx *c, Ent *t, Ent *s) {
+static void merge_ent(Ctx c[static 1], Ent *t, Ent *s) {
     double sum = 0, w = 0;
     if (t->w != 0) sum += t->bc * t->w, w += t->w;
     if (s->w != 0) sum += s->bc * s->w, w += s->w;
@@ -79,20 +79,20 @@ static void merge_ent(Ctx *c, Ent *t, Ent *s) {
     s->merged = true;
 }
 
-static bool key_lt(const Ctx *c, const Ent *a, const Ent *b) { /* JS object key order of entry.v */
+static bool key_lt(const Ctx c[static 1], const Ent *a, const Ent *b) { /* JS object key order of entry.v */
     int64_t ka = c->d->ikey[a->v], kb = c->d->ikey[b->v];
     if ((ka >= 0) != (kb >= 0)) return ka >= 0;
     if (ka >= 0 && ka != kb) return ka < kb;
     return a->i < b->i;
 }
 
-static bool cmp_bias(const Ent *a, const Ent *b, bool bias, bool *tie) { /* a before b? (sort.js compareWithBias) */
+static bool cmp_bias(const Ent *a, const Ent *b, bool bias, bool tie[static 1]) { /* a before b? (sort.js compareWithBias) */
     if (a->bc < b->bc) return true;
     if (a->bc > b->bc) return false;
     *tie = true; /* result depends on biasRight */
     return bias ? a->i > b->i : a->i < b->i;
 }
-static void msort(size_t n, Ent **a, Ent **t, bool bias, bool *tie) { /* stable merge sort, like TimSort's result */
+static void msort(size_t n, Ent **a, Ent **t, bool bias, bool tie[static 1]) { /* stable merge sort, like TimSort's result */
     if (n < 2) return;
     if (n <= 12) {
         for (size_t i = 1; i < n; i++) {
@@ -113,15 +113,15 @@ static void msort(size_t n, Ent **a, Ent **t, bool bias, bool *tie) { /* stable 
     memcpy(a, t, n * sizeof *a);
 }
 
-static inline void res_push(Ctx *c, Res *r, int32_t h, int32_t t, uint32_t n) {
+static inline void res_push(Ctx c[static 1], Res r[static 1], int32_t h, int32_t t, uint32_t n) {
     if (!n) return;
     if (r->head < 0) r->head = h; else c->nx[r->tail] = h;
     r->tail = t, r->len += n;
 }
 
-static Res sort_subgraph(Ctx *c, int32_t k);
+static Res sort_subgraph(Ctx c[static 1], int32_t k);
 
-static Res sort_subgraph(Ctx *c, int32_t k) {
+static Res sort_subgraph(Ctx c[static 1], int32_t k) {
     const DOrder *d = c->d;
     size_t V = c->V, S = c->S;
     Res out = {.head = -1, .tail = -1};
@@ -280,7 +280,7 @@ expand:;
     return out;
 }
 
-static void cg_set(Ctx *c, int32_t a, int32_t b) {
+static void cg_set(Ctx c[static 1], int32_t a, int32_t b) {
     size_t bit = (size_t)a * c->S + (size_t)b;
     if (c->cgbits[bit >> 6] >> (bit & 63) & 1) return;
     c->cgbits[bit >> 6] |= 1ull << (bit & 63);
@@ -289,7 +289,7 @@ static void cg_set(Ctx *c, int32_t a, int32_t b) {
 }
 
 /* crossings between layers r and r+1 */
-static uint64_t cross_pair(const DOrder *d, const int32_t *lay, size_t r, uint32_t *tree) {
+static uint64_t cross_pair(const DOrder d[static 1], const int32_t *lay, size_t r, uint32_t *tree) {
     uint64_t cc = 0;
     uint32_t a = d->loff[r], na = d->loff[r + 1] - a, nb = d->loff[r + 2] - d->loff[r + 1];
     if (!na || !nb) return 0;
@@ -312,7 +312,7 @@ static uint64_t cross_pair(const DOrder *d, const int32_t *lay, size_t r, uint32
 
 /* sortSubgraph for a layer graph with no clusters and an empty constraint graph: resolveConflicts cannot merge,
  * every entry is a single node, so this is barycenters + sort.js on flat SoA arrays. Bit-identical result. */
-static void sort_flat(Ctx *c, const uint32_t *xs, uint32_t n, double *bc, uint32_t *si, uint32_t *ui, int32_t *out) {
+static void sort_flat(Ctx c[static 1], const uint32_t *xs, uint32_t n, double *bc, uint32_t *si, uint32_t *ui, int32_t *out) {
     const DOrder *d = c->d;
     const uint32_t *off = c->down ? d->poff : d->soff, *idx = c->down ? d->pidx : d->sidx;
     uint32_t ns = 0, nu = 0;
@@ -348,7 +348,7 @@ static void sort_flat(Ctx *c, const uint32_t *xs, uint32_t n, double *bc, uint32
  * per-call arena would mmap/munmap (and page-fault) its big blocks on every layout, while the malloc
  * heap reuses them across calls. */
 typedef struct Heap { size_t n; void *p[48]; } Heap;
-[[nodiscard]] static void *heap_new(Heap *h, size_t n, size_t size) {
+[[nodiscard]] static void *heap_new(Heap h[static 1], size_t n, size_t size) {
     size_t bytes;
     if (h->n == countof(h->p) || ckd_mul(&bytes, n ? n : 1, size)) return nullptr;
     void *p = malloc(bytes);
@@ -362,7 +362,7 @@ static void heap_release(Heap *h) {
 }
 static void ctx_release(Ctx *c) { free(c->ent), free(c->lk); }
 
-bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
+bool dagre_order(Arena *A, const DOrder d[static 1], uint64_t *crossings) {
     size_t V = d->V, S = d->S, R = d->R, NS = V + S;
     DT(t_start);
     [[gnu::cleanup(ctx_release)]] Ctx c = {.d = d, .V = V, .S = S, .NS = NS};

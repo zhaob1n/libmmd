@@ -26,7 +26,7 @@ static constexpr char CSS[] =
 static constexpr char SECCOL[][8] = {"#ECECFF", "#ffffde", "#f5ffe0", "#e0f0ff", "#ffe0f0", "#e0ffe8"};
 static constexpr char ACTCOL[][8] = {"#8FBC8F", "#7CFC00", "#00FFFF", "#20B2AA", "#B0E0E6", "#FFFFE0", "#FFB6C1", "#87CEFA"};
 
-static void face(Buf *b, double cx, double cy, double score) {
+static void face(Buf b[static 1], double cx, double cy, double score) {
     buf_lit(b, "<circle class=\"face\" cx=\""); buf_num(b, cx); buf_lit(b, "\" cy=\""); buf_num(b, cy);
     buf_lit(b, "\" r=\"15\"/><circle class=\"eye\" r=\"1.5\" cx=\""); buf_num(b, cx - 5); buf_lit(b, "\" cy=\"");
     buf_num(b, cy - 5); buf_lit(b, "\"/><circle class=\"eye\" r=\"1.5\" cx=\""); buf_num(b, cx + 5);

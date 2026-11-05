@@ -23,7 +23,7 @@ static constexpr char CSS[] =
     "#mermaid .rr{fill:none;stroke:#333;stroke-width:1px;stroke-dasharray:10,7;}#mermaid .rr.c{stroke-dasharray:none;}"
     "#mermaid .rh{fill:#333;}#mermaid .rl{fill:#fff;opacity:.9;}#mermaid .rn{font-weight:bold;}#mermaid .rt{font-size:14px;}";
 
-static Str cap(Arena *a, Str s) { /* Medium / Test: capitalise like mermaid */
+static Str cap(Arena a[static 1], Str s) { /* Medium / Test: capitalise like mermaid */
     if (!s.n || !(s.p[0] >= 'a' && s.p[0] <= 'z')) return s;
     char *o = ANEW(a, char, s.n);
     if (!o) return s;

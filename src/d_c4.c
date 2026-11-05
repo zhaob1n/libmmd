@@ -32,7 +32,7 @@ static const Str FILL[2][4] = {{S("#08427B"), S("#1168BD"), S("#438DD5"), S("#85
 static const Str STROKE[2][4] = {{S("#073B6F"), S("#3C7FC0"), S("#3C7FC0"), S("#78A8D8")}, {S("#8A8A8A"), S("#8A8A8A"), S("#A6A6A6"), S("#D0D0D0")}};
 
 /* next comma-separated argument of in from *i on, commas inside "..." kept; false when exhausted */
-static bool next_arg(Str in, size_t *i, Str *out) {
+static bool next_arg(Str in, size_t i[static 1], Str out[static 1]) {
     if (*i > in.n) return false;
     size_t st = *i, j = st;
     for (bool q = false; j < in.n && (in.p[j] != ',' || q); j++) q ^= in.p[j] == '"';
@@ -66,7 +66,7 @@ static Str named(Str in, Str key) {
  * presentation-attribute values via put_attr, which escapes everything that could end the attribute. */
 static bool color_ok(Str c) { return c.n > 0 && c.n <= 256; }
 
-static void put_attr(Buf *b, Str s) {
+static void put_attr(Buf b[static 1], Str s) {
     for (size_t i = 0; i < s.n; i++) {
         unsigned char ch = (unsigned char)s.p[i];
         switch (ch) {
@@ -82,7 +82,7 @@ static void put_attr(Buf *b, Str s) {
 
 
 /* first crossing of the segment centre->(ox,oy) with the w*h box around (cx,cy) */
-static void rclip(double cx, double cy, double w, double h, double ox, double oy, double *x, double *y) {
+static void rclip(double cx, double cy, double w, double h, double ox, double oy, double x[static 1], double y[static 1]) {
     double dx = ox - cx, dy = oy - cy;
     double tx = dx != 0 ? (w / 2) / fabs(dx) : INFINITY, ty = dy != 0 ? (h / 2) / fabs(dy) : INFINITY;
     double t = fmin(fmin(tx, ty), 1);
@@ -114,9 +114,9 @@ typedef struct Bnd {
     unsigned cnt;
 } Bnd;
 
-static void bnd_set(Bnd *b, double x, double y) { b->x0 = b->x1 = b->nx0 = b->nx1 = x, b->y0 = b->y1 = b->ny0 = b->ny1 = y; }
+static void bnd_set(Bnd b[static 1], double x, double y) { b->x0 = b->x1 = b->nx0 = b->nx1 = x, b->y0 = b->y1 = b->ny0 = b->ny1 = y; }
 
-static void bnd_insert(Bnd *b, unsigned shape_row, double w, double h, double gap, double *ox, double *oy) {
+static void bnd_insert(Bnd b[static 1], unsigned shape_row, double w, double h, double gap, double ox[static 1], double oy[static 1]) {
     constexpr double m = C4_SHAPE_MARGIN;
     b->cnt++;
     double sx = b->nx0 == b->nx1 ? b->nx1 + m : b->nx1 + 2 * m + gap, ex = sx + w, sy = b->ny0 + 2 * m, ey = sy + h;
@@ -136,7 +136,7 @@ static void bnd_insert(Bnd *b, unsigned shape_row, double w, double h, double ga
 constexpr int32_t C4_GLOBAL = -2; /* mermaid's implicit "global" boundary (not drawn) */
 
 /* mermaid lineBreakRegex /<br\s*\/?>/gi: length of the next segment of t from *i, advancing past the break */
-static Str br_next(Str t, size_t *i) {
+static Str br_next(Str t, size_t i[static 1]) {
     size_t s0 = *i;
     for (size_t k = s0; k < t.n; k++) {
         if (t.p[k] != '<' || k + 3 > t.n || (t.p[k + 1] | 32) != 'b' || (t.p[k + 2] | 32) != 'r') continue;
@@ -155,7 +155,7 @@ static unsigned br_lines(Str t) {
 }
 
 /* drawInsideBoundary(parentBounds, boundaries whose parent is `parent`) */
-static void lay(Lay *L, Bnd *P, int32_t parent, unsigned depth) {
+static void lay(Lay L[static 1], Bnd P[static 1], int32_t parent, unsigned depth) {
     const Graph *g = L->g;
     size_t nb = 0;
     if (parent == C4_GLOBAL) nb = 1;

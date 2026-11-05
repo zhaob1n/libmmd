@@ -19,7 +19,7 @@ static constexpr char PAL[][8] = {"#4e79a7", "#f28e2c", "#e15759", "#76b7b2", "#
                                   "#af7aa1", "#ff9da7", "#9c755f", "#bab0ab"};
 
 /* one CSV field from s (advances); quoted fields unescape "" into arena memory */
-[[nodiscard]] static bool field(Arena *a, Str *s, Str *f, bool *oom) {
+[[nodiscard]] static bool field(Arena a[static 1], Str s[static 1], Str f[static 1], bool oom[static 1]) {
     *s = (Str){.p = s->p, .n = s->n};
     size_t i = 0;
     while (i < s->n && (s->p[i] == ' ' || s->p[i] == '\t')) i++;

@@ -61,7 +61,7 @@ static void squarify(TNode *V, size_t n, const uint32_t ch[static n], double val
         value -= sum, i0 = i1;
     }
 }
-static int by_val_desc(const uint32_t *a, const uint32_t *b, const TNode *V) {
+static int by_val_desc(const uint32_t *a, const uint32_t b[static 1], const TNode *V) {
     double x = V[*a].v, y = V[*b].v;
     return (x < y) - (x > y);
 }
@@ -100,7 +100,7 @@ static void position(TNode *V, uint32_t *tmp, uint32_t id, double p, double inne
 }
 
 
-static size_t ord_idx(Str *dom, size_t *n, Str name, bool root) {
+static size_t ord_idx(Str *dom, size_t n[static 1], Str name, bool root) {
     for (size_t i = 0; i < *n; i++) if (dom[i].p ? (!root && str_eq(dom[i], name)) : root) return i;
     dom[*n] = root ? (Str){} : name;
     if (!root && !name.p) dom[*n] = (Str){.p = "", .n = 0};
@@ -113,7 +113,7 @@ static const TCls *find_cls(size_t n, const TCls *c, Str name) {
     return r;
 }
 /* d3 ordinal ranges: cScale/cScalePeer start with "transparent", cScaleLabel does not */
-static void put_c(Buf *out, const char *pfx, size_t i) {
+static void put_c(Buf out[static 1], const char pfx[static 1], size_t i) {
     bool lab = !strcmp(pfx, "cScaleLabel");
     if (!lab) {
         i %= 13;
@@ -127,7 +127,7 @@ static void put_c(Buf *out, const char *pfx, size_t i) {
     const char *c = dcfg_pal(pfx, i, def);
     buf_cstr(out, c);
 }
-static void fmt_val(double v, size_t cap, char b[static cap], size_t *len) {
+static void fmt_val(double v, size_t cap, char b[static cap], size_t len[static 1]) {
     int k = fabs(v - round(v)) < 1e-9 ? snprintf(b, cap, "%.0f", v) : snprintf(b, cap, "%.2f", v);
     *len = k < 0 ? 0 : (size_t)k < cap ? (size_t)k : cap - 1;
 }

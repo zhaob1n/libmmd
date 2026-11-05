@@ -35,7 +35,7 @@ enum { BK_CALL, BK_CTRL, BK_NONE };
 typedef struct Blk { uint8_t kind; bool returned; int32_t callee, caller, ev; Str ret, num; int cnt; } Blk;
 
 /* Consecutive `//` lines form one multi-line comment; `**bold**` markers are dropped. */
-static Str cm_join(Arena *a, Str prev, Str cm, bool *oom) {
+static Str cm_join(Arena *a, Str prev, Str cm, bool oom[static 1]) {
     size_t n = prev.n + (prev.n ? 1 : 0) + cm.n;
     char *p = ANEW(a, char, n + 1);
     if (!p) { *oom = true; return prev; }
@@ -80,7 +80,7 @@ typedef struct ZT {
 static bool idch(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || (unsigned char)c >= 0x80; }
 
 
-static int32_t part(ZT *z, Str name, uint8_t icon) {
+static int32_t part(ZT z[static 1], Str name, uint8_t icon) {
     name = dg_unquote(name, true);
     for (size_t i = 1; i < z->P.n; i++)
         if (str_eq(z->P.v[i].name, name)) {
@@ -94,18 +94,18 @@ static int32_t part(ZT *z, Str name, uint8_t icon) {
     return (int32_t)z->P.n - 1;
 }
 
-static int32_t starter(ZT *z) {
+static int32_t starter(ZT z[static 1]) {
     if (z->starter < 0) { z->starter = 0; z->P.v[0].used = true; }
     return z->starter;
 }
 
-static Blk *numblk(ZT *z) {
+static Blk *numblk(ZT z[static 1]) {
     for (size_t i = z->sp; i-- > 0;)
         if (z->st[i].kind != BK_NONE) return &z->st[i];
     return nullptr;
 }
 
-static Str mknum(ZT *z, Str prefix, int k) {
+static Str mknum(ZT z[static 1], Str prefix, int k) {
     char t[24];
     int m = snprintf(t, sizeof t, "%d", k);
     Str s = {.n = prefix.n + (prefix.n ? 1 : 0) + (size_t)m};
@@ -116,41 +116,41 @@ static Str mknum(ZT *z, Str prefix, int k) {
     s.p = p;
     return s;
 }
-static Str next_num(ZT *z) {
+static Str next_num(ZT z[static 1]) {
     Blk *b = numblk(z);
     if (!b) return mknum(z, (Str){}, ++z->top_cnt);
     return mknum(z, b->num, ++b->cnt);
 }
 
-static int32_t ev(ZT *z, Ev e) {
+static int32_t ev(ZT z[static 1], Ev e) {
     if (z->E.n > 100000 || !VEC_PUSH(z->a, &z->E, e)) { z->oom = true; return -1; }
     return (int32_t)z->E.n - 1;
 }
 
-static int32_t msg(ZT *z, uint8_t mk, int32_t from, int32_t to, Str label, Str num, bool block) {
+static int32_t msg(ZT z[static 1], uint8_t mk, int32_t from, int32_t to, Str label, Str num, bool block) {
     Ev e = {.k = E_MSG, .mk = mk, .from = from, .to = to, .label = label, .num = num, .comment = z->comment, .block = block};
     z->comment = (Str){};
     return ev(z, e);
 }
 
-static int32_t cur_callee(ZT *z) {
+static int32_t cur_callee(ZT z[static 1]) {
     for (size_t i = z->sp; i-- > 0;)
         if (z->st[i].kind == BK_CALL) return z->st[i].callee;
     return starter(z);
 }
 
-static void flush_end(ZT *z) {
+static void flush_end(ZT z[static 1]) {
     if (!z->pending_end) return;
     z->pending_end = false;
     ev(z, (Ev){.k = E_END, .ref = z->last_ctrl.ev});
 }
 
-static void push(ZT *z, Blk b) {
+static void push(ZT z[static 1], Blk b) {
     if (z->sp < countof(z->st)) z->st[z->sp++] = b;
     else z->depth_skip++;
 }
 
-static void close_block(ZT *z) {
+static void close_block(ZT z[static 1]) {
     flush_end(z);
     if (z->depth_skip) { z->depth_skip--; return; }
     if (!z->sp) return;
@@ -165,13 +165,13 @@ static void close_block(ZT *z) {
     z->sp--;
 }
 
-static bool kw(Str s, Str k, Str *rest) {
+static bool kw(Str s, Str k, Str rest[static 1]) {
     if (!str_starts(s, k) || (s.n > k.n && idch(s.p[k.n]))) return false;
     *rest = str_trim((Str){.p = s.p + k.n, .n = s.n - k.n});
     return true;
 }
 /* arena concatenation that records OOM in z */
-static Str z_oom(ZT *z, Str s) {
+static Str z_oom(ZT z[static 1], Str s) {
     if (!s.p) z->oom = true;
     return s;
 }
@@ -182,7 +182,7 @@ static Str paren(Str s) {
     return str_trim(s);
 }
 
-static void open_frag(ZT *z, Str label, Str cond, bool block) {
+static void open_frag(ZT z[static 1], Str label, Str cond, bool block) {
     Str num = next_num(z);
     Ev e = {.k = E_FRAG, .label = label, .cond = cond, .num = num, .comment = z->comment};
     z->comment = (Str){};
@@ -191,7 +191,7 @@ static void open_frag(ZT *z, Str label, Str cond, bool block) {
     if (!block) close_block(z);
 }
 
-static void stmt(ZT *z, Str s, bool block) {
+static void stmt(ZT z[static 1], Str s, bool block) {
     s = str_trim(s);
     Str r;
     bool cont = kw(s, S("else"), &r) || kw(s, S("catch"), &r) || kw(s, S("finally"), &r);
@@ -342,7 +342,7 @@ static constexpr double AW = 5;
 static constexpr double TB = 26;
 
 /* 14x14 stroked fragment-header glyphs (ZenUML style), top-left at (x, y) */
-static void frag_icon(Buf *o, Str label, double x, double y) {
+static void frag_icon(Buf o[static 1], Str label, double x, double y) {
     static const struct { Str k, d; } IC[] = {
         {S("Alt"), S("M2 2v10M2 7h5l3-4h3M7 7l3 4h3")},
         {S("Loop"), S("M11.5 4.5A5 5 0 1 0 12 9M12 1.5v3.5h-3.5")},
@@ -361,7 +361,7 @@ static void frag_icon(Buf *o, Str label, double x, double y) {
     }
 }
 
-static void icon(Buf *o, uint8_t ic, double x, double y) { /* 14x14 glyph, top-left (x,y) */
+static void icon(Buf o[static 1], uint8_t ic, double x, double y) { /* 14x14 glyph, top-left (x,y) */
     buf_lit(o, "<path class=\"zi\" d=\"");
     switch (ic) {
     case IC_ACTOR:
@@ -400,7 +400,7 @@ static void icon(Buf *o, uint8_t ic, double x, double y) { /* 14x14 glyph, top-l
     buf_lit(o, "\"/>");
 }
 
-static void arrow(Buf *o, double x1, double x2, double y, uint8_t mk) {
+static void arrow(Buf o[static 1], double x1, double x2, double y, uint8_t mk) {
     buf_lit(o, "<path class=\"");
     buf_put(o, 2, mk == M_SYNC || mk == M_ASYNC ? "zm" : "zr");
     buf_lit(o, "\" d=\"M");

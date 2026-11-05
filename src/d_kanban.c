@@ -18,7 +18,7 @@ static constexpr char CSS[] =
 static constexpr char COLF[][8] = {"#ECECFF", "#ffffde", "#e8f4ea", "#fde8e8", "#e8f0fd", "#f8e8fd"};
 
 /* `id[label]`, `[label]`, `id(label)` or text; returns label, strips/parses @{..} into *meta */
-static Str node_label(Str s, Str *meta) {
+static Str node_label(Str s, Str meta[static 1]) {
     *meta = (Str){};
     for (size_t i = 0; i + 1 < s.n; i++)
         if (s.p[i] == '@' && s.p[i + 1] == '{') {
