@@ -53,9 +53,7 @@ constexpr double ACT_MARGIN = 50;
 constexpr double BOX_MARGIN = 10;
 
 static mmd_status sfail(SP *p, size_t off, const char *m) {
-    p->err = off;
-    snprintf(p->msg, 160, "%s", m);
-    return MMD_ERR_SYNTAX;
+    return diag_fail(&p->err, p->msg, off, m);
 }
 
 static int32_t part_get(SP *p, Str id, bool *oom) {
@@ -446,8 +444,7 @@ static constexpr char SEQ_DEFS[] =
     "markerUnits=\"userSpaceOnUse\" orient=\"auto\"><path d=\"M0,0 L12,6 L0,12\" fill=\"none\" stroke=\"#333\" stroke-width=\"1.5\"/></marker>"
     "</defs>";
 
-mmd_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, Str title, double fs,
-                      Buf *out, size_t *err_off, char msg[static 160]) {
+DIAG_FN(seq_render) {
     SP p = {.A = a, .s = src, .n = n, .msg = msg, .title = title, .cur_box = -1};
     for (size_t k = 0; k + 4 <= off; k++) /* global wrap from frontmatter/directive config */
         if (memcmp(src + k, "wrap", 4) == 0) {
