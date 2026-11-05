@@ -27,25 +27,25 @@ static constexpr uint8_t CC[256] = {
 };
 static inline bool cid(char c) { return CC[(unsigned char)c] & C_ID; }
 
-static inline char pk(const P *p, size_t k) { return p->i + k < p->n ? p->s[p->i + k] : 0; }
-static inline void skip_sp(P *p) { if (p->i < p->n) p->i = scan_sp(p->n, p->s, p->i); }
-static inline bool at_eos(const P *p) {
+static inline char pk(const P p[static 1], size_t k) { return p->i + k < p->n ? p->s[p->i + k] : 0; }
+static inline void skip_sp(P p[static 1]) { if (p->i < p->n) p->i = scan_sp(p->n, p->s, p->i); }
+static inline bool at_eos(const P p[static 1]) {
     char c = pk(p, 0);
     return c == 0 || c == '\n' || c == ';' || (c == '%' && pk(p, 1) == '%');
 }
 
-static mmd_status fail(P *p, const char *m) {
+static mmd_status fail(P p[static 1], const char m[static 1]) {
     p->err = p->i;
     snprintf(p->msg, 160, "%s", m);
     return MMD_ERR_SYNTAX;
 }
 
-static Str read_word(P *p) {
+static Str read_word(P p[static 1]) {
     size_t st = p->i;
     if (st < p->n) p->i = scan_id(p->n, p->s, st);
     return (Str){.p = p->s + st, .n = p->i - st};
 }
-static Str rest_of_line(P *p) {
+static Str rest_of_line(P p[static 1]) {
     size_t st = p->i;
     const char *nl = memchr(p->s + st, '\n', p->n - st);
     p->i = nl ? (size_t)(nl - p->s) : p->n;
@@ -177,7 +177,7 @@ static int32_t find_sg(const Graph *g, Str id) {
     return true;
 }
 
-static bool parse_dir(Str w, Dir *d) {
+static bool parse_dir(Str w, Dir d[static 1]) {
     if (str_eq(w, S("TD")) || str_eq(w, S("TB")) || str_eq(w, S("v"))) { *d = DIR_TB; return true; }
     if (str_eq(w, S("BT")) || str_eq(w, S("^"))) { *d = DIR_BT; return true; }
     if (str_eq(w, S("LR")) || str_eq(w, S(">"))) { *d = DIR_LR; return true; }
@@ -195,7 +195,7 @@ static constexpr ShapeTok SHAPES[] = {
     ST("{{", "}}", SH_HEXAGON), ST("{", "}", SH_RHOMBUS),     ST(">", "]", SH_ASYM),
 };
 
-static mmd_status parse_shape_text(P *p, Graph *g, int32_t v) {
+static mmd_status parse_shape_text(P p[static 1], Graph *g, int32_t v) {
     char c0 = pk(p, 0);
     if (c0 != '(' && c0 != '[' && c0 != '{' && c0 != '>') return MMD_OK;
     const ShapeTok *t = nullptr;
@@ -252,7 +252,7 @@ static Shape shape_by_name(Str n) {
 }
 
 /* A@{ shape: x, label: "y" } (v11 syntax, basic) */
-static mmd_status parse_at_shape(P *p, Graph *g, int32_t v) {
+static mmd_status parse_at_shape(P p[static 1], Graph *g, int32_t v) {
     p->i += 2;
     size_t st = p->i;
     const char *e = memchr(p->s + st, '}', p->n - st);
@@ -288,7 +288,7 @@ static mmd_status parse_at_shape(P *p, Graph *g, int32_t v) {
     return MMD_OK;
 }
 
-static mmd_status parse_node(P *p, int32_t *out) {
+static mmd_status parse_node(P p[static 1], int32_t out[static 1]) {
     Graph *g = p->g;
     Str id = read_word(p);
     if (!id.n) return fail(p, "expected node identifier");
@@ -311,7 +311,7 @@ static mmd_status parse_node(P *p, int32_t *out) {
 
 typedef VEC(int32_t) I32Vec;
 
-static mmd_status parse_group(P *p, I32Vec *grp) {
+static mmd_status parse_group(P p[static 1], I32Vec grp[static 1]) {
     grp->n = 0;
     for (;;) {
         skip_sp(p);
@@ -327,7 +327,7 @@ static mmd_status parse_group(P *p, I32Vec *grp) {
 
 typedef struct Link { Stroke st; Arrow a0, a1; uint16_t len; Str label, id; } Link;
 
-static bool link_start(const P *p) {
+static bool link_start(const P p[static 1]) {
     char c = pk(p, 0), d = pk(p, 1);
     if (c == '-' || c == '=' || c == '~') return true;
     if (c == '.' && d == '-') return true;
@@ -337,7 +337,7 @@ static bool link_start(const P *p) {
 }
 
 /* parse a link body at p->i: [-=.~]+ followed by optional head */
-static bool link_body(P *p, Link *l, size_t *nd, size_t *ne, size_t *ndot, size_t *nt) {
+static bool link_body(P p[static 1], Link l[static 1], size_t nd[static 1], size_t ne[static 1], size_t ndot[static 1], size_t nt[static 1]) {
     *nd = *ne = *ndot = *nt = 0;
     size_t st = p->i;
     while (p->i < p->n && (CC[(unsigned char)p->s[p->i]] & C_LINK)) {
@@ -373,7 +373,7 @@ static uint16_t link_len(Stroke s, bool head, size_t nd, size_t ne, size_t ndot,
     return (uint16_t)L;
 }
 
-static mmd_status parse_link(P *p, Link *l) {
+static mmd_status parse_link(P p[static 1], Link l[static 1]) {
     *l = (Link){};
     char c = pk(p, 0);
     if (c == '<') { l->a0 = AH_ARROW; p->i++; }
@@ -421,7 +421,7 @@ static mmd_status parse_link(P *p, Link *l) {
     return MMD_OK;
 }
 
-[[nodiscard]] static bool add_edge(Graph *g, int32_t a, int32_t b, const Link *l) {
+[[nodiscard]] static bool add_edge(Graph *g, int32_t a, int32_t b, const Link l[static 1]) {
     if (g->ne == g->ecap && !edge_grow(g)) return false;
     size_t e = g->ne++;
     g->efrom[e] = a;
@@ -443,7 +443,7 @@ static int32_t find_edge_id(const Graph *g, Str id) {
 }
 
 /* e1@{ animate: true, animation: slow } */
-static mmd_status parse_edge_props(P *p, int32_t e) {
+static mmd_status parse_edge_props(P p[static 1], int32_t e) {
     p->i += 2;
     const char *end = memchr(p->s + p->i, '}', p->n - p->i);
     if (!end) return fail(p, "unterminated @{ }");
@@ -463,7 +463,7 @@ static mmd_status parse_edge_props(P *p, int32_t e) {
 }
 
 /* "id@" immediately followed by a link: edge id. Returns id (empty if none), consumes it. */
-static Str edge_id_prefix(P *p) {
+static Str edge_id_prefix(P p[static 1]) {
     size_t save = p->i;
     Str w = read_word(p);
     if (w.n && pk(p, 0) == '@') {
@@ -474,7 +474,7 @@ static Str edge_id_prefix(P *p) {
     return (Str){};
 }
 
-static mmd_status parse_chain(P *p) {
+static mmd_status parse_chain(P p[static 1]) {
     I32Vec a = {}, b = {};
     {   /* edge property statement: e1@{ ... } */
         size_t save = p->i;
@@ -504,13 +504,13 @@ static mmd_status parse_chain(P *p) {
 }
 
 /* comma separated id list followed by whitespace */
-static Str read_list(P *p) {
+static Str read_list(P p[static 1]) {
     skip_sp(p);
     size_t st = p->i;
     while (p->i < p->n && !is_sp(p->s[p->i]) && p->s[p->i] != '\n') p->i++;
     return (Str){.p = p->s + st, .n = p->i - st};
 }
-static bool list_next(Str *list, Str *item) {
+static bool list_next(Str list[static 1], Str item[static 1]) {
     while (list->n && list->p[0] == ',') list->p++, list->n--;
     if (!list->n) return false;
     const char *c = memchr(list->p, ',', list->n);
@@ -521,7 +521,7 @@ static bool list_next(Str *list, Str *item) {
     return true;
 }
 
-static mmd_status parse_subgraph(P *p) {
+static mmd_status parse_subgraph(P p[static 1]) {
     Graph *g = p->g;
     skip_sp(p);
     Str id = {}, title = {};
@@ -574,7 +574,7 @@ static mmd_status parse_subgraph(P *p) {
     return MMD_OK;
 }
 
-static mmd_status parse_stmt(P *p, Str w) {
+static mmd_status parse_stmt(P p[static 1], Str w) {
     Graph *g = p->g;
     if (str_eq(w, S("subgraph"))) return parse_subgraph(p);
     if (str_eq(w, S("end"))) {
@@ -667,7 +667,7 @@ static bool is_keyword(Str w) {
     return false;
 }
 
-mmd_status flow_parse(Graph *g, size_t n, const char src[static n], size_t off, size_t *err_off,
+mmd_status flow_parse(Graph g[static 1], size_t n, const char src[static n], size_t off, size_t err_off[static 1],
                       char msg[static 160]) {
     P p = {.g = g, .s = src, .n = n, .i = off, .msg = msg};
     mmd_status st = MMD_OK;

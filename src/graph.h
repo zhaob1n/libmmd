@@ -77,8 +77,8 @@ enum { SF_DIRSET = 1u };
 enum { EF_ANIM = 1u, EF_ANIM_SLOW = 2u, EF_LOOPPTS = 4u /* self-loop routed as a polyline (mermaid helpers) */ };
 
 /* parse flowchart body starting at offset `off` within src */
-[[nodiscard]] mmd_status flow_parse(Graph *g, size_t n, const char src[static n], size_t off,
-                                    size_t *err_off, char msg[static 160]);
+[[nodiscard]] mmd_status flow_parse(Graph g[static 1], size_t n, const char src[static n], size_t off,
+                                    size_t err_off[static 1], char msg[static 160]);
 [[nodiscard]] mmd_status flow_layout(Graph *g);
 [[nodiscard]] mmd_status flow_svg(const Graph *g, Buf *out);
 /* mermaid flowchart.curve name -> CURVE_* (unknown => basis) */
