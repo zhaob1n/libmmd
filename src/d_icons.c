@@ -16,7 +16,7 @@ static const IconPath *find(size_t n, const IconPath T[static n], Str name) {
     return nullptr;
 }
 
-static Str strip(Str s, const char *pre) {
+static Str strip(Str s, const char pre[static 1]) {
     size_t l = strlen(pre);
     return s.n > l && !memcmp(s.p, pre, l) ? (Str){.p = s.p + l, .n = s.n - l} : s;
 }
