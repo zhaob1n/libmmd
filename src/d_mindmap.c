@@ -34,7 +34,8 @@ static constexpr char SECS[][8] = {"#cccc33", "#99cc33", "#7f33cc", "#cc33cc", "
 static constexpr bool SECW[] = {false, false, true, false, false, false, false, false, false, false, false}; /* white text */
 
 static bool parse_node(Str s, Str *label, uint8_t *shape) {
-    static const struct { const char *o, *c; uint8_t sh; } SH[] = {
+    typedef struct { char o[3], c[3]; uint8_t sh; } Shape;
+    static constexpr Shape SH[] = {
         {"((", "))", M_CIR}, {"))", "((", M_BANG}, {"{{", "}}", M_HEX}, {"[", "]", M_SQ},
         {"(", ")", M_RND}, {")", "(", M_CLOUD}};
     for (size_t i = 0; i < s.n; i++)
