@@ -202,15 +202,16 @@ static inline bool buf_reserve(Buf b[static 1], size_t extra) {
     if (MMD_LIKELY(b->cap - b->n > extra)) return true;
     return buf_reserve_slow(b, extra);
 }
-static inline void buf_put_(Buf b[static 1], size_t n, const char s[static n]) {
+/* appends never take their source from inside the destination Buf (it may move on reserve) */
+static inline void buf_put_(Buf b[restrict static 1], size_t n, const char s[restrict static n]) {
     if (!buf_reserve(b, n)) return;
     memcpy(b->p + b->n, s, n);
     b->n += n;
 }
 /* zero-length appends are common (escape runs); [static 0] would be UB, so filter here */
 #define buf_put(b, n, s) do { size_t n_ = (n); if (n_) buf_put_((b), n_, (s)); } while (0)
-static inline void buf_str(Buf b[static 1], Str s) { if (s.n) buf_put(b, s.n, s.p); }
-static inline void buf_cstr(Buf b[static 1], const char s[static 1]) { buf_put(b, strlen(s), s); }
+static inline void buf_str(Buf b[restrict static 1], Str s) { if (s.n) buf_put(b, s.n, s.p); }
+static inline void buf_cstr(Buf b[restrict static 1], const char s[restrict static 1]) { buf_put(b, strlen(s), s); }
 /* append a string literal; countof() rejects a pointer at compile time */
 #define buf_lit(b, lit) buf_put((b), countof(lit) - 1, (lit))
 static inline void buf_ch(Buf b[static 1], char c) {
@@ -220,7 +221,7 @@ static inline void buf_ch(Buf b[static 1], char c) {
 void buf_num(Buf b[static 1], double v); /* fast fixed 2-decimal, trimmed */
 void buf_pt(Buf b[static 1], double x, double y); /* "x,y" with buf_num formatting, one reserve */
 void buf_int(Buf b[static 1], int64_t v);
-void buf_xml(Buf b[static 1], Str s); /* XML-escape text, handles mermaid #entity; */
+void buf_xml(Buf b[restrict static 1], Str s); /* XML-escape text, handles mermaid #entity; */
 
 #ifdef MMD_PROFILE
 /* per-phase cycle accounting: time since the previous mark is charged to name ("" just resets);
