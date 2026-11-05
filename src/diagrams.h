@@ -47,5 +47,5 @@ struct Graph;
 [[nodiscard]] DiagFn diag_lookup(Str kw);
 
 /* shared error helper */
-[[nodiscard]] mmd_status diag_fail(size_t *err_off, char msg[static 160], size_t off, const char *m);
+[[nodiscard]] mmd_status diag_fail(size_t err_off[static 1], char msg[static 160], size_t off, const char m[static 1]);
 #endif
