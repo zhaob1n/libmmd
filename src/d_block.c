@@ -284,6 +284,29 @@ static size_t uniq(double *v, size_t n) {
     for (size_t i = 0; i < n; i++) if (!k || v[i] - v[k - 1] > 0.5) v[k++] = v[i];
     return k;
 }
+/* binary min-heap of states keyed by dist[] (lazy deletion: stale entries are popped and re-relaxed) */
+static void heap_push(uint32_t hp[], size_t *hn, const double dist[], uint32_t v) {
+    size_t i = (*hn)++;
+    hp[i] = v;
+    for (; i && dist[hp[(i - 1) / 2]] > dist[hp[i]]; i = (i - 1) / 2) {
+        uint32_t t = hp[i]; hp[i] = hp[(i - 1) / 2]; hp[(i - 1) / 2] = t;
+    }
+}
+
+static uint32_t heap_pop(uint32_t hp[], size_t *hn, const double dist[]) {
+    uint32_t u = hp[0];
+    size_t n = --*hn;
+    hp[0] = hp[n];
+    for (size_t i = 0;;) {
+        size_t l = 2 * i + 1, r = l + 1, m = i;
+        if (l < n && dist[hp[l]] < dist[hp[m]]) m = l;
+        if (r < n && dist[hp[r]] < dist[hp[m]]) m = r;
+        if (m == i) break;
+        uint32_t t = hp[i]; hp[i] = hp[m]; hp[m] = t; i = m;
+    }
+    return u;
+}
+
 /* deviate from mermaid: an edge with no clear straight or bent path runs orthogonally along the gaps
  * between blocks (Dijkstra over the gap centre lines, bends penalised). P gets up to 64 points, clipped
  * to the rectangles of s and t; returns the count, 0 when there is no route */
@@ -315,21 +338,10 @@ static size_t gap_route(Arena *a, const Blk *B, size_t nb, const Blk *s, const B
     for (size_t i = 0; i < nx; i++) { if (fabs(xs[i] - sx) < 0.3) si = i * ny; if (fabs(xs[i] - tx) < 0.3) ti = i * ny; }
     for (size_t j = 0; j < ny; j++) { if (fabs(ys[j] - sy) < 0.3) si += j; if (fabs(ys[j] - ty) < 0.3) ti += j; }
     static const int DX[4] = {1, -1, 0, 0}, DY[4] = {0, 0, 1, -1};
-    /* binary heap of states keyed by dist (lazy deletion) */
-#define HPUSH(st) do { uint32_t _v = (uint32_t)(st); size_t _i = hn++; hp[_i] = _v; \
-        while (_i && dist[hp[(_i - 1) / 2]] > dist[hp[_i]]) { uint32_t _t = hp[_i]; hp[_i] = hp[(_i - 1) / 2]; hp[(_i - 1) / 2] = _t; _i = (_i - 1) / 2; } } while (0)
-    for (int d = 0; d < 4; d++) { dist[4 * si + d] = 0; if (hn < 4 * NS) HPUSH(4 * si + d); }
+    for (uint32_t d = 0; d < 4; d++) { dist[4 * si + d] = 0; if (hn < 4 * NS) heap_push(hp, &hn, dist, (uint32_t)(4 * si) + d); }
     size_t goal = SIZE_MAX;
     while (hn) {
-        uint32_t u = hp[0];
-        hp[0] = hp[--hn];
-        for (size_t i = 0;;) {
-            size_t l = 2 * i + 1, r = l + 1, m = i;
-            if (l < hn && dist[hp[l]] < dist[hp[m]]) m = l;
-            if (r < hn && dist[hp[r]] < dist[hp[m]]) m = r;
-            if (m == i) break;
-            uint32_t tmp = hp[i]; hp[i] = hp[m]; hp[m] = tmp; i = m;
-        }
+        uint32_t u = heap_pop(hp, &hn, dist);
         size_t node = u / 4, d0 = u % 4;
         if (node == ti) { goal = u; break; }
         size_t xi = node / ny, yi = node % ny;
@@ -344,10 +356,9 @@ static size_t gap_route(Arena *a, const Blk *B, size_t nb, const Blk *s, const B
             if (blk) continue;
             double nd = dist[u] + fabs(xs[X] - xs[xi]) + fabs(ys[Y] - ys[yi]) + ((size_t)d != d0 && node != si ? 30 : 0);
             uint32_t w = (uint32_t)(4 * v + (size_t)d);
-            if (nd < dist[w] - 1e-9 && hn < 4 * NS) { dist[w] = nd, prev[w] = u; HPUSH(w); }
+            if (nd < dist[w] - 1e-9 && hn < 4 * NS) { dist[w] = nd, prev[w] = u; heap_push(hp, &hn, dist, w); }
         }
     }
-#undef HPUSH
     if (goal == SIZE_MAX) return 0;
     /* walk back, keep the corners */
     size_t k = 0;
