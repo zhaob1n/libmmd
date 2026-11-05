@@ -131,7 +131,7 @@ static uint32_t find(const BlkVec v[static 1], Str id) {
     return UINT32_MAX;
 }
 
-static uint32_t group_cols(const Blk *B, const Blk *g) {
+static uint32_t group_cols(const Blk *B, const Blk g[static 1]) {
     if (g->cols > 0) return (uint32_t)g->cols;
     uint32_t t = 0;
     for (uint32_t c = g->first; c != UINT32_MAX; c = B[c].next) t += B[c].span;
@@ -139,7 +139,7 @@ static uint32_t group_cols(const Blk *B, const Blk *g) {
 }
 
 /* rows needed and per-child (row, col) via flow placement */
-static uint32_t flow(Blk *B, const Blk *g, uint32_t cols, uint32_t *rc, uint32_t *cc) {
+static uint32_t flow(Blk *B, const Blk g[static 1], uint32_t cols, uint32_t *rc, uint32_t *cc) {
     uint32_t r = 0, c = 0;
     for (uint32_t k = g->first; k != UINT32_MAX; k = B[k].next) {
         uint32_t s = B[k].span < cols ? B[k].span : cols;
@@ -210,7 +210,7 @@ static void para_pts(uint8_t shape, double x, double y, double w, double h, doub
 }
 
 /* outline polygon of b (arcs approximated); returns vertex count */
-static size_t outline(const Blk *b, double P[static 80]) {
+static size_t outline(const Blk b[static 1], double P[static 80]) {
     double x = b->x, y = b->y, w = b->w, h = b->h, cx = x + w / 2, cy = y + h / 2;
     size_t k = 0;
     #define V(px, py) (P[2 * k] = (px), P[2 * k + 1] = (py), k++)
@@ -245,7 +245,7 @@ static size_t outline(const Blk *b, double P[static 80]) {
     return k;
 }
 
-static void clip(const Blk *b, double ox, double oy, double x[static 1], double y[static 1]) {
+static void clip(const Blk b[static 1], double ox, double oy, double x[static 1], double y[static 1]) {
     /* first crossing of the ray centre->(ox,oy) with b's outline */
     double P[80], cx = b->x + b->w / 2, cy = b->y + b->h / 2, dx = ox - cx, dy = oy - cy, best = 1;
     size_t k = outline(b, P);
@@ -275,8 +275,10 @@ static unsigned q_hits(const Blk *B, size_t nb, const Blk *s, const Blk *t, doub
     return h;
 }
 
-static bool obstacle(const Blk *o, const Blk *s, const Blk *t) { return !o->group && !o->space && o->w > 0 && o != s && o != t; }
-static bool in_rect(const Blk *o, double x, double y, double m) { return x > o->x + m && x < o->x + o->w - m && y > o->y + m && y < o->y + o->h - m; }
+static bool obstacle(const Blk o[static 1], const Blk *s, const Blk *t) { return !o->group && !o->space && o->w > 0 && o != s && o != t; }
+static bool in_rect(const Blk o[static 1], double x, double y, double m) {
+    return x > o->x + m && x < o->x + o->w - m && y > o->y + m && y < o->y + o->h - m;
+}
 static int dcmp(const void *a, const void *b) { double x = *(const double *)a, y = *(const double *)b; return (x > y) - (x < y); }
 static size_t uniq(double *v, size_t n) {
     qsort(v, n, sizeof *v, dcmp);
@@ -310,7 +312,7 @@ static uint32_t heap_pop(uint32_t hp[], size_t hn[static 1], const double dist[]
 /* deviate from mermaid: an edge with no clear straight or bent path runs orthogonally along the gaps
  * between blocks (Dijkstra over the gap centre lines, bends penalised). P gets up to 64 points, clipped
  * to the rectangles of s and t; returns the count, 0 when there is no route */
-static size_t gap_route(Arena a[static 1], const Blk *B, size_t nb, const Blk *s, const Blk *t, double *P) {
+static size_t gap_route(Arena a[static 1], const Blk *B, size_t nb, const Blk s[static 1], const Blk t[static 1], double *P) {
     double *xs = ANEW(a, double, 2 * nb + 2), *ys = ANEW(a, double, 2 * nb + 2);
     if (!xs || !ys) return 0;
     size_t nx = 0, ny = 0;
