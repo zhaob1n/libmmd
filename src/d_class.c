@@ -29,10 +29,10 @@ typedef struct CP {
     char *msg;
 } CP;
 
-static mmd_status cfail(CP *p, size_t off, const char *m) { return diag_fail(p->err_off, p->msg, off, m); }
+static mmd_status cfail(CP p[static 1], size_t off, const char m[static 1]) { return diag_fail(p->err_off, p->msg, off, m); }
 
 /* ~T~ -> <T> (zero-copy unless a tilde is present) */
-static Str generics(Arena *A, Str s, bool *ok) {
+static Str generics(Arena *A, Str s, bool ok[static 1]) {
     *ok = true;
     if (!s.n || !memchr(s.p, '~', s.n)) return s;
     char *o = arena_alloc(A, s.n + 1, 1);
@@ -49,7 +49,7 @@ static Str generics(Arena *A, Str s, bool *ok) {
     return (Str){.p = o, .n = s.n};
 }
 
-[[nodiscard]] static int32_t cls(CP *p, Str id) {
+[[nodiscard]] static int32_t cls(CP p[static 1], Str id) {
     bool fresh;
     int32_t v = dg_node(&p->g, id, &fresh);
     if (v == NONE) return NONE;
@@ -63,7 +63,7 @@ static Str generics(Arena *A, Str s, bool *ok) {
     return v;
 }
 
-[[nodiscard]] static int32_t iface(CP *p, Str label) {
+[[nodiscard]] static int32_t iface(CP p[static 1], Str label) {
     char nm[32];
     int k = snprintf(nm, sizeof nm, "\x1finterface%u", p->niface++);
     char *id = arena_alloc(p->A, (size_t)k, 1);
@@ -77,7 +77,7 @@ static Str generics(Arena *A, Str s, bool *ok) {
 }
 
 /* split "Name~T~" / "Name[\"Label\"]" / "Name:::css" into id and optional label */
-static Str class_ref(CP *p, Str s, Str *label) {
+static Str class_ref(CP p[static 1], Str s, Str label[static 1]) {
     s = str_trim(s);
     *label = (Str){};
     for (size_t k = 0; k + 2 < s.n; k++)
@@ -104,11 +104,11 @@ static Str class_ref(CP *p, Str s, Str *label) {
 }
 
 /* a label seen at any reference (Name~T~ / Name["x"]) replaces the default id label */
-static void ref_label(Graph *g, int32_t v, Str label) {
+static void ref_label(Graph g[static 1], int32_t v, Str label) {
     if (label.n && g->nlabel[v].p == g->nid[v].p && g->nlabel[v].n == g->nid[v].n) g->nlabel[v] = label;
 }
 
-static mmd_status add_member(CP *p, int32_t v, Str t) {
+static mmd_status add_member(CP p[static 1], int32_t v, Str t) {
     t = str_trim(t);
     if (!t.n) return MMD_OK;
     if (t.n >= 4 && str_starts(t, S("<<")) && t.p[t.n - 1] == '>' && t.p[t.n - 2] == '>') {
@@ -161,7 +161,7 @@ static constexpr RelTok LEFT[] = {{"<|", 2, RM_EXT}, {"()", 2, RM_LOLLI}, {"*", 
 static constexpr RelTok RIGHT[] = {{"|>", 2, RM_EXT}, {"()", 2, RM_LOLLI}, {"*", 1, RM_COMP}, {"o", 1, RM_AGG}, {">", 1, RM_ARROW}};
 
 /* find relation operator; returns true and fills [s0,s1) span + marks */
-static bool find_rel(Str l, size_t *s0, size_t *s1, Rel *r) {
+static bool find_rel(Str l, size_t s0[static 1], size_t s1[static 1], Rel r[static 1]) {
     bool inq = false;
     for (size_t k = 0; k + 1 < l.n; k++) {
         if (l.p[k] == '"') inq = !inq;
@@ -193,7 +193,7 @@ static bool find_rel(Str l, size_t *s0, size_t *s1, Rel *r) {
     return false;
 }
 
-static Str take_quoted_tail(Str *s) { /* trailing "card" */
+static Str take_quoted_tail(Str s[static 1]) { /* trailing "card" */
     *s = str_trim(*s);
     if (s->n >= 2 && s->p[s->n - 1] == '"') {
         for (size_t k = s->n - 1; k-- > 0;)
@@ -206,7 +206,7 @@ static Str take_quoted_tail(Str *s) { /* trailing "card" */
     }
     return (Str){};
 }
-static Str take_quoted_head(Str *s) {
+static Str take_quoted_head(Str s[static 1]) {
     *s = str_trim(*s);
     if (s->n >= 2 && s->p[0] == '"') {
         const char *q = memchr(s->p + 1, '"', s->n - 1);
@@ -219,7 +219,7 @@ static Str take_quoted_head(Str *s) {
     return (Str){};
 }
 
-static mmd_status parse(CP *p, LineIt *it) {
+static mmd_status parse(CP p[static 1], LineIt it[static 1]) {
     Graph *g = &p->g;
     Str line;
     size_t off;
@@ -455,7 +455,7 @@ static double ov_area(double ax, double ay, double ahw, double ahh, double bx, d
 }
 /* deviate from mermaid: candidates are scored against every relation label, every class box and the
  * cardinalities already placed (pl: x, y, hw, hh quads), so parallel relations don't stack their labels */
-static void card_label(Buf *b, const Graph *g, const double *P, uint32_t np, bool end, Str t, double fs, double *pl, size_t *npl, const BBox *bb) {
+static void card_label(Buf b[static 1], const Graph g[static 1], const double *P, uint32_t np, bool end, Str t, double fs, double *pl, size_t npl[static 1], const BBox bb[static 1]) {
     const double *P0 = end ? P + 2 * (np - 1) : P, *P1 = P0;
     for (uint32_t i = 1; i < np; i++) {
         P1 = end ? P + 2 * (np - 1 - i) : P + 2 * i;
