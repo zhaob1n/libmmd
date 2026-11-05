@@ -47,11 +47,11 @@ void dg_line(Buf *b, double x1, double y1, double x2, double y2, const char *cls
 /* tiny line scanner shared by line-oriented diagram parsers */
 typedef struct LineIt { const char *s; size_t n, i, lstart; } LineIt;
 /* next non-empty, non-comment trimmed line; *off = offset of its first byte */
-bool dg_next_line(LineIt *it, Str *line, size_t *off);
+[[nodiscard]] bool dg_next_line(LineIt *it, Str *line, size_t *off);
 /* indentation (columns, tab = 4) of the raw line starting at offset off */
-unsigned dg_indent(const LineIt *it, size_t off);
-Str dg_word(Str *s);
-bool dg_parse_num(Str s, double *out);
+[[nodiscard]] unsigned dg_indent(const LineIt *it, size_t off);
+[[nodiscard]] Str dg_word(Str *s);
+[[nodiscard]] bool dg_parse_num(Str s, double *out);
 /* ---- free-form (non-graph) renderers: draw into a body Buf while growing a BBox ---- */
 typedef enum TBase { TB_ALPHA, TB_MIDDLE, TB_HANG } TBase;
 /* mermaid drawMultilineText: lines ('\n' or <br>) as tspans, first at y (block centred when
