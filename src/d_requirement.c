@@ -32,16 +32,6 @@ static Str cap(Arena *a, Str s) { /* Medium / Test: capitalise like mermaid */
     return (Str){.p = o, .n = s.n};
 }
 
-static void arrowhead(Buf *b, uint32_t np, const double *P) {
-    if (np < 2) return;
-    const double *A = P + 2 * (np - 1), *B = P + 2 * (np - 2);
-    double dx = A[0] - B[0], dy = A[1] - B[1], L = sqrt(dx * dx + dy * dy);
-    if (L < 1e-9) return;
-    dx /= L, dy /= L;
-    buf_lit(b, "<path class=\"rh\" d=\"M"); dg_pt(b, A[0], A[1]); buf_ch(b, 'L');
-    dg_pt(b, A[0] - dx * 10 - dy * 5, A[1] - dy * 10 + dx * 5); buf_ch(b, 'L');
-    dg_pt(b, A[0] - dx * 10 + dy * 5, A[1] - dy * 10 - dx * 5); buf_lit(b, "z\"/>");
-}
 
 DIAG_FN(requirement_render) {
     Graph g;
@@ -160,7 +150,10 @@ DIAG_FN(requirement_render) {
                 dg_line(out, cx - 8, cy, cx + 8, cy, "rqd");
                 dg_line(out, cx, cy - 8, cx, cy + 8, "rqd");
             }
-        } else arrowhead(out, g.eptn[e], P);
+        } else if (g.eptn[e] >= 2) { /* arrowhead on the last segment */
+            const double *end = P + 2 * g.eptn[e];
+            dg_arrowhead(out, "rh", end - 2, end - 4, 5);
+        }
         dg_rect(out, g.elx[e] - g.elw[e] / 2, g.ely[e] - g.elh[e] / 2, g.elw[e], g.elh[e], 0, "rl");
         { /* mermaid draws relation labels on a light grey plate */
             double lw, lh;

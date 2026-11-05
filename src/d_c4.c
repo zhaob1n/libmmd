@@ -197,14 +197,6 @@ static void lay(Lay *L, Bnd *P, int32_t parent, unsigned depth) {
     }
 }
 
-static void arrowhead(Buf *b, const double *A, const double *B) { /* tip at A, coming from B */
-    double dx = A[0] - B[0], dy = A[1] - B[1], L = sqrt(dx * dx + dy * dy);
-    if (L < 1e-9) return;
-    dx /= L, dy /= L;
-    buf_lit(b, "<path class=\"crh\" d=\"M"); buf_pt(b, A[0], A[1]); buf_ch(b, 'L');
-    buf_pt(b, A[0] - dx * 10 - dy * 4, A[1] - dy * 10 + dx * 4); buf_ch(b, 'L');
-    buf_pt(b, A[0] - dx * 10 + dy * 4, A[1] - dy * 10 - dx * 4); buf_lit(b, "z\"/>");
-}
 
 constexpr double C4_NF = 14;     /* c4 element name */
 constexpr double C4_TF = 10.5;   /* [type] 0.75em */
@@ -632,8 +624,8 @@ DIAG_FN(c4_render) {
         buf_lit(out, " d=\"M"); buf_pt(out, P[0], P[1]);
         if (bent) { buf_ch(out, 'Q'); buf_pt(out, Q0[0], Q0[1]); buf_ch(out, ' '); } else buf_ch(out, 'L');
         buf_pt(out, P[2], P[3]); buf_lit(out, "\"/>");
-        arrowhead(out, P + 2, bent ? Q0 : P);
-        if (cr.v[e].bi) arrowhead(out, P, bent ? Q0 : P + 2);
+        dg_arrowhead(out, "crh", P + 2, bent ? Q0 : P, 4);
+        if (cr.v[e].bi) dg_arrowhead(out, "crh", P, bent ? Q0 : P + 2, 4);
         if (lc) buf_lit(out, "</g>");
     }
     for (size_t v = 0; v < g.nn; v++) {

@@ -150,6 +150,14 @@ BBox dg_bbox(const Graph *g) {
 }
 
 void dg_pt(Buf *b, double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
+void dg_arrowhead(Buf *b, const char *cls, const double tip[static 2], const double from[static 2], double half) {
+    double dx = tip[0] - from[0], dy = tip[1] - from[1], L = sqrt(dx * dx + dy * dy);
+    if (L < 1e-9) return;
+    dx /= L, dy /= L;
+    buf_lit(b, "<path class=\""); buf_cstr(b, cls); buf_lit(b, "\" d=\"M"); buf_pt(b, tip[0], tip[1]); buf_ch(b, 'L');
+    buf_pt(b, tip[0] - dx * 10 - dy * half, tip[1] - dy * 10 + dx * half); buf_ch(b, 'L');
+    buf_pt(b, tip[0] - dx * 10 + dy * half, tip[1] - dy * 10 - dx * half); buf_lit(b, "z\"/>");
+}
 
 void dg_basis(Buf *b, size_t n, const double P[static 2 * n]) {
     double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
