@@ -68,7 +68,7 @@ typedef struct ZT {
     VEC(Part) P;
     VEC(Ev) E;
     Blk st[64];
-    int sp;
+    size_t sp;
     size_t depth_skip;
     bool pending_end, oom;
     Blk last_ctrl;     /* fragment level just closed (else/catch continue its numbering) */
@@ -105,7 +105,7 @@ static int32_t starter(ZT *z) {
 }
 
 static Blk *numblk(ZT *z) {
-    for (int i = z->sp; i-- > 0;)
+    for (size_t i = z->sp; i-- > 0;)
         if (z->st[i].kind != BK_NONE) return &z->st[i];
     return nullptr;
 }
@@ -139,7 +139,7 @@ static int32_t msg(ZT *z, uint8_t mk, int32_t from, int32_t to, Str label, Str n
 }
 
 static int32_t cur_callee(ZT *z) {
-    for (int i = z->sp; i-- > 0;)
+    for (size_t i = z->sp; i-- > 0;)
         if (z->st[i].kind == BK_CALL) return z->st[i].callee;
     return starter(z);
 }
@@ -151,7 +151,7 @@ static void flush_end(ZT *z) {
 }
 
 static void push(ZT *z, Blk b) {
-    if (z->sp < (int)countof(z->st)) z->st[z->sp++] = b;
+    if (z->sp < countof(z->st)) z->st[z->sp++] = b;
     else z->depth_skip++;
 }
 
@@ -170,10 +170,9 @@ static void close_block(ZT *z) {
     z->sp--;
 }
 
-static bool kw(Str s, const char *k, Str *rest) {
-    size_t n = strlen(k);
-    if (s.n < n || memcmp(s.p, k, n) || (s.n > n && idch(s.p[n]))) return false;
-    *rest = str_trim((Str){.p = s.p + n, .n = s.n - n});
+static bool kw(Str s, Str k, Str *rest) {
+    if (!str_starts(s, k) || (s.n > k.n && idch(s.p[k.n]))) return false;
+    *rest = str_trim((Str){.p = s.p + k.n, .n = s.n - k.n});
     return true;
 }
 static Str paren(Str s) {
@@ -181,19 +180,18 @@ static Str paren(Str s) {
     if (s.n >= 2 && s.p[0] == '(' && s.p[s.n - 1] == ')') s.p++, s.n -= 2;
     return str_trim(s);
 }
-static Str cat3(ZT *z, const char *a, Str m, const char *b) {
-    size_t la = strlen(a), lb = strlen(b);
-    char *p = ANEW(z->a, char, la + m.n + lb + 1);
+static Str cat3(ZT *z, Str a, Str m, Str b) {
+    char *p = ANEW(z->a, char, a.n + m.n + b.n + 1);
     if (!p) { z->oom = true; return (Str){}; }
-    memcpy(p, a, la);
-    if (m.n) memcpy(p + la, m.p, m.n);
-    memcpy(p + la + m.n, b, lb);
-    return (Str){.p = p, .n = la + m.n + lb};
+    if (a.n) memcpy(p, a.p, a.n);
+    if (m.n) memcpy(p + a.n, m.p, m.n);
+    if (b.n) memcpy(p + a.n + m.n, b.p, b.n);
+    return (Str){.p = p, .n = a.n + m.n + b.n};
 }
 
-static void open_frag(ZT *z, const char *label, Str cond, bool block) {
+static void open_frag(ZT *z, Str label, Str cond, bool block) {
     Str num = next_num(z);
-    Ev e = {.k = E_FRAG, .label = {.p = label, .n = strlen(label)}, .cond = cond, .num = num, .comment = z->comment};
+    Ev e = {.k = E_FRAG, .label = label, .cond = cond, .num = num, .comment = z->comment};
     z->comment = (Str){};
     int32_t i = ev(z, e);
     push(z, (Blk){.kind = BK_CTRL, .ev = i, .num = num});
@@ -203,42 +201,41 @@ static void open_frag(ZT *z, const char *label, Str cond, bool block) {
 static void stmt(ZT *z, Str s, bool block) {
     s = str_trim(s);
     Str r;
-    bool cont = kw(s, "else", &r) || kw(s, "catch", &r) || kw(s, "finally", &r);
+    bool cont = kw(s, S("else"), &r) || kw(s, S("catch"), &r) || kw(s, S("finally"), &r);
     if (!cont) {
         if (!s.n && !block) return;
         flush_end(z);
     }
     if (!s.n) { push(z, (Blk){.kind = BK_NONE}); return; }
     if (cont) {
-        if (!z->pending_end) { open_frag(z, s.p[0] == 'e' ? "Alt" : "Try", (Str){}, true); }
+        if (!z->pending_end) { open_frag(z, s.p[0] == 'e' ? S("Alt") : S("Try"), (Str){}, true); }
         else {
             z->pending_end = false;
             push(z, z->last_ctrl);
         }
         Str c, lab;
-        if (s.p[0] == 'e') lab = kw(r, "if", &c) ? cat3(z, "[ ", paren(c), " ]") : S("[else]");
-        else if (s.p[0] == 'c') lab = cat3(z, "catch ", paren(r), "");
+        if (s.p[0] == 'e') lab = kw(r, S("if"), &c) ? cat3(z, S("[ "), paren(c), S(" ]")) : S("[else]");
+        else if (s.p[0] == 'c') lab = cat3(z, S("catch "), paren(r), S(""));
         else lab = S("finally");
-        Blk *b = &z->st[z->sp - 1];
-        if (z->sp && b->kind == BK_CTRL) ev(z, (Ev){.k = E_SEC, .cond = lab, .ref = b->ev});
+        if (z->sp && z->st[z->sp - 1].kind == BK_CTRL) ev(z, (Ev){.k = E_SEC, .cond = lab, .ref = z->st[z->sp - 1].ev});
         if (!block) close_block(z);
         return;
     }
-    static const struct { const char *k, *frag; bool cond; } CT[] = {
-        {"if", "Alt", true}, {"while", "Loop", true}, {"for", "Loop", true}, {"forEach", "Loop", true},
-        {"foreach", "Loop", true}, {"loop", "Loop", true}, {"opt", "Opt", true}, {"par", "Par", false},
-        {"try", "Try", false}, {"critical", "Critical", true}, {"section", "Section", true}, {"group", "Group", true},
+    static const struct { Str k, frag; bool cond; } CT[] = {
+        {S("if"), S("Alt"), true}, {S("while"), S("Loop"), true}, {S("for"), S("Loop"), true}, {S("forEach"), S("Loop"), true},
+        {S("foreach"), S("Loop"), true}, {S("loop"), S("Loop"), true}, {S("opt"), S("Opt"), true}, {S("par"), S("Par"), false},
+        {S("try"), S("Try"), false}, {S("critical"), S("Critical"), true}, {S("section"), S("Section"), true}, {S("group"), S("Group"), true},
     };
     for (size_t i = 0; i < countof(CT); i++)
         if (kw(s, CT[i].k, &r)) {
             Str c = paren(r);
-            open_frag(z, CT[i].frag, c.n ? (CT[i].cond && c.p[0] != '"' ? cat3(z, "[ ", c, " ]") : unq(c)) : (Str){}, block);
+            open_frag(z, CT[i].frag, c.n ? (CT[i].cond && c.p[0] != '"' ? cat3(z, S("[ "), c, S(" ]")) : unq(c)) : (Str){}, block);
             return;
         }
-    if (kw(s, "title", &r)) { z->title = r; return; }
-    if (kw(s, "return", &r) || kw(s, "@return", &r)) {
+    if (kw(s, S("title"), &r)) { z->title = r; return; }
+    if (kw(s, S("return"), &r) || kw(s, S("@return"), &r)) {
         int32_t from = cur_callee(z), to = starter(z);
-        for (int i = z->sp; i-- > 0;)
+        for (size_t i = z->sp; i-- > 0;)
             if (z->st[i].kind == BK_CALL) {
                 to = z->st[i].caller;
                 if (i == z->sp - 1) z->st[i].returned = true;
@@ -252,13 +249,13 @@ static void stmt(ZT *z, Str s, bool block) {
         while (t.n + 1 < s.n && idch(s.p[1 + t.n])) t.n++;
         Str nm = str_trim((Str){.p = t.p + t.n, .n = s.n - 1 - t.n});
         if (str_eq(t, S("Starter"))) { z->starter = part(z, paren(nm), 0); z->P.v[0].used = false; return; }
-        static const struct { const char *z; uint8_t ic; } TY[] = {
-            {"Actor", IC_ACTOR}, {"Database", IC_DB}, {"Boundary", IC_BOUNDARY}, {"Control", IC_CONTROL},
-            {"Entity", IC_ENTITY}, {"Collections", IC_COLL}, {"Queue", IC_QUEUE},
+        static const struct { Str z; uint8_t ic; } TY[] = {
+            {S("Actor"), IC_ACTOR}, {S("Database"), IC_DB}, {S("Boundary"), IC_BOUNDARY}, {S("Control"), IC_CONTROL},
+            {S("Entity"), IC_ENTITY}, {S("Collections"), IC_COLL}, {S("Queue"), IC_QUEUE},
         };
         uint8_t ic = IC_NONE;
         for (size_t i = 0; i < countof(TY); i++)
-            if (str_eq(t, (Str){.p = TY[i].z, .n = strlen(TY[i].z)})) ic = TY[i].ic;
+            if (str_eq(t, TY[i].z)) ic = TY[i].ic;
         if (nm.n) part(z, nm, ic);
         return;
     }
@@ -286,7 +283,7 @@ static void stmt(ZT *z, Str s, bool block) {
             break;
         }
     }
-    bool isnew = kw(s, "new", &r);
+    bool isnew = kw(s, S("new"), &r);
     if (isnew) s = r;
     size_t i = 0;
     if (s.n && (s.p[0] == '"' || s.p[0] == '\'')) {
@@ -312,10 +309,10 @@ static void stmt(ZT *z, Str s, bool block) {
     int32_t t;
     uint8_t mk = M_SYNC;
     if (isnew) {
-        t = part(z, assign.n ? cat3(z, "", assign, ":") : (Str){}, 0); /* placeholder name, fixed below */
+        t = part(z, assign.n ? cat3(z, S(""), assign, S(":")) : (Str){}, 0); /* placeholder name, fixed below */
         Part *p = &z->P.v[t];
         p->name = assign.n ? assign : unq(target);
-        p->label = assign.n ? cat3(z, "", assign, "") : unq(target);
+        p->label = assign.n ? cat3(z, S(""), assign, S("")) : unq(target);
         if (assign.n) {
             char *q = ANEW(z->a, char, assign.n + 1 + target.n);
             if (!q) { z->oom = true; return; }
@@ -324,7 +321,7 @@ static void stmt(ZT *z, Str s, bool block) {
         }
         p->create_ev = (int32_t)z->E.n;
         Str args = paren(tail);
-        label = args.n ? cat3(z, "« ", args, " »") : S("«create»");
+        label = args.n ? cat3(z, S("« "), args, S(" »")) : S("«create»");
         mk = M_CREATE;
     } else {
         t = part(z, target, 0);
@@ -353,20 +350,20 @@ static constexpr double TB = 26;
 
 /* 14x14 stroked fragment-header glyphs (ZenUML style), top-left at (x, y) */
 static void frag_icon(Buf *o, Str label, double x, double y) {
-    static const struct { const char *k, *d; } IC[] = {
-        {"Alt", "M2 2v10M2 7h5l3-4h3M7 7l3 4h3"},
-        {"Loop", "M11.5 4.5A5 5 0 1 0 12 9M12 1.5v3.5h-3.5"},
-        {"Opt", "M12 7A5 5 0 1 1 2 7A5 5 0 1 1 12 7"},
-        {"Par", "M3 2v10M7 2v10M11 2v10"},
-        {"Try", "M7 1.5l5 2v4c0 3-2.5 4.5-5 5.5-2.5-1-5-2.5-5-5.5v-4z"},
-        {"Critical", "M7 1.5l5.5 10.5h-11zM7 5.5v3.5M7 10.2v.6"},
-        {"Section", "M2 3h10M2 7h10M2 11h6"},
+    static const struct { Str k, d; } IC[] = {
+        {S("Alt"), S("M2 2v10M2 7h5l3-4h3M7 7l3 4h3")},
+        {S("Loop"), S("M11.5 4.5A5 5 0 1 0 12 9M12 1.5v3.5h-3.5")},
+        {S("Opt"), S("M12 7A5 5 0 1 1 2 7A5 5 0 1 1 12 7")},
+        {S("Par"), S("M3 2v10M7 2v10M11 2v10")},
+        {S("Try"), S("M7 1.5l5 2v4c0 3-2.5 4.5-5 5.5-2.5-1-5-2.5-5-5.5v-4z")},
+        {S("Critical"), S("M7 1.5l5.5 10.5h-11zM7 5.5v3.5M7 10.2v.6")},
+        {S("Section"), S("M2 3h10M2 7h10M2 11h6")},
     };
     for (size_t i = 0; i < countof(IC); i++) {
-        if (!str_eq(label, (Str){.p = IC[i].k, .n = strlen(IC[i].k)})) continue;
+        if (!str_eq(label, IC[i].k)) continue;
         buf_lit(o, "<path class=\"zfi\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" transform=\"translate(");
         buf_num(o, x); buf_ch(o, ','); buf_num(o, y); buf_lit(o, ")\" d=\"");
-        buf_put(o, strlen(IC[i].d), IC[i].d); buf_lit(o, "\"/>");
+        buf_str(o, IC[i].d); buf_lit(o, "\"/>");
         return;
     }
 }
@@ -411,7 +408,9 @@ static void icon(Buf *o, uint8_t ic, double x, double y) { /* 14x14 glyph, top-l
 }
 
 static void arrow(Buf *o, double x1, double x2, double y, uint8_t mk) {
-    { const char *cs_ = mk == M_SYNC || mk == M_ASYNC ? "<path class=\"zm\" d=\"M" : "<path class=\"zr\" d=\"M"; buf_put(o, strlen(cs_), cs_); }
+    buf_lit(o, "<path class=\"");
+    buf_put(o, 2, mk == M_SYNC || mk == M_ASYNC ? "zm" : "zr");
+    buf_lit(o, "\" d=\"M");
     buf_pt(o, x1, y); buf_lit(o, "H"); buf_num(o, x2); buf_lit(o, "\"/>");
     double d = x2 > x1 ? -1 : 1;
     if (mk == M_SYNC || mk == M_CREATE) {
@@ -634,7 +633,7 @@ DIAG_FN(zenuml_render) {
         double fx = P[e->from].x, tx = P[e->to].x, y = e->y;
         if (e->from == e->to) {
             double x1 = fx + (e->depth_from ? AW + (e->depth_from - 1) * AW : 0), x2 = tx + (e->depth_to ? AW + (e->depth_to - 1) * AW : 0);
-            { const char *cs_ = e->mk == M_RET ? "<path class=\"zr\" d=\"M" : "<path class=\"zm\" d=\"M"; buf_put(o, strlen(cs_), cs_); }
+            buf_lit(o, "<path class=\""); buf_put(o, 2, e->mk == M_RET ? "zr" : "zm"); buf_lit(o, "\" d=\"M");
             buf_pt(o, x1, y); buf_lit(o, "H"); buf_num(o, fx + 40); buf_lit(o, "V"); buf_num(o, y + 18);
             buf_lit(o, "H"); buf_num(o, x2 + 8); buf_lit(o, "\"/>");
             arrow(o, x2 + 9, x2, y + 18, e->mk == M_SYNC ? M_SYNC : M_ASYNC);
