@@ -660,7 +660,7 @@ DIAG_FN(state_render) {
                 continue;
             }
             dg_rect(out, x, y, w, h, 5, "comp");
-            buf_lit(out, "<path class=\"comp-t\" d=\"M"); dg_pt(out, x, y + C_TITLE);
+            buf_lit(out, "<path class=\"comp-t\" d=\"M"); buf_pt(out, x, y + C_TITLE);
             buf_lit(out, " v-21 a5,5 0 0 1 5,-5 h"); buf_num(out, w - 10);
             buf_lit(out, " a5,5 0 0 1 5,5 v21 z\"/>");
             dg_text(out, g->stitle[r], fs, x + w / 2, y + C_TITLE / 2, "middle", nullptr);
@@ -697,8 +697,8 @@ DIAG_FN(state_render) {
             break;
         case SK_FORK: case SK_JOIN: dg_rect(out, x - w / 2, y - h / 2, w, h, 0, "bar"); break;
         case SK_CHOICE:
-            buf_lit(out, "<path class=\"choice\" d=\"M"); dg_pt(out, x, y - h / 2); buf_ch(out, 'L'); dg_pt(out, x + w / 2, y);
-            buf_ch(out, 'L'); dg_pt(out, x, y + h / 2); buf_ch(out, 'L'); dg_pt(out, x - w / 2, y); buf_lit(out, "Z\"/>");
+            buf_lit(out, "<path class=\"choice\" d=\"M"); buf_pt(out, x, y - h / 2); buf_ch(out, 'L'); buf_pt(out, x + w / 2, y);
+            buf_ch(out, 'L'); buf_pt(out, x, y + h / 2); buf_ch(out, 'L'); buf_pt(out, x - w / 2, y); buf_lit(out, "Z\"/>");
             break;
         case SK_STATE: {
             buf_lit(out, "<rect class=\"st\" x=\""); buf_num(out, x - w / 2); buf_lit(out, "\" y=\""); buf_num(out, y - h / 2);

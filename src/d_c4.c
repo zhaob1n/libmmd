@@ -211,9 +211,9 @@ static void arrowhead(Buf *b, const double *A, const double *B) { /* tip at A, c
     double dx = A[0] - B[0], dy = A[1] - B[1], L = sqrt(dx * dx + dy * dy);
     if (L < 1e-9) return;
     dx /= L, dy /= L;
-    buf_lit(b, "<path class=\"crh\" d=\"M"); dg_pt(b, A[0], A[1]); buf_ch(b, 'L');
-    dg_pt(b, A[0] - dx * 10 - dy * 4, A[1] - dy * 10 + dx * 4); buf_ch(b, 'L');
-    dg_pt(b, A[0] - dx * 10 + dy * 4, A[1] - dy * 10 - dx * 4); buf_lit(b, "z\"/>");
+    buf_lit(b, "<path class=\"crh\" d=\"M"); buf_pt(b, A[0], A[1]); buf_ch(b, 'L');
+    buf_pt(b, A[0] - dx * 10 - dy * 4, A[1] - dy * 10 + dx * 4); buf_ch(b, 'L');
+    buf_pt(b, A[0] - dx * 10 + dy * 4, A[1] - dy * 10 - dx * 4); buf_lit(b, "z\"/>");
 }
 
 constexpr double C4_NF = 14;     /* c4 element name */
@@ -638,9 +638,9 @@ DIAG_FN(c4_render) {
         bool lc = rst[e] && color_ok(rst[e]->line);
         if (lc) { buf_lit(out, "<g class=\"crc\" stroke=\""); put_attr(out, rst[e]->line); buf_lit(out, "\" fill=\""); put_attr(out, rst[e]->line); buf_lit(out, "\">"); }
         buf_lit(out, "<path class=\"cr\"");
-        buf_lit(out, " d=\"M"); dg_pt(out, P[0], P[1]);
-        if (bent) { buf_ch(out, 'Q'); dg_pt(out, Q0[0], Q0[1]); buf_ch(out, ' '); } else buf_ch(out, 'L');
-        dg_pt(out, P[2], P[3]); buf_lit(out, "\"/>");
+        buf_lit(out, " d=\"M"); buf_pt(out, P[0], P[1]);
+        if (bent) { buf_ch(out, 'Q'); buf_pt(out, Q0[0], Q0[1]); buf_ch(out, ' '); } else buf_ch(out, 'L');
+        buf_pt(out, P[2], P[3]); buf_lit(out, "\"/>");
         arrowhead(out, P + 2, bent ? Q0 : P);
         if (cr.v[e].bi) arrowhead(out, P, bent ? Q0 : P + 2);
         if (lc) buf_lit(out, "</g>");
@@ -661,22 +661,22 @@ DIAG_FN(c4_render) {
         if (c->form == F_DB) {
             double ry = cyl_r(w);
             buf_lit(out, "<path fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
-            buf_lit(out, "\" d=\"M"); dg_pt(out, x0, y0 + ry);
+            buf_lit(out, "\" d=\"M"); buf_pt(out, x0, y0 + ry);
             buf_lit(out, "a"); buf_num(out, w / 2); buf_ch(out, ','); buf_num(out, ry); buf_lit(out, " 0 0 1 "); buf_num(out, w); buf_lit(out, ",0");
             buf_lit(out, "v"); buf_num(out, h - 2 * ry);
             buf_lit(out, "a"); buf_num(out, w / 2); buf_ch(out, ','); buf_num(out, ry); buf_lit(out, " 0 0 1 "); buf_num(out, -w); buf_lit(out, ",0");
-            buf_lit(out, "z M"); dg_pt(out, x0, y0 + ry);
+            buf_lit(out, "z M"); buf_pt(out, x0, y0 + ry);
             buf_lit(out, "a"); buf_num(out, w / 2); buf_ch(out, ','); buf_num(out, ry); buf_lit(out, " 0 0 0 "); buf_num(out, w); buf_lit(out, ",0\"/>");
             lt = y0 + 1.5 * ry + (h - 1.5 * ry - lab[v]) / 2;
         } else if (c->form == F_QUEUE) {
             double rx = h / 2 / (2.5 + h / 50);
             buf_lit(out, "<path fill=\""); put_attr(out, fill_s); buf_lit(out, "\" stroke=\""); put_attr(out, stroke_s);
-            buf_lit(out, "\" d=\"M"); dg_pt(out, x0 + rx, y0);
+            buf_lit(out, "\" d=\"M"); buf_pt(out, x0 + rx, y0);
             buf_lit(out, "h"); buf_num(out, w - 2 * rx);
             buf_lit(out, "a"); buf_num(out, rx); buf_ch(out, ','); buf_num(out, h / 2); buf_lit(out, " 0 0 1 0,"); buf_num(out, h);
             buf_lit(out, "h"); buf_num(out, -(w - 2 * rx));
             buf_lit(out, "a"); buf_num(out, rx); buf_ch(out, ','); buf_num(out, h / 2); buf_lit(out, " 0 0 1 0,"); buf_num(out, -h);
-            buf_lit(out, "z M"); dg_pt(out, x0 + w - rx, y0);
+            buf_lit(out, "z M"); buf_pt(out, x0 + w - rx, y0);
             buf_lit(out, "a"); buf_num(out, rx); buf_ch(out, ','); buf_num(out, h / 2); buf_lit(out, " 0 0 0 0,"); buf_num(out, h); buf_lit(out, "\"/>");
         } else if (c->kind == K_PERSON) { /* mermaid 11: rounded body with a large head circle above it */
             double r = head_r(w), by = y0 + 2 * r - 0.27 * r, bh = h - (by - y0);

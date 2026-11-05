@@ -629,8 +629,8 @@ DIAG_FN(block_render) {
         double x0, y0, x1, y1;
         if (s == t) { /* self edge: a loop on the right side, label right of it (room reserved in gx) */
             double X = s->x + s->w, Y = s->y + s->h / 2, q = fmin(10, s->h / 4);
-            buf_lit(eb, "<path class=\"be\" fill=\"none\" d=\"M"); dg_pt(eb, X, Y - q); buf_ch(eb, 'C'); dg_pt(eb, X + 28, Y - q - 14);
-            buf_ch(eb, ' '); dg_pt(eb, X + 28, Y + q + 14); buf_ch(eb, ' '); dg_pt(eb, X, Y + q); buf_ch(eb, '"');
+            buf_lit(eb, "<path class=\"be\" fill=\"none\" d=\"M"); buf_pt(eb, X, Y - q); buf_ch(eb, 'C'); buf_pt(eb, X + 28, Y - q - 14);
+            buf_ch(eb, ' '); buf_pt(eb, X + 28, Y + q + 14); buf_ch(eb, ' '); buf_pt(eb, X, Y + q); buf_ch(eb, '"');
             if (ev.v[e].arrow) buf_lit(eb, " marker-end=\"url(#blk-ae)\"");
             buf_lit(eb, "/>");
             if (ev.v[e].label.n) {
@@ -676,13 +676,13 @@ DIAG_FN(block_render) {
         if (rn >= 2) {
             for (size_t i = 0; i < rn; i++)
                 bb.x0 = fmin(bb.x0, RP[2 * i] - 1), bb.x1 = fmax(bb.x1, RP[2 * i] + 1), bb.y0 = fmin(bb.y0, RP[2 * i + 1] - 1), bb.y1 = fmax(bb.y1, RP[2 * i + 1] + 1);
-            dg_pt(eb, RP[0], RP[1]);
-            for (size_t i = 1; i < rn; i++) { buf_ch(eb, 'L'); dg_pt(eb, RP[2 * i], RP[2 * i + 1]); }
+            buf_pt(eb, RP[0], RP[1]);
+            for (size_t i = 1; i < rn; i++) { buf_ch(eb, 'L'); buf_pt(eb, RP[2 * i], RP[2 * i + 1]); }
             buf_lit(eb, "\" fill=\"none");
         } else {
-            dg_pt(eb, x0, y0);
-            if (bent) { buf_ch(eb, 'Q'); dg_pt(eb, qx, qy); buf_ch(eb, ' '); } else buf_ch(eb, 'L');
-            dg_pt(eb, x1, y1);
+            buf_pt(eb, x0, y0);
+            if (bent) { buf_ch(eb, 'Q'); buf_pt(eb, qx, qy); buf_ch(eb, ' '); } else buf_ch(eb, 'L');
+            buf_pt(eb, x1, y1);
         }
         buf_ch(eb, '"');
         if (bent) buf_lit(eb, " fill=\"none\"");
@@ -728,7 +728,7 @@ DIAG_FN(block_render) {
                         bb.x0 = fmin(bb.x0, mx - tw / 2 - 2), bb.x1 = fmax(bb.x1, mx + tw / 2 + 2);
                         bb.y0 = fmin(bb.y0, my - fs * 0.6), bb.y1 = fmax(bb.y1, my + fs * 0.6);
                         buf_lit(eb, "<path class=\"leader\" d=\"M");
-                        dg_pt(eb, ax, ay); buf_ch(eb, 'L'); dg_pt(eb, mx, my);
+                        buf_pt(eb, ax, ay); buf_ch(eb, 'L'); buf_pt(eb, mx, my);
                         buf_lit(eb, "\" stroke=\"#999\" stroke-width=\"1\" stroke-dasharray=\"2 2\" fill=\"none\"/>");
                     }
                 }
@@ -817,7 +817,7 @@ DIAG_FN(block_render) {
             for (size_t j = 0; j < k; j++) {
                 double u = neg ? L - U[j] : U[j];
                 if (j) buf_ch(out, ' ');
-                if (vert) dg_pt(out, cx + Vv[j], y + u); else dg_pt(out, x + u, cy + Vv[j]);
+                if (vert) buf_pt(out, cx + Vv[j], y + u); else buf_pt(out, x + u, cy + Vv[j]);
             }
             buf_lit(out, "\"/>");
             break;
@@ -830,13 +830,13 @@ DIAG_FN(block_render) {
             else if (b->shape == BS_ASYM) { double e = h / 3, q[] = {x, y, x + w, y, x + w, y + h, x, y + h, x + e, cy}; k = 5; memcpy(P_, q, sizeof q); }
             else { para_pts(b->shape, x, y, w, h, P_); k = 4; }
             buf_lit(out, "<polygon class=\"bn\" points=\"");
-            for (size_t j = 0; j < k; j++) { if (j) buf_ch(out, ' '); dg_pt(out, P_[2 * j], P_[2 * j + 1]); }
+            for (size_t j = 0; j < k; j++) { if (j) buf_ch(out, ' '); buf_pt(out, P_[2 * j], P_[2 * j + 1]); }
             buf_lit(out, "\"/>");
             break;
         }
         case BS_CYL: {
             double ry = w / 2 / (2.5 + w / 50); /* mermaid cylinder */
-            buf_lit(out, "<path class=\"bn\" d=\"M"); dg_pt(out, x, y + ry);
+            buf_lit(out, "<path class=\"bn\" d=\"M"); buf_pt(out, x, y + ry);
             buf_lit(out, "a"); buf_num(out, w / 2); buf_ch(out, ','); buf_num(out, ry); buf_lit(out, " 0 0 0 "); buf_num(out, w); buf_lit(out, ",0");
             buf_lit(out, "a"); buf_num(out, w / 2); buf_ch(out, ','); buf_num(out, ry); buf_lit(out, " 0 0 0 "); buf_num(out, -w); buf_lit(out, ",0");
             buf_lit(out, "v"); buf_num(out, h - 2 * ry);
