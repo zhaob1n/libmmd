@@ -7,13 +7,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdcountof.h>
 #include <string.h>
 
-/* element count of a real array; a pointer argument is a compile error */
-#define countof(a)                                                                             \
-    (sizeof(a) / sizeof((a)[0]) +                                                              \
-     0 * sizeof(struct { static_assert(!__builtin_types_compatible_p(typeof(a), typeof(&(a)[0])), \
-                                       "countof on a pointer"); int x_; }))
 #define MMD_LIKELY(x) __builtin_expect(!!(x), 1)
 #define MMD_UNLIKELY(x) __builtin_expect(!!(x), 0)
 
