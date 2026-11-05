@@ -22,18 +22,17 @@ static const Theme THEMES[] = {
 };
 static_assert(countof(THEMES) == MMD_THEME_NEUTRAL + 1, "theme table covers mmd_theme");
 
-static void put_cstr(Buf *b, const char *s) { buf_put(b, strlen(s), s); }
 
 static void emit_css(Buf *b, const Theme *t) {
-    buf_lit(b, "#mermaid{font-family:"); put_cstr(b, t->font); buf_lit(b, ";font-size:16px;fill:"); put_cstr(b, t->text); buf_lit(b, ";}");
+    buf_lit(b, "#mermaid{font-family:"); buf_cstr(b, t->font); buf_lit(b, ";font-size:16px;fill:"); buf_cstr(b, t->text); buf_lit(b, ";}");
     buf_lit(b, "#mermaid .node rect,#mermaid .node circle,#mermaid .node ellipse,#mermaid .node polygon,#mermaid .node path{fill:");
-    put_cstr(b, t->node_fill); buf_lit(b, ";stroke:"); put_cstr(b, t->node_stroke); buf_lit(b, ";stroke-width:1px;}");
-    buf_lit(b, "#mermaid .flowchart-link{stroke:"); put_cstr(b, t->line); buf_lit(b, ";fill:none;stroke-width:1px;}#mermaid .thick{stroke-width:3.5px;}#mermaid .dotted{stroke-dasharray:3;}");
-    buf_lit(b, "#mermaid .edgeLabel rect{fill:"); put_cstr(b, t->label_bg); buf_lit(b, ";stroke:none;}");
-    buf_lit(b, "#mermaid .cluster rect{fill:"); put_cstr(b, t->cluster_fill); buf_lit(b, ";stroke:");
-    put_cstr(b, t->cluster_stroke); buf_lit(b, ";stroke-width:1px;}");
-    buf_lit(b, "#mermaid .marker{fill:"); put_cstr(b, t->marker); buf_lit(b, ";stroke:"); put_cstr(b, t->marker); buf_lit(b, ";}");
-    buf_lit(b, "#mermaid text{fill:"); put_cstr(b, t->text); buf_lit(b, ";text-anchor:middle;dominant-baseline:central;}");
+    buf_cstr(b, t->node_fill); buf_lit(b, ";stroke:"); buf_cstr(b, t->node_stroke); buf_lit(b, ";stroke-width:1px;}");
+    buf_lit(b, "#mermaid .flowchart-link{stroke:"); buf_cstr(b, t->line); buf_lit(b, ";fill:none;stroke-width:1px;}#mermaid .thick{stroke-width:3.5px;}#mermaid .dotted{stroke-dasharray:3;}");
+    buf_lit(b, "#mermaid .edgeLabel rect{fill:"); buf_cstr(b, t->label_bg); buf_lit(b, ";stroke:none;}");
+    buf_lit(b, "#mermaid .cluster rect{fill:"); buf_cstr(b, t->cluster_fill); buf_lit(b, ";stroke:");
+    buf_cstr(b, t->cluster_stroke); buf_lit(b, ";stroke-width:1px;}");
+    buf_lit(b, "#mermaid .marker{fill:"); buf_cstr(b, t->marker); buf_lit(b, ";stroke:"); buf_cstr(b, t->marker); buf_lit(b, ";}");
+    buf_lit(b, "#mermaid text{fill:"); buf_cstr(b, t->text); buf_lit(b, ";text-anchor:middle;dominant-baseline:central;}");
     buf_lit(b, "#mermaid .title{font-size:18px;}");
 }
 
@@ -129,7 +128,7 @@ static void text_lines(Buf *b, Str lab, double fs, double cx, double cy, const c
     bool rich = rich_needed(lab), bold = false, ital = false;
     double lh = fs * 1.5, y = cy - (k - 1) * lh / 2;
     buf_lit(b, "<text");
-    if (cls) { buf_lit(b, " class=\""); buf_put(b, strlen(cls), cls); buf_ch(b, '"'); }
+    if (cls) { buf_lit(b, " class=\""); buf_cstr(b, cls); buf_ch(b, '"'); }
     if (k == 1) {
         buf_lit(b, " x=\""); buf_num(b, cx); buf_lit(b, "\" y=\""); buf_num(b, y); buf_lit(b, "\">");
         if (rich) rich_emit_line(b, lab, &bold, &ital); else buf_xml(b, lab);
@@ -330,7 +329,7 @@ mmd_status flow_svg(const Graph *g, Buf *b) {
     buf_lit(b, "\" width=\""); buf_num(b, vw); buf_lit(b, "\" height=\""); buf_num(b, vh);
     buf_lit(b, "\" fill=\"");
     Str bgv = dcfg_background();
-    if (bgv.n) buf_str(b, bgv); else put_cstr(b, th->bg);
+    if (bgv.n) buf_str(b, bgv); else buf_cstr(b, th->bg);
     buf_lit(b, "\"/>");
     if (g->title.n) text_lines(b, g->title, 18, (bb.x0 + bb.x1) / 2, bb.y0 - title_h / 2, "title");
     buf_lit(b, "<g class=\"root\"><g class=\"clusters\">");
@@ -363,7 +362,7 @@ mmd_status flow_svg(const Graph *g, Buf *b) {
         if (g->estroke[e] == ST_THICK) buf_lit(b, " thick");
         else if (g->estroke[e] == ST_DOTTED) buf_lit(b, " dotted");
         if (g->eflags && (g->eflags[e] & EF_ANIM))
-            put_cstr(b, (g->eflags[e] & EF_ANIM_SLOW) ? " edge-animation-slow" : " edge-animation-fast");
+            buf_cstr(b, (g->eflags[e] & EF_ANIM_SLOW) ? " edge-animation-slow" : " edge-animation-fast");
         buf_lit(b, "\" d=\"");
         if (self) {
             int32_t v = g->efrom[e];
@@ -387,8 +386,8 @@ mmd_status flow_svg(const Graph *g, Buf *b) {
             else buf_ch(b, '"');
         }
         const char *ms = marker_name(g->estart[e], false), *me = marker_name(g->eend[e], true);
-        if (ms) { buf_lit(b, " marker-start=\"url(#"); buf_put(b, strlen(ms), ms); buf_lit(b, ")\""); }
-        if (me) { buf_lit(b, " marker-end=\"url(#"); buf_put(b, strlen(me), me); buf_lit(b, ")\""); }
+        if (ms) { buf_lit(b, " marker-start=\"url(#"); buf_cstr(b, ms); buf_lit(b, ")\""); }
+        if (me) { buf_lit(b, " marker-end=\"url(#"); buf_cstr(b, me); buf_lit(b, ")\""); }
         buf_lit(b, "/>");
     }
     buf_lit(b, "</g><g class=\"edgeLabels\">");

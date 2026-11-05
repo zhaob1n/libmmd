@@ -326,12 +326,12 @@ static mmd_status parse_line(SP *p, Str line, size_t off) {
 
 static void pt(Buf *b, double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
 static void rect(Buf *b, double x, double y, double w, double h, const char *cls) {
-    buf_lit(b, "<rect class=\""); buf_put(b, strlen(cls), cls); buf_lit(b, "\" x=\""); buf_num(b, x);
+    buf_lit(b, "<rect class=\""); buf_cstr(b, cls); buf_lit(b, "\" x=\""); buf_num(b, x);
     buf_lit(b, "\" y=\""); buf_num(b, y); buf_lit(b, "\" width=\""); buf_num(b, w);
     buf_lit(b, "\" height=\""); buf_num(b, h); buf_lit(b, "\"/>");
 }
 static void line_(Buf *b, double x1, double y1, double x2, double y2, const char *cls) {
-    buf_lit(b, "<line class=\""); buf_put(b, strlen(cls), cls); buf_lit(b, "\" x1=\""); buf_num(b, x1);
+    buf_lit(b, "<line class=\""); buf_cstr(b, cls); buf_lit(b, "\" x1=\""); buf_num(b, x1);
     buf_lit(b, "\" y1=\""); buf_num(b, y1); buf_lit(b, "\" x2=\""); buf_num(b, x2);
     buf_lit(b, "\" y2=\""); buf_num(b, y2); buf_lit(b, "\"/>");
 }
@@ -340,8 +340,8 @@ static void text_(Buf *b, Str s, double fs, double x, double y, const char *anch
     Str ln;
     double lh = fs * 1.5;
     while (label_next_line(s, &pos, &ln)) {
-        buf_lit(b, "<text class=\""); buf_put(b, strlen(cls), cls); buf_lit(b, "\" x=\""); buf_num(b, x);
-        buf_lit(b, "\" y=\""); buf_num(b, y); buf_lit(b, "\" text-anchor=\""); buf_put(b, strlen(anchor), anchor);
+        buf_lit(b, "<text class=\""); buf_cstr(b, cls); buf_lit(b, "\" x=\""); buf_num(b, x);
+        buf_lit(b, "\" y=\""); buf_num(b, y); buf_lit(b, "\" text-anchor=\""); buf_cstr(b, anchor);
         buf_lit(b, "\" dominant-baseline=\"central\">");
         buf_xml(b, ln);
         buf_lit(b, "</text>");
@@ -548,7 +548,7 @@ mmd_status seq_render(Arena *a, size_t n, const char src[static n], size_t off, 
                 buf_lit(&front, "<path class=\"msg"); if (ev->dotted) buf_lit(&front, " dotted");
                 buf_lit(&front, "\" d=\"M"); pt(&front, x1, ly); buf_lit(&front, " L"); pt(&front, x2 - dir * 1, ly); buf_ch(&front, '"');
             }
-            if (mk) { buf_lit(&front, " marker-end=\"url(#"); buf_put(&front, strlen(mk), mk); buf_lit(&front, ")\""); }
+            if (mk) { buf_lit(&front, " marker-end=\"url(#"); buf_cstr(&front, mk); buf_lit(&front, ")\""); }
             if (ev->bidir) buf_lit(&front, " marker-start=\"url(#sq-arrow-start)\"");
             buf_lit(&front, "/>");
             for (int e = 0; e < 2; e++)

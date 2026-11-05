@@ -41,13 +41,13 @@ bool icon_draw(Buf *b, Str name, double x, double y, double s, const char *cls) 
     if (!ic) return false;
     double k = s / (ic->w > ic->h ? ic->w : ic->h), ox = x + (s - ic->w * k) / 2, oy = y + (s - ic->h * k) / 2;
     buf_lit(b, "<path class=\"");
-    buf_put(b, strlen(cls), cls);
+    buf_cstr(b, cls);
     buf_lit(b, "\" transform=\"translate(");
     buf_num(b, ox); buf_ch(b, ','); buf_num(b, oy);
     buf_lit(b, ") scale(");
     buf_num(b, k);
     buf_lit(b, ")\" d=\"");
-    buf_put(b, strlen(ic->d), ic->d);
+    buf_cstr(b, ic->d);
     buf_lit(b, "\"/>");
     return true;
 }
