@@ -211,7 +211,7 @@ static void scallop(Buf *out, BBox *bb, const MNode *m) {
     for (int k = 0; k < n; k++) {
         if (out) {
             buf_lit(out, "a"); buf_num(out, A[k][0]); buf_ch(out, ','); buf_num(out, A[k][1]);
-            buf_lit(out, sw ? " 0 0,1 " : " 0 0,0 "); buf_num(out, A[k][2]); buf_ch(out, ','); buf_num(out, A[k][3]);
+            if (sw) buf_lit(out, " 0 0,1 "); else buf_lit(out, " 0 0,0 "); buf_num(out, A[k][2]); buf_ch(out, ','); buf_num(out, A[k][3]);
         }
         if (bb) arc_bb(bb, px, py, A[k][0], A[k][1], false, sw, px + A[k][2], py + A[k][3]);
         px += A[k][2], py += A[k][3];
