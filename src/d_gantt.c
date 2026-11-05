@@ -485,8 +485,7 @@ DIAG_FN(gantt_render) {
         if (t > hi_t + 1e-6) break;
         TK[ntk++] = t;
     }
-    size_t nticks = 0;
-    for (size_t k = 0; k < ntk; k++, nticks++) {
+    for (size_t k = 0; k < ntk; k++) {
         double t = TK[k];
         double lw = text_width((Str){.p = lab, .n = fmt_time(axis, t, sizeof lab, lab)}, 10);
         if (lw > maxlab) maxlab = lw;
