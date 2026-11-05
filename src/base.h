@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* element count of a real array; a pointer argument is a compile error */
@@ -148,6 +150,8 @@ typedef struct Arena {
 /* grow an array previously allocated from the arena (or nullptr). */
 [[nodiscard]] void *arena_grow(Arena *a, void *old, size_t *cap, size_t elem, size_t align);
 void arena_free(Arena *a);
+static inline void arena_freep(Arena *a) { arena_free(a); }
+#define AUTO_ARENA [[gnu::cleanup(arena_freep)]]
 /* Drop all allocations but keep (coalesced) memory for reuse. */
 void arena_reset(Arena *a);
 [[nodiscard]] Str arena_strdup(Arena *a, Str s);
@@ -177,6 +181,23 @@ typedef struct Buf {
     size_t n, cap;
     bool oom;
 } Buf;
+
+
+/* ---- scope-bound cleanup ([[gnu::cleanup]]) ----
+ * AUTOFREE char *p = malloc(n);   freed when p leaves scope
+ * AUTO_ARENA Arena a = {};          arena_free(&a)
+ * AUTO_BUF Buf b = {};              free(b.p)
+ * AUTOCLOSE FILE *f = fopen(..);    fclose(f) if non-null
+ * Hand ownership out with TAKE_PTR(p) / buf_take(&b), which null the
+ * local so the cleanup becomes a no-op. */
+static inline void freep(void *pp) { free(*(void **)pp); }
+static inline void fclosep(FILE **fp) { if (*fp) fclose(*fp); }
+static inline void buf_freep(Buf *b) { free(b->p); }
+#define AUTOFREE [[gnu::cleanup(freep)]]
+#define AUTOCLOSE [[gnu::cleanup(fclosep)]]
+#define AUTO_BUF [[gnu::cleanup(buf_freep)]]
+#define TAKE_PTR(p) ({ auto take_ = (p); (p) = nullptr; take_; })
+static inline Buf buf_take(Buf *b) { Buf r = *b; *b = (Buf){}; return r; }
 
 bool buf_reserve_slow(Buf *b, size_t extra);
 static inline bool buf_reserve(Buf *b, size_t extra) {
