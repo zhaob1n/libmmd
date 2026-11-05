@@ -1740,12 +1740,12 @@ static mmd_status layout_core(Graph *g) {
         int32_t a = ef[e], b = et[e];
         if (a == NONE || b == NONE) continue;
         if (a == b) { /* self loop: drawn by the SVG writer; labels right of the outermost loop, stacked */
-            unsigned k = 0, cnt = 0;
-            for (size_t f = 0; f < E; f++)
-                if (g->efrom[f] == a && g->eto[f] == a) { if (f < e) k++; cnt++; }
+            unsigned k = 0, nloop = 0;
+            for (size_t o = 0; o < E; o++)
+                if (g->efrom[o] == a && g->eto[o] == a) { if (o < e) k++; nloop++; }
             double lh = g->elh[e] + 4;
-            g->elx[e] = g->nx[a] + g->nw[a] / 2 + SELFLOOP_BULGE * selfloop_r(cnt - 1) + SELFLOOP_GAP + g->elw[e] / 2;
-            g->ely[e] = g->ny[a] + ((double)k - (double)(cnt - 1) / 2) * lh;
+            g->elx[e] = g->nx[a] + g->nw[a] / 2 + SELFLOOP_BULGE * selfloop_r(nloop - 1) + SELFLOOP_GAP + g->elw[e] / 2;
+            g->ely[e] = g->ny[a] + ((double)k - (double)(nloop - 1) / 2) * lh;
             continue;
         }
         int32_t span = rank[EV(e)] - rank[EU(e)];
@@ -2581,7 +2581,8 @@ static bool spline_hits(const SBox *SX, const SBox *SY /* nullable */, size_t n,
             for (uint32_t i = 1; i + 1 < np; i++) {
                 double x = P[2 * i], y = P[2 * i + 1];
                 for (int sgn = -1; sgn <= 1; sgn += 2) {
-                    double ox = P[2 * (i + sgn)] - x, oy = P[2 * (i + sgn) + 1] - y, l = hypot(ox, oy);
+                    uint32_t j = sgn < 0 ? i - 1 : i + 1;
+                    double ox = P[2 * j] - x, oy = P[2 * j + 1] - y, l = hypot(ox, oy);
                     double f = l > 0 ? fmin(d, l / 3) / l : 0;
                     if (sgn > 0) Q[m++] = x, Q[m++] = y;
                     Q[m++] = x + ox * f, Q[m++] = y + oy * f;
@@ -2807,7 +2808,7 @@ static void labels_on_curve(Graph *g) {
                         if (k1 > np - 2) k1 = np - 2;
                         if (side[k0] && side[k0] == side[k1]) continue;
                     }
-                    for (int h = 0; h < 2; h++) {
+                    for (uint32_t h = 0; h < 2; h++) {
                         double u = (double)(i - np + h) / 8; /* 0..np-1 */
                         uint32_t k = (uint32_t)u;
                         if (k > np - 2) k = np - 2;

@@ -34,7 +34,7 @@ typedef struct Ctx {
     Res *sub;                    /* [S] subgraph results */
     uint32_t *ord, *src, *outl;  /* scratch [V+S] */
     Ent **sbuf, **stmp;          /* sort scratch */
-    int32_t *cga, *cgb; size_t cgn; uint64_t *cgbits; /* constraint graph (cluster edges, insertion order) */
+    int32_t *cga, *cgb; uint32_t cgn; uint64_t *cgbits; /* constraint graph (cluster edges, insertion order) */
     int32_t *prev; uint32_t *ptag, pgen; /* addSubgraphConstraints */
     bool down, bias, tie;
     uint64_t cgh; /* hash of the constraint-graph edge sequence */
@@ -243,8 +243,8 @@ expand:;
         Ent **bk = c->stmp;
         for (uint32_t j = 0; j < n; j++) bk[j] = nullptr;
         for (size_t a = 0; a < nun; a++) bk[uns[a]->i] = uns[a];
-        size_t k = 0;
-        for (uint32_t j = n; j-- > 0;) if (bk[j]) uns[k++] = bk[j];
+        size_t w = 0;
+        for (uint32_t j = n; j-- > 0;) if (bk[j]) uns[w++] = bk[j];
     }
     msort(srt, c->stmp, nsort, c->bias, &c->tie);
     double sum = 0, wt = 0;
