@@ -1105,27 +1105,26 @@ static mmd_status layout_core(Graph *g) {
 #ifdef MMD_RANKDUMP
     if (getenv("MMD_DUMPGRAPH")) {
         static const char *const DN[] = {"TB", "BT", "LR", "RL"};
-        FILE *F = fopen(getenv("MMD_DUMPGRAPH"), "w");
-        if (!F) goto nodump;
-        fprintf(F, "{\"dir\":\"%s\",\"nodesep\":%g,\"ranksep\":%g,\"clusters\":[", DN[g->dir], g->node_sep, g->rank_sep);
-        for (size_t s = 0; s < S; s++) fprintf(F, "%s{\"id\":\"%.*s\",\"parent\":%s%.*s%s}", s ? "," : "", (int)g->sid[s].n, g->sid[s].p,
-            g->sparent[s] == NONE ? "null" : "\"", g->sparent[s] == NONE ? 0 : (int)g->sid[g->sparent[s]].n, g->sparent[s] == NONE ? "" : g->sid[g->sparent[s]].p, g->sparent[s] == NONE ? "" : "\"");
-        fprintf(F, "],\"nodes\":[");
-        bool first = true;
-        for (size_t v = 0; v < N; v++) {
-            if (g->nflags[v] & NF_HIDDEN) continue;
-            int32_t p = g->nparent[v];
-            fprintf(F, "%s{\"id\":\"%.*s\",\"w\":%.17g,\"h\":%.17g,\"parent\":%s%.*s%s}", first ? "" : ",", (int)g->nid[v].n, g->nid[v].p, g->nw[v], g->nh[v],
-                p == NONE ? "null" : "\"", p == NONE ? 0 : (int)g->sid[p].n, p == NONE ? "" : g->sid[p].p, p == NONE ? "" : "\"");
-            first = false;
+        AUTOCLOSE FILE *F = fopen(getenv("MMD_DUMPGRAPH"), "w");
+        if (F) {
+            fprintf(F, "{\"dir\":\"%s\",\"nodesep\":%g,\"ranksep\":%g,\"clusters\":[", DN[g->dir], g->node_sep, g->rank_sep);
+            for (size_t s = 0; s < S; s++) fprintf(F, "%s{\"id\":\"%.*s\",\"parent\":%s%.*s%s}", s ? "," : "", (int)g->sid[s].n, g->sid[s].p,
+                g->sparent[s] == NONE ? "null" : "\"", g->sparent[s] == NONE ? 0 : (int)g->sid[g->sparent[s]].n, g->sparent[s] == NONE ? "" : g->sid[g->sparent[s]].p, g->sparent[s] == NONE ? "" : "\"");
+            fprintf(F, "],\"nodes\":[");
+            bool first = true;
+            for (size_t v = 0; v < N; v++) {
+                if (g->nflags[v] & NF_HIDDEN) continue;
+                int32_t p = g->nparent[v];
+                fprintf(F, "%s{\"id\":\"%.*s\",\"w\":%.17g,\"h\":%.17g,\"parent\":%s%.*s%s}", first ? "" : ",", (int)g->nid[v].n, g->nid[v].p, g->nw[v], g->nh[v],
+                    p == NONE ? "null" : "\"", p == NONE ? 0 : (int)g->sid[p].n, p == NONE ? "" : g->sid[p].p, p == NONE ? "" : "\"");
+                first = false;
+            }
+            fprintf(F, "],\"edges\":[");
+            for (size_t e = 0; e < E; e++)
+                fprintf(F, "%s{\"a\":\"%.*s\",\"b\":\"%.*s\",\"w\":%.17g,\"h\":%.17g,\"minlen\":%u}", e ? "," : "", (int)g->nid[g->efrom[e]].n, g->nid[g->efrom[e]].p,
+                    (int)g->nid[g->eto[e]].n, g->nid[g->eto[e]].p, g->elw[e], g->elh[e], (unsigned)g->elen[e]);
+            fprintf(F, "]}\n");
         }
-        fprintf(F, "],\"edges\":[");
-        for (size_t e = 0; e < E; e++)
-            fprintf(F, "%s{\"a\":\"%.*s\",\"b\":\"%.*s\",\"w\":%.17g,\"h\":%.17g,\"minlen\":%u}", e ? "," : "", (int)g->nid[g->efrom[e]].n, g->nid[g->efrom[e]].p,
-                (int)g->nid[g->eto[e]].n, g->nid[g->eto[e]].p, g->elw[e], g->elh[e], (unsigned)g->elen[e]);
-        fprintf(F, "]}\n");
-        fclose(F);
-    nodump:;
     }
 #endif
     /* dagre-faithful path (makeSpaceForEdgeLabels always doubles minlen, nesting-graph ranking, dagre order) */
