@@ -12,7 +12,7 @@
     exit(code);
 }
 
-[[nodiscard]] static char *slurp(FILE *f, size_t *len) {
+[[nodiscard]] static char *slurp(FILE *f, size_t len[static 1]) {
     size_t cap = 1 << 16, n = 0;
     AUTOFREE char *p = malloc(cap);
     if (!p) return nullptr;
