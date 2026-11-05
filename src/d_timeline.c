@@ -18,9 +18,9 @@ static constexpr char CSS[] =
 static constexpr char COL[][8] = {"#8686ff", "#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2",
                                   "#ff8686", "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"}; /* mermaid cScale */
 
-static void push_events(Arena *a, Str s, void *evp, bool *oom) {
-    typedef VEC(Str) EV;
-    EV *ev = evp;
+typedef VEC(Str) StrVec;
+
+static void push_events(Arena *a, Str s, StrVec *ev, bool *oom) {
     while (s.n) {
         const char *c = memchr(s.p, ':', s.n);
         size_t k = c ? (size_t)(c - s.p) : s.n;
@@ -66,7 +66,7 @@ DIAG_FN(timeline_render) {
     (void)dg_word(&hrest);
     const bool TD = str_eq(str_trim(hrest), S("TD"));
     VEC(Str) secs = {};
-    VEC(Str) ev = {};
+    StrVec ev = {};
     VEC(Period) per = {};
     bool oom = false;
     while (dg_next_line(&it, &line, &lo)) {

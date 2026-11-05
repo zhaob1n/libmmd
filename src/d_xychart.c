@@ -52,9 +52,9 @@ static bool range(Str s, double *lo, double *hi) {
     return false;
 }
 /* "[a, "b, c", d]" -> items */
-static bool list(Arena *a, Str s, void *vp, bool *oom) {
-    typedef VEC(Str) V;
-    V *v = vp;
+typedef VEC(Str) StrVec;
+
+static bool list(Arena *a, Str s, StrVec *v, bool *oom) {
     s = str_trim(s);
     if (s.n < 2 || s.p[0] != '[' || s.p[s.n - 1] != ']') return false;
     s = (Str){.p = s.p + 1, .n = s.n - 2};
@@ -96,7 +96,7 @@ DIAG_FN(xychart_render) {
         if (str_eq(dg_word(&r), S("horizontal"))) horiz = true;
     }
     Str xt = {}, yt = {};
-    VEC(Str) cats = {};
+    StrVec cats = {};
     VEC(double) vals = {};
     VEC(Str) labs = {};
     VEC(Series) ser = {};
@@ -123,7 +123,7 @@ DIAG_FN(xychart_render) {
         if (str_eq(w, S("bar")) || str_eq(w, S("line"))) {
             Series s = {.line = w.p[0] == 'l', .v0 = (uint32_t)vals.n};
             s.name = take_title(&rest);
-            VEC(Str) items = {};
+            StrVec items = {};
             if (!list(a, rest, &items, &oom)) return oom ? MMD_ERR_NOMEM : diag_fail(err_off, msg, lo, "expected [numbers]");
             for (size_t i = 0; i < items.n; i++) {
                 double d;
