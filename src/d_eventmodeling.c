@@ -59,7 +59,7 @@ static void put_col(Buf *b, Str v, const char *def) {
 }
 
 /* does segment (x0,y0)-(x1,y1) pass through a box other than frames a and b? (Liang-Barsky clip) */
-static bool em_blocked(const Frame *F, size_t n, const Lane *L, int a, int b, double x0, double y0, double x1, double y1) {
+static bool em_blocked(size_t n, const Frame *F, const Lane *L, int a, int b, double x0, double y0, double x1, double y1) {
     for (size_t k = 0; k < n; k++) {
         if ((int)k == a || (int)k == b) continue;
         double bx0 = F[k].x - 2, bx1 = F[k].x + F[k].w + 2, by0 = L[F[k].lane].y + LANE_PAD - 2, by1 = by0 + F[k].h + 4;
@@ -342,18 +342,18 @@ DIAG_FN(eventmodeling_render) {
              * orthogonally through the lane gaps (source gap, a clear column, target gap) */
             double P[12] = {sx, sy, tx, ty};
             unsigned np = 2;
-            if (em_blocked(fr.v, fr.n, ln_.v, srcs[q], (int)i, sx, sy, tx, ty)) {
+            if (em_blocked(fr.n, fr.v, ln_.v, srcs[q], (int)i, sx, sy, tx, ty)) {
                 const Lane *SL = &ln_.v[s->lane], *TL = &ln_.v[t->lane];
                 double gs = up ? SL->y - LANE_GAP / 2 : SL->y + SL->h + LANE_GAP / 2;
                 double gt = up ? TL->y + TL->h + LANE_GAP / 2 : TL->y - LANE_GAP / 2;
                 double cx = tx;
-                if (em_blocked(fr.v, fr.n, ln_.v, srcs[q], (int)i, tx, gs, tx, gt)) { /* nearest clear column */
+                if (em_blocked(fr.n, fr.v, ln_.v, srcs[q], (int)i, tx, gs, tx, gt)) { /* nearest clear column */
                     double best = 1e300;
                     for (size_t k = 0; k < fr.n; k++)
                         for (size_t j = 0; j <= fr.n; j++) { /* middle of the gap to box j, or 12 outside box k */
                             double r = fr.v[k].x + fr.v[k].w, c = j < fr.n ? (r + fr.v[j].x) / 2 : r + 12;
                             if (j < fr.n && fr.v[j].x - r < 16) c = fr.v[k].x - 12;
-                            if (fabs(c - tx) < best && !em_blocked(fr.v, fr.n, ln_.v, srcs[q], (int)i, c, gs, c, gt)) best = fabs(c - tx), cx = c;
+                            if (fabs(c - tx) < best && !em_blocked(fr.n, fr.v, ln_.v, srcs[q], (int)i, c, gs, c, gt)) best = fabs(c - tx), cx = c;
                         }
                 }
                 double R[12] = {sx, sy, sx, gs, cx, gs, cx, gt, tx, gt, tx, ty};

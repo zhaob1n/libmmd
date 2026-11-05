@@ -106,7 +106,7 @@ static size_t ord_idx(Str *dom, size_t *n, Str name, bool root) {
     if (!root && !name.p) dom[*n] = (Str){.p = "", .n = 0};
     return (*n)++;
 }
-static const TCls *find_cls(const TCls *c, size_t n, Str name) {
+static const TCls *find_cls(size_t n, const TCls *c, Str name) {
     if (!name.n) return nullptr;
     const TCls *r = nullptr;
     for (size_t k = 0; k < n; k++) if (str_eq(c[k].name, name)) r = &c[k];
@@ -257,7 +257,7 @@ DIAG_FN(treemap_render) {
     for (size_t k = 1; k < nb; k++) { /* sections */
         const TNode *t = &V[bfs[k]];
         if (t->first == UINT32_MAX) continue;
-        const TCls *uc = find_cls(cls.v, cls.n, t->cls);
+        const TCls *uc = find_cls(cls.n, cls.v, t->cls);
         size_t fi = ord_idx(dom_f, &nf, t->label, false), li = ord_idx(dom_l, &nlab, t->label, false);
         buf_lit(out, "<rect class=\"sec");
         if (t->cls.n) { buf_ch(out, ' '); buf_xml(out, t->cls); }
@@ -303,7 +303,7 @@ DIAG_FN(treemap_render) {
     const double bl = cx ? 16 : 38, bv = cx ? 14 : 28, ml = cx ? 4 : 8, mv = cx ? 4 : 6, lp = cx ? 2 : 4, thr = cx ? 8 : 10, sp = cx ? 1 : 2;
     for (size_t k = 0; k < nlv; k++) {
         const TNode *t = &V[leaves[k]];
-        const TCls *uc = find_cls(cls.v, cls.n, t->cls);
+        const TCls *uc = find_cls(cls.n, cls.v, t->cls);
         size_t fi = ord_idx(dom_f, &nf, V[t->parent].label, t->parent == 0);
         buf_lit(out, "<rect class=\"lf");
         if (t->cls.n) { buf_ch(out, ' '); buf_xml(out, t->cls); }
