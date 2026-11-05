@@ -133,7 +133,7 @@ static RNode *mk(RP p[static 1], RKind k, Str s) {
     *r = (RNode){.k = k, .s = s};
     return r;
 }
-static bool add(RP p[static 1], RNode *par, RNode *c) {
+static bool add(RP p[static 1], RNode par[static 1], RNode *c) {
     RNode **nk = ANEW(p->a, RNode *, par->nk + 1);
     if (!nk) { p->err = "out of memory"; return false; }
     if (par->nk) memcpy(nk, par->kid, par->nk * sizeof *nk);
@@ -328,7 +328,7 @@ constexpr double MR = 5;
 constexpr double TFS = 16; /* mermaid measures with the svg's default font */
 constexpr double TH = 17;
 
-static Str label_of(Arena *a, const RNode *r) {
+static Str label_of(Arena a[static 1], const RNode r[static 1]) {
     if (r->k != RN_SPECIAL) return r->s;
     char *o = ANEW(a, char, r->s.n + 5);
     if (!o) return r->s;
@@ -336,7 +336,7 @@ static Str label_of(Arena *a, const RNode *r) {
     return (Str){.p = o, .n = r->s.n + 4};
 }
 
-static void measure(Arena a[static 1], RNode *r) {
+static void measure(Arena a[static 1], RNode r[static 1]) {
     switch (r->k) {
     case RN_TERM: case RN_NONTERM: case RN_SPECIAL:
     {
@@ -376,16 +376,16 @@ static void measure(Arena a[static 1], RNode *r) {
 
 typedef struct DC { Buf *b; BBox *bb; Arena *a; } DC;
 
-static void M(Buf *b, double x, double y) { buf_lit(b, "M "); buf_num(b, x); buf_ch(b, ' '); buf_num(b, y); buf_ch(b, ' '); }
-static void L(Buf *b, double x, double y) { buf_lit(b, "L "); buf_num(b, x); buf_ch(b, ' '); buf_num(b, y); buf_ch(b, ' '); }
-static void A(Buf *b, bool sweep, double x, double y) {
+static void M(Buf b[static 1], double x, double y) { buf_lit(b, "M "); buf_num(b, x); buf_ch(b, ' '); buf_num(b, y); buf_ch(b, ' '); }
+static void L(Buf b[static 1], double x, double y) { buf_lit(b, "L "); buf_num(b, x); buf_ch(b, ' '); buf_num(b, y); buf_ch(b, ' '); }
+static void A(Buf b[static 1], bool sweep, double x, double y) {
     buf_lit(b, "A 10 10 0 0 "); buf_ch(b, sweep ? '1' : '0'); buf_ch(b, ' '); buf_num(b, x); buf_ch(b, ' '); buf_num(b, y); buf_ch(b, ' ');
 }
-static void P0(Buf *b) { buf_lit(b, "<path class=\"railroad-line\" d=\""); }
-static void P1(Buf *b) { if (b->n && b->p[b->n - 1] == ' ') b->n--; buf_lit(b, "\"/>"); }
+static void P0(Buf b[static 1]) { buf_lit(b, "<path class=\"railroad-line\" d=\""); }
+static void P1(Buf b[static 1]) { if (b->n && b->p[b->n - 1] == ' ') b->n--; buf_lit(b, "\"/>"); }
 
 /* draw r with its top-left at (ox, oy) */
-static void draw(DC c[static 1], const RNode *r, double ox, double oy) {
+static void draw(DC c[static 1], const RNode r[static 1], double ox, double oy) {
     Buf *b = c->b;
     switch (r->k) {
     case RN_TERM: case RN_NONTERM: case RN_SPECIAL: {
