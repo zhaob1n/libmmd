@@ -167,3 +167,4 @@ Build with `-DMMD_PROFILE` to get per-phase cycle counters. See bench/results_v1
 ## Toolchain
 - Builds use `-std=gnu2y` when the compiler accepts it (clang), else `gnu23` (gcc-14). Code must compile warning-free under both, so C2y-only syntax (`_Countof`, `if` declarations) is avoided; `countof` is a macro in `src/base.h`.
 - Byte-identity gate: `bench/eq/cmp.sh build/mmd` must print `bad=0`.
+- Before writing a string helper, check `src/base.h` (`str_sub`/`str_from`/`str_span`, `str_split`, `str_cat`/`STR_CAT`, `buf_cstr`), `src/text.h` (`label_br_len`) and `src/dgraph.h`.
