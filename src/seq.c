@@ -88,7 +88,7 @@ constexpr double WRAP_MSG = 220;
 constexpr double WRAP_NOTE = 160;
 
 /* Greedy word wrap of a normalised label to maxw px. Returns s itself when nothing to do. */
-static Str wrap_text(Arena *A, Str s, double maxw, double fs, bool ok[static 1]) {
+static Str wrap_text(Arena A[static 1], Str s, double maxw, double fs, bool ok[static 1]) {
     *ok = true;
     if (text_width(s, fs) <= maxw) return s;
     char *o = arena_alloc(A, s.n + 1, 1);
@@ -356,7 +356,7 @@ static unsigned nlines(Str s) {
 
 static void sq_pt(Buf b[static 1], double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
 
-static void actor_box(Buf b[static 1], const Part *pa, double y, double fs) {
+static void actor_box(Buf b[static 1], const Part pa[static 1], double y, double fs) {
     if (pa->actor) {
         double x = pa->x, t = y + 4;
         buf_lit(b, "<g class=\"actor-man\"><circle cx=\""); buf_num(b, x); buf_lit(b, "\" cy=\""); buf_num(b, t + 8);

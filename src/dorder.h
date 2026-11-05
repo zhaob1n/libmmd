@@ -23,4 +23,4 @@ typedef struct DOrder {
 } DOrder;
 
 /* Returns false on allocation failure. Result: lay/pos hold dagre's best ordering. */
-[[nodiscard]] bool dagre_order(Arena *A, const DOrder d[static 1], uint64_t *crossings);
+[[nodiscard]] bool dagre_order(Arena A[static 1], const DOrder d[static 1], uint64_t *crossings);

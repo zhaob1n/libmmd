@@ -332,7 +332,7 @@ typedef struct NB { /* nesting-graph builder */
     int32_t *u, *v, *wt, *ml;
 } NB;
 
-static void nb_edge(NB *b, int32_t u, int32_t v, int32_t wt, int32_t ml) {
+static void nb_edge(NB b[static 1], int32_t u, int32_t v, int32_t wt, int32_t ml) {
     if (b->E >= b->cap) return;
     b->u[b->E] = u, b->v[b->E] = v, b->wt[b->E] = wt, b->ml[b->E] = ml, b->E++;
 }
@@ -388,7 +388,7 @@ static void nest_dfs(Ctx c[static 1], uint32_t x) {
 
 typedef struct HE { uint64_t k; int32_t e; } HE;
 
-bool dagre_rank(Arena *A, const DRankIn in[static 1], int32_t rank[], int32_t top[], int32_t bot[], int32_t corder[]) {
+bool dagre_rank(Arena A[static 1], const DRankIn in[static 1], int32_t rank[], int32_t top[], int32_t bot[], int32_t corder[]) {
     size_t N = in->N, S = in->S, NR = in->nreal;
     size_t M = NR + 1 + 2 * S;
     size_t kn = in->koff[S + 1];

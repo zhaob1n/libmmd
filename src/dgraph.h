@@ -5,18 +5,18 @@
 #define MMD_DGRAPH_H
 #include "graph.h"
 
-void dg_init(Graph *g, Arena *A, Dir dir, double fs);
+void dg_init(Graph g[static 1], Arena A[static 1], Dir dir, double fs);
 /* intern node by id; NONE on OOM. *fresh set when created now (may be nullptr). */
-[[nodiscard]] int32_t dg_node(Graph *g, Str id, bool *fresh);
+[[nodiscard]] int32_t dg_node(Graph g[static 1], Str id, bool *fresh);
 /* lookup only */
-[[nodiscard]] int32_t dg_find(const Graph *g, Str id);
+[[nodiscard]] int32_t dg_find(const Graph g[static 1], Str id);
 static inline void dg_size(Graph *g, int32_t v, double w, double h) {
     g->nw[v] = w;
     g->nh[v] = h;
     g->nflags[v] |= NF_FIXED;
 }
-[[nodiscard]] int32_t dg_edge(Graph *g, int32_t a, int32_t b, Str label);
-[[nodiscard]] int32_t dg_cluster(Graph *g, Str id, Str title, int32_t parent);
+[[nodiscard]] int32_t dg_edge(Graph g[static 1], int32_t a, int32_t b, Str label);
+[[nodiscard]] int32_t dg_cluster(Graph g[static 1], Str id, Str title, int32_t parent);
 
 /* ---- SVG ---- */
 typedef struct BBox { double x0, y0, x1, y1; } BBox;
@@ -28,8 +28,8 @@ static inline void bb_add(BBox *bb, double x0, double y0, double x1, double y1) 
 }
 constexpr BBox BB_EMPTY = {.x0 = 1e300, .y0 = 1e300, .x1 = -1e300, .y1 = -1e300};
 /* bbox of laid-out nodes, edge points, edge labels and clusters */
-[[nodiscard]] BBox dg_bbox(const Graph *g);
-void dg_pt(Buf *b, double x, double y);
+[[nodiscard]] BBox dg_bbox(const Graph g[static 1]);
+void dg_pt(Buf b[static 1], double x, double y);
 /* filled 10-long arrowhead at tip, pointing away from from; half = half the base width */
 void dg_arrowhead(Buf b[static 1], const char cls[static 1], const double tip[static 2], const double from[static 2], double half);
 /* d3 curveBasis through n points */
@@ -43,7 +43,7 @@ void dg_text_lh(Buf b[static 1], Str s, double lh, double x, double cy, const ch
 /* svg root with viewBox, <style>, white background */
 void dg_head(Buf b[static 1], BBox bb, double margin, const char kind[static 1], size_t ncss, const char css[static ncss]);
 #define DG_HEAD(b, bb, m, kind, css) dg_head((b), (bb), (m), (kind), sizeof(css) - 1, (css))
-void dg_rect(Buf *b, double x, double y, double w, double h, double rx, const char *cls);
+void dg_rect(Buf b[static 1], double x, double y, double w, double h, double rx, const char *cls);
 void dg_line(Buf b[static 1], double x1, double y1, double x2, double y2, const char *cls);
 
 /* tiny line scanner shared by line-oriented diagram parsers */
@@ -70,12 +70,12 @@ static inline bool dg_css_ok(Str v) {
 typedef enum TBase { TB_ALPHA, TB_MIDDLE, TB_HANG } TBase;
 /* mermaid drawMultilineText: lines ('\n' or <br>) as tspans, first at y (block centred when
  * centre is true); grows *bb (nullable) with an estimated text box. Returns the line count. */
-unsigned dg_tspans(Buf *b, BBox *bb, Str s, double fs, double lh, double x, double y, bool centre,
+unsigned dg_tspans(Buf b[static 1], BBox *bb, Str s, double fs, double lh, double x, double y, bool centre,
                    const char anchor[static 1], TBase base, const char *cls);
 /* estimated bbox of such a text block (same arguments) */
 [[nodiscard]] BBox dg_tbox(Str s, double fs, double lh, double x, double y, bool centre, const char anchor[static 1], TBase base);
 /* greedy word wrap at maxc characters per line (mermaid wrapText), '\n'-joined; {} on OOM */
-[[nodiscard]] Str dg_wrapc(Arena *a, Str s, size_t maxc);
+[[nodiscard]] Str dg_wrapc(Arena a[static 1], Str s, size_t maxc);
 /* svg head for bb + margin, then body, then </svg>; frees body */
 [[nodiscard]] mmd_status dg_finish(Buf out[static 1], Buf body[static 1], BBox bb, double m, const char kind[static 1], size_t ncss, const char css[static ncss]);
 #define DG_FINISH(o, body, bb, m, kind, css) dg_finish((o), (body), (bb), (m), (kind), sizeof(css) - 1, (css))

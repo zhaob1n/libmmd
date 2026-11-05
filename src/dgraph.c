@@ -7,7 +7,7 @@
 
 #include "text.h"
 
-void dg_init(Graph *g, Arena *A, Dir dir, double fs) {
+void dg_init(Graph g[static 1], Arena A[static 1], Dir dir, double fs) {
     *g = (Graph){.arena = A, .dir = dir, .node_sep = 50, .rank_sep = 50, .font_size = fs};
 }
 
@@ -25,7 +25,7 @@ static inline uint64_t hstr(Str s) {
         (arr) = na_;                                                                              \
     } while (0)
 
-[[nodiscard]] static bool node_grow(Graph *g) {
+[[nodiscard]] static bool node_grow(Graph g[static 1]) {
     size_t oc = g->ncap, nc = oc ? oc * 2 : 32;
     Arena *A = g->arena;
     GROW(A, g->nid, oc, nc); GROW(A, g->nlabel, oc, nc); GROW(A, g->nclass, oc, nc);
@@ -34,7 +34,7 @@ static inline uint64_t hstr(Str s) {
     g->ncap = nc;
     return true;
 }
-[[nodiscard]] static bool edge_grow(Graph *g) {
+[[nodiscard]] static bool edge_grow(Graph g[static 1]) {
     size_t oc = g->ecap, nc = oc ? oc * 2 : 32;
     Arena *A = g->arena;
     GROW(A, g->efrom, oc, nc); GROW(A, g->eto, oc, nc); GROW(A, g->elabel, oc, nc);
@@ -43,7 +43,7 @@ static inline uint64_t hstr(Str s) {
     g->ecap = nc;
     return true;
 }
-[[nodiscard]] static bool sg_grow(Graph *g) {
+[[nodiscard]] static bool sg_grow(Graph g[static 1]) {
     size_t oc = g->scap, nc = oc ? oc * 2 : 16;
     Arena *A = g->arena;
     GROW(A, g->sid, oc, nc); GROW(A, g->stitle, oc, nc); GROW(A, g->sclass, oc, nc);
@@ -52,7 +52,7 @@ static inline uint64_t hstr(Str s) {
     g->scap = nc;
     return true;
 }
-[[nodiscard]] static bool rehash(Graph *g) {
+[[nodiscard]] static bool rehash(Graph g[static 1]) {
     size_t nc = g->hcap ? g->hcap * 2 : 64;
     uint32_t *t = ANEW(g->arena, uint32_t, nc);
     if (!t) return false;
@@ -67,7 +67,7 @@ static inline uint64_t hstr(Str s) {
     return true;
 }
 
-int32_t dg_find(const Graph *g, Str id) {
+int32_t dg_find(const Graph g[static 1], Str id) {
     if (!g->hcap) return NONE;
     for (size_t h = hstr(id) & (g->hcap - 1);; h = (h + 1) & (g->hcap - 1)) {
         uint32_t e = g->htab[h];
@@ -76,7 +76,7 @@ int32_t dg_find(const Graph *g, Str id) {
     }
 }
 
-int32_t dg_node(Graph *g, Str id, bool *fresh) {
+int32_t dg_node(Graph g[static 1], Str id, bool *fresh) {
     if (fresh) *fresh = false;
     int32_t f = dg_find(g, id);
     if (f != NONE) return f;
@@ -98,7 +98,7 @@ int32_t dg_node(Graph *g, Str id, bool *fresh) {
     return (int32_t)v;
 }
 
-int32_t dg_edge(Graph *g, int32_t a, int32_t b, Str label) {
+int32_t dg_edge(Graph g[static 1], int32_t a, int32_t b, Str label) {
     if (g->ne >= INT32_MAX / 2) return NONE;
     if (g->ne == g->ecap && !edge_grow(g)) return NONE;
     size_t e = g->ne++;
@@ -113,7 +113,7 @@ int32_t dg_edge(Graph *g, int32_t a, int32_t b, Str label) {
     return (int32_t)e;
 }
 
-int32_t dg_cluster(Graph *g, Str id, Str title, int32_t parent) {
+int32_t dg_cluster(Graph g[static 1], Str id, Str title, int32_t parent) {
     if (g->ns >= 1u << 20) return NONE;
     if (g->ns == g->scap && !sg_grow(g)) return NONE;
     size_t s = g->ns++;
@@ -125,7 +125,7 @@ int32_t dg_cluster(Graph *g, Str id, Str title, int32_t parent) {
     return (int32_t)s;
 }
 
-BBox dg_bbox(const Graph *g) {
+BBox dg_bbox(const Graph g[static 1]) {
     BBox bb = BB_EMPTY;
     for (size_t v = 0; v < g->nn; v++) {
         if (g->nflags[v] & NF_HIDDEN) continue;
@@ -149,7 +149,7 @@ BBox dg_bbox(const Graph *g) {
     return bb;
 }
 
-void dg_pt(Buf *b, double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
+void dg_pt(Buf b[static 1], double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
 void dg_arrowhead(Buf b[static 1], const char cls[static 1], const double tip[static 2], const double from[static 2], double half) {
     double dx = tip[0] - from[0], dy = tip[1] - from[1], L = sqrt(dx * dx + dy * dy);
     if (L < 1e-9) return;
@@ -246,7 +246,7 @@ void dg_head(Buf b[static 1], BBox bb, double m, const char kind[static 1], size
     buf_lit(b, "\"/>");
 }
 
-void dg_rect(Buf *b, double x, double y, double w, double h, double rx, const char *cls) {
+void dg_rect(Buf b[static 1], double x, double y, double w, double h, double rx, const char *cls) {
     buf_lit(b, "<rect");
     if (cls) { buf_lit(b, " class=\""); buf_cstr(b, cls); buf_ch(b, '"'); }
     buf_lit(b, " x=\""); buf_num(b, x); buf_lit(b, "\" y=\""); buf_num(b, y);
@@ -405,7 +405,7 @@ BBox dg_tbox(Str s, double fs, double lh, double x, double y, bool centre, const
     return (BBox){x0, top, x0 + w, top + (k - 1) * lh + 1.15 * fs};
 }
 
-unsigned dg_tspans(Buf *b, BBox *bb, Str s, double fs, double lh, double x, double y, bool centre,
+unsigned dg_tspans(Buf b[static 1], BBox *bb, Str s, double fs, double lh, double x, double y, bool centre,
                    const char anchor[static 1], TBase base, const char *cls) {
     unsigned k = nlines(s);
     if (bb) {
@@ -431,7 +431,7 @@ unsigned dg_tspans(Buf *b, BBox *bb, Str s, double fs, double lh, double x, doub
     return k;
 }
 
-Str dg_wrapc(Arena *a, Str s, size_t maxc) {
+Str dg_wrapc(Arena a[static 1], Str s, size_t maxc) {
     if (s.n <= maxc) return s;
     char *o = arena_alloc(a, s.n + 1, 1);
     if (!o) return (Str){};

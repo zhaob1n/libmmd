@@ -27,7 +27,7 @@ constexpr double CLUSTER_TITLE = 24.0;
 constexpr double EDGE_SEP = 20.0;
 
 /* measure a label; markdown labels are word-wrapped in place first */
-static void measure(Graph *g, Str *lab, double w[static 1], unsigned lines[static 1]) {
+static void measure(Graph g[static 1], Str lab[static 1], double w[static 1], unsigned lines[static 1]) {
     double fs = g->font_size;
     if (lab->n && rich_needed(*lab)) {
         bool ok;
@@ -60,7 +60,7 @@ static void measure(Graph *g, Str *lab, double w[static 1], unsigned lines[stati
     *w = maxw; /* the label div is display:table-cell with max-width: it reports exactly maxw */
 }
 
-void node_size(Graph *g, size_t v) {
+void node_size(Graph g[static 1], size_t v) {
     if (g->nflags[v] & NF_FIXED) return;
     double fs = g->font_size, tw;
     unsigned lines;
@@ -368,7 +368,7 @@ static inline uint64_t pkey(int32_t a, int32_t b) {
     return ((uint64_t)(uint32_t)a << 32 | (uint32_t)b) + 1;
 }
 static inline size_t phash(uint64_t k, size_t cap) { return (size_t)((k * 0x9E3779B97F4A7C15ull) >> 17) & (cap - 1); }
-[[nodiscard]] static bool pset_add(Arena *A, PairSet s[static 1], int32_t a, int32_t b) {
+[[nodiscard]] static bool pset_add(Arena A[static 1], PairSet s[static 1], int32_t a, int32_t b) {
     { uint64_t bk = pkey(a, b) * 0x9E3779B97F4A7C15ull >> 52; s->bloom[bk >> 6] |= 1ull << (bk & 63); }
     if ((s->n + 1) * 2 > s->cap) {
         size_t nc = s->cap ? s->cap * 2 : 64;
@@ -406,7 +406,7 @@ static inline bool pset_has(const PairSet s[static 1], int32_t a, int32_t b) {
     return false;
 }
 
-static int32_t cluster_lca(const Graph *g, const int32_t *depth, int32_t a, int32_t b) {
+static int32_t cluster_lca(const Graph g[static 1], const int32_t *depth, int32_t a, int32_t b) {
     while (a != b) {
         int32_t da = a == NONE ? 0 : depth[a], db = b == NONE ? 0 : depth[b];
         if (da >= db) a = a == NONE ? NONE : g->sparent[a];
@@ -642,7 +642,7 @@ static bool bk_pass(Lay L[static 1], const PairSet conf[static 1], bool up, bool
 }
 
 /* ---------- geometry helpers ---------- */
-static void clip_to_node(const Graph *g, int32_t v, double px, double py, double *ox, double *oy) {
+static void clip_to_node(const Graph g[static 1], int32_t v, double px, double py, double ox[static 1], double oy[static 1]) {
     double cx = g->nx[v], cy = g->ny[v], hw = g->nw[v] / 2, hh = g->nh[v] / 2;
     double dx = px - cx, dy = py - cy;
     if (fabs(dx) < 1e-9 && fabs(dy) < 1e-9) { *ox = cx; *oy = cy + hh; return; }
@@ -689,7 +689,7 @@ static size_t clip_poly_box(size_t np, double P[static 2 * np], double x0, doubl
 }
 
 typedef struct PortKey { double k1, k2; uint32_t e; } PortKey;
-static inline bool port_lt(const PortKey *a, const PortKey *b) {
+static inline bool port_lt(const PortKey a[static 1], const PortKey b[static 1]) {
     if (a->k1 != b->k1) return a->k1 < b->k1;
     if (a->k2 != b->k2) return a->k2 < b->k2;
     return a->e < b->e;
@@ -748,7 +748,7 @@ static void succ_del(SuccSim s[static 1], int32_t u, int32_t w) {
 
 /* dagre (mermaid) order step on our ranks: reconstruct dagre's node order, dummy parents
  * (parentDummyChains) and successor order, then run the faithful order() port. */
-static mmd_status dagre_prep_order(Lay L[static 1], const Graph *g, size_t E, const int32_t *ef, const int32_t *et,
+static mmd_status dagre_prep_order(Lay L[static 1], const Graph g[static 1], size_t E, const int32_t *ef, const int32_t *et,
                                    const uint8_t *rev, const uint32_t *revord, size_t nrevord, const int32_t *esub,
                                    const int32_t *rank, const uint32_t *choff, const int32_t *cmin,
                                    const int32_t *cmax, const uint32_t *bbase, const int32_t *sdepth,
@@ -923,7 +923,7 @@ static mmd_status dagre_prep_order(Lay L[static 1], const Graph *g, size_t E, co
 }
 
 /* dagre ranking on the nesting graph: node/children/edge orders as mermaid feeds dagre */
-static mmd_status dagre_rank_graph(Arena *A, const Graph *g, size_t N, size_t E, size_t S, const int32_t *ef,
+static mmd_status dagre_rank_graph(Arena A[static 1], const Graph g[static 1], size_t N, size_t E, size_t S, const int32_t *ef,
                                    const int32_t *et, const uint8_t *rev, const uint32_t *revord, size_t nrevord,
                                    const int32_t *esub, const int32_t *mlen, int32_t *rank, int32_t *ctop[static 1],
                                    int32_t *cbot[static 1], int32_t *corder[static 1], int32_t *elrank) {
@@ -1032,7 +1032,7 @@ static mmd_status dagre_rank_graph(Arena *A, const Graph *g, size_t N, size_t E,
     return MMD_OK;
 }
 
-static mmd_status layout_core(Graph *g) {
+static mmd_status layout_core(Graph g[static 1]) {
     Arena *A = g->arena;
     size_t N = g->nn, E = g->ne, S = g->ns;
     bool horiz = g->dir == DIR_LR || g->dir == DIR_RL;
@@ -1781,7 +1781,7 @@ static mmd_status layout_core(Graph *g) {
  * A cluster whose direction differs from its context is laid out on its own (recursively),
  * then stands in the parent layout as one fixed-size proxy node. Edges to the cluster id
  * attach to the proxy box; edges to member nodes are extended from the box to the member. */
-static BBox content_box(const Graph *g) {
+static BBox content_box(const Graph g[static 1]) {
     BBox b = {INFINITY, INFINITY, -INFINITY, -INFINITY};
     for (size_t v = 0; v < g->nn; v++)
         if (!(g->nflags[v] & NF_HIDDEN))
@@ -1804,10 +1804,10 @@ static BBox content_box(const Graph *g) {
 constexpr double ISO_RANK_EXTRA = 25;   /* mermaid sub-graph ranksep = ranksep + 25 */
 /* isolated cluster padding: (ranksep + 25)/2 along its rank axis, (nodesep + 20)/2 across it
  * (flowchart 50/50: 37.5 / 35; er 140/80: 52.5 / 80) */
-static inline double iso_pad_rank(const Graph *g) { return (g->rank_sep + 25) / 2; }
-static inline double iso_pad_cross(const Graph *g) { return (g->node_sep + 20) / 2; }
+static inline double iso_pad_rank(const Graph g[static 1]) { return (g->rank_sep + 25) / 2; }
+static inline double iso_pad_cross(const Graph g[static 1]) { return (g->node_sep + 20) / 2; }
 
-[[nodiscard]] static bool gsub_alloc(Graph *d, const Graph *g, Dir dir, size_t nn, size_t ne, size_t ns) {
+[[nodiscard]] static bool gsub_alloc(Graph d[static 1], const Graph g[static 1], Dir dir, size_t nn, size_t ne, size_t ns) {
     Arena *A = g->arena;
     *d = (Graph){.arena = g->arena, .dir = dir, .theme = g->theme, .flags = g->flags, .acyclicer = g->acyclicer, .order_mode = g->order_mode, .iso_toggle = g->iso_toggle, .node_sep = g->node_sep,
                  .rank_sep = g->rank_sep, .font_size = g->font_size, .nn = nn, .ne = ne, .ns = ns,
@@ -1826,7 +1826,7 @@ static inline double iso_pad_cross(const Graph *g) { return (g->node_sep + 20) /
            d->eflags && d->sid && d->stitle && d->sclass && d->sstyle && d->sparent && d->sdir && d->sflags;
 }
 
-[[nodiscard]] static bool alloc_outputs(Graph *g) {
+[[nodiscard]] static bool alloc_outputs(Graph g[static 1]) {
     Arena *A = g->arena;
     size_t N = g->nn, E = g->ne, S = g->ns;
     g->nw = ANEW(A, double, N + 1); g->nh = ANEW(A, double, N + 1);
@@ -1840,7 +1840,7 @@ static inline double iso_pad_cross(const Graph *g) { return (g->node_sep + 20) /
            g->sx && g->sy && g->sw && g->sh;
 }
 
-static mmd_status layout_rec(Graph *g, unsigned depth) {
+static mmd_status layout_rec(Graph g[static 1], unsigned depth) {
     size_t N = g->nn, E = g->ne, S = g->ns;
     if (!S || depth > 16) return layout_core(g);
     Arena *A = g->arena;
@@ -2077,7 +2077,7 @@ static double seg_box(double px, double py, double qx, double qy, const BBox b[s
  * boxes; total work is budgeted so huge graphs degrade to the plain layout route. */
 typedef struct Grid { double x0, y0, cs, ics; size_t gw, gh; uint32_t *off, *idx; } Grid;
 
-[[nodiscard]] static bool grid_build(Arena *A, Grid G[static 1], size_t N, const BBox nb[static N + 1], const bool *use) {
+[[nodiscard]] static bool grid_build(Arena A[static 1], Grid G[static 1], size_t N, const BBox nb[static N + 1], const bool *use) {
     double x0 = INFINITY, y0 = INFINITY, x1 = -INFINITY, y1 = -INFINITY, area = 0;
     size_t k = 0;
     for (size_t v = 0; v < N; v++) {
@@ -2171,7 +2171,7 @@ static int32_t seg_hit(Router R[static 1], double px, double py, double qx, doub
     return seg_hit_m(R, px, py, qx, qy, s1, s2, 0.5);
 }
 
-static bool pt_in(const BBox *b, double x, double y) { return x > b->x0 && x < b->x1 && y > b->y0 && y < b->y1; }
+static bool pt_in(const BBox b[static 1], double x, double y) { return x > b->x0 && x < b->x1 && y > b->y0 && y < b->y1; }
 
 /* is (x,y) strictly inside some obstacle other than s1/s2? (one grid cell, no segment test) */
 static bool pt_buried(const Router R[static 1], double x, double y, int32_t s1, int32_t s2) {
@@ -2221,7 +2221,7 @@ static void vh_del(VHeap H[static 1], int32_t v) {
     if (i < H->n) vh_fix(H, i);
 }
 
-static int vis_path(Router R[static 1], Arena *A, double sx, double sy, double tx, double ty, int32_t s1, int32_t s2,
+static int vis_path(Router R[static 1], Arena A[static 1], double sx, double sy, double tx, double ty, int32_t s1, int32_t s2,
                     size_t cap, double out[static 2 * cap]) {
     const Graph *g = R->g;
     double pad = 0;
@@ -2364,7 +2364,7 @@ static int side_path(Router R[static 1], double sx, double sy, double tx, double
     return 2;
 }
 
-[[nodiscard]] static bool route_avoid(Graph *g) {
+[[nodiscard]] static bool route_avoid(Graph g[static 1]) {
     Arena *A = g->arena;
     size_t N = g->nn, E = g->ne;
     constexpr double M = 10;
@@ -2524,7 +2524,7 @@ static bool spline_hits(const SBox *SX, const SBox *SY /* nullable */, size_t n,
 }
 
 /* basis curves cut corners; where that cuts through a node, pin the curve to the polyline corners */
-[[nodiscard]] static bool tighten_curves(Graph *g) {
+[[nodiscard]] static bool tighten_curves(Graph g[static 1]) {
     if (g->curve != CURVE_BASIS) return true;
     Arena *A = g->arena;
     SBox *S = ANEW(A, SBox, g->nn + 1);
@@ -2598,7 +2598,7 @@ static bool spline_hits(const SBox *SX, const SBox *SY /* nullable */, size_t n,
 }
 
 /* drop interior polyline points collinear with their neighbours (dummy-node runs) */
-static void simplify_pts(Graph *g) {
+static void simplify_pts(Graph g[static 1]) {
     size_t w = 0;
     double *V = g->pts.v;
     for (size_t e = 0; e < g->ne; e++) {
@@ -2624,7 +2624,7 @@ static void simplify_pts(Graph *g) {
 }
 
 /* move edge labels onto the drawn curve (B-spline of the polyline), nearest point to the reserved slot */
-static bool lab_overlap(const Graph *g, size_t a, size_t b) {
+static bool lab_overlap(const Graph g[static 1], size_t a, size_t b) {
     return fabs(g->elx[a] - g->elx[b]) * 2 < g->elw[a] + g->elw[b] + 4 &&
            fabs(g->ely[a] - g->ely[b]) * 2 < g->elh[a] + g->elh[b] + 2;
 }
@@ -2647,7 +2647,7 @@ static inline void qpiece_at(const QPiece q[static 1], double t, double x[static
 }
 
 /* slide label e along its own curve to the nearest sample clear of every other label */
-static bool slide_on_curve(Graph *g, const size_t *L, size_t nl, size_t e) {
+static bool slide_on_curve(Graph g[static 1], const size_t *L, size_t nl, size_t e) {
     uint32_t np = g->eptn[e];
     if (np < 3) return false;
     const double *P = g->pts.v + g->eptoff[e];
@@ -2673,7 +2673,7 @@ static bool slide_on_curve(Graph *g, const size_t *L, size_t nl, size_t e) {
     return bd < INFINITY;
 }
 
-static void labels_on_curve(Graph *g) {
+static void labels_on_curve(Graph g[static 1]) {
     size_t E = g->ne;
     double *ox = ANEW(g->arena, double, 2 * E + 2);
     if (ox) for (size_t e = 0; e < E; e++) ox[2 * e] = g->elx[e], ox[2 * e + 1] = g->ely[e];
@@ -2730,7 +2730,7 @@ static void labels_on_curve(Graph *g) {
 }
 
 /* place each cluster title where no edge crosses the title band (prefer centred) */
-[[nodiscard]] static bool place_titles(Graph *g) {
+[[nodiscard]] static bool place_titles(Graph g[static 1]) {
     size_t S = g->ns, E = g->ne;
     g->stx = ANEW(g->arena, double, S + 1);
     if (!g->stx) return false;
@@ -2851,18 +2851,18 @@ typedef struct LoopSave {
     int32_t *nparent;
 } LoopSave;
 
-static bool loop_dagre(const Graph *g) {
+static bool loop_dagre(const Graph g[static 1]) {
     return g->order_mode != MMD_ORDER_FAST && g->ns <= DAGRE_ORDER_MAX_S &&
            (g->order_mode == MMD_ORDER_DAGRE || g->nn <= DAGRE_RANK_MAX_N);
 }
 
-static bool is_loop(const Graph *g, size_t e) {
+static bool is_loop(const Graph g[static 1], size_t e) {
     int32_t a = g->efrom[e];
     return a != NONE && a == g->eto[e] && !(g->nflags[a] & (NF_HIDDEN | NF_SUBREF));
 }
 
 #define LGROW(T, f, n) do { T *t_ = ANEW(A, T, (n) + 1); if (!t_) return MMD_ERR_NOMEM; memcpy(t_, sv->f, N * sizeof *t_); g->f = t_; } while (0)
-static mmd_status loops_expand(Graph *g, LoopSave sv[static 1]) {
+static mmd_status loops_expand(Graph g[static 1], LoopSave sv[static 1]) {
     *sv = (LoopSave){};
     if (!loop_dagre(g)) return MMD_OK;
     size_t K = 0, N = g->nn, E = g->ne;
@@ -2932,7 +2932,7 @@ static mmd_status loops_expand(Graph *g, LoopSave sv[static 1]) {
 }
 #undef LGROW
 
-static mmd_status loops_collapse(Graph *g, const LoopSave sv[static 1]) {
+static mmd_status loops_collapse(Graph g[static 1], const LoopSave sv[static 1]) {
     if (!sv->K) return MMD_OK;
     Arena *A = g->arena;
     size_t E = sv->E;
@@ -3001,7 +3001,7 @@ static mmd_status loops_collapse(Graph *g, const LoopSave sv[static 1]) {
 }
 
 /* is a self-loop label at (x, y) clear of other labels and of nodes other than its own? */
-static bool loop_lab_free(const Graph *g, size_t e, double x, double y) {
+static bool loop_lab_free(const Graph g[static 1], size_t e, double x, double y) {
     double hw = g->elw[e] / 2, hh = g->elh[e] / 2;
     for (size_t q = 0; q < g->ne; q++)
         if (q != e && g->elabel[q].n && fabs(x - g->elx[q]) * 2 < g->elw[e] + g->elw[q] + 4 && fabs(y - g->ely[q]) * 2 < g->elh[e] + g->elh[q] + 2) return false;
@@ -3014,7 +3014,7 @@ static bool loop_lab_free(const Graph *g, size_t e, double x, double y) {
 
 /* self-loop labels are placed after the overlap pass: push one that lands on another label
  * further out from its node (away from the node centre on the dominant axis) */
-static void loop_labels_clear(Graph *g) {
+static void loop_labels_clear(Graph g[static 1]) {
     size_t E = g->ne;
     if (E > 4000) return;
     for (size_t e = 0; e < E; e++) {
@@ -3051,7 +3051,7 @@ static void loop_labels_clear(Graph *g) {
     }
 }
 
-mmd_status flow_layout(Graph *g) {
+mmd_status flow_layout(Graph g[static 1]) {
     LoopSave sv;
     mmd_status st = loops_expand(g, &sv);
     if (st) return st;

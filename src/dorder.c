@@ -65,7 +65,7 @@ static int32_t new_lk(Ctx c[static 1], int32_t e, int32_t next) {
 }
 
 /* resolve-conflicts.js mergeEntries */
-static void merge_ent(Ctx c[static 1], Ent *t, Ent *s) {
+static void merge_ent(Ctx c[static 1], Ent t[static 1], Ent s[static 1]) {
     double sum = 0, w = 0;
     if (t->w != 0) sum += t->bc * t->w, w += t->w;
     if (s->w != 0) sum += s->bc * s->w, w += s->w;
@@ -79,14 +79,14 @@ static void merge_ent(Ctx c[static 1], Ent *t, Ent *s) {
     s->merged = true;
 }
 
-static bool key_lt(const Ctx c[static 1], const Ent *a, const Ent *b) { /* JS object key order of entry.v */
+static bool key_lt(const Ctx c[static 1], const Ent a[static 1], const Ent b[static 1]) { /* JS object key order of entry.v */
     int64_t ka = c->d->ikey[a->v], kb = c->d->ikey[b->v];
     if ((ka >= 0) != (kb >= 0)) return ka >= 0;
     if (ka >= 0 && ka != kb) return ka < kb;
     return a->i < b->i;
 }
 
-static bool cmp_bias(const Ent *a, const Ent *b, bool bias, bool tie[static 1]) { /* a before b? (sort.js compareWithBias) */
+static bool cmp_bias(const Ent a[static 1], const Ent b[static 1], bool bias, bool tie[static 1]) { /* a before b? (sort.js compareWithBias) */
     if (a->bc < b->bc) return true;
     if (a->bc > b->bc) return false;
     *tie = true; /* result depends on biasRight */
@@ -356,13 +356,13 @@ typedef struct Heap { size_t n; void *p[48]; } Heap;
     return p;
 }
 /* [[gnu::cleanup]] handlers */
-static void heap_release(Heap *h) {
+static void heap_release(Heap h[static 1]) {
     for (size_t i = 0; i < h->n; i++) free(h->p[i]);
     h->n = 0;
 }
-static void ctx_release(Ctx *c) { free(c->ent), free(c->lk); }
+static void ctx_release(Ctx c[static 1]) { free(c->ent), free(c->lk); }
 
-bool dagre_order(Arena *A, const DOrder d[static 1], uint64_t *crossings) {
+bool dagre_order(Arena A[static 1], const DOrder d[static 1], uint64_t *crossings) {
     size_t V = d->V, S = d->S, R = d->R, NS = V + S;
     DT(t_start);
     [[gnu::cleanup(ctx_release)]] Ctx c = {.d = d, .V = V, .S = S, .NS = NS};
