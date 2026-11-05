@@ -9,11 +9,7 @@
 extern "C" {
 #endif
 
-#if defined(__GNUC__) || defined(__clang__)
-#define MMD_API __attribute__((visibility("default")))
-#else
-#define MMD_API
-#endif
+#define MMD_API [[gnu::visibility("default")]]
 
 typedef enum mmd_status {
     MMD_OK = 0,
