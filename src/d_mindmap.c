@@ -33,7 +33,7 @@ static constexpr char SECS[][8] = {"#cccc33", "#99cc33", "#7f33cc", "#cc33cc", "
                                    "#cc8033", "#80cc33", "#33cc80", "#33cccc", "#337fcc"};
 static constexpr bool SECW[] = {false, false, true, false, false, false, false, false, false, false, false}; /* white text */
 
-static void parse_node(Str s, Str *label, uint8_t *shape) {
+static void parse_node(Str s, Str label[static 1], uint8_t shape[static 1]) {
     typedef struct { char o[3], c[3]; uint8_t sh; } Delim;
     static constexpr Delim SH[] = {
         {"((", "))", M_CIR}, {"))", "((", M_BANG}, {"{{", "}}", M_HEX}, {"[", "]", M_SQ},
@@ -94,7 +94,7 @@ static void mm_pair(const MNode V[], size_t i, size_t j, double margin, double f
 /* compaction (mermaid's cose-bilkent result is much tighter than a pure radial layout): springs pull each node
  * toward a short rest length from its parent, grid-local box-overlap repulsion keeps everything apart. Root fixed.
  * Stops early once the largest move per step is tiny. */
-[[nodiscard]] static bool mm_relax(Arena *a, size_t n, MNode V[static n]) {
+[[nodiscard]] static bool mm_relax(Arena a[static 1], size_t n, MNode V[static n]) {
     if (n < 2) return true;
     double *fx = ANEW(a, double, n), *fy = ANEW(a, double, n);
     uint32_t *ord = ANEW(a, uint32_t, n);
