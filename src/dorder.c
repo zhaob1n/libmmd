@@ -342,10 +342,20 @@ static void sort_flat(Ctx *c, const uint32_t *xs, uint32_t n, double *bc, uint32
     while (u < nu) out[o++] = (int32_t)xs[ui[u++]];
 }
 
-static void *dscratch(Arena *A, bool ua, size_t sz, bool zero) {
-    void *p = ua ? arena_alloc(A, sz ? sz : 1, alignof(max_align_t)) : zero ? calloc(1, sz ? sz : 1) : malloc(sz ? sz : 1);
-    if (p && ua && zero) memset(p, 0, sz);
+/* Large-graph scratch: plain malloc blocks, all released at the end of dagre_order. Not an Arena: a
+ * per-call arena would mmap/munmap (and page-fault) its big blocks on every layout, while the malloc
+ * heap reuses them across calls. */
+typedef struct Heap { size_t n; void *p[48]; } Heap;
+[[nodiscard]] static void *heap_new(Heap *h, size_t n, size_t size) {
+    size_t bytes;
+    if (h->n == countof(h->p) || ckd_mul(&bytes, n ? n : 1, size)) return nullptr;
+    void *p = malloc(bytes);
+    if (p) h->p[h->n++] = p;
     return p;
+}
+static void heap_free(Heap *h) {
+    for (size_t i = 0; i < h->n; i++) free(h->p[i]);
+    h->n = 0;
 }
 
 bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
@@ -353,51 +363,60 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
     DT(t_start);
     Ctx c = {.d = d, .V = V, .S = S, .NS = NS};
     bool ok = false;
-    /* small graphs: scratch from the render arena (no per-call malloc/free churn) */
-    bool ua = NS <= 1024 && S <= 32;
-#define SA(sz, zero) dscratch(A, ua, (sz), (zero))
-    uint32_t *rioff = SA((R + 2) * sizeof *rioff, true), *ri = nullptr, *dstk = nullptr, *dit = nullptr;
+    /* small graphs: scratch from the render arena (no per-call malloc/free churn); large ones use
+     * tracked malloc blocks (see Heap) so the render arena does not keep their peak */
+    Heap heap = {};
+    bool small = NS <= 1024 && S <= 32;
+#define SA(p, n) (small ? ANEW(A, typeof(*(p)), (n)) : heap_new(&heap, (n), sizeof *(p)))
+    uint32_t *rioff = SA(rioff, R + 2), *ri = nullptr, *dstk = nullptr, *dit = nullptr;
     uint32_t *tree = nullptr;
     int32_t *best = nullptr;
     uint8_t *vis = nullptr;
     size_t maxw = 1;
     for (size_t r = 0; r < R; r++) if (d->loff[r + 1] - d->loff[r] > maxw) maxw = d->loff[r + 1] - d->loff[r];
-    c.nx = SA(NS * sizeof *c.nx, false);
-    c.khead = SA((S + 1) * sizeof *c.khead, false);
-    c.ktail = SA((S + 1) * sizeof *c.ktail, false);
-    c.knext = SA(NS * sizeof *c.knext, false);
-    c.mtag = SA((NS) * sizeof *c.mtag, true);
-    c.mix = SA(NS * sizeof *c.mix, false);
-    c.sub = SA((S + 1) * sizeof *c.sub, false);
-    c.ord = SA(NS * sizeof *c.ord, false);
-    c.src = SA(NS * sizeof *c.src, false);
-    c.outl = SA(NS * sizeof *c.outl, false);
-    c.sbuf = SA(2 * NS * sizeof *c.sbuf, false);
-    c.stmp = SA(NS * sizeof *c.stmp, false);
-    c.cga = SA((S * S + 1) * sizeof *c.cga, false);
-    c.cgb = SA((S * S + 1) * sizeof *c.cgb, false);
-    c.cgbits = SA(((S * S + 63) / 64 + 1) * sizeof *c.cgbits, true);
-    c.prev = SA((S + 1) * sizeof *c.prev, false);
-    c.ptag = SA((S + 1) * sizeof *c.ptag, true);
-    dstk = SA((V + 1) * sizeof *dstk, false);
-    dit = SA((V + 1) * sizeof *dit, false);
-    vis = SA((V + 1) * 1, true);
-    best = SA((V + 1) * sizeof *best, false);
-    double *fbc = SA((maxw + 1) * sizeof *fbc, false);
-    uint32_t *fsi = SA((maxw + 1) * sizeof *fsi, false), *fui = SA((maxw + 1) * sizeof *fui, false);
+    c.nx = SA(c.nx, NS);
+    c.khead = SA(c.khead, S + 1);
+    c.ktail = SA(c.ktail, S + 1);
+    c.knext = SA(c.knext, NS);
+    c.mtag = SA(c.mtag, NS);
+    c.mix = SA(c.mix, NS);
+    c.sub = SA(c.sub, S + 1);
+    c.ord = SA(c.ord, NS);
+    c.src = SA(c.src, NS);
+    c.outl = SA(c.outl, NS);
+    c.sbuf = SA(c.sbuf, 2 * NS);
+    c.stmp = SA(c.stmp, NS);
+    c.cga = SA(c.cga, S * S + 1);
+    c.cgb = SA(c.cgb, S * S + 1);
+    c.cgbits = SA(c.cgbits, (S * S + 63) / 64 + 1);
+    c.prev = SA(c.prev, S + 1);
+    c.ptag = SA(c.ptag, S + 1);
+    dstk = SA(dstk, V + 1);
+    dit = SA(dit, V + 1);
+    vis = SA(vis, V + 1);
+    best = SA(best, V + 1);
+    double *fbc = SA(fbc, maxw + 1);
+    uint32_t *fsi = SA(fsi, maxw + 1), *fui = SA(fui, maxw + 1);
     /* sweep memo: per (layer, direction) the neighbour-layer order it was computed from and its result */
     size_t LT = d->loff[R] + 1;
-    uint32_t *ver = SA((R + 1) * sizeof *ver, true), *pva = SA((R + 1) * sizeof *pva, false);
-    uint32_t *pvb = SA((R + 1) * sizeof *pvb, false);
-    uint64_t *pcc = SA((R + 1) * sizeof *pcc, false), *mcgh = SA((2 * R + 1) * sizeof *mcgh, false);
-    uint8_t *mst = SA(2 * R + 1, true); /* bit0 valid, bit1 bias-dependent, bit2 bias, bit3 cg-independent */
-    uint32_t *mcgn = SA((2 * R + 1) * sizeof *mcgn, false);
-    int32_t *msnap = SA(2 * LT * sizeof *msnap, false), *mout = SA(2 * LT * sizeof *mout, false);
-    tree = SA(4 * (maxw + 1) * sizeof *tree, false);
+    uint32_t *ver = SA(ver, R + 1), *pva = SA(pva, R + 1);
+    uint32_t *pvb = SA(pvb, R + 1);
+    uint64_t *pcc = SA(pcc, R + 1), *mcgh = SA(mcgh, 2 * R + 1);
+    uint8_t *mst = SA(mst, 2 * R + 1); /* bit0 valid, bit1 bias-dependent, bit2 bias, bit3 cg-independent */
+    uint32_t *mcgn = SA(mcgn, 2 * R + 1);
+    int32_t *msnap = SA(msnap, 2 * LT), *mout = SA(mout, 2 * LT);
+    tree = SA(tree, 4 * (maxw + 1));
     if (!rioff || !c.nx || !c.khead || !c.ktail || !c.knext || !c.mtag || !c.mix || !c.sub || !c.ord || !c.src ||
         !c.outl || !c.sbuf || !c.stmp || !c.cga || !c.cgb || !c.cgbits || !c.prev || !c.ptag || !dstk || !dit ||
         !vis || !best || !tree || !fbc || !fsi || !fui || !ver || !pva || !pvb || !pcc || !mcgh || !mst || !mcgn || !msnap || !mout)
         goto done;
+    memset(rioff, 0, (R + 2) * sizeof *rioff);
+    memset(c.mtag, 0, NS * sizeof *c.mtag);
+    memset(c.cgbits, 0, ((S * S + 63) / 64 + 1) * sizeof *c.cgbits);
+    memset(c.ptag, 0, (S + 1) * sizeof *c.ptag);
+    memset(vis, 0, (V + 1) * sizeof *vis);
+    memset(ver, 0, (R + 1) * sizeof *ver);
+    memset(mst, 0, (2 * R + 1) * sizeof *mst);
     /* per-rank layer-graph membership in g.nodes() order: rank-r nodes + clusters spanning r */
     for (size_t q = 0; q < d->nn; q++) {
         uint32_t x = d->nord[q];
@@ -405,11 +424,10 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
         else for (int32_t r = d->cmin[x - V]; r <= d->cmax[x - V]; r++) rioff[r + 1]++;
     }
     for (size_t r = 0; r < R; r++) rioff[r + 1] += rioff[r];
-    ri = SA((rioff[R] + 1) * sizeof *ri, false);
+    ri = SA(ri, rioff[R] + 1);
     if (!ri) goto done;
     {
-        uint32_t *fill = c.ord; /* reuse as [R] fill pointers when R <= NS, else separate */
-        uint32_t *tmpf = R <= NS ? fill : malloc(R * sizeof *tmpf);
+        uint32_t *tmpf = R <= NS ? c.ord : SA(tmpf, R);
         if (!tmpf) goto done;
         for (size_t r = 0; r < R; r++) tmpf[r] = rioff[r];
         for (size_t q = 0; q < d->nn; q++) {
@@ -417,11 +435,10 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
             if (x < V) { if (d->rank[x] >= 0) ri[tmpf[d->rank[x]]++] = x; }
             else for (int32_t r = d->cmin[x - V]; r <= d->cmax[x - V]; r++) ri[tmpf[r]++] = x;
         }
-        if (tmpf != fill) free(tmpf);
     }
     /* initOrder: DFS from simple nodes sorted (stably) by rank, successors in dagre order */
     {
-        uint32_t *fillp = SA((R + 1) * sizeof *fillp, false);
+        uint32_t *fillp = SA(fillp, R + 1);
         if (!fillp) goto done;
         for (size_t r = 0; r < R; r++) fillp[r] = d->loff[r];
         for (size_t r = 0; r < R; r++)
@@ -441,7 +458,6 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
                     dstk[sp++] = w;
                 }
             }
-        if (!ua) free(fillp);
         for (size_t r = 0; r < R; r++)
             for (uint32_t i = d->loff[r]; i < d->loff[r + 1]; i++) d->pos[d->lay[i]] = (int32_t)(i - d->loff[r]);
     }
@@ -557,13 +573,7 @@ bool dagre_order(Arena *A, const DOrder *d, uint64_t *crossings) {
     ok = true;
 done:
 #undef SA
-    if (!ua) {
-    free(rioff); free(ri); free(dstk); free(dit); free(vis); free(best); free(tree); free(fbc); free(fsi); free(fui);
-    free(c.nx); free(c.khead); free(c.ktail); free(c.knext); free(c.mtag); free(c.mix); free(c.sub); free(c.ord);
-    free(c.src); free(c.outl); free(c.sbuf); free(c.stmp); free(c.cga); free(c.cgb); free(c.cgbits); free(c.prev);
-    free(c.ptag);
-    free(ver); free(pva); free(pvb); free(pcc); free(mcgh); free(mst); free(mcgn); free(msnap); free(mout);
-    }
+    heap_free(&heap);
     free(c.ent); free(c.lk);
     return ok;
 }
