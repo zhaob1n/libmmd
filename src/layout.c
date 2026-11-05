@@ -2644,6 +2644,23 @@ static bool lab_overlap(const Graph *g, size_t a, size_t b) {
            fabs(g->ely[a] - g->ely[b]) * 2 < g->elh[a] + g->elh[b] + 2;
 }
 
+/* curveBasis piece i of an np-point polyline as a quadratic Bezier between span midpoints (the first
+ * and last pieces are anchored at the polyline ends) */
+typedef struct QPiece { double sx, sy, cx, cy, ex, ey; } QPiece;
+static inline QPiece qpiece(uint32_t np, const double P[static 2 * np], uint32_t i) {
+    const double *p0 = P + 2 * i, *p1 = p0 + 2, *p2 = p0 + 4;
+    return (QPiece){
+        .sx = i == 0 ? p0[0] : (p0[0] + p1[0]) / 2, .sy = i == 0 ? p0[1] : (p0[1] + p1[1]) / 2,
+        .cx = p1[0], .cy = p1[1],
+        .ex = i + 3 == np ? p2[0] : (p1[0] + p2[0]) / 2, .ey = i + 3 == np ? p2[1] : (p1[1] + p2[1]) / 2,
+    };
+}
+static inline void qpiece_at(const QPiece *q, double t, double *x, double *y) {
+    double u = 1 - t;
+    *x = u * u * q->sx + 2 * u * t * q->cx + t * t * q->ex;
+    *y = u * u * q->sy + 2 * u * t * q->cy + t * t * q->ey;
+}
+
 /* slide label e along its own curve to the nearest sample clear of every other label */
 static bool slide_on_curve(Graph *g, const size_t *L, size_t nl, size_t e) {
     uint32_t np = g->eptn[e];
@@ -2651,12 +2668,10 @@ static bool slide_on_curve(Graph *g, const size_t *L, size_t nl, size_t e) {
     const double *P = g->pts.v + g->eptoff[e];
     double lx = g->elx[e], ly = g->ely[e], bd = INFINITY, bx = lx, by = ly;
     for (uint32_t i = 0; i + 2 < np; i++) {
-        const double *p0 = P + 2 * i, *p1 = p0 + 2, *p2 = p0 + 4;
-        double sx = i == 0 ? p0[0] : (p0[0] + p1[0]) / 2, sy = i == 0 ? p0[1] : (p0[1] + p1[1]) / 2;
-        double ex = i + 3 == np ? p2[0] : (p1[0] + p2[0]) / 2, ey = i + 3 == np ? p2[1] : (p1[1] + p2[1]) / 2;
+        QPiece q = qpiece(np, P, i);
         for (unsigned s = 0; s <= 16; s++) {
-            double t = s / 16.0, u = 1 - t;
-            double x = u * u * sx + 2 * u * t * p1[0] + t * t * ex, y = u * u * sy + 2 * u * t * p1[1] + t * t * ey;
+            double x, y;
+            qpiece_at(&q, s / 16.0, &x, &y);
             double d = (x - lx) * (x - lx) + (y - ly) * (y - ly);
             if (d >= bd) continue;
             /* keep clear of the endpoints' arrowheads */
@@ -2682,15 +2697,11 @@ static void labels_on_curve(Graph *g) {
         if (!g->elabel[e].n || np < 3) continue;
         const double *P = g->pts.v + g->eptoff[e];
         double lx = g->elx[e], ly = g->ely[e], bx = lx, by = ly, bd = INFINITY;
-        /* curveBasis: segment i (1..np-2 interior) uses points i-1,i,i+1 with endpoints clamped */
         for (uint32_t i = 0; i + 2 < np; i++) {
-            const double *p0 = P + 2 * i, *p1 = p0 + 2, *p2 = p0 + 4;
-            /* quadratic B-spline piece between midpoints (start/end pieces anchored at the ends) */
-            double sx = i == 0 ? p0[0] : (p0[0] + p1[0]) / 2, sy = i == 0 ? p0[1] : (p0[1] + p1[1]) / 2;
-            double ex = i + 3 == np ? p2[0] : (p1[0] + p2[0]) / 2, ey = i + 3 == np ? p2[1] : (p1[1] + p2[1]) / 2;
+            QPiece q = qpiece(np, P, i);
             for (unsigned s = 0; s <= 8; s++) {
-                double t = s / 8.0, u = 1 - t;
-                double x = u * u * sx + 2 * u * t * p1[0] + t * t * ex, y = u * u * sy + 2 * u * t * p1[1] + t * t * ey;
+                double x, y;
+                qpiece_at(&q, s / 8.0, &x, &y);
                 double d = (x - lx) * (x - lx) + (y - ly) * (y - ly);
                 if (d < bd) bd = d, bx = x, by = y;
             }
