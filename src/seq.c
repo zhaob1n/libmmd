@@ -52,18 +52,18 @@ constexpr double ACT_H = 65;
 constexpr double ACT_MARGIN = 50;
 constexpr double BOX_MARGIN = 10;
 
-static mmd_status sfail(SP *p, size_t off, const char *m) {
+static mmd_status sfail(SP p[static 1], size_t off, const char m[static 1]) {
     return diag_fail(&p->err, p->msg, off, m);
 }
 
-static int32_t part_get(SP *p, Str id, bool *oom) {
+static int32_t part_get(SP p[static 1], Str id, bool oom[static 1]) {
     for (size_t k = 0; k < p->parts.n; k++)
         if (str_eq(p->parts.v[k].id, id)) return (int32_t)k;
     if (!VEC_PUSH(p->A, &p->parts, (Part){.id = id, .label = id, .box = -1})) { *oom = true; return -1; }
     return (int32_t)p->parts.n - 1;
 }
 
-static Str word(Str *s) {
+static Str word(Str s[static 1]) {
     *s = str_trim(*s);
     size_t k = 0;
     while (k < s->n && !is_sp(s->p[k])) k++;
@@ -88,7 +88,7 @@ constexpr double WRAP_MSG = 220;
 constexpr double WRAP_NOTE = 160;
 
 /* Greedy word wrap of a normalised label to maxw px. Returns s itself when nothing to do. */
-static Str wrap_text(Arena *A, Str s, double maxw, double fs, bool *ok) {
+static Str wrap_text(Arena *A, Str s, double maxw, double fs, bool ok[static 1]) {
     *ok = true;
     if (text_width(s, fs) <= maxw) return s;
     char *o = arena_alloc(A, s.n + 1, 1);
@@ -110,7 +110,7 @@ static Str wrap_text(Arena *A, Str s, double maxw, double fs, bool *ok) {
 }
 
 /* strip a leading "wrap:"/"nowrap:" marker; returns effective wrap flag */
-static bool wrap_prefix(Str *t, bool dflt) {
+static bool wrap_prefix(Str t[static 1], bool dflt) {
     Str x = str_trim(*t);
     if (x.n && x.p[0] == ':') x.p++, x.n--;
     if (str_starts(x, S("wrap:"))) { *t = (Str){.p = x.p + 5, .n = x.n - 5}; return true; }
@@ -131,7 +131,7 @@ static bool looks_color(Str w) {
 }
 
 /* split "color rest" where color may be rgb(...) containing spaces */
-static void split_color(Str rest, Str *color, Str *label) {
+static void split_color(Str rest, Str color[static 1], Str label[static 1]) {
     rest = str_trim(rest);
     *color = (Str){};
     *label = rest;
@@ -147,7 +147,7 @@ static void split_color(Str rest, Str *color, Str *label) {
     *label = str_trim((Str){.p = rest.p + k, .n = rest.n - k});
 }
 
-static mmd_status parse_line(SP *p, Str line, size_t off) {
+static mmd_status parse_line(SP p[static 1], Str line, size_t off) {
     bool oom = false;
     Str rest = line;
     Str w = word(&rest);
@@ -323,18 +323,18 @@ static mmd_status parse_line(SP *p, Str line, size_t off) {
     return VEC_PUSH(p->A, &p->evs, ev) ? MMD_OK : MMD_ERR_NOMEM;
 }
 
-static void pt(Buf *b, double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
-static void rect(Buf *b, double x, double y, double w, double h, const char *cls) {
+static void pt(Buf b[static 1], double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
+static void rect(Buf b[static 1], double x, double y, double w, double h, const char cls[static 1]) {
     buf_lit(b, "<rect class=\""); buf_cstr(b, cls); buf_lit(b, "\" x=\""); buf_num(b, x);
     buf_lit(b, "\" y=\""); buf_num(b, y); buf_lit(b, "\" width=\""); buf_num(b, w);
     buf_lit(b, "\" height=\""); buf_num(b, h); buf_lit(b, "\"/>");
 }
-static void line_(Buf *b, double x1, double y1, double x2, double y2, const char *cls) {
+static void line_(Buf b[static 1], double x1, double y1, double x2, double y2, const char cls[static 1]) {
     buf_lit(b, "<line class=\""); buf_cstr(b, cls); buf_lit(b, "\" x1=\""); buf_num(b, x1);
     buf_lit(b, "\" y1=\""); buf_num(b, y1); buf_lit(b, "\" x2=\""); buf_num(b, x2);
     buf_lit(b, "\" y2=\""); buf_num(b, y2); buf_lit(b, "\"/>");
 }
-static void text_(Buf *b, Str s, double fs, double x, double y, const char *anchor, const char *cls) {
+static void text_(Buf b[static 1], Str s, double fs, double x, double y, const char anchor[static 1], const char cls[static 1]) {
     size_t pos = 0;
     Str ln;
     double lh = fs * 1.5;
@@ -354,9 +354,9 @@ static unsigned nlines(Str s) {
     return k;
 }
 
-static void sq_pt(Buf *b, double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
+static void sq_pt(Buf b[static 1], double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
 
-static void actor_box(Buf *b, const Part *pa, double y, double fs) {
+static void actor_box(Buf b[static 1], const Part *pa, double y, double fs) {
     if (pa->actor) {
         double x = pa->x, t = y + 4;
         buf_lit(b, "<g class=\"actor-man\"><circle cx=\""); buf_num(b, x); buf_lit(b, "\" cy=\""); buf_num(b, t + 8);
