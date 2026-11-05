@@ -25,8 +25,6 @@ constexpr double PAD_NODE = 15.0;
 constexpr double CLUSTER_PAD = 15.0;
 constexpr double CLUSTER_TITLE = 24.0;
 constexpr double EDGE_SEP = 20.0;
-constexpr unsigned MAX_KEY_DEPTH = 8;
-static_assert(sizeof(double) * MAX_KEY_DEPTH >= 2 * 16, "Key buffer reused for BcItem pairs");
 
 /* measure a label; markdown labels are word-wrapped in place first */
 static void measure(Graph *g, Str *lab, double *w, unsigned *lines) {
@@ -116,12 +114,6 @@ typedef struct Lay {
 } Lay;
 
 /* ---------- sorting helpers ---------- */
-typedef struct Key {
-    double bc[MAX_KEY_DEPTH];
-    int32_t id[MAX_KEY_DEPTH];
-    uint32_t len;
-} Key;
-
 static void sort_u32_small(size_t n, uint32_t a[static n]) {
     for (size_t i = 1; i < n; i++) {
         uint32_t t = a[i];
@@ -198,8 +190,7 @@ static void cluster_keys(const Lay *L, size_t S, double gk[static S + 1], uint32
 }
 
 /* ---------- one barycenter sweep over layer r ---------- */
-static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint32_t *idx, uint32_t *tmp,
-                        double *csum, uint32_t *ccnt, bool clusters) {
+static void sweep_layer(Lay *L, size_t r, bool down, bool self, BcItem *bcbuf, const double *csum, bool clusters) {
     size_t a = L->loff[r], b = L->loff[r + 1], n = b - a;
     if (n < 2) return;
     const uint32_t *off = down ? L->poff : L->soff, *adj = down ? L->pidx : L->sidx;
@@ -218,7 +209,7 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint3
         L->bc[v] = bcv;
     }
     if (!clusters) {
-        BcItem *it = (BcItem *)keys, *tb = it + n; /* keys buffer is large enough (sizeof Key >= 2*sizeof BcItem) */
+        BcItem *it = bcbuf, *tb = it + n;
         for (size_t i = 0; i < n; i++) {
             int32_t v = L->lay[a + i];
             it[i] = (BcItem){.bc = L->bc[v], .id = v, .i = (uint32_t)i};
@@ -228,10 +219,9 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint3
             L->lay[a + i] = it[i].id;
             L->pos[it[i].id] = (int32_t)i;
         }
-        (void)idx; (void)tmp;
         return;
     }
-    (void)ccnt; /* csum holds layer-independent cluster keys (see cluster_keys) */
+    /* csum holds layer-independent cluster keys (see cluster_keys) */
     /* compound ordering: a cluster is placed among its siblings by the local barycenter of its members
      * (so long edges pass on the near side), made monotone in the global cluster order by pool-adjacent-
      * violators so siblings never swap between layers (keeps boxes disjoint). */
@@ -314,7 +304,6 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint3
         if (x.id >= 0) { L->lay[a + o] = x.id; L->pos[x.id] = (int32_t)o; o++; }
         else { uint32_t cc = (uint32_t)(-x.id - 1); cur[cc] = bs[cc]; stk[sp++] = cc; }
     }
-    (void)keys; (void)idx; (void)tmp;
 }
 
 /* ---------- transpose: adjacent swaps that strictly reduce crossings ---------- */
@@ -1510,13 +1499,12 @@ static mmd_status layout_core(Graph *g) {
     /* ---- crossing minimisation ---- */
     size_t maxw = 1;
     for (size_t r = 0; r < R; r++) if (L.loff[r + 1] - L.loff[r] > maxw) maxw = L.loff[r + 1] - L.loff[r];
-    Key *keys = ANEW(A, Key, maxw);
-    uint32_t *idx = ANEW(A, uint32_t, maxw), *tmp = ANEW(A, uint32_t, maxw);
+    BcItem *bcbuf = ANEW(A, BcItem, 2 * maxw); /* sweep_layer: items + merge scratch */
     uint32_t *cbuf = ANEW(A, uint32_t, nseg + 1), *fen = ANEW(A, uint32_t, maxw + 2);
     double *csum = ANEW(A, double, S + 1);
     uint32_t *ccnt = ANEW(A, uint32_t, S + 1);
     int32_t *best = ANEW(A, int32_t, V + 1);
-    if (!keys || !idx || !tmp || !cbuf || !fen || !csum || !ccnt || !best) return MMD_ERR_NOMEM;
+    if (!bcbuf || !cbuf || !fen || !csum || !ccnt || !best) return MMD_ERR_NOMEM;
     L.lsum = ANEW(A, double, S + 1), L.lval = ANEW(A, double, S + 1);
     L.lcnt = ANEW(A, uint32_t, S + 1), L.plist = ANEW(A, int32_t, S + 1);
     L.S = S;
@@ -1530,7 +1518,7 @@ static mmd_status layout_core(Graph *g) {
     bool clusters = S > 0;
     if (clusters && !use_dagre) cluster_keys(&L, S, csum, ccnt);
     if (clusters && !use_dagre) /* establish cluster contiguity (borders at extremes) before any scoring */
-        for (size_t r = 0; r < R; r++) sweep_layer(&L, r, false, true, keys, idx, tmp, csum, ccnt, clusters);
+        for (size_t r = 0; r < R; r++) sweep_layer(&L, r, false, true, bcbuf, csum, clusters);
     uint64_t bestc = use_dagre ? 0 : cross_all(&L, cbuf, fen);
     if (!use_dagre) memcpy(best, L.lay, placed * sizeof *best);
     unsigned since = 0;
@@ -1552,8 +1540,8 @@ static mmd_status layout_core(Graph *g) {
     for (unsigned iter = 0; iter < maxit && since < patience && bestc > 0; iter++) {
         bool down = ((iter & 1u) == 0);
         if (clusters) cluster_keys(&L, S, csum, ccnt);
-        if (down) for (size_t r = 1; r < R; r++) sweep_layer(&L, r, true, false, keys, idx, tmp, csum, ccnt, clusters);
-        else for (size_t r = R - 1; r-- > 0;) sweep_layer(&L, r, false, false, keys, idx, tmp, csum, ccnt, clusters);
+        if (down) for (size_t r = 1; r < R; r++) sweep_layer(&L, r, true, false, bcbuf, csum, clusters);
+        else for (size_t r = R - 1; r-- > 0;) sweep_layer(&L, r, false, false, bcbuf, csum, clusters);
         uint64_t c = cross_all(&L, cbuf, fen);
         if (c < bestc) { bestc = c; memcpy(best, L.lay, placed * sizeof *best); since = 0; }
         else since++;
