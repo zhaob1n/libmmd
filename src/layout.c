@@ -6,16 +6,11 @@
 #include <math.h>
 #ifdef MMD_PROFILE
 #include <stdio.h>
-#include <time.h>
-
-#define PROF(name) do { if (*name) prof_mark(name); } while (0)
-#else
-#define PROF(name) do { } while (0)
 #endif
 
 #include <stdlib.h>
 
-#include "graph.h"
+#include "dgraph.h"
 #include "dorder.h"
 #include "drank.h"
 #include "nsimplex.h"
@@ -30,8 +25,6 @@ constexpr double PAD_NODE = 15.0;
 constexpr double CLUSTER_PAD = 15.0;
 constexpr double CLUSTER_TITLE = 24.0;
 constexpr double EDGE_SEP = 20.0;
-constexpr unsigned MAX_KEY_DEPTH = 8;
-static_assert(sizeof(double) * MAX_KEY_DEPTH >= 2 * 16, "Key buffer reused for BcItem pairs");
 
 /* measure a label; markdown labels are word-wrapped in place first */
 static void measure(Graph *g, Str *lab, double *w, unsigned *lines) {
@@ -121,12 +114,6 @@ typedef struct Lay {
 } Lay;
 
 /* ---------- sorting helpers ---------- */
-typedef struct Key {
-    double bc[MAX_KEY_DEPTH];
-    int32_t id[MAX_KEY_DEPTH];
-    uint32_t len;
-} Key;
-
 static void sort_u32_small(size_t n, uint32_t a[static n]) {
     for (size_t i = 1; i < n; i++) {
         uint32_t t = a[i];
@@ -203,8 +190,7 @@ static void cluster_keys(const Lay *L, size_t S, double gk[static S + 1], uint32
 }
 
 /* ---------- one barycenter sweep over layer r ---------- */
-static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint32_t *idx, uint32_t *tmp,
-                        double *csum, uint32_t *ccnt, bool clusters) {
+static void sweep_layer(Lay *L, size_t r, bool down, bool self, BcItem *bcbuf, const double *csum, bool clusters) {
     size_t a = L->loff[r], b = L->loff[r + 1], n = b - a;
     if (n < 2) return;
     const uint32_t *off = down ? L->poff : L->soff, *adj = down ? L->pidx : L->sidx;
@@ -223,7 +209,7 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint3
         L->bc[v] = bcv;
     }
     if (!clusters) {
-        BcItem *it = (BcItem *)keys, *tb = it + n; /* keys buffer is large enough (sizeof Key >= 2*sizeof BcItem) */
+        BcItem *it = bcbuf, *tb = it + n;
         for (size_t i = 0; i < n; i++) {
             int32_t v = L->lay[a + i];
             it[i] = (BcItem){.bc = L->bc[v], .id = v, .i = (uint32_t)i};
@@ -233,10 +219,9 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint3
             L->lay[a + i] = it[i].id;
             L->pos[it[i].id] = (int32_t)i;
         }
-        (void)idx; (void)tmp;
         return;
     }
-    (void)ccnt; /* csum holds layer-independent cluster keys (see cluster_keys) */
+    /* csum holds layer-independent cluster keys (see cluster_keys) */
     /* compound ordering: a cluster is placed among its siblings by the local barycenter of its members
      * (so long edges pass on the near side), made monotone in the global cluster order by pool-adjacent-
      * violators so siblings never swap between layers (keeps boxes disjoint). */
@@ -319,7 +304,6 @@ static void sweep_layer(Lay *L, size_t r, bool down, bool self, Key *keys, uint3
         if (x.id >= 0) { L->lay[a + o] = x.id; L->pos[x.id] = (int32_t)o; o++; }
         else { uint32_t cc = (uint32_t)(-x.id - 1); cur[cc] = bs[cc]; stk[sp++] = cc; }
     }
-    (void)keys; (void)idx; (void)tmp;
 }
 
 /* ---------- transpose: adjacent swaps that strictly reduce crossings ---------- */
@@ -608,8 +592,7 @@ static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, 
             }
         }
     }
-    PROF("bk-conf");
-    size_t E = L->soff[V];
+    PMARK("bk-conf");
     size_t maxdeg = 1;
     for (size_t v = 0; v < V; v++) {
         size_t d1 = L->poff[v + 1] - L->poff[v], d2 = L->soff[v + 1] - L->soff[v];
@@ -623,16 +606,15 @@ static bool bk_pass(Lay *L, const PairSet *conf, bool up, bool left, BKWork *W, 
         .xs = ANEW(A, double, V), .nbuf = ANEW(A, int32_t, maxdeg),
     };
     double *xss[4];
-    for (unsigned k = 0; k < 4; k++) xss[k] = ANEW(A, double, V);
+    for (size_t k = 0; k < countof(xss); k++) xss[k] = ANEW(A, double, V);
     if (!W.root || !W.align || !W.posl || !W.order || !W.indeg || !W.qbuf || !W.boff || !W.bidx ||
         !W.bw || !W.xs || !W.nbuf || !xss[0] || !xss[1] || !xss[2] || !xss[3])
         return false;
-    (void)E;
     double *sepv = ANEW(A, double, V + 1);
     if (!sepv) return false;
     for (size_t r = 0; r < R; r++)
         for (size_t i = L->loff[r] + 1; i < L->loff[r + 1]; i++) sepv[i] = sep(L, L->lay[i - 1], L->lay[i]);
-    for (unsigned k = 0; k < 4; k++) { (void)bk_pass(L, &conf, k < 2, (k & 1u) == 0, &W, sepv, xss[k]); PROF("bk-pass"); }
+    for (size_t k = 0; k < countof(xss); k++) { (void)bk_pass(L, &conf, k < 2, (k & 1u) == 0, &W, sepv, xss[k]); PMARK("bk-pass"); }
     /* align to the narrowest layout */
     double mins[4], maxs[4], best = INFINITY;
     unsigned bi = 0;
@@ -689,11 +671,13 @@ static void reverse_pts(size_t np, double P[static 2 * np]) {
 }
 
 /* polyline starts outside box and ends inside it: cut at the first entry. Returns new count. */
+static inline bool pt_in_box(const double p[static 2], double x0, double y0, double x1, double y1) {
+    return p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1;
+}
 static size_t clip_poly_box(size_t np, double P[static 2 * np], double x0, double y0, double x1, double y1) {
-    #define INSIDE(i) (P[2 * (i)] >= x0 && P[2 * (i)] <= x1 && P[2 * (i) + 1] >= y0 && P[2 * (i) + 1] <= y1)
-    if (np < 2 || INSIDE(0)) return np;
+    if (np < 2 || pt_in_box(P, x0, y0, x1, y1)) return np;
     size_t j = 1;
-    while (j < np && !INSIDE(j)) j++;
+    while (j < np && !pt_in_box(&P[2 * j], x0, y0, x1, y1)) j++;
     if (j == np) return np;
     double px = P[2 * j - 2], py = P[2 * j - 1], dx = P[2 * j] - px, dy = P[2 * j + 1] - py, t = 0;
     if (px < x0 && dx > 0) t = dmax(t, (x0 - px) / dx);
@@ -702,7 +686,6 @@ static size_t clip_poly_box(size_t np, double P[static 2 * np], double x0, doubl
     if (py > y1 && dy < 0) t = dmax(t, (y1 - py) / dy);
     P[2 * j] = px + dx * t, P[2 * j + 1] = py + dy * t;
     return j + 1;
-    #undef INSIDE
 }
 
 typedef struct PortKey { double k1, k2; uint32_t e; } PortKey;
@@ -796,7 +779,7 @@ static mmd_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
         }
     for (size_t i = 0; i < nrevord; i++) if (DV(revord[i]) && !inseq[revord[i]]) eseq[ne++] = revord[i], inseq[revord[i]] = 1;
     /* g.nodes(): subgraphs in reverse closing order, then vertices; array-index ids first */
-    size_t nn = 0, nc = 0;
+    size_t nn = 0;
     {
         /* iterative post-order over the cluster forest with children in ascending index */
         uint32_t *post = kid; /* reuse */
@@ -817,10 +800,8 @@ static mmd_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
             }
         }
         for (size_t i = np; i-- > 0;) nord[nn++] = (uint32_t)V + post[i];
-        nc = nn;
     }
     for (size_t v = 0; v < N; v++) if (L->rank[v] >= 0) nord[nn++] = (uint32_t)v;
-    size_t nbeg = nn;
     { /* stable: integer-like keys first, ascending */
         size_t a = 0;
         uint32_t *tmp = ANEW(A, uint32_t, nn + 1);
@@ -835,8 +816,6 @@ static mmd_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
         for (size_t i = 0; i < nn; i++) if (ikey[nord[i]] < 0) tmp[a++] = nord[i];
         memcpy(nord, tmp, nn * sizeof *nord);
     }
-    (void)nc;
-    (void)nbeg;
     for (size_t i = 0; i < L->nco; i++) /* nestingGraph _bt/_bb, in creation order */
         for (unsigned k = 0; k < 2; k++) {
             size_t d = L->tbase + 2 * i + k;
@@ -935,7 +914,7 @@ static mmd_status dagre_prep_order(Lay *L, const Graph *g, size_t E, const int32
     DOrder d = {.V = V, .S = S, .R = L->R, .rank = L->rank, .par = par, .nn = nn, .nord = nord, .ikey = ikey,
                 .poff = L->poff, .pidx = L->pidx, .soff = L->soff, .sidx = L->sidx, .doff = doff, .didx = didx,
                 .cmin = cmin, .cmax = cmax, .bbase = bbase, .loff = L->loff, .lay = L->lay, .pos = L->pos};
-    PROF("dprep");
+    PMARK("dprep");
     if (!dagre_order(A, &d, bestc)) return MMD_ERR_NOMEM;
 #undef DV
 #undef DU
@@ -1073,8 +1052,6 @@ static mmd_status layout_core(Graph *g) {
     if (!g->nw || !g->nh || !g->nx || !g->ny || !g->eptoff || !g->eptn || !g->elx || !g->ely || !g->elw ||
         !g->elh || !g->sx || !g->sy || !g->sw || !g->sh || !sdepth || !srep || !ef || !et || !mlen || !rev)
         return MMD_ERR_NOMEM;
-
-    PROF("");
     for (size_t v = 0; v < N; v++) node_size(g, v);
     for (size_t s = 0; s < S; s++) {
         int32_t d = 1;
@@ -1127,26 +1104,27 @@ static mmd_status layout_core(Graph *g) {
     }
 #ifdef MMD_RANKDUMP
     if (getenv("MMD_DUMPGRAPH")) {
-        static const char *DN[] = {"TB", "BT", "LR", "RL"};
-        FILE *F = fopen(getenv("MMD_DUMPGRAPH"), "w");
-        fprintf(F, "{\"dir\":\"%s\",\"nodesep\":%g,\"ranksep\":%g,\"clusters\":[", DN[g->dir], g->node_sep, g->rank_sep);
-        for (size_t s = 0; s < S; s++) fprintf(F, "%s{\"id\":\"%.*s\",\"parent\":%s%.*s%s}", s ? "," : "", (int)g->sid[s].n, g->sid[s].p,
-            g->sparent[s] == NONE ? "null" : "\"", g->sparent[s] == NONE ? 0 : (int)g->sid[g->sparent[s]].n, g->sparent[s] == NONE ? "" : g->sid[g->sparent[s]].p, g->sparent[s] == NONE ? "" : "\"");
-        fprintf(F, "],\"nodes\":[");
-        bool first = true;
-        for (size_t v = 0; v < N; v++) {
-            if (g->nflags[v] & NF_HIDDEN) continue;
-            int32_t p = g->nparent[v];
-            fprintf(F, "%s{\"id\":\"%.*s\",\"w\":%.17g,\"h\":%.17g,\"parent\":%s%.*s%s}", first ? "" : ",", (int)g->nid[v].n, g->nid[v].p, g->nw[v], g->nh[v],
-                p == NONE ? "null" : "\"", p == NONE ? 0 : (int)g->sid[p].n, p == NONE ? "" : g->sid[p].p, p == NONE ? "" : "\"");
-            first = false;
+        static const char *const DN[] = {"TB", "BT", "LR", "RL"};
+        AUTOCLOSE FILE *F = fopen(getenv("MMD_DUMPGRAPH"), "w");
+        if (F) {
+            fprintf(F, "{\"dir\":\"%s\",\"nodesep\":%g,\"ranksep\":%g,\"clusters\":[", DN[g->dir], g->node_sep, g->rank_sep);
+            for (size_t s = 0; s < S; s++) fprintf(F, "%s{\"id\":\"%.*s\",\"parent\":%s%.*s%s}", s ? "," : "", (int)g->sid[s].n, g->sid[s].p,
+                g->sparent[s] == NONE ? "null" : "\"", g->sparent[s] == NONE ? 0 : (int)g->sid[g->sparent[s]].n, g->sparent[s] == NONE ? "" : g->sid[g->sparent[s]].p, g->sparent[s] == NONE ? "" : "\"");
+            fprintf(F, "],\"nodes\":[");
+            bool first = true;
+            for (size_t v = 0; v < N; v++) {
+                if (g->nflags[v] & NF_HIDDEN) continue;
+                int32_t p = g->nparent[v];
+                fprintf(F, "%s{\"id\":\"%.*s\",\"w\":%.17g,\"h\":%.17g,\"parent\":%s%.*s%s}", first ? "" : ",", (int)g->nid[v].n, g->nid[v].p, g->nw[v], g->nh[v],
+                    p == NONE ? "null" : "\"", p == NONE ? 0 : (int)g->sid[p].n, p == NONE ? "" : g->sid[p].p, p == NONE ? "" : "\"");
+                first = false;
+            }
+            fprintf(F, "],\"edges\":[");
+            for (size_t e = 0; e < E; e++)
+                fprintf(F, "%s{\"a\":\"%.*s\",\"b\":\"%.*s\",\"w\":%.17g,\"h\":%.17g,\"minlen\":%u}", e ? "," : "", (int)g->nid[g->efrom[e]].n, g->nid[g->efrom[e]].p,
+                    (int)g->nid[g->eto[e]].n, g->nid[g->eto[e]].p, g->elw[e], g->elh[e], (unsigned)g->elen[e]);
+            fprintf(F, "]}\n");
         }
-        fprintf(F, "],\"edges\":[");
-        for (size_t e = 0; e < E; e++)
-            fprintf(F, "%s{\"a\":\"%.*s\",\"b\":\"%.*s\",\"w\":%.17g,\"h\":%.17g,\"minlen\":%u}", e ? "," : "", (int)g->nid[g->efrom[e]].n, g->nid[g->efrom[e]].p,
-                (int)g->nid[g->eto[e]].n, g->nid[g->eto[e]].p, g->elw[e], g->elh[e], (unsigned)g->elen[e]);
-        fprintf(F, "]}\n");
-        fclose(F);
     }
 #endif
     /* dagre-faithful path (makeSpaceForEdgeLabels always doubles minlen, nesting-graph ranking, dagre order) */
@@ -1159,7 +1137,7 @@ static mmd_status layout_core(Graph *g) {
     #define LW(v) (horiz ? g->nh[v] : g->nw[v])
     #define LH(v) (horiz ? g->nw[v] : g->nh[v])
 
-    PROF("sizes");
+    PMARK("sizes");
     /* ---- out-CSR on real nodes ---- */
     uint32_t *ooff = ANEW(A, uint32_t, N + 1), *oidx = ANEW(A, uint32_t, E + 1);
     int32_t *rank = ANEW(A, int32_t, N);
@@ -1264,7 +1242,7 @@ static mmd_status layout_core(Graph *g) {
         if (!(g->nflags[v] & NF_HIDDEN) && rank[v] > maxr) maxr = rank[v];
     }
 
-    PROF("rank");
+    PMARK("rank");
     /* ---- normalisation: dummies ---- */
     size_t D = 0;
     uint32_t *choff = ANEW(A, uint32_t, E + 1);
@@ -1420,7 +1398,7 @@ static mmd_status layout_core(Graph *g) {
                 L.pidx[pfill[d + 2]++] = (uint32_t)d;
             }
 
-    PROF("normalize");
+    PMARK("normalize");
     const bool use_dagre = drank;
     if (use_dagre) L.cpad = 0; /* dagre: border nodes (edgesep) carry cluster separation */
     /* ---- initial order: DFS by rank ---- */
@@ -1515,13 +1493,12 @@ static mmd_status layout_core(Graph *g) {
     /* ---- crossing minimisation ---- */
     size_t maxw = 1;
     for (size_t r = 0; r < R; r++) if (L.loff[r + 1] - L.loff[r] > maxw) maxw = L.loff[r + 1] - L.loff[r];
-    Key *keys = ANEW(A, Key, maxw);
-    uint32_t *idx = ANEW(A, uint32_t, maxw), *tmp = ANEW(A, uint32_t, maxw);
+    BcItem *bcbuf = ANEW(A, BcItem, 2 * maxw); /* sweep_layer: items + merge scratch */
     uint32_t *cbuf = ANEW(A, uint32_t, nseg + 1), *fen = ANEW(A, uint32_t, maxw + 2);
     double *csum = ANEW(A, double, S + 1);
     uint32_t *ccnt = ANEW(A, uint32_t, S + 1);
     int32_t *best = ANEW(A, int32_t, V + 1);
-    if (!keys || !idx || !tmp || !cbuf || !fen || !csum || !ccnt || !best) return MMD_ERR_NOMEM;
+    if (!bcbuf || !cbuf || !fen || !csum || !ccnt || !best) return MMD_ERR_NOMEM;
     L.lsum = ANEW(A, double, S + 1), L.lval = ANEW(A, double, S + 1);
     L.lcnt = ANEW(A, uint32_t, S + 1), L.plist = ANEW(A, int32_t, S + 1);
     L.S = S;
@@ -1535,7 +1512,7 @@ static mmd_status layout_core(Graph *g) {
     bool clusters = S > 0;
     if (clusters && !use_dagre) cluster_keys(&L, S, csum, ccnt);
     if (clusters && !use_dagre) /* establish cluster contiguity (borders at extremes) before any scoring */
-        for (size_t r = 0; r < R; r++) sweep_layer(&L, r, false, true, keys, idx, tmp, csum, ccnt, clusters);
+        for (size_t r = 0; r < R; r++) sweep_layer(&L, r, false, true, bcbuf, csum, clusters);
     uint64_t bestc = use_dagre ? 0 : cross_all(&L, cbuf, fen);
     if (!use_dagre) memcpy(best, L.lay, placed * sizeof *best);
     unsigned since = 0;
@@ -1557,8 +1534,8 @@ static mmd_status layout_core(Graph *g) {
     for (unsigned iter = 0; iter < maxit && since < patience && bestc > 0; iter++) {
         bool down = ((iter & 1u) == 0);
         if (clusters) cluster_keys(&L, S, csum, ccnt);
-        if (down) for (size_t r = 1; r < R; r++) sweep_layer(&L, r, true, false, keys, idx, tmp, csum, ccnt, clusters);
-        else for (size_t r = R - 1; r-- > 0;) sweep_layer(&L, r, false, false, keys, idx, tmp, csum, ccnt, clusters);
+        if (down) for (size_t r = 1; r < R; r++) sweep_layer(&L, r, true, false, bcbuf, csum, clusters);
+        else for (size_t r = R - 1; r-- > 0;) sweep_layer(&L, r, false, false, bcbuf, csum, clusters);
         uint64_t c = cross_all(&L, cbuf, fen);
         if (c < bestc) { bestc = c; memcpy(best, L.lay, placed * sizeof *best); since = 0; }
         else since++;
@@ -1583,11 +1560,11 @@ static mmd_status layout_core(Graph *g) {
     if (getenv("MMD_PROFV")) fprintf(stderr, "  crossings=%llu tbudget_left=%lld\n", (unsigned long long)bestc, (long long)tbudget);
 #endif
     if (use_dagre) {
-        PROF("oldseed");
+        PMARK("oldseed");
         mmd_status dr = dagre_prep_order(&L, g, E, ef, et, rev, revord, nrevord, esub, rank, choff, cmin, cmax, bbase, sdepth, &bestc);
         if (dr) return dr;
     }
-    PROF("order");
+    PMARK("order");
     /* ---- x via Brandes-Köpf ---- */
     if (!bk(&L)) return MMD_ERR_NOMEM;
     /* pull long-edge dummy chains (as a rigid block) toward the endpoints' mean x, order-preserving */
@@ -1610,7 +1587,7 @@ static mmd_status layout_core(Graph *g) {
         for (int32_t k = 1; k < span; k++) L.x[N + choff[e] + (size_t)(k - 1)] = t;
     }
 
-    PROF("bk");
+    PMARK("bk");
 #ifdef MMD_PROFILE
     for (size_t c = 0; c < S; c++) {
         if (cmax[c] < cmin[c]) continue;
@@ -1697,7 +1674,7 @@ static mmd_status layout_core(Graph *g) {
         g->sw[s] -= g->sx[s];
         g->sh[s] -= g->sy[s];
     }
-    PROF("clusters");
+    PMARK("clusters");
 
     /* ---- ports: spread attachment points of fan-outs/fan-ins (and parallel edges) ---- */
     double *eport = ANEW(A, double, 2 * E + 1);
@@ -1736,7 +1713,7 @@ static mmd_status layout_core(Graph *g) {
                 for (size_t i = 0; i < k; i++) eport[2 * pk[i].e + side] = ((double)i - (double)(k - 1) / 2) * step;
             }
     }
-    PROF("ports");
+    PMARK("ports");
 
     /* edges */
     g->pts.n = 0;
@@ -1747,12 +1724,12 @@ static mmd_status layout_core(Graph *g) {
         int32_t a = ef[e], b = et[e];
         if (a == NONE || b == NONE) continue;
         if (a == b) { /* self loop: drawn by the SVG writer; labels right of the outermost loop, stacked */
-            unsigned k = 0, cnt = 0;
-            for (size_t f = 0; f < E; f++)
-                if (g->efrom[f] == a && g->eto[f] == a) { if (f < e) k++; cnt++; }
+            unsigned k = 0, nloop = 0;
+            for (size_t o = 0; o < E; o++)
+                if (g->efrom[o] == a && g->eto[o] == a) { if (o < e) k++; nloop++; }
             double lh = g->elh[e] + 4;
-            g->elx[e] = g->nx[a] + g->nw[a] / 2 + SELFLOOP_BULGE * selfloop_r(cnt - 1) + SELFLOOP_GAP + g->elw[e] / 2;
-            g->ely[e] = g->ny[a] + ((double)k - (double)(cnt - 1) / 2) * lh;
+            g->elx[e] = g->nx[a] + g->nw[a] / 2 + SELFLOOP_BULGE * selfloop_r(nloop - 1) + SELFLOOP_GAP + g->elw[e] / 2;
+            g->ely[e] = g->ny[a] + ((double)k - (double)(nloop - 1) / 2) * lh;
             continue;
         }
         int32_t span = rank[EV(e)] - rank[EU(e)];
@@ -1793,7 +1770,7 @@ static mmd_status layout_core(Graph *g) {
         g->elx[e] = lx, g->ely[e] = ly;
         g->eptn[e] = (uint32_t)np;
     }
-    PROF("edges");
+    PMARK("edges");
 #ifdef MMD_PROFILE
     if (getenv("MMD_PROFV")) fprintf(stderr, "  V=%zu N=%zu D=%zu R=%zu segs=%zu\n", V, N, D, R, nseg);
 #endif
@@ -1804,28 +1781,21 @@ static mmd_status layout_core(Graph *g) {
  * A cluster whose direction differs from its context is laid out on its own (recursively),
  * then stands in the parent layout as one fixed-size proxy node. Edges to the cluster id
  * attach to the proxy box; edges to member nodes are extended from the box to the member. */
-typedef struct Box { double x0, y0, x1, y1; } Box;
-static inline void box_add(Box *b, double x0, double y0, double x1, double y1) {
-    if (x0 < b->x0) b->x0 = x0;
-    if (y0 < b->y0) b->y0 = y0;
-    if (x1 > b->x1) b->x1 = x1;
-    if (y1 > b->y1) b->y1 = y1;
-}
-static Box content_box(const Graph *g) {
-    Box b = {INFINITY, INFINITY, -INFINITY, -INFINITY};
+static BBox content_box(const Graph *g) {
+    BBox b = {INFINITY, INFINITY, -INFINITY, -INFINITY};
     for (size_t v = 0; v < g->nn; v++)
         if (!(g->nflags[v] & NF_HIDDEN))
-            box_add(&b, g->nx[v] - g->nw[v] / 2, g->ny[v] - g->nh[v] / 2, g->nx[v] + g->nw[v] / 2, g->ny[v] + g->nh[v] / 2);
+            bb_add(&b, g->nx[v] - g->nw[v] / 2, g->ny[v] - g->nh[v] / 2, g->nx[v] + g->nw[v] / 2, g->ny[v] + g->nh[v] / 2);
     for (size_t s = 0; s < g->ns; s++)
-        if (g->sw[s] > 0) box_add(&b, g->sx[s], g->sy[s], g->sx[s] + g->sw[s], g->sy[s] + g->sh[s]);
+        if (g->sw[s] > 0) bb_add(&b, g->sx[s], g->sy[s], g->sx[s] + g->sw[s], g->sy[s] + g->sh[s]);
     for (size_t e = 0; e < g->ne; e++) {
         const double *P = g->pts.v + g->eptoff[e];
-        for (uint32_t i = 0; i < g->eptn[e]; i++) box_add(&b, P[2 * i], P[2 * i + 1], P[2 * i], P[2 * i + 1]);
+        for (uint32_t i = 0; i < g->eptn[e]; i++) bb_add(&b, P[2 * i], P[2 * i + 1], P[2 * i], P[2 * i + 1]);
         if (g->elw[e] > 0 && g->eptn[e])
-            box_add(&b, g->elx[e] - g->elw[e] / 2, g->ely[e] - g->elh[e] / 2, g->elx[e] + g->elw[e] / 2, g->ely[e] + g->elh[e] / 2);
+            bb_add(&b, g->elx[e] - g->elw[e] / 2, g->ely[e] - g->elh[e] / 2, g->elx[e] + g->elw[e] / 2, g->ely[e] + g->elh[e] / 2);
         if (g->efrom[e] == g->eto[e] && g->efrom[e] != NONE) {
             int32_t v = g->efrom[e];
-            box_add(&b, g->nx[v], g->ny[v] - g->nh[v] / 2, g->nx[v] + g->nw[v] / 2 + 40 + g->elw[e], g->ny[v] + g->nh[v] / 2);
+            bb_add(&b, g->nx[v], g->ny[v] - g->nh[v] / 2, g->nx[v] + g->nw[v] / 2 + 40 + g->elw[e], g->ny[v] + g->nh[v] / 2);
         }
     }
     return b;
@@ -1993,7 +1963,7 @@ static mmd_status layout_rec(Graph *g, unsigned depth) {
         d->eend[i] = g->eend[e]; d->elen[i] = g->elen[e]; d->eid[i] = g->eid[e]; d->eflags[i] = g->eflags[e];
     }
     /* inner layouts first: they size the proxies */
-    Box *cb = ANEW(A, Box, K + 1);
+    BBox *cb = ANEW(A, BBox, K + 1);
     double *ipx = ANEW(A, double, K + 1), *ipy = ANEW(A, double, K + 1);
     if (!cb || !ipx || !ipy) return MMD_ERR_NOMEM;
     for (size_t k = 0; k <= K; k++) ipx[k] = ipy[k] = 0;
@@ -2001,11 +1971,11 @@ static mmd_status layout_rec(Graph *g, unsigned depth) {
         mmd_status st = layout_rec(&G[k], depth + 1);
         if (st) return st;
         int32_t s = cands[k];
-        Box b = content_box(&G[k]);
+        BBox b = content_box(&G[k]);
         double tw;
         unsigned tl;
         measure(g, &g->stitle[s], &tw, &tl);
-        if (b.x0 == INFINITY) b = (Box){0, 0, dmax(tw, 40), 20};
+        if (b.x0 == INFINITY) b = (BBox){0, 0, dmax(tw, 40), 20};
         cb[k] = b;
         double w = dmax(b.x1 - b.x0, tw) + 2 * CLUSTER_PAD, h = b.y1 - b.y0 + 2 * CLUSTER_PAD + CLUSTER_TITLE;
         if (g->iso_toggle) { /* mermaid: dagre margins + cluster padding, title sits in the top margin */
@@ -2088,7 +2058,7 @@ static mmd_status layout_rec(Graph *g, unsigned depth) {
 
 /* ---------- post passes on the final geometry ---------- */
 /* segment p->q vs box: entry parameter in [0,1] or -1 */
-static double seg_box(double px, double py, double qx, double qy, const Box *b) {
+static double seg_box(double px, double py, double qx, double qy, const BBox *b) {
     double t0 = 0, t1 = 1, d[2] = {qx - px, qy - py}, p0[2] = {px, py}, lo[2] = {b->x0, b->y0}, hi[2] = {b->x1, b->y1};
     for (unsigned k = 0; k < 2; k++) {
         if (fabs(d[k]) < 1e-12) { if (p0[k] < lo[k] || p0[k] > hi[k]) return -1; continue; }
@@ -2107,7 +2077,7 @@ static double seg_box(double px, double py, double qx, double qy, const Box *b) 
  * boxes; total work is budgeted so huge graphs degrade to the plain layout route. */
 typedef struct Grid { double x0, y0, cs, ics; size_t gw, gh; uint32_t *off, *idx; } Grid;
 
-[[nodiscard]] static bool grid_build(Arena *A, Grid *G, size_t N, const Box nb[static N + 1], const bool *use) {
+[[nodiscard]] static bool grid_build(Arena *A, Grid *G, size_t N, const BBox nb[static N + 1], const bool *use) {
     double x0 = INFINITY, y0 = INFINITY, x1 = -INFINITY, y1 = -INFINITY, area = 0;
     size_t k = 0;
     for (size_t v = 0; v < N; v++) {
@@ -2148,7 +2118,7 @@ typedef struct Grid { double x0, y0, cs, ics; size_t gw, gh; uint32_t *off, *idx
 
 typedef struct Router {
     const Graph *g;
-    const Box *nb;
+    const BBox *nb;
     Grid G;
     uint32_t *stamp; /* per-node visit stamp for de-duplicating grid hits */
     uint32_t cur;
@@ -2166,8 +2136,6 @@ static int32_t seg_hit_m(Router *R, double px, double py, double qx, double qy, 
     if (cx1 >= G->gw) cx1 = G->gw - 1;
     if (cy1 >= G->gh) cy1 = G->gh - 1;
     if (++R->cur == 0) { memset(R->stamp, 0, R->g->nn * sizeof *R->stamp); R->cur = 1; }
-    int32_t hit = NONE;
-    double bt = 2;
     double dy = qy - py, idy = fabs(dy) > 1e-12 ? 1 / dy : 0;
     for (size_t cy = cy0; cy <= cy1; cy++) {
         /* x-extent of the segment inside this row band: only those cells can be touched */
@@ -2190,21 +2158,20 @@ static int32_t seg_hit_m(Router *R, double px, double py, double qx, double qy, 
                 if (R->stamp[v] == R->cur || (int32_t)v == s1 || (int32_t)v == s2) continue;
                 R->stamp[v] = R->cur;
                 R->budget--;
-                Box b = R->nb[v];
+                BBox b = R->nb[v];
                 b.x0 += sh, b.y0 += sh, b.x1 -= sh, b.y1 -= sh; /* grazing along a side is fine */
                 if (hx < b.x0 || lx > b.x1 || hy < b.y0 || ly > b.y1) continue;
-                double t = seg_box(px, py, qx, qy, &b);
-                if (t >= 0 && t < bt) return (int32_t)v; /* any hit suffices */
+                if (seg_box(px, py, qx, qy, &b) >= 0) return (int32_t)v; /* any hit suffices */
             }
     }
-    return hit;
+    return NONE;
 }
 
 static int32_t seg_hit(Router *R, double px, double py, double qx, double qy, int32_t s1, int32_t s2) {
     return seg_hit_m(R, px, py, qx, qy, s1, s2, 0.5);
 }
 
-static bool pt_in(const Box *b, double x, double y) { return x > b->x0 && x < b->x1 && y > b->y0 && y < b->y1; }
+static bool pt_in(const BBox *b, double x, double y) { return x > b->x0 && x < b->x1 && y > b->y0 && y < b->y1; }
 
 /* is (x,y) strictly inside some obstacle other than s1/s2? (one grid cell, no segment test) */
 static bool pt_buried(const Router *R, double x, double y, int32_t s1, int32_t s2) {
@@ -2280,7 +2247,7 @@ static int vis_path(Router *R, Arena *A, double sx, double sy, double tx, double
                     uint32_t v = G->idx[k];
                     if (R->stamp[v] == R->cur || (int32_t)v == s1 || (int32_t)v == s2) continue;
                     R->stamp[v] = R->cur;
-                    const Box *b = &R->nb[v];
+                    const BBox *b = &R->nb[v];
                     if (b->x1 < lx || b->x0 > hx || b->y1 < ly || b->y0 > hy) continue;
                     if (nc + 4 > MAXC + 2) { full = true; break; }
                     double xs[2] = {b->x0, b->x1}, ys[2] = {b->y0, b->y1};
@@ -2366,7 +2333,7 @@ static int side_path(Router *R, double sx, double sy, double tx, double ty, int3
                      double out[static 4]) {
     int32_t h = seg_hit(R, sx, sy, tx, ty, s1, s2);
     if (h == NONE) return 0;
-    const Box *b = &R->nb[h];
+    const BBox *b = &R->nb[h];
     if (pt_in(b, sx, sy) || pt_in(b, tx, ty)) return -1;
     double c[4][4] = {
         {b->x0, b->y0, b->x0, b->y1}, {b->x1, b->y0, b->x1, b->y1}, /* left, right side */
@@ -2401,14 +2368,14 @@ static int side_path(Router *R, double sx, double sy, double tx, double ty, int3
     Arena *A = g->arena;
     size_t N = g->nn, E = g->ne;
     constexpr double M = 10;
-    Box *nb = ANEW(A, Box, N + 1);
+    BBox *nb = ANEW(A, BBox, N + 1);
     bool *use = ANEW(A, bool, N + 1);
     uint32_t *stamp = ANEW(A, uint32_t, N + 1);
     if (!nb || !use || !stamp) return false;
     memset(stamp, 0, (N + 1) * sizeof *stamp);
     for (size_t v = 0; v < N; v++) {
         use[v] = !(g->nflags[v] & NF_HIDDEN) && g->nw[v] > 0 && g->nh[v] > 0;
-        nb[v] = (Box){g->nx[v] - g->nw[v] / 2 - M, g->ny[v] - g->nh[v] / 2 - M, g->nx[v] + g->nw[v] / 2 + M, g->ny[v] + g->nh[v] / 2 + M};
+        nb[v] = (BBox){g->nx[v] - g->nw[v] / 2 - M, g->ny[v] - g->nh[v] / 2 - M, g->nx[v] + g->nw[v] / 2 + M, g->ny[v] + g->nh[v] / 2 + M};
     }
     Router R = {.g = g, .nb = nb, .stamp = stamp, .budget = 4000000 + 200 * (int64_t)(N + E)};
     if (!grid_build(A, &R.G, N, nb, use)) return false;
@@ -2598,7 +2565,8 @@ static bool spline_hits(const SBox *SX, const SBox *SY /* nullable */, size_t n,
             for (uint32_t i = 1; i + 1 < np; i++) {
                 double x = P[2 * i], y = P[2 * i + 1];
                 for (int sgn = -1; sgn <= 1; sgn += 2) {
-                    double ox = P[2 * (i + sgn)] - x, oy = P[2 * (i + sgn) + 1] - y, l = hypot(ox, oy);
+                    uint32_t j = sgn < 0 ? i - 1 : i + 1;
+                    double ox = P[2 * j] - x, oy = P[2 * j + 1] - y, l = hypot(ox, oy);
                     double f = l > 0 ? fmin(d, l / 3) / l : 0;
                     if (sgn > 0) Q[m++] = x, Q[m++] = y;
                     Q[m++] = x + ox * f, Q[m++] = y + oy * f;
@@ -2661,6 +2629,23 @@ static bool lab_overlap(const Graph *g, size_t a, size_t b) {
            fabs(g->ely[a] - g->ely[b]) * 2 < g->elh[a] + g->elh[b] + 2;
 }
 
+/* curveBasis piece i of an np-point polyline as a quadratic Bezier between span midpoints (the first
+ * and last pieces are anchored at the polyline ends) */
+typedef struct QPiece { double sx, sy, cx, cy, ex, ey; } QPiece;
+static inline QPiece qpiece(uint32_t np, const double P[static 2 * np], uint32_t i) {
+    const double *p0 = P + 2 * i, *p1 = p0 + 2, *p2 = p0 + 4;
+    return (QPiece){
+        .sx = i == 0 ? p0[0] : (p0[0] + p1[0]) / 2, .sy = i == 0 ? p0[1] : (p0[1] + p1[1]) / 2,
+        .cx = p1[0], .cy = p1[1],
+        .ex = i + 3 == np ? p2[0] : (p1[0] + p2[0]) / 2, .ey = i + 3 == np ? p2[1] : (p1[1] + p2[1]) / 2,
+    };
+}
+static inline void qpiece_at(const QPiece *q, double t, double *x, double *y) {
+    double u = 1 - t;
+    *x = u * u * q->sx + 2 * u * t * q->cx + t * t * q->ex;
+    *y = u * u * q->sy + 2 * u * t * q->cy + t * t * q->ey;
+}
+
 /* slide label e along its own curve to the nearest sample clear of every other label */
 static bool slide_on_curve(Graph *g, const size_t *L, size_t nl, size_t e) {
     uint32_t np = g->eptn[e];
@@ -2668,12 +2653,10 @@ static bool slide_on_curve(Graph *g, const size_t *L, size_t nl, size_t e) {
     const double *P = g->pts.v + g->eptoff[e];
     double lx = g->elx[e], ly = g->ely[e], bd = INFINITY, bx = lx, by = ly;
     for (uint32_t i = 0; i + 2 < np; i++) {
-        const double *p0 = P + 2 * i, *p1 = p0 + 2, *p2 = p0 + 4;
-        double sx = i == 0 ? p0[0] : (p0[0] + p1[0]) / 2, sy = i == 0 ? p0[1] : (p0[1] + p1[1]) / 2;
-        double ex = i + 3 == np ? p2[0] : (p1[0] + p2[0]) / 2, ey = i + 3 == np ? p2[1] : (p1[1] + p2[1]) / 2;
+        QPiece q = qpiece(np, P, i);
         for (unsigned s = 0; s <= 16; s++) {
-            double t = s / 16.0, u = 1 - t;
-            double x = u * u * sx + 2 * u * t * p1[0] + t * t * ex, y = u * u * sy + 2 * u * t * p1[1] + t * t * ey;
+            double x, y;
+            qpiece_at(&q, s / 16.0, &x, &y);
             double d = (x - lx) * (x - lx) + (y - ly) * (y - ly);
             if (d >= bd) continue;
             /* keep clear of the endpoints' arrowheads */
@@ -2699,15 +2682,11 @@ static void labels_on_curve(Graph *g) {
         if (!g->elabel[e].n || np < 3) continue;
         const double *P = g->pts.v + g->eptoff[e];
         double lx = g->elx[e], ly = g->ely[e], bx = lx, by = ly, bd = INFINITY;
-        /* curveBasis: segment i (1..np-2 interior) uses points i-1,i,i+1 with endpoints clamped */
         for (uint32_t i = 0; i + 2 < np; i++) {
-            const double *p0 = P + 2 * i, *p1 = p0 + 2, *p2 = p0 + 4;
-            /* quadratic B-spline piece between midpoints (start/end pieces anchored at the ends) */
-            double sx = i == 0 ? p0[0] : (p0[0] + p1[0]) / 2, sy = i == 0 ? p0[1] : (p0[1] + p1[1]) / 2;
-            double ex = i + 3 == np ? p2[0] : (p1[0] + p2[0]) / 2, ey = i + 3 == np ? p2[1] : (p1[1] + p2[1]) / 2;
+            QPiece q = qpiece(np, P, i);
             for (unsigned s = 0; s <= 8; s++) {
-                double t = s / 8.0, u = 1 - t;
-                double x = u * u * sx + 2 * u * t * p1[0] + t * t * ex, y = u * u * sy + 2 * u * t * p1[1] + t * t * ey;
+                double x, y;
+                qpiece_at(&q, s / 8.0, &x, &y);
                 double d = (x - lx) * (x - lx) + (y - ly) * (y - ly);
                 if (d < bd) bd = d, bx = x, by = y;
             }
@@ -2813,7 +2792,7 @@ static void labels_on_curve(Graph *g) {
                         if (k1 > np - 2) k1 = np - 2;
                         if (side[k0] && side[k0] == side[k1]) continue;
                     }
-                    for (int h = 0; h < 2; h++) {
+                    for (uint32_t h = 0; h < 2; h++) {
                         double u = (double)(i - np + h) / 8; /* 0..np-1 */
                         uint32_t k = (uint32_t)u;
                         if (k > np - 2) k = np - 2;
@@ -3078,11 +3057,10 @@ mmd_status flow_layout(Graph *g) {
     if (st) return st;
     st = layout_rec(g, 0);
     if (st) return st;
-    PROF("");
     simplify_pts(g); /* fewer segments for the obstacle test */
     if (!(g->flags & MMD_F_NO_AVOID)) {
         if (!route_avoid(g)) return MMD_ERR_NOMEM;
-        PROF("route");
+        PMARK("route");
         simplify_pts(g);
         if (!tighten_curves(g)) return MMD_ERR_NOMEM;
     }
@@ -3090,6 +3068,6 @@ mmd_status flow_layout(Graph *g) {
     if (!place_titles(g)) return MMD_ERR_NOMEM;
     st = loops_collapse(g, &sv);
     if (!st) loop_labels_clear(g);
-    PROF("post");
+    PMARK("post");
     return st;
 }

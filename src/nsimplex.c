@@ -273,9 +273,9 @@ static void run_component(NS *s, size_t max_iter) {
 #endif
 }
 
-bool network_simplex(Arena *A, size_t N, size_t E, const int32_t eu[], const int32_t ev[],
-                     const int32_t minlen[], const uint8_t valid[], const uint8_t hidden[],
-                     int32_t rank[], size_t max_iter) {
+bool network_simplex(Arena *A, size_t N, size_t E, const int32_t *eu, const int32_t *ev,
+                     const int32_t *minlen, const uint8_t *valid, const uint8_t *hidden,
+                     int32_t *rank, size_t max_iter) {
     NS s = {.N = N, .E = E, .eu = eu, .ev = ev, .minlen = minlen, .valid = valid, .rank = rank};
     uint32_t *ioff = ANEW(A, uint32_t, N + 1), *iidx = ANEW(A, uint32_t, 2 * E + 1);
     uint32_t *fill = ANEW(A, uint32_t, N + 1);
@@ -347,8 +347,8 @@ static inline void fas_link(FAS *f, int32_t v) {
     f->head[b] = v;
 }
 
-bool greedy_fas(Arena *A, size_t N, size_t E, const int32_t ef[], const int32_t et[], const uint8_t valid[],
-                const uint8_t hidden[], uint8_t rev[]) {
+bool greedy_fas(Arena *A, size_t N, size_t E, const int32_t *ef, const int32_t *et, const uint8_t *valid,
+                const uint8_t *hidden, uint8_t *rev) {
     uint32_t *ooff = ANEW(A, uint32_t, N + 1), *ioff = ANEW(A, uint32_t, N + 1);
     uint32_t *oidx = ANEW(A, uint32_t, E + 1), *iidx = ANEW(A, uint32_t, E + 1), *fill = ANEW(A, uint32_t, N + 1);
     int32_t *ord = ANEW(A, int32_t, N + 1);

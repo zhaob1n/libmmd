@@ -54,6 +54,17 @@ static bool t_add_edge(RG *g, int32_t a, int32_t b, int32_t ge) {
     return true;
 }
 
+/* JS string order (code units compared as bytes, a prefix first); ties keep insertion order */
+typedef struct NameIx { Str s; uint32_t i; } NameIx;
+static int name_cmp(const void *x, const void *y) {
+    const NameIx *a = x, *b = y;
+    size_t n = a->s.n < b->s.n ? a->s.n : b->s.n;
+    int r = n ? memcmp(a->s.p, b->s.p, n) : 0;
+    if (r) return r;
+    if (a->s.n != b->s.n) return a->s.n < b->s.n ? -1 : 1;
+    return (a->i > b->i) - (a->i < b->i);
+}
+
 static int cmp_u64pair(const void *x, const void *y) {
     uint64_t a = *(const uint64_t *)x, b = *(const uint64_t *)y;
     return (a > b) - (a < b);
@@ -406,35 +417,24 @@ bool dagre_rank(Arena *A, const DRankIn *in, int32_t rank[], int32_t top[], int3
     /* names in JS string order: reals by id, generated _root/_bt/_bb with equal-width counters */
     RG g = {.A = A, .M = M};
     int64_t *key = ANEW(A, int64_t, M + 1);
-    uint32_t *sord = ANEW(A, uint32_t, M + 1), *ordv = ANEW(A, uint32_t, M + 1);
+    uint32_t *sord = ANEW(A, uint32_t, M + 1);
     Str *nm = ANEW(A, Str, M + 1);
     char *gen = ANEW(A, char, 16 * (M - NR) + 1);
-    if (!key || !sord || !ordv || !nm || !gen) return false;
+    if (!key || !sord || !nm || !gen) return false;
     for (size_t i = 0; i < M; i++) key[i] = -1;
     for (size_t i = 0; i < NR; i++) key[i] = in->ikey[in->real[i]], nm[i] = in->id[in->real[i]];
     for (size_t i = NR; i < M; i++) {
         char *p = gen + 16 * (i - NR);
         const char *pre = i == NR ? "_root" : ((i - NR - 1) % 2 ? "_bb" : "_bt");
         int n = snprintf(p, 16, "%s%u", pre, (unsigned)(1000000 + i));
+        if (n < 0 || n >= 16) return false;
         nm[i] = (Str){p, (size_t)n};
     }
-    for (size_t i = 0; i < M; i++) ordv[i] = (uint32_t)i;
-    /* insertion sort is fine for small M; use a simple merge via qsort on index with static ctx */
-    for (size_t i = 1; i < M; i++) {
-        uint32_t x = ordv[i];
-        size_t j = i;
-        while (j > 0) {
-            Str a = nm[ordv[j - 1]], bs = nm[x];
-            size_t n = a.n < bs.n ? a.n : bs.n, c = 0;
-            while (c < n && a.p[c] == bs.p[c]) c++;
-            int r = c == n ? 0 : (unsigned char)a.p[c] < (unsigned char)bs.p[c] ? -1 : 1;
-            if (r < 0 || (r == 0 && a.n <= bs.n)) break;
-            ordv[j] = ordv[j - 1];
-            j--;
-        }
-        ordv[j] = x;
-    }
-    for (size_t i = 0; i < M; i++) sord[ordv[i]] = (uint32_t)i;
+    NameIx *byname = ANEW(A, NameIx, M + 1);
+    if (!byname) return false;
+    for (size_t i = 0; i < M; i++) byname[i] = (NameIx){nm[i], (uint32_t)i};
+    qsort(byname, M, sizeof *byname, name_cmp);
+    for (size_t i = 0; i < M; i++) sord[byname[i].i] = (uint32_t)i;
     g.key = key, g.sord = sord;
     /* simplify: merge multi-edges (weight sum, minlen max), first-occurrence order */
     size_t hcap = 16;
