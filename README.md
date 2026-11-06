@@ -198,7 +198,7 @@ More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 - **Mindmap** does not use mermaid's cose-bilkent layout. It uses its own radial and spring layout, so mindmaps look different from mermaid's.
 - **Architecture** also has its own grid layout, not fcose.
 - **Text** is measured with built-in Helvetica/Arial-compatible advance tables, not a real font engine. Unusual fonts and complex scripts can be sized imperfectly. CJK and emoji are treated as wide characters.
-- **Very dense diagrams**, around 5× the stress generator's density, can still have label overlaps. This mostly affects Sankey, quadrant and Wardley charts on a fixed-size canvas.
+- **Dense charts.** Sankey, quadrant and Wardley move labels so they do not sit on each other. Wardley draws a short leader when a label has to sit farther from its node, and a white halo when it still crosses a link. Labels with user-given coordinates stay where the author put them, so those can still overlap.
 - **Known differences** from mermaid include gantt tick density, state concurrent-region styling and journey legend order. See [docs/dev/INTERNALS.md](docs/dev/INTERNALS.md).
 - **`fa:` icons** in flowcharts need the Font Awesome font where the SVG is viewed. Architecture and mindmap icons are embedded as paths.
 - **Not supported:** interactivity (`click` callbacks, tooltips) and PNG/PDF output. To get a raster image, convert the SVG with any SVG rasteriser.

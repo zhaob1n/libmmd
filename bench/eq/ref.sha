@@ -573,9 +573,9 @@ abb9b133681bc039 tests/cases/wardley_16.mmd
 609d6eebf1907779 tests/cases/wardley_17.mmd
 61b913fd7eaa5112 tests/cases/wardley_19.mmd
 3b722e821a6e0e49 tests/cases/wardley_dense_labels.mmd
-8b53eb50b9869c1e tests/cases/wardley_dense_text.mmd
+132e90fc3d9d3b3e tests/cases/wardley_dense_text.mmd
 3a007588f83e1b8c tests/cases/wardley_edge.mmd
-8b53eb50b9869c1e tests/cases/wardley_label_halo.mmd
+132e90fc3d9d3b3e tests/cases/wardley_label_halo.mmd
 c669fbe34dccf7ac tests/cases/xychart_full.mmd
 566fbe582282399a tests/cases/xychart_horiz.mmd
 8de4094e894e22b6 tests/cases/zenuml_basic.mmd
