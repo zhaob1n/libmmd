@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include "text.h"
+#include "eaw_tbl.inc"
 #include <math.h>
 
 /* Liberation Sans (metric-compatible with Arial, which is what Chromium resolves mermaid's
@@ -43,18 +44,29 @@ static constexpr int16_t KT[16][95] = {
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -152, 0, -152, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 };
 
+static bool rng_has(const uint32_t r[][2], size_t n, uint32_t cp) {
+    size_t lo = 0, hi = n;
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        if (cp < r[mid][0]) hi = mid;
+        else if (cp > r[mid][1]) lo = mid + 1;
+        else return true;
+    }
+    return false;
+}
+
+/* Advances in 1/2048 em. ASCII/Latin-1 come from Liberation Sans (Arial-compatible).
+ * Wide/fullwidth code points use 1em, matching Noto Sans CJK / YaHei / PingFang for
+ * Han, kana and fullwidth forms. Nonspacing marks are 0. Halfwidth forms are 1/2 em.
+ * Remaining code points use a Latin average (~0.58em). */
 static inline unsigned cp_width(uint32_t cp) {
     if (cp >= 32 && cp < 127) return ASCII_W[cp - 32];
     if (cp < 32) return 0;
     if (cp >= 0xA0 && cp <= 0xFF) return LAT1_W[cp - 0xA0];
-    /* East Asian wide / fullwidth ranges */
-    if ((cp >= 0x1100 && cp <= 0x115F) || (cp >= 0x2E80 && cp <= 0xA4CF) ||
-        (cp >= 0xAC00 && cp <= 0xD7A3) || (cp >= 0xF900 && cp <= 0xFAFF) ||
-        (cp >= 0xFE30 && cp <= 0xFE4F) || (cp >= 0xFF00 && cp <= 0xFF60) ||
-        (cp >= 0xFFE0 && cp <= 0xFFE6) || (cp >= 0x1F300 && cp <= 0x1FAFF) ||
-        (cp >= 0x20000 && cp <= 0x3FFFD))
-        return 2048;
-    if (cp >= 0x0300 && cp <= 0x036F) return 0; /* combining */
+    if (rng_has(COMB_MN, countof(COMB_MN), cp)) return 0;
+    if (cp >= 0x1F300 && cp <= 0x1FAFF) return 2048; /* emoji pictographs, incl. East_Asian_Width=N */
+    if ((cp >= 0xFF61 && cp <= 0xFFDC) || (cp >= 0xFFE8 && cp <= 0xFFEE)) return 1024;
+    if (rng_has(EAW_WF, countof(EAW_WF), cp)) return 2048;
     return 1188;
 }
 

@@ -181,7 +181,7 @@ More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 
 | what | how |
 |---|---|
-| Golden + sanity tests (150 cases; XML well-formedness, error positions, viewBox bounds, mermaid docs corpus) | `make test` (`UPDATE_GOLDEN=1 make test` to refresh) |
+| Golden + sanity tests (151 cases; XML well-formedness, error positions, viewBox bounds, mermaid docs corpus) | `make test` (`UPDATE_GOLDEN=1 make test` to refresh) |
 | Mermaid docs corpus: 432 examples from mermaid's syntax docs, 396/396 that mermaid itself renders | `python3 tools/docs_audit.py [-v]` |
 | ASan + UBSan build | `make asan` → `build-asan/mmd` |
 | Fuzzing (mutational, under ASan) | `python3 tests/fuzz.py build-asan/mmd 1000` |
@@ -197,7 +197,7 @@ More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 - **Similar, not identical.** Output follows mermaid-cli 11.17 in style and, for flowcharts, in layout (mermaid/dagre ordering and ranking). Mermaid-generated CSS selectors and pixel-exact SVGs are not goals.
 - **Mindmap** does not use mermaid's cose-bilkent layout. It uses its own radial and spring layout, so mindmaps look different from mermaid's.
 - **Architecture** also has its own grid layout, not fcose.
-- **Text** is measured with built-in Helvetica/Arial-compatible advance tables, not a real font engine. Unusual fonts and complex scripts can be sized imperfectly. CJK and emoji are treated as wide characters.
+- **Text** is measured with built-in Helvetica/Arial-compatible advance tables, not a real font engine. Unusual fonts can be sized imperfectly. CJK ideographs, kana and fullwidth forms are 1em (as in Noto Sans CJK, YaHei and PingFang); halfwidth forms are half an em; combining marks have no advance of their own; other letters use a Latin average.
 - **Dense charts.** Sankey, quadrant and Wardley move labels so they do not sit on each other. Wardley draws a short leader when a label has to sit farther from its node, and a white halo when it still crosses a link. Labels with user-given coordinates stay where the author put them, so those can still overlap.
 - **Known differences** from mermaid include gantt tick density, state concurrent-region styling and journey legend order. See [docs/dev/INTERNALS.md](docs/dev/INTERNALS.md).
 - **`fa:` icons** in flowcharts need the Font Awesome font where the SVG is viewed. Architecture and mindmap icons are embedded as paths.
