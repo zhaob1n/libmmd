@@ -48,7 +48,7 @@ static int sgn(int v) { return (v > 0) - (v < 0); }
 
 static void glyph(Buf b[static 1], Str icon, double x, double y, double s) { /* x,y top-left of s×s tile */
     double u = s / 80;
-    #define P(px, py) dg_pt(b, x + (px) * u, y + (py) * u)
+    #define P(px, py) buf_pt(b, x + (px) * u, y + (py) * u)
     if (str_eq(icon, S("database"))) {
         buf_lit(b, "<path class=\"aw\" d=\"M"); P(20, 22); buf_lit(b, "a"); buf_num(b, 20 * u); buf_ch(b, ','); buf_num(b, 7 * u);
         buf_lit(b, " 0 0 0 "); buf_num(b, 40 * u); buf_lit(b, ",0a"); buf_num(b, 20 * u); buf_ch(b, ','); buf_num(b, 7 * u); buf_lit(b, " 0 0 0 ");
@@ -419,7 +419,7 @@ DIAG_FN(architecture_render) {
         for (size_t i = 0; i + 2 < np && ns < 8 * (ev.n + 1); i += 2) memcpy(SG + 4 * ns++, P + i, 4 * sizeof *P);
         size_t k = np / 2;
         buf_lit(&eb, "<path class=\"ae\" d=\"M");
-        for (size_t i = 0; i < k; i++) { if (i) buf_ch(&eb, 'L'); dg_pt(&eb, P[2 * i], P[2 * i + 1]); }
+        for (size_t i = 0; i < k; i++) { if (i) buf_ch(&eb, 'L'); buf_pt(&eb, P[2 * i], P[2 * i + 1]); }
         buf_lit(&eb, "\"/>");
         for (int end = 0; end < 2; end++) {
             if (!(end ? E->arr_b : E->arr_a)) continue;
@@ -427,9 +427,9 @@ DIAG_FN(architecture_render) {
             double dx = T[0] - F[0], dy = T[1] - F[1], L = sqrt(dx * dx + dy * dy);
             if (L < 1e-9) continue;
             dx /= L, dy /= L;
-            buf_lit(&eb, "<path class=\"ah\" d=\"M"); dg_pt(&eb, T[0], T[1]); buf_ch(&eb, 'L');
-            dg_pt(&eb, T[0] - dx * 12 - dy * 6, T[1] - dy * 12 + dx * 6); buf_ch(&eb, 'L');
-            dg_pt(&eb, T[0] - dx * 12 + dy * 6, T[1] - dy * 12 - dx * 6); buf_lit(&eb, "z\"/>");
+            buf_lit(&eb, "<path class=\"ah\" d=\"M"); buf_pt(&eb, T[0], T[1]); buf_ch(&eb, 'L');
+            buf_pt(&eb, T[0] - dx * 12 - dy * 6, T[1] - dy * 12 + dx * 6); buf_ch(&eb, 'L');
+            buf_pt(&eb, T[0] - dx * 12 + dy * 6, T[1] - dy * 12 - dx * 6); buf_lit(&eb, "z\"/>");
         }
         if (E->label.n) {
             size_t mid = (k - 1) / 2;

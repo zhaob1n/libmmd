@@ -137,7 +137,7 @@ DIAG_FN(radar_render) {
             buf_lit(out, "\" r=\""); buf_num(out, r); buf_lit(out, "\"/>");
         } else {
             buf_lit(out, "<path class=\"gr\" d=\"");
-            for (size_t k = 0; k < na; k++) { buf_ch(out, k ? 'L' : 'M'); dg_pt(out, CX + r * cos(axis_angle(k, na)), cy + r * sin(axis_angle(k, na))); }
+            for (size_t k = 0; k < na; k++) { buf_ch(out, k ? 'L' : 'M'); buf_pt(out, CX + r * cos(axis_angle(k, na)), cy + r * sin(axis_angle(k, na))); }
             buf_lit(out, "Z\"/>");
         }
     }
@@ -157,14 +157,14 @@ DIAG_FN(radar_render) {
         }
         buf_lit(out, "<path class=\"cv\" fill=\""); buf_cstr(out, col); buf_lit(out, "\" stroke=\"");
         buf_cstr(out, col); buf_lit(out, "\" d=\"M");
-        dg_pt(out, P[0], P[1]);
+        buf_pt(out, P[0], P[1]);
         for (size_t k = 0; k < m; k++) { /* closed cardinal spline, tension 0.17 */
             size_t i0 = (k + m - 1) % m, i1 = k, i2 = (k + 1) % m, i3 = (k + 2) % m;
             constexpr double T = (1 - 0.17) / 6; /* d3 curveCardinalClosed.tension(0.17) */
             buf_ch(out, 'C');
-            dg_pt(out, P[2 * i1] + (P[2 * i2] - P[2 * i0]) * T, P[2 * i1 + 1] + (P[2 * i2 + 1] - P[2 * i0 + 1]) * T); buf_ch(out, ' ');
-            dg_pt(out, P[2 * i2] - (P[2 * i3] - P[2 * i1]) * T, P[2 * i2 + 1] - (P[2 * i3 + 1] - P[2 * i1 + 1]) * T); buf_ch(out, ' ');
-            dg_pt(out, P[2 * i2], P[2 * i2 + 1]);
+            buf_pt(out, P[2 * i1] + (P[2 * i2] - P[2 * i0]) * T, P[2 * i1 + 1] + (P[2 * i2 + 1] - P[2 * i0 + 1]) * T); buf_ch(out, ' ');
+            buf_pt(out, P[2 * i2] - (P[2 * i3] - P[2 * i1]) * T, P[2 * i2 + 1] - (P[2 * i3 + 1] - P[2 * i1 + 1]) * T); buf_ch(out, ' ');
+            buf_pt(out, P[2 * i2], P[2 * i2 + 1]);
         }
         buf_lit(out, "Z\"/>");
     }

@@ -206,7 +206,7 @@ static void scallop(Buf *out, BBox *bb, const MNode m[static 1]) {
                                  {r, r, -w * .1, -h * .33}, {r * .8, r * .8, 0, -h * .34}, {r, r, w * .1, -h * .33}};
         memcpy(A, c, sizeof c), n = 14, sw = 0;
     }
-    if (out) { buf_lit(out, "<path d=\"M"); dg_pt(out, x, y); }
+    if (out) { buf_lit(out, "<path d=\"M"); buf_pt(out, x, y); }
     double px = x, py = y;
     for (int k = 0; k < n; k++) {
         if (out) {
@@ -376,7 +376,7 @@ DIAG_FN(mindmap_render) {
             const char *col = dcfg_pal("cScale", c->sec % countof(SEC) + 1, SEC[c->sec % countof(SEC)]); /* mermaid colours edges like their section's nodes */
             buf_lit(out, "<path class=\"me\" stroke=\""); buf_cstr(out, col);
             buf_lit(out, "\" stroke-width=\""); buf_num(out, fmax(2, 17 - 3.0 * c->depth)); buf_lit(out, "\" d=\"M");
-            dg_pt(out, p->x, p->y); buf_ch(out, 'L'); dg_pt(out, c->x, c->y); buf_lit(out, "\"/>");
+            buf_pt(out, p->x, p->y); buf_ch(out, 'L'); buf_pt(out, c->x, c->y); buf_lit(out, "\"/>");
             continue;
         }
         double dir = c->x > p->x ? 1 : -1;
@@ -385,8 +385,8 @@ DIAG_FN(mindmap_render) {
         const char *col = dcfg_pal("cScalePeer", c->sec % countof(SECS) + 1, SECS[c->sec % countof(SECS)]);
         buf_lit(out, "<path class=\"me\" stroke=\""); buf_cstr(out, col);
         buf_lit(out, "\" stroke-width=\""); buf_num(out, fmax(2, 17 - 3.0 * c->depth)); buf_lit(out, "\" d=\"M");
-        dg_pt(out, x0, y0); buf_ch(out, 'C'); dg_pt(out, (x0 + x1) / 2, y0); buf_ch(out, ' ');
-        dg_pt(out, (x0 + x1) / 2, y1); buf_ch(out, ' '); dg_pt(out, x1, y1); buf_lit(out, "\"/>");
+        buf_pt(out, x0, y0); buf_ch(out, 'C'); buf_pt(out, (x0 + x1) / 2, y0); buf_ch(out, ' ');
+        buf_pt(out, (x0 + x1) / 2, y1); buf_ch(out, ' '); buf_pt(out, x1, y1); buf_lit(out, "\"/>");
     }
     for (size_t i = 0; i < v.n; i++) {
         const MNode *m = &V[i];
@@ -412,9 +412,9 @@ DIAG_FN(mindmap_render) {
             buf_lit(out, "\" r=\""); buf_num(out, w / 2); buf_lit(out, "\"/>");
             break;
         case M_HEX:
-            buf_lit(out, "<path d=\"M"); dg_pt(out, x, m->y); buf_ch(out, 'L'); dg_pt(out, x + 12, y); buf_ch(out, 'L');
-            dg_pt(out, x + w - 12, y); buf_ch(out, 'L'); dg_pt(out, x + w, m->y); buf_ch(out, 'L');
-            dg_pt(out, x + w - 12, y + h); buf_ch(out, 'L'); dg_pt(out, x + 12, y + h); buf_lit(out, "Z\"/>");
+            buf_lit(out, "<path d=\"M"); buf_pt(out, x, m->y); buf_ch(out, 'L'); buf_pt(out, x + 12, y); buf_ch(out, 'L');
+            buf_pt(out, x + w - 12, y); buf_ch(out, 'L'); buf_pt(out, x + w, m->y); buf_ch(out, 'L');
+            buf_pt(out, x + w - 12, y + h); buf_ch(out, 'L'); buf_pt(out, x + 12, y + h); buf_lit(out, "Z\"/>");
             break;
         case M_BANG: case M_CLOUD: scallop(out, nullptr, m); break;
         }

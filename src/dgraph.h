@@ -29,7 +29,6 @@ static inline void bb_add(BBox bb[static 1], double x0, double y0, double x1, do
 constexpr BBox BB_EMPTY = {.x0 = 1e300, .y0 = 1e300, .x1 = -1e300, .y1 = -1e300};
 /* bbox of laid-out nodes, edge points, edge labels and clusters */
 [[nodiscard]] BBox dg_bbox(const Graph g[static 1]);
-void dg_pt(Buf b[restrict static 1], double x, double y);
 /* filled 10-long arrowhead at tip, pointing away from from; half = half the base width */
 void dg_arrowhead(Buf b[restrict static 1], const char cls[restrict static 1], const double tip[restrict static 2],
                   const double from[restrict static 2], double half);

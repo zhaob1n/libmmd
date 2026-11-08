@@ -204,7 +204,7 @@ DIAG_FN(xychart_render) {
         for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
             double v = vals.v[ser.v[s].v0 + k];
             buf_ch(out, k ? 'L' : 'M');
-            if (horiz) dg_pt(out, VPOS(v), CPOS(k)); else dg_pt(out, CPOS(k), VPOS(v));
+            if (horiz) buf_pt(out, VPOS(v), CPOS(k)); else buf_pt(out, CPOS(k), VPOS(v));
         }
         buf_lit(out, "\"/>");
     }
@@ -243,7 +243,7 @@ DIAG_FN(xychart_render) {
         for (size_t s = 0; s < ser.n; s++) {
             if (!ser.v[s].name.n) continue;
             if (ser.v[s].line) { buf_lit(out, "<path class=\"ln\" stroke=\""); buf_cstr(out, ser.v[s].col);
-                buf_lit(out, "\" d=\"M"); dg_pt(out, ox + pw + 20, ly); buf_ch(out, 'L'); dg_pt(out, ox + pw + 36, ly); buf_lit(out, "\"/>"); }
+                buf_lit(out, "\" d=\"M"); buf_pt(out, ox + pw + 20, ly); buf_ch(out, 'L'); buf_pt(out, ox + pw + 36, ly); buf_lit(out, "\"/>"); }
             else dg_rect_fill(out, ox + pw + 22, ly - 6, 12, 12, 0, "lg", ser.v[s].col);
             dg_text(out, ser.v[s].name, 14, ox + pw + 42, ly, "start", "tl");
             ly += 22;

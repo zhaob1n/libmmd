@@ -278,10 +278,10 @@ static void card_mark(Buf b[static 1], double px, double py, double ux, double u
     #define AT(d, s) px + ux * (d) + nx * (s), py + uy * (d) + ny * (s)
     buf_lit(b, "<path class=\"mk\" d=\"");
     bool many = c == CD_ONE_MANY || c == CD_ZERO_MANY;
-    if (many) { buf_ch(b, 'M'); dg_pt(b, AT(0, -9)); buf_ch(b, 'L'); dg_pt(b, AT(16, 0)); buf_ch(b, 'L'); dg_pt(b, AT(0, 9)); }
+    if (many) { buf_ch(b, 'M'); buf_pt(b, AT(0, -9)); buf_ch(b, 'L'); buf_pt(b, AT(16, 0)); buf_ch(b, 'L'); buf_pt(b, AT(0, 9)); }
     double bar = many ? 20 : 8;
-    if (c != CD_ZERO_MANY) { buf_ch(b, 'M'); dg_pt(b, AT(bar, -8)); buf_ch(b, 'L'); dg_pt(b, AT(bar, 8)); }
-    if (c == CD_ONE) { buf_ch(b, 'M'); dg_pt(b, AT(14, -8)); buf_ch(b, 'L'); dg_pt(b, AT(14, 8)); }
+    if (c != CD_ZERO_MANY) { buf_ch(b, 'M'); buf_pt(b, AT(bar, -8)); buf_ch(b, 'L'); buf_pt(b, AT(bar, 8)); }
+    if (c == CD_ONE) { buf_ch(b, 'M'); buf_pt(b, AT(14, -8)); buf_ch(b, 'L'); buf_pt(b, AT(14, 8)); }
     buf_lit(b, "\"/>");
     if (c == CD_ZERO_ONE || c == CD_ZERO_MANY) {
         double d = c == CD_ZERO_ONE ? 20 : 24;

@@ -149,7 +149,6 @@ BBox dg_bbox(const Graph g[static 1]) {
     return bb;
 }
 
-void dg_pt(Buf b[restrict static 1], double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
 void dg_arrowhead(Buf b[restrict static 1], const char cls[restrict static 1], const double tip[restrict static 2],
                   const double from[restrict static 2], double half) {
     double dx = tip[0] - from[0], dy = tip[1] - from[1], L = sqrt(dx * dx + dy * dy);
@@ -166,27 +165,27 @@ void dg_basis(Buf b[restrict static 1], size_t n, const double P[restrict static
     for (size_t i = 0; i < n; i++) {
         double x = P[2 * i], y = P[2 * i + 1];
         switch (st) {
-        case 0: st = 1; buf_ch(b, 'M'); dg_pt(b, x, y); break;
+        case 0: st = 1; buf_ch(b, 'M'); buf_pt(b, x, y); break;
         case 1: st = 2; break;
         case 2:
             st = 3;
-            buf_ch(b, 'L'); dg_pt(b, (5 * x0 + x1) / 6, (5 * y0 + y1) / 6);
+            buf_ch(b, 'L'); buf_pt(b, (5 * x0 + x1) / 6, (5 * y0 + y1) / 6);
             [[fallthrough]];
         default:
-            buf_ch(b, 'C'); dg_pt(b, (2 * x0 + x1) / 3, (2 * y0 + y1) / 3);
-            buf_ch(b, ' '); dg_pt(b, (x0 + 2 * x1) / 3, (y0 + 2 * y1) / 3);
-            buf_ch(b, ' '); dg_pt(b, (x0 + 4 * x1 + x) / 6, (y0 + 4 * y1 + y) / 6);
+            buf_ch(b, 'C'); buf_pt(b, (2 * x0 + x1) / 3, (2 * y0 + y1) / 3);
+            buf_ch(b, ' '); buf_pt(b, (x0 + 2 * x1) / 3, (y0 + 2 * y1) / 3);
+            buf_ch(b, ' '); buf_pt(b, (x0 + 4 * x1 + x) / 6, (y0 + 4 * y1 + y) / 6);
             break;
         }
         x0 = x1, x1 = x, y0 = y1, y1 = y;
     }
     switch (st) {
     case 3:
-        buf_ch(b, 'C'); dg_pt(b, (2 * x0 + x1) / 3, (2 * y0 + y1) / 3);
-        buf_ch(b, ' '); dg_pt(b, (x0 + 2 * x1) / 3, (y0 + 2 * y1) / 3);
-        buf_ch(b, ' '); dg_pt(b, (x0 + 5 * x1) / 6, (y0 + 5 * y1) / 6);
+        buf_ch(b, 'C'); buf_pt(b, (2 * x0 + x1) / 3, (2 * y0 + y1) / 3);
+        buf_ch(b, ' '); buf_pt(b, (x0 + 2 * x1) / 3, (y0 + 2 * y1) / 3);
+        buf_ch(b, ' '); buf_pt(b, (x0 + 5 * x1) / 6, (y0 + 5 * y1) / 6);
         [[fallthrough]];
-    case 2: buf_ch(b, 'L'); dg_pt(b, x1, y1); break;
+    case 2: buf_ch(b, 'L'); buf_pt(b, x1, y1); break;
     default: break;
     }
 }
@@ -195,9 +194,9 @@ void dg_edge_d(Buf b[restrict static 1], const Graph g[restrict static 1], size_
     if (g->efrom[e] == g->eto[e] && g->efrom[e] != NONE && !(g->eflags && (g->eflags[e] & EF_LOOPPTS) && g->eptn[e] >= 2)) {
         int32_t v = g->efrom[e];
         double x = g->nx[v] + g->nw[v] / 2, y = g->ny[v], q = g->nh[v] / 4;
-        buf_ch(b, 'M'); dg_pt(b, x, y - q);
-        buf_ch(b, 'C'); dg_pt(b, x + 40, y - q - 20); buf_ch(b, ' '); dg_pt(b, x + 40, y + q + 20);
-        buf_ch(b, ' '); dg_pt(b, x, y + q);
+        buf_ch(b, 'M'); buf_pt(b, x, y - q);
+        buf_ch(b, 'C'); buf_pt(b, x + 40, y - q - 20); buf_ch(b, ' '); buf_pt(b, x + 40, y + q + 20);
+        buf_ch(b, ' '); buf_pt(b, x, y + q);
         return;
     }
     if (g->eptn[e] >= 2) dg_basis(b, g->eptn[e], g->pts.v + g->eptoff[e]);

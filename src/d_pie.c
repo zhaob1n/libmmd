@@ -134,10 +134,10 @@ DIAG_FN(pie_render) {
             buf_lit(out, "\" r=\""); buf_num(out, R); buf_lit(out, "\" fill=\""); buf_cstr(out, col); buf_lit(out, "\"/>");
         } else if (frac > 0) {
             buf_lit(out, "<path class=\"slice\" fill=\""); buf_cstr(out, col); buf_lit(out, "\" d=\"M");
-            dg_pt(out, CX, CY); buf_ch(out, 'L'); dg_pt(out, CX + R * sin(ang), CY - R * cos(ang));
+            buf_pt(out, CX, CY); buf_ch(out, 'L'); buf_pt(out, CX + R * sin(ang), CY - R * cos(ang));
             buf_lit(out, "A"); buf_num(out, R); buf_ch(out, ','); buf_num(out, R);
             if (frac > 0.5) buf_lit(out, " 0 1 1 "); else buf_lit(out, " 0 0 1 ");
-            dg_pt(out, CX + R * sin(a1), CY - R * cos(a1)); buf_lit(out, "Z\"/>");
+            buf_pt(out, CX + R * sin(a1), CY - R * cos(a1)); buf_lit(out, "Z\"/>");
         }
         ang = a1;
     }
@@ -147,9 +147,9 @@ DIAG_FN(pie_render) {
         int len = snprintf(fill, sizeof fill, "%.0f%%", frac * 100);
         if (!LO[i]) { dg_text(out, (Str){.p = fill, .n = (size_t)len}, 17, LX[i], LY[i], "middle", "pct"); continue; }
         buf_lit(out, "<path class=\"leader\" fill=\"none\" stroke=\"#666\" stroke-width=\"1\" d=\"M");
-        dg_pt(out, CX + (R - 4) * sin(mid), CY - (R - 4) * cos(mid)); buf_ch(out, 'L');
-        dg_pt(out, CX + (R + 18) * sin(mid), CY - (R + 18) * cos(mid)); buf_ch(out, 'L');
-        dg_pt(out, LX[i], LY[i]); buf_lit(out, "\"/>");
+        buf_pt(out, CX + (R - 4) * sin(mid), CY - (R - 4) * cos(mid)); buf_ch(out, 'L');
+        buf_pt(out, CX + (R + 18) * sin(mid), CY - (R + 18) * cos(mid)); buf_ch(out, 'L');
+        buf_pt(out, LX[i], LY[i]); buf_lit(out, "\"/>");
         dg_text(out, (Str){.p = fill, .n = (size_t)len}, 17, LX[i] + 4 * LO[i], LY[i], LO[i] > 0 ? "start" : "end", "pct");
     }
     buf_lit(out, "<circle class=\"outer\" cx=\""); buf_num(out, CX); buf_lit(out, "\" cy=\""); buf_num(out, CY);
