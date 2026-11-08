@@ -83,9 +83,8 @@ double text_width(Str s, double fs) {
         uint32_t cp = c;
         size_t len = 1;
         if (c == '#') { /* mermaid entity #name; / #123; renders as one glyph */
-            size_t j = i + 1;
-            while (j < n && j - i < 12 && ((unsigned)((p[j] | 32) - 'a') < 26u || (unsigned)(p[j] - '0') < 10u)) j++;
-            if (j < n && p[j] == ';' && j > i + 1) {
+            size_t j = ent_end(n, s.p, i);
+            if (j) {
                 uint32_t e = (unsigned)(p[i + 1] - '0') < 10u ? (uint32_t)strtoul((const char *)p + i + 1, nullptr, 10)
                                                               : ent_lookup(j - i - 1, (const char *)p + i + 1);
                 if (e) { cp = e; len = j + 1 - i; goto have; }

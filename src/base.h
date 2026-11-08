@@ -99,6 +99,12 @@ static inline Str str_trim(Str s) {
     while (s.n && (is_sp(s.p[s.n - 1]) || s.p[s.n - 1] == '\n')) s.n--;
     return s;
 }
+/* s[i] == '#': index of the ';' closing a mermaid entity #name; / #123;, or 0 */
+static inline size_t ent_end(size_t n, const char s[static n], size_t i) {
+    size_t j = i + 1;
+    while (j < n && j - i < 12 && ((unsigned)((s[j] | 32) - 'a') < 26u || (unsigned)(s[j] - '0') < 10u)) j++;
+    return j < n && s[j] == ';' && j > i + 1 ? j : 0;
+}
 static inline bool str_starts(Str s, Str pre) { return s.n >= pre.n && memcmp(s.p, pre.p, pre.n) == 0; }
 /* s[i, j); callers guarantee i <= j <= s.n */
 static inline Str str_sub(Str s, size_t i, size_t j) { return (Str){.p = s.p + i, .n = j - i}; }

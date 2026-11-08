@@ -468,10 +468,8 @@ void buf_xml(Buf b[restrict static 1], Str s) {
         case '"': rep = "&quot;"; rl = 6; break;
         case '#': {
             /* mermaid entity: #name; or #123; */
-            size_t j = i + 1;
-            while (j < s.n && j - i < 12 &&
-                   ((unsigned)((s.p[j] | 32) - 'a') < 26u || (unsigned)(s.p[j] - '0') < 10u)) j++;
-            if (j < s.n && s.p[j] == ';' && j > i + 1) {
+            size_t j = ent_end(s.n, s.p, i);
+            if (j) {
                 buf_put(b, i - run, s.p + run);
                 if ((unsigned)(s.p[i + 1] - '0') < 10u) {
                     buf_lit(b, "&#");
