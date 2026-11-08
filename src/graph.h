@@ -91,4 +91,14 @@ constexpr double SELFLOOP_BULGE = 0.75;
 constexpr double SELFLOOP_GAP = 6;
 void node_size(Graph g[static 1], size_t v);
 
+typedef struct BBox { double x0, y0, x1, y1; } BBox;
+static inline void bb_add(BBox bb[static 1], double x0, double y0, double x1, double y1) {
+    if (x0 < bb->x0) bb->x0 = x0;
+    if (y0 < bb->y0) bb->y0 = y0;
+    if (x1 > bb->x1) bb->x1 = x1;
+    if (y1 > bb->y1) bb->y1 = y1;
+}
+/* d3 curveBasis through n points */
+void dg_basis(Buf b[restrict static 1], size_t n, const double P[restrict static 2 * n]);
+
 #endif
