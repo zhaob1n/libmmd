@@ -307,11 +307,7 @@ static void css_attr(Buf b[static 1], const StP p[static 1], Str cls) {
         if (!str_eq(p->cdefs.v[i].name, cls)) continue;
         Str c = p->cdefs.v[i].css;
         buf_lit(b, " style=\"");
-        for (size_t k = 0; k < c.n; k++) {
-            char ch = c.p[k] == ',' ? ';' : c.p[k];
-            if (ch == '"' || ch == '<' || ch == '&') continue;
-            buf_ch(b, ch);
-        }
+        dg_css_put(b, c);
         buf_ch(b, '"');
         return;
     }

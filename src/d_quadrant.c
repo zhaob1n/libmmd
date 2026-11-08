@@ -221,11 +221,11 @@ DIAG_FN(quadrant_render) {
         if (bk && lt > r + w / 2 + 14) { /* leader from the point's rim toward the label */
             double vx = bx - cx, vy = by - cy, l = hypot(vx, vy);
             buf_lit(out, "<path class=\"leader\" stroke=\"#888\" stroke-width=\"1\" d=\"M");
-            dg_pt(out, cx + vx / l * (r + 1), cy + vy / l * (r + 1)); buf_ch(out, 'L');
+            buf_pt(out, cx + vx / l * (r + 1), cy + vy / l * (r + 1)); buf_ch(out, 'L');
             /* stop at the label box edge so the leader stays short */
             double tx = fabs(vx) > 1e-9 ? (w / 2 + 3) / fabs(vx) : HUGE_VAL, ty = fabs(vy) > 1e-9 ? 9 / fabs(vy) : HUGE_VAL;
             double t = fmax(0, 1 - fmin(tx, ty));
-            dg_pt(out, cx + vx * t, cy + vy * t); buf_lit(out, "\"/>");
+            buf_pt(out, cx + vx * t, cy + vy * t); buf_lit(out, "\"/>");
         }
         dg_text(out, p->name, 12, bx, by, "middle", "pl");
         double *o = ob + 4 * no++;

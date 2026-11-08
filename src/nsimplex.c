@@ -403,12 +403,12 @@ bool greedy_fas(Arena A[restrict static 1], size_t N, size_t E, const int32_t *r
             int32_t w = et[oidx[k]];
             if (gone[w]) continue;
             fas_unlink(&f, w); f.in[w]--; fas_link(&f, w);
+            if (f.bk[w] > top) top = f.bk[w];
         }
         for (uint32_t k = ioff[v]; k < ioff[v + 1]; k++) {
             int32_t u = ef[iidx[k]];
             if (gone[u]) continue;
             fas_unlink(&f, u); f.out[u]--; fas_link(&f, u);
-            if (f.bk[u] > top) top = f.bk[u];
         }
     }
     for (size_t e = 0; e < E; e++) rev[e] = valid[e] && ord[ef[e]] > ord[et[e]];

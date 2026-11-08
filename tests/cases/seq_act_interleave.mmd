@@ -1,0 +1,13 @@
+sequenceDiagram
+    participant B
+    participant X
+    activate B
+    B->>X: open outer
+    activate X
+    X->>X: open inner
+    activate X
+    deactivate B
+    X->>B: close inner
+    deactivate X
+    X->>B: close outer
+    deactivate X

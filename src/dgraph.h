@@ -19,22 +19,12 @@ static inline void dg_size(Graph g[static 1], int32_t v, double w, double h) {
 [[nodiscard]] int32_t dg_cluster(Graph g[static 1], Str id, Str title, int32_t parent);
 
 /* ---- SVG ---- */
-typedef struct BBox { double x0, y0, x1, y1; } BBox;
-static inline void bb_add(BBox bb[static 1], double x0, double y0, double x1, double y1) {
-    if (x0 < bb->x0) bb->x0 = x0;
-    if (y0 < bb->y0) bb->y0 = y0;
-    if (x1 > bb->x1) bb->x1 = x1;
-    if (y1 > bb->y1) bb->y1 = y1;
-}
 constexpr BBox BB_EMPTY = {.x0 = 1e300, .y0 = 1e300, .x1 = -1e300, .y1 = -1e300};
 /* bbox of laid-out nodes, edge points, edge labels and clusters */
 [[nodiscard]] BBox dg_bbox(const Graph g[static 1]);
-void dg_pt(Buf b[restrict static 1], double x, double y);
 /* filled 10-long arrowhead at tip, pointing away from from; half = half the base width */
 void dg_arrowhead(Buf b[restrict static 1], const char cls[restrict static 1], const double tip[restrict static 2],
                   const double from[restrict static 2], double half);
-/* d3 curveBasis through n points */
-void dg_basis(Buf b[restrict static 1], size_t n, const double P[restrict static 2 * n]);
 /* path data for edge e (basis curve, or a loop for self edges) */
 void dg_edge_d(Buf b[restrict static 1], const Graph g[restrict static 1], size_t e);
 /* centred multi-line text; anchor "middle"/"start"/"end"; cls may be nullptr */
@@ -63,12 +53,18 @@ static inline Str dg_unquote(Str s, bool apos) {
     if (s.n >= 2 && (s.p[0] == '"' || (apos && s.p[0] == '\'')) && s.p[s.n - 1] == s.p[0]) s = (Str){.p = s.p + 1, .n = s.n - 2};
     return s;
 }
+/* `direction` argument; anything but LR/RL/BT is TB */
+static inline Dir dg_dir(Str d) {
+    return str_eq(d, S("LR")) ? DIR_LR : str_eq(d, S("RL")) ? DIR_RL : str_eq(d, S("BT")) ? DIR_BT : DIR_TB;
+}
 /* user-supplied CSS value safe to splice into a style attribute */
 static inline bool dg_css_ok(Str v) {
     if (!v.n || v.n > 40) return false;
     for (size_t i = 0; i < v.n; i++) if (strchr(";{}<>\"'\\", v.p[i])) return false;
     return true;
 }
+/* classDef body into a style attribute: ',' separates declarations, '"' '<' '&' are dropped */
+void dg_css_put(Buf b[static 1], Str css);
 [[nodiscard]] bool dg_parse_num(Str s, double out[static 1]);
 /* ---- free-form (non-graph) renderers: draw into a body Buf while growing a BBox ---- */
 typedef enum TBase { TB_ALPHA, TB_MIDDLE, TB_HANG } TBase;

@@ -32,11 +32,11 @@ static void face(Buf b[static 1], double cx, double cy, double score) {
     buf_num(b, cy - 5); buf_lit(b, "\"/><circle class=\"eye\" r=\"1.5\" cx=\""); buf_num(b, cx + 5);
     buf_lit(b, "\" cy=\""); buf_num(b, cy - 5); buf_lit(b, "\"/>");
     if (score > 3) { /* smile */
-        buf_lit(b, "<path class=\"feat\" d=\"M"); dg_pt(b, cx - 7, cy + 2); buf_lit(b, "Q"); dg_pt(b, cx, cy + 10);
-        buf_ch(b, ' '); dg_pt(b, cx + 7, cy + 2); buf_lit(b, "\"/>");
+        buf_lit(b, "<path class=\"feat\" d=\"M"); buf_pt(b, cx - 7, cy + 2); buf_lit(b, "Q"); buf_pt(b, cx, cy + 10);
+        buf_ch(b, ' '); buf_pt(b, cx + 7, cy + 2); buf_lit(b, "\"/>");
     } else if (score < 3) { /* frown */
-        buf_lit(b, "<path class=\"feat\" d=\"M"); dg_pt(b, cx - 7, cy + 8); buf_lit(b, "Q"); dg_pt(b, cx, cy + 1);
-        buf_ch(b, ' '); dg_pt(b, cx + 7, cy + 8); buf_lit(b, "\"/>");
+        buf_lit(b, "<path class=\"feat\" d=\"M"); buf_pt(b, cx - 7, cy + 8); buf_lit(b, "Q"); buf_pt(b, cx, cy + 1);
+        buf_ch(b, ' '); buf_pt(b, cx + 7, cy + 8); buf_lit(b, "\"/>");
     } else dg_line(b, cx - 6, cy + 6, cx + 6, cy + 6, "feat");
 }
 

@@ -254,9 +254,16 @@ static Str css_safe(Str v) {
         bool ok = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || strchr("#%.,()- '", c);
         if (!ok || !c) return (Str){};
     }
-    /* reject url( / expression( even though the charset allows parentheses */
-    for (size_t i = 0; i + 3 < v.n; i++)
-        if ((v.p[i] | 32) == 'u' && (v.p[i + 1] | 32) == 'r' && (v.p[i + 2] | 32) == 'l' && v.p[i + 3] == '(') return (Str){};
+    /* reject url( / expression( even though the charset allows parentheses (and spaces before them) */
+    for (size_t i = 0; i < v.n; i++) {
+        if (v.p[i] != '(') continue;
+        size_t e = i;
+        while (e && v.p[e - 1] == ' ') e--;
+        size_t s = e;
+        while (s && (unsigned)((v.p[s - 1] | 32) - 'a') < 26u) s--;
+        Str fn = {.p = v.p + s, .n = e - s};
+        if (str_ieq(fn, S("url")) || str_ieq(fn, S("expression"))) return (Str){};
+    }
     return v;
 }
 

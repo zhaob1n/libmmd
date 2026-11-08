@@ -288,7 +288,7 @@ DIAG_FN(gitgraph_render) {
             uint32_t cl = lane[cm.v[par].lane] > lane[c->lane] ? lane[cm.v[par].lane] : lane[c->lane];
             const char *col = dcfg_pal("git", cl % countof(COL), COL[cl % countof(COL)]);
             buf_lit(out, "<path class=\"ar\" stroke=\""); buf_cstr(out, col); buf_lit(out, "\" d=\"M");
-            dg_pt(out, PX(pp, pq), PY(pp, pq));
+            buf_pt(out, PX(pp, pq), PY(pp, pq));
             /* orthogonal route with rounded corners. Branch-out (and cherry-pick) turns at the parent and runs
              * on the child lane; merges run on the parent lane and turn at the child. If that run would pass
              * over other commits of the lane, detour through a lane-gap track (mermaid's "findLane"). */
@@ -316,10 +316,10 @@ DIAG_FN(gitgraph_render) {
                     double r1 = fmin(rr, la / 2), r2 = fmin(rr, lb / 2);
                     double sx = P[j][0] - ax / la * r1, sy = P[j][1] - ay / la * r1;
                     double ex = P[j][0] + bx / lb * r2, ey = P[j][1] + by / lb * r2;
-                    buf_ch(out, 'L'); dg_pt(out, PX(sx, sy), PY(sx, sy));
-                    buf_ch(out, 'Q'); dg_pt(out, PX(P[j][0], P[j][1]), PY(P[j][0], P[j][1])); buf_ch(out, ' ');
-                    dg_pt(out, PX(ex, ey), PY(ex, ey));
-                } else { buf_ch(out, 'L'); dg_pt(out, PX(P[j][0], P[j][1]), PY(P[j][0], P[j][1])); }
+                    buf_ch(out, 'L'); buf_pt(out, PX(sx, sy), PY(sx, sy));
+                    buf_ch(out, 'Q'); buf_pt(out, PX(P[j][0], P[j][1]), PY(P[j][0], P[j][1])); buf_ch(out, ' ');
+                    buf_pt(out, PX(ex, ey), PY(ex, ey));
+                } else { buf_ch(out, 'L'); buf_pt(out, PX(P[j][0], P[j][1]), PY(P[j][0], P[j][1])); }
             }
             if (c->type == C_CHERRY && k == 1) buf_lit(out, "\" stroke-dasharray=\"6 4");
             buf_lit(out, "\"/>");
@@ -341,9 +341,9 @@ DIAG_FN(gitgraph_render) {
                 buf_lit(out, "<circle fill=\"#fff\" cx=\""); buf_num(out, x); buf_lit(out, "\" cy=\""); buf_num(out, y);
                 buf_lit(out, "\" r=\"6\"/>");
             } else if (c->type == C_REVERSE) {
-                buf_lit(out, "<path stroke=\"#fff\" stroke-width=\"3\" d=\"M"); dg_pt(out, x - 5, y - 5); buf_ch(out, 'L');
-                dg_pt(out, x + 5, y + 5); buf_ch(out, 'M'); dg_pt(out, x - 5, y + 5); buf_ch(out, 'L');
-                dg_pt(out, x + 5, y - 5); buf_lit(out, "\"/>");
+                buf_lit(out, "<path stroke=\"#fff\" stroke-width=\"3\" d=\"M"); buf_pt(out, x - 5, y - 5); buf_ch(out, 'L');
+                buf_pt(out, x + 5, y + 5); buf_ch(out, 'M'); buf_pt(out, x - 5, y + 5); buf_ch(out, 'L');
+                buf_pt(out, x + 5, y - 5); buf_lit(out, "\"/>");
             } else if (c->type == C_CHERRY) {
                 buf_lit(out, "<circle fill=\"#fff\" r=\"2.75\" cx=\""); buf_num(out, x - 3); buf_lit(out, "\" cy=\"");
                 buf_num(out, y + 2); buf_lit(out, "\"/><circle fill=\"#fff\" r=\"2.75\" cx=\""); buf_num(out, x + 3);
@@ -358,7 +358,7 @@ DIAG_FN(gitgraph_render) {
             dg_text(out, lab, 10, x, y + 21, "middle", "cl");
         } else if (dir == 0) { /* mermaid rotateCommitLabel (default on): label hangs down-left at -45 degrees */
             double rx = -7.5 - (tw + 10) / 25 * 9.5, ry = 10 + tw / 25 * 8.5;
-            buf_lit(out, "<g transform=\"translate("); dg_pt(out, rx, ry); buf_lit(out, ") rotate(-45 ");
+            buf_lit(out, "<g transform=\"translate("); buf_pt(out, rx, ry); buf_lit(out, ") rotate(-45 ");
             buf_num(out, x - 10); buf_ch(out, ' '); buf_num(out, y); buf_lit(out, ")\">");
             dg_rect_fill(out, x - tw / 2 - 2, y + 13.5, tw + 4, 15, 0, "clb", nullptr);
             dg_text(out, lab, 10, x, y + 21, "middle", "cl");

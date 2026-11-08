@@ -139,11 +139,8 @@ constexpr int32_t C4_GLOBAL = -2; /* mermaid's implicit "global" boundary (not d
 static Str br_next(Str t, size_t i[static 1]) {
     size_t s0 = *i;
     for (size_t k = s0; k < t.n; k++) {
-        if (t.p[k] != '<' || k + 3 > t.n || (t.p[k + 1] | 32) != 'b' || (t.p[k + 2] | 32) != 'r') continue;
-        size_t j = k + 3;
-        while (j < t.n && (t.p[j] == ' ' || t.p[j] == '\t')) j++;
-        if (j < t.n && t.p[j] == '/') j++;
-        if (j < t.n && t.p[j] == '>') { *i = j + 1; return (Str){.p = t.p + s0, .n = k - s0}; }
+        size_t bl = label_br_len(t, k);
+        if (bl) { *i = k + bl; return (Str){.p = t.p + s0, .n = k - s0}; }
     }
     *i = t.n + 1;
     return (Str){.p = t.p + s0, .n = t.n - s0};

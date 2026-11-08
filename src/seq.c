@@ -8,6 +8,7 @@
 #include "seq.h"
 #include "dcfg.h"
 #include "text.h"
+#include "dgraph.h"
 
 typedef enum : uint8_t { EV_MSG, EV_NOTE, EV_BEGIN, EV_ELSE, EV_END, EV_ACT, EV_DEACT, EV_CREATE, EV_DESTROY } EvKind;
 typedef enum : uint8_t { NP_LEFT, NP_RIGHT, NP_OVER } NotePos;
@@ -323,17 +324,6 @@ static mmd_status parse_line(SP p[static 1], Str line, size_t off) {
     return VEC_PUSH(p->A, &p->evs, ev) ? MMD_OK : MMD_ERR_NOMEM;
 }
 
-static void pt(Buf b[static 1], double x, double y) { buf_num(b, x); buf_ch(b, ','); buf_num(b, y); }
-static void rect(Buf b[static 1], double x, double y, double w, double h, const char cls[static 1]) {
-    buf_lit(b, "<rect class=\""); buf_cstr(b, cls); buf_lit(b, "\" x=\""); buf_num(b, x);
-    buf_lit(b, "\" y=\""); buf_num(b, y); buf_lit(b, "\" width=\""); buf_num(b, w);
-    buf_lit(b, "\" height=\""); buf_num(b, h); buf_lit(b, "\"/>");
-}
-static void line_(Buf b[static 1], double x1, double y1, double x2, double y2, const char cls[static 1]) {
-    buf_lit(b, "<line class=\""); buf_cstr(b, cls); buf_lit(b, "\" x1=\""); buf_num(b, x1);
-    buf_lit(b, "\" y1=\""); buf_num(b, y1); buf_lit(b, "\" x2=\""); buf_num(b, x2);
-    buf_lit(b, "\" y2=\""); buf_num(b, y2); buf_lit(b, "\"/>");
-}
 static void text_(Buf b[static 1], Str s, double fs, double x, double y, const char anchor[static 1], const char cls[static 1]) {
     size_t pos = 0;
     Str ln;
@@ -361,10 +351,10 @@ static void actor_box(Buf b[static 1], const Part pa[static 1], double y, double
         double x = pa->x, t = y + 4;
         buf_lit(b, "<g class=\"actor-man\"><circle cx=\""); buf_num(b, x); buf_lit(b, "\" cy=\""); buf_num(b, t + 8);
         buf_lit(b, "\" r=\"8\"/>");
-        line_(b, x, t + 16, x, t + 34, "actor-line");
-        line_(b, x - 14, t + 22, x + 14, t + 22, "actor-line");
-        line_(b, x, t + 34, x - 12, t + 48, "actor-line");
-        line_(b, x, t + 34, x + 12, t + 48, "actor-line");
+        dg_line(b, x, t + 16, x, t + 34, "actor-line");
+        dg_line(b, x - 14, t + 22, x + 14, t + 22, "actor-line");
+        dg_line(b, x, t + 34, x - 12, t + 48, "actor-line");
+        dg_line(b, x, t + 34, x + 12, t + 48, "actor-line");
         buf_lit(b, "</g>");
         text_(b, pa->label, fs, x, y + ACT_H - 6, "middle", "actor-label");
         return;
@@ -373,8 +363,8 @@ static void actor_box(Buf b[static 1], const Part pa[static 1], double y, double
     switch (pa->shape) { /* icon on top, label underneath (like actor) */
     case PS_BOUNDARY:
         buf_lit(b, "<g class=\"actor-man\">");
-        line_(b, x - 22, t + 8, x - 22, t + 40, "actor-line");
-        line_(b, x - 22, t + 24, x - 10, t + 24, "actor-line");
+        dg_line(b, x - 22, t + 8, x - 22, t + 40, "actor-line");
+        dg_line(b, x - 22, t + 24, x - 10, t + 24, "actor-line");
         buf_lit(b, "<circle cx=\""); buf_num(b, x + 4); buf_lit(b, "\" cy=\""); buf_num(b, t + 24); buf_lit(b, "\" r=\"14\"/></g>");
         text_(b, pa->label, fs, x, y + ACT_H - 6, "middle", "actor-label");
         return;
@@ -382,7 +372,7 @@ static void actor_box(Buf b[static 1], const Part pa[static 1], double y, double
     case PS_ENTITY:
         buf_lit(b, "<g class=\"actor-man\"><circle cx=\""); buf_num(b, x); buf_lit(b, "\" cy=\""); buf_num(b, t + 22);
         buf_lit(b, "\" r=\"14\"/>");
-        if (pa->shape == PS_ENTITY) line_(b, x - 14, t + 38, x + 14, t + 38, "actor-line");
+        if (pa->shape == PS_ENTITY) dg_line(b, x - 14, t + 38, x + 14, t + 38, "actor-line");
         else { buf_lit(b, "<path class=\"actor-line\" d=\"M"); sq_pt(b, x + 6, t + 3); buf_ch(b, 'L'); sq_pt(b, x - 1, t + 8);
                buf_ch(b, 'L'); sq_pt(b, x + 6, t + 13); buf_lit(b, "\"/>"); }
         buf_lit(b, "</g>");
@@ -397,7 +387,7 @@ static void actor_box(Buf b[static 1], const Part pa[static 1], double y, double
         text_(b, pa->label, fs, x, y + ACT_H - 6, "middle", "actor-label");
         return;
     }
-    case PS_COLLECTIONS: rect(b, pa->x - pa->w / 2 + 5, y + 5, pa->w, ACT_H, "actor"); break; /* stacked copy behind */
+    case PS_COLLECTIONS: dg_rect(b, pa->x - pa->w / 2 + 5, y + 5, pa->w, ACT_H, 0, "actor"); break; /* stacked copy behind */
     default: break;
     }
     if (pa->shape == PS_QUEUE) { /* horizontal cylinder */
@@ -407,7 +397,7 @@ static void actor_box(Buf b[static 1], const Part pa[static 1], double y, double
         buf_ch(b, 'h'); buf_num(b, -(w - 2 * rx)); buf_ch(b, 'a'); buf_num(b, rx); buf_ch(b, ','); buf_num(b, ry);
         buf_lit(b, " 0 0 1 0,"); buf_num(b, -ACT_H); buf_lit(b, "M"); sq_pt(b, x0 + w - rx, y); buf_ch(b, 'a'); buf_num(b, rx);
         buf_ch(b, ','); buf_num(b, ry); buf_lit(b, " 0 0 0 0,"); buf_num(b, ACT_H); buf_lit(b, "\"/>");
-    } else rect(b, pa->x - pa->w / 2, y, pa->w, ACT_H, "actor");
+    } else dg_rect(b, pa->x - pa->w / 2, y, pa->w, ACT_H, 0, "actor");
     unsigned k = nlines(pa->label);
     text_(b, pa->label, fs, pa->x, y + ACT_H / 2 - (k - 1) * fs * 0.75, "middle", "actor-label");
 }
@@ -537,8 +527,8 @@ DIAG_FN(seq_render) {
             if (ev->a == ev->b) {
                 text_(&front, ev->text, fs, x1 + 8, ty, "start", "msg-text");
                 buf_lit(&front, "<path class=\"msg"); if (ev->dotted) buf_lit(&front, " dotted");
-                buf_lit(&front, "\" d=\"M"); pt(&front, x1, ly); buf_lit(&front, " C"); pt(&front, x1 + 60, ly - 10);
-                buf_ch(&front, ' '); pt(&front, x1 + 60, ly + 40); buf_ch(&front, ' '); pt(&front, x1, ly + 30); buf_ch(&front, '"');
+                buf_lit(&front, "\" d=\"M"); buf_pt(&front, x1, ly); buf_lit(&front, " C"); buf_pt(&front, x1 + 60, ly - 10);
+                buf_ch(&front, ' '); buf_pt(&front, x1 + 60, ly + 40); buf_ch(&front, ' '); buf_pt(&front, x1, ly + 30); buf_ch(&front, '"');
                 ly += 30;
                 if (x1 + 70 + text_width(ev->text, fs) > maxx) maxx = x1 + 70 + text_width(ev->text, fs);
                 for (size_t q = 0; q < nblk; q++)
@@ -547,7 +537,7 @@ DIAG_FN(seq_render) {
                 text_(&front, ev->text, fs, (x1 + x2) / 2, ty, "middle", "msg-text");
                 double dir = x2 > x1 ? 1 : -1;
                 buf_lit(&front, "<path class=\"msg"); if (ev->dotted) buf_lit(&front, " dotted");
-                buf_lit(&front, "\" d=\"M"); pt(&front, x1, ly); buf_lit(&front, " L"); pt(&front, x2 - dir * 1, ly); buf_ch(&front, '"');
+                buf_lit(&front, "\" d=\"M"); buf_pt(&front, x1, ly); buf_lit(&front, " L"); buf_pt(&front, x2 - dir * 1, ly); buf_ch(&front, '"');
             }
             if (mk) { buf_lit(&front, " marker-end=\"url(#"); buf_cstr(&front, mk); buf_lit(&front, ")\""); }
             if (ev->bidir) buf_lit(&front, " marker-start=\"url(#sq-arrow-start)\"");
@@ -574,8 +564,8 @@ DIAG_FN(seq_render) {
                 for (size_t q = nact; q-- > 0;)
                     if (acts[q].p == ev->a) {
                         double ax = pa[acts[q].p].x - 5 + acts[q].depth * 5;
-                        rect(&mid, ax, acts[q].y0, 10, ly - acts[q].y0, "act");
-                        acts[q] = acts[--nact];
+                        dg_rect(&mid, ax, acts[q].y0, 10, ly - acts[q].y0, 0, "act");
+                        memmove(&acts[q], &acts[q + 1], (--nact - q) * sizeof *acts);
                         break;
                     }
             for (unsigned q = 0; q < 2; q++) {
@@ -583,7 +573,7 @@ DIAG_FN(seq_render) {
                 if (!dp->pend_destroy) continue;
                 dp->pend_destroy = false;
                 dp->y1 = ly;
-                buf_lit(&front, "<path class=\"destroy\" d=\"M"); pt(&front, dp->x - 9, ly - 9);
+                buf_lit(&front, "<path class=\"destroy\" d=\"M"); buf_pt(&front, dp->x - 9, ly - 9);
                 buf_lit(&front, " l18,18 m0,-18 l-18,18\"/>");
             }
             y = ly + (cr ? ACT_H / 2 : 0) + 10;
@@ -607,7 +597,7 @@ DIAG_FN(seq_render) {
             }
             if (x < minx) minx = x;
             if (x + w > maxx) maxx = x + w;
-            rect(&front, x, y, w, h, "note");
+            dg_rect(&front, x, y, w, h, 0, "note");
             for (size_t q = 0; q < nblk; q++) {
                 if (x < blks[q].xl) blks[q].xl = x;
                 if (x + w > blks[q].xr) blks[q].xr = x + w;
@@ -667,8 +657,8 @@ DIAG_FN(seq_render) {
                     if (x1 - x0 < need) x1 = x0 + need;
                     for (size_t q = 0; q < nblk; q++) if (x1 + 8 > blks[q].xr) blks[q].xr = x1 + 8;
                 }
-                rect(&mid, x0, bl.y0, x1 - x0, y1 - bl.y0, "block");
-                buf_lit(&mid, "<path class=\"block-tab\" d=\"M"); pt(&mid, x0, bl.y0); buf_lit(&mid, " h"); buf_num(&mid, tw);
+                dg_rect(&mid, x0, bl.y0, x1 - x0, y1 - bl.y0, 0, "block");
+                buf_lit(&mid, "<path class=\"block-tab\" d=\"M"); buf_pt(&mid, x0, bl.y0); buf_lit(&mid, " h"); buf_num(&mid, tw);
                 buf_lit(&mid, " v14 l-8,8 H"); buf_num(&mid, x0); buf_lit(&mid, " Z\"/>");
                 text_(&front, be->kw, 14, x0 + 8, bl.y0 + 11, "start", "block-kw");
                 if (be->text.n) {
@@ -714,19 +704,19 @@ DIAG_FN(seq_render) {
             for (size_t q = nact; q-- > 0;)
                 if (acts[q].p == ev->a) {
                     double ax = pa[acts[q].p].x - 5 + acts[q].depth * 5;
-                    rect(&mid, ax, acts[q].y0, 10, y - 10 - acts[q].y0, "act");
-                    acts[q] = acts[--nact];
+                    dg_rect(&mid, ax, acts[q].y0, 10, y - 10 - acts[q].y0, 0, "act");
+                    memmove(&acts[q], &acts[q + 1], (--nact - q) * sizeof *acts);
                     break;
                 }
             break;
         }
     }
     if (nblk) { st = sfail(&p, n, "unterminated block (missing 'end')"); goto done; }
-    for (size_t q = 0; q < nact; q++) rect(&mid, pa[acts[q].p].x - 5 + acts[q].depth * 5, acts[q].y0, 10, y - acts[q].y0, "act");
+    for (size_t q = 0; q < nact; q++) dg_rect(&mid, pa[acts[q].p].x - 5 + acts[q].depth * 5, acts[q].y0, 10, y - acts[q].y0, 0, "act");
     double bottom = y + 10;
     for (size_t k = 0; k < P; k++) {
         if (pa[k].pend_create) continue; /* declared but never messaged: drawn nowhere */
-        line_(&back, pa[k].x, pa[k].y0, pa[k].x, pa[k].y1 > 0 ? pa[k].y1 : bottom, "lifeline");
+        dg_line(&back, pa[k].x, pa[k].y0, pa[k].x, pa[k].y1 > 0 ? pa[k].y1 : bottom, "lifeline");
         if (!pa[k].created) actor_box(&back, &pa[k], title_h, fs);
         if (pa[k].y1 <= 0) actor_box(&front, &pa[k], bottom, fs);
     }

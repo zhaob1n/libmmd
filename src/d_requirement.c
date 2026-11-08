@@ -59,7 +59,7 @@ DIAG_FN(requirement_render) {
         }
         if (str_starts(line, S("direction "))) {
             Str d = str_trim((Str){.p = line.p + 10, .n = line.n - 10});
-            g.dir = str_eq(d, S("LR")) ? DIR_LR : str_eq(d, S("RL")) ? DIR_RL : str_eq(d, S("BT")) ? DIR_BT : DIR_TB;
+            g.dir = dg_dir(d);
             continue;
         }
         if (str_starts(line, S("style ")) || str_starts(line, S("classDef ")) || str_starts(line, S("class "))) continue;

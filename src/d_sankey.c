@@ -268,8 +268,8 @@ DIAG_FN(sankey_render) {
         const char *col = PAL[l->s % countof(PAL)];
         buf_lit(out, "<path class=\"sl\" stroke=\""); buf_cstr(out, col);
         buf_lit(out, "\" stroke-width=\""); buf_num(out, fmax(1, l->v * ky)); buf_lit(out, "\" d=\"M");
-        dg_pt(out, x0, l->y0); buf_ch(out, 'C'); dg_pt(out, xm, l->y0); buf_ch(out, ' '); dg_pt(out, xm, l->y1);
-        buf_ch(out, ' '); dg_pt(out, x1, l->y1); buf_lit(out, "\"/>");
+        buf_pt(out, x0, l->y0); buf_ch(out, 'C'); buf_pt(out, xm, l->y0); buf_ch(out, ' '); buf_pt(out, xm, l->y1);
+        buf_ch(out, ' '); buf_pt(out, x1, l->y1); buf_lit(out, "\"/>");
     }
     for (size_t i = 0; i < nn; i++) {
         dg_rect_fill(out, N[i].x, N[i].y, NW, N[i].h, 0, "sn", PAL[i % countof(PAL)]);

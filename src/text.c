@@ -44,7 +44,7 @@ static constexpr int16_t KT[16][95] = {
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -152, 0, -152, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 };
 
-static bool rng_has(const uint32_t r[][2], size_t n, uint32_t cp) {
+static bool rng_has(size_t n, const uint32_t r[static n][2], uint32_t cp) {
     size_t lo = 0, hi = n;
     while (lo < hi) {
         size_t mid = lo + (hi - lo) / 2;
@@ -63,10 +63,12 @@ static inline unsigned cp_width(uint32_t cp) {
     if (cp >= 32 && cp < 127) return ASCII_W[cp - 32];
     if (cp < 32) return 0;
     if (cp >= 0xA0 && cp <= 0xFF) return LAT1_W[cp - 0xA0];
-    if (rng_has(COMB_MN, countof(COMB_MN), cp)) return 0;
+    /* CJK Unified Ideographs and Hangul Syllables: wide, no marks among them */
+    if ((cp >= 0x4E00 && cp <= 0x9FFF) || (cp >= 0xAC00 && cp <= 0xD7A3)) return 2048;
+    if (rng_has(countof(COMB_MN), COMB_MN, cp)) return 0;
     if (cp >= 0x1F300 && cp <= 0x1FAFF) return 2048; /* emoji pictographs, incl. East_Asian_Width=N */
     if ((cp >= 0xFF61 && cp <= 0xFFDC) || (cp >= 0xFFE8 && cp <= 0xFFEE)) return 1024;
-    if (rng_has(EAW_WF, countof(EAW_WF), cp)) return 2048;
+    if (rng_has(countof(EAW_WF), EAW_WF, cp)) return 2048;
     return 1188;
 }
 
@@ -81,9 +83,8 @@ double text_width(Str s, double fs) {
         uint32_t cp = c;
         size_t len = 1;
         if (c == '#') { /* mermaid entity #name; / #123; renders as one glyph */
-            size_t j = i + 1;
-            while (j < n && j - i < 12 && ((unsigned)((p[j] | 32) - 'a') < 26u || (unsigned)(p[j] - '0') < 10u)) j++;
-            if (j < n && p[j] == ';' && j > i + 1) {
+            size_t j = ent_end(n, s.p, i);
+            if (j) {
                 uint32_t e = (unsigned)(p[i + 1] - '0') < 10u ? (uint32_t)strtoul((const char *)p + i + 1, nullptr, 10)
                                                               : ent_lookup(j - i - 1, (const char *)p + i + 1);
                 if (e) { cp = e; len = j + 1 - i; goto have; }
@@ -105,7 +106,7 @@ double text_width(Str s, double fs) {
 size_t label_br_len(Str s, size_t i) {
     if (i + 4 > s.n || s.p[i] != '<' || (s.p[i + 1] | 32) != 'b' || (s.p[i + 2] | 32) != 'r') return 0;
     size_t j = i + 3;
-    while (j < s.n && s.p[j] == ' ') j++;
+    while (j < s.n && (s.p[j] == ' ' || s.p[j] == '\t')) j++;
     if (j < s.n && s.p[j] == '/') j++;
     return j < s.n && s.p[j] == '>' ? j + 1 - i : 0;
 }

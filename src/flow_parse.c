@@ -404,8 +404,6 @@ static mmd_status parse_link(P p[static 1], Link l[static 1]) {
         l->label = rich_normalize(p->g->arena, raw, &ok);
         if (!ok) return MMD_ERR_NOMEM;
         if (l->st == ST_DOTTED && ndot == 0) ndot = 1;
-        if (l->st == ST_DOTTED) ndot = ndot ? ndot : 1;
-        if (l->st == ST_NORMAL) nd = nd + 0;
     }
     l->len = link_len(l->st, l->a1 != AH_NONE, nd, ne, ndot, nt);
     skip_sp(p);

@@ -237,38 +237,6 @@ static void other_path(Buf b[static 1], uint8_t kind, size_t n, const double P[s
     }
 }
 
-/* d3 curveBasis */
-static void basis_path(Buf b[restrict static 1], size_t n, const double P[restrict static 2 * n]) {
-    double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
-    unsigned st = 0;
-    for (size_t i = 0; i < n; i++) {
-        double x = P[2 * i], y = P[2 * i + 1];
-        switch (st) {
-        case 0: st = 1; buf_ch(b, 'M'); pt(b, x, y); break;
-        case 1: st = 2; break;
-        case 2:
-            st = 3;
-            buf_ch(b, 'L'); pt(b, (5 * x0 + x1) / 6, (5 * y0 + y1) / 6);
-            [[fallthrough]];
-        default:
-            buf_ch(b, 'C'); pt(b, (2 * x0 + x1) / 3, (2 * y0 + y1) / 3);
-            buf_ch(b, ' '); pt(b, (x0 + 2 * x1) / 3, (y0 + 2 * y1) / 3);
-            buf_ch(b, ' '); pt(b, (x0 + 4 * x1 + x) / 6, (y0 + 4 * y1 + y) / 6);
-            break;
-        }
-        x0 = x1, x1 = x, y0 = y1, y1 = y;
-    }
-    switch (st) {
-    case 3:
-        buf_ch(b, 'C'); pt(b, (2 * x0 + x1) / 3, (2 * y0 + y1) / 3);
-        buf_ch(b, ' '); pt(b, (x0 + 2 * x1) / 3, (y0 + 2 * y1) / 3);
-        buf_ch(b, ' '); pt(b, (x0 + 5 * x1) / 6, (y0 + 5 * y1) / 6);
-        [[fallthrough]];
-    case 2: buf_ch(b, 'L'); pt(b, x1, y1); break;
-    default: break;
-    }
-}
-
 static const char *marker_name(Arrow a, bool end) {
     switch (a) {
     case AH_ARROW: return end ? "mm-arrow-end" : "mm-arrow-start";
@@ -278,13 +246,6 @@ static const char *marker_name(Arrow a, bool end) {
     }
 }
 
-typedef struct BBox { double x0, y0, x1, y1; } BBox;
-static inline void bb_add(BBox bb[static 1], double x0, double y0, double x1, double y1) {
-    if (x0 < bb->x0) bb->x0 = x0;
-    if (y0 < bb->y0) bb->y0 = y0;
-    if (x1 > bb->x1) bb->x1 = x1;
-    if (y1 > bb->y1) bb->y1 = y1;
-}
 
 mmd_status flow_svg(const Graph g[restrict static 1], Buf b[restrict static 1]) {
     double fs = g->font_size;
@@ -373,7 +334,7 @@ mmd_status flow_svg(const Graph g[restrict static 1], Buf b[restrict static 1]) 
             buf_ch(b, 'C'); pt(b, x + r, y - q - u); buf_ch(b, ' '); pt(b, x + r, y + q + u);
             buf_ch(b, ' '); pt(b, x, y + q);
         } else if (g->curve != CURVE_BASIS) other_path(b, g->curve, g->eptn[e], g->pts.v + g->eptoff[e]);
-        else basis_path(b, g->eptn[e], g->pts.v + g->eptoff[e]);
+        else dg_basis(b, g->eptn[e], g->pts.v + g->eptoff[e]);
         buf_ch(b, '"');
         {
             size_t mark = b->n;

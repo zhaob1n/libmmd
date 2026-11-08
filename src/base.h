@@ -32,6 +32,8 @@ static inline bool str_ieq(Str a, Str b) {
     }
     return true;
 }
+/* control bytes XML text can't carry; \t and \n pass through */
+static inline bool xml_ctl(char c) { return (unsigned char)c < 0x20 && c != '\t' && c != '\n'; }
 /* ---- 16-bytes-at-a-time scanners (SSE2; scalar tail / fallback) ----
  * Each returns the first index >= i (and < n) whose byte is NOT in the class, or n. */
 #if defined(__SSE2__)
@@ -70,9 +72,10 @@ static inline size_t scan_xml_plain(size_t n, const char s[static n], size_t i) 
                _mm_or_si128(_mm_or_si128(_mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8('<')), _mm_cmpeq_epi8(v, _mm_set1_epi8('>'))),
                                          _mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8('&')), _mm_cmpeq_epi8(v, _mm_set1_epi8('"')))),
                             _mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8('#')),
-                                         _mm_and_si128(_mm_cmpgt_epi8(v, _mm_set1_epi8(-1)), _mm_cmplt_epi8(v, _mm_set1_epi8(0x20))))),
+                                         _mm_andnot_si128(_mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8('\t')), _mm_cmpeq_epi8(v, _mm_set1_epi8('\n'))),
+                                                          _mm_and_si128(_mm_cmpgt_epi8(v, _mm_set1_epi8(-1)), _mm_cmplt_epi8(v, _mm_set1_epi8(0x20)))))),
                _mm_set1_epi8(-1)),
-           !(s[i] == '<' || s[i] == '>' || s[i] == '&' || s[i] == '"' || s[i] == '#' || (unsigned char)s[i] < 0x20))
+           !(s[i] == '<' || s[i] == '>' || s[i] == '&' || s[i] == '"' || s[i] == '#' || xml_ctl(s[i])))
 }
 #undef SCAN16
 #else
@@ -85,7 +88,7 @@ static inline size_t scan_sp(size_t n, const char s[static n], size_t i) {
     return i;
 }
 static inline size_t scan_xml_plain(size_t n, const char s[static n], size_t i) {
-    for (; i < n; i++) { char c = s[i]; if (c == '<' || c == '>' || c == '&' || c == '"' || c == '#' || (unsigned char)c < 0x20) break; }
+    for (; i < n; i++) { char c = s[i]; if (c == '<' || c == '>' || c == '&' || c == '"' || c == '#' || xml_ctl(c)) break; }
     return i;
 }
 #endif
@@ -95,6 +98,12 @@ static inline Str str_trim(Str s) {
     while (s.n && (is_sp(s.p[0]) || s.p[0] == '\n')) s.p++, s.n--;
     while (s.n && (is_sp(s.p[s.n - 1]) || s.p[s.n - 1] == '\n')) s.n--;
     return s;
+}
+/* s[i] == '#': index of the ';' closing a mermaid entity #name; / #123;, or 0 */
+static inline size_t ent_end(size_t n, const char s[static n], size_t i) {
+    size_t j = i + 1;
+    while (j < n && j - i < 12 && ((unsigned)((s[j] | 32) - 'a') < 26u || (unsigned)(s[j] - '0') < 10u)) j++;
+    return j < n && s[j] == ';' && j > i + 1 ? j : 0;
 }
 static inline bool str_starts(Str s, Str pre) { return s.n >= pre.n && memcmp(s.p, pre.p, pre.n) == 0; }
 /* s[i, j); callers guarantee i <= j <= s.n */

@@ -179,7 +179,7 @@ static constexpr CardTok WCARD[] = { /* word forms, longest first */
         if (p->sgn && str_eq(line, S("end"))) { p->sgn--; continue; }
         if (str_eq(w, S("direction"))) {
             Str d = dg_word(&rest);
-            Dir dd = str_eq(d, S("LR")) ? DIR_LR : str_eq(d, S("RL")) ? DIR_RL : str_eq(d, S("BT")) ? DIR_BT : DIR_TB;
+            Dir dd = dg_dir(d);
             if (p->sgn) { /* subgraph direction (used when the subgraph has no external links) */
                 int32_t c = p->sg[p->sgn - 1];
                 g->sdir[c] = dd;
@@ -252,11 +252,7 @@ static void ent_style(Buf b[static 1], const EP p[static 1], Str cls, Str sty) {
     b->n -= 2; /* "/>" */
     buf_lit(b, " style=\"");
     for (int j = 0; j < 2; j++) {
-        for (size_t k = 0; k < css[j].n; k++) {
-            char ch = css[j].p[k] == ',' ? ';' : css[j].p[k];
-            if (ch == '"' || ch == '<' || ch == '&') continue;
-            buf_ch(b, ch);
-        }
+        dg_css_put(b, css[j]);
         if (css[j].n) buf_ch(b, ';');
     }
     buf_lit(b, "\"/>");
@@ -278,10 +274,10 @@ static void card_mark(Buf b[static 1], double px, double py, double ux, double u
     #define AT(d, s) px + ux * (d) + nx * (s), py + uy * (d) + ny * (s)
     buf_lit(b, "<path class=\"mk\" d=\"");
     bool many = c == CD_ONE_MANY || c == CD_ZERO_MANY;
-    if (many) { buf_ch(b, 'M'); dg_pt(b, AT(0, -9)); buf_ch(b, 'L'); dg_pt(b, AT(16, 0)); buf_ch(b, 'L'); dg_pt(b, AT(0, 9)); }
+    if (many) { buf_ch(b, 'M'); buf_pt(b, AT(0, -9)); buf_ch(b, 'L'); buf_pt(b, AT(16, 0)); buf_ch(b, 'L'); buf_pt(b, AT(0, 9)); }
     double bar = many ? 20 : 8;
-    if (c != CD_ZERO_MANY) { buf_ch(b, 'M'); dg_pt(b, AT(bar, -8)); buf_ch(b, 'L'); dg_pt(b, AT(bar, 8)); }
-    if (c == CD_ONE) { buf_ch(b, 'M'); dg_pt(b, AT(14, -8)); buf_ch(b, 'L'); dg_pt(b, AT(14, 8)); }
+    if (c != CD_ZERO_MANY) { buf_ch(b, 'M'); buf_pt(b, AT(bar, -8)); buf_ch(b, 'L'); buf_pt(b, AT(bar, 8)); }
+    if (c == CD_ONE) { buf_ch(b, 'M'); buf_pt(b, AT(14, -8)); buf_ch(b, 'L'); buf_pt(b, AT(14, 8)); }
     buf_lit(b, "\"/>");
     if (c == CD_ZERO_ONE || c == CD_ZERO_MANY) {
         double d = c == CD_ZERO_ONE ? 20 : 24;
