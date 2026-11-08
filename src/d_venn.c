@@ -287,7 +287,7 @@ DIAG_FN(venn_render) {
                 if (d > bd) bd = d, bx = px, by = py;
             }
         }
-        for (double stp = R[0] / 20; stp > 0.05; stp /= 2)
+        for (double stp = R[0] / 20; stp > 1e-3; stp /= 2)
             for (int rep = 0; rep < 8; rep++) {
                 bool moved = false;
                 for (int dxi = -1; dxi <= 1; dxi++) for (int dyi = -1; dyi <= 1; dyi++) {
