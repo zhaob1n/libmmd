@@ -467,3 +467,10 @@ mmd_status dg_finish(Buf out[restrict static 1], Buf body[restrict static 1], BB
     *body = (Buf){};
     return oom ? MMD_ERR_NOMEM : MMD_OK;
 }
+
+void dg_css_put(Buf b[static 1], Str css) {
+    for (size_t k = 0; k < css.n; k++) {
+        char ch = css.p[k] == ',' ? ';' : css.p[k];
+        if (ch != '"' && ch != '<' && ch != '&') buf_ch(b, ch);
+    }
+}

@@ -63,6 +63,8 @@ static inline bool dg_css_ok(Str v) {
     for (size_t i = 0; i < v.n; i++) if (strchr(";{}<>\"'\\", v.p[i])) return false;
     return true;
 }
+/* classDef body into a style attribute: ',' separates declarations, '"' '<' '&' are dropped */
+void dg_css_put(Buf b[static 1], Str css);
 [[nodiscard]] bool dg_parse_num(Str s, double out[static 1]);
 /* ---- free-form (non-graph) renderers: draw into a body Buf while growing a BBox ---- */
 typedef enum TBase { TB_ALPHA, TB_MIDDLE, TB_HANG } TBase;

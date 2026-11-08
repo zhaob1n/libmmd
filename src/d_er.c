@@ -252,11 +252,7 @@ static void ent_style(Buf b[static 1], const EP p[static 1], Str cls, Str sty) {
     b->n -= 2; /* "/>" */
     buf_lit(b, " style=\"");
     for (int j = 0; j < 2; j++) {
-        for (size_t k = 0; k < css[j].n; k++) {
-            char ch = css[j].p[k] == ',' ? ';' : css[j].p[k];
-            if (ch == '"' || ch == '<' || ch == '&') continue;
-            buf_ch(b, ch);
-        }
+        dg_css_put(b, css[j]);
         if (css[j].n) buf_ch(b, ';');
     }
     buf_lit(b, "\"/>");
