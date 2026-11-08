@@ -63,6 +63,8 @@ static inline unsigned cp_width(uint32_t cp) {
     if (cp >= 32 && cp < 127) return ASCII_W[cp - 32];
     if (cp < 32) return 0;
     if (cp >= 0xA0 && cp <= 0xFF) return LAT1_W[cp - 0xA0];
+    /* CJK Unified Ideographs and Hangul Syllables: wide, no marks among them */
+    if ((cp >= 0x4E00 && cp <= 0x9FFF) || (cp >= 0xAC00 && cp <= 0xD7A3)) return 2048;
     if (rng_has(countof(COMB_MN), COMB_MN, cp)) return 0;
     if (cp >= 0x1F300 && cp <= 0x1FAFF) return 2048; /* emoji pictographs, incl. East_Asian_Width=N */
     if ((cp >= 0xFF61 && cp <= 0xFFDC) || (cp >= 0xFFE8 && cp <= 0xFFEE)) return 1024;
