@@ -53,6 +53,10 @@ static inline Str dg_unquote(Str s, bool apos) {
     if (s.n >= 2 && (s.p[0] == '"' || (apos && s.p[0] == '\'')) && s.p[s.n - 1] == s.p[0]) s = (Str){.p = s.p + 1, .n = s.n - 2};
     return s;
 }
+/* `direction` argument; anything but LR/RL/BT is TB */
+static inline Dir dg_dir(Str d) {
+    return str_eq(d, S("LR")) ? DIR_LR : str_eq(d, S("RL")) ? DIR_RL : str_eq(d, S("BT")) ? DIR_BT : DIR_TB;
+}
 /* user-supplied CSS value safe to splice into a style attribute */
 static inline bool dg_css_ok(Str v) {
     if (!v.n || v.n > 40) return false;

@@ -179,7 +179,7 @@ static constexpr CardTok WCARD[] = { /* word forms, longest first */
         if (p->sgn && str_eq(line, S("end"))) { p->sgn--; continue; }
         if (str_eq(w, S("direction"))) {
             Str d = dg_word(&rest);
-            Dir dd = str_eq(d, S("LR")) ? DIR_LR : str_eq(d, S("RL")) ? DIR_RL : str_eq(d, S("BT")) ? DIR_BT : DIR_TB;
+            Dir dd = dg_dir(d);
             if (p->sgn) { /* subgraph direction (used when the subgraph has no external links) */
                 int32_t c = p->sg[p->sgn - 1];
                 g->sdir[c] = dd;

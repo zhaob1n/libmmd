@@ -243,7 +243,7 @@ static mmd_status parse(CP p[static 1], LineIt it[static 1]) {
         }
         if (str_eq(w, S("direction"))) {
             Str d = dg_word(&rest);
-            g->dir = str_eq(d, S("LR")) ? DIR_LR : str_eq(d, S("RL")) ? DIR_RL : str_eq(d, S("BT")) ? DIR_BT : DIR_TB;
+            g->dir = dg_dir(d);
             continue;
         }
         if (str_starts(w, S("accTitle")) || str_starts(w, S("accDescr")) || str_eq(w, S("cssClass")) ||
