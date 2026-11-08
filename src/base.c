@@ -490,7 +490,7 @@ void buf_xml(Buf b[restrict static 1], Str s) {
             break;
         }
         default:
-            if ((unsigned char)c < 0x20 && c != '\t' && c != '\n') { rep = " "; rl = 1; }
+            if (xml_ctl(c)) { rep = " "; rl = 1; }
             break;
         }
         if (rep) {
