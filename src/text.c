@@ -44,7 +44,7 @@ static constexpr int16_t KT[16][95] = {
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -152, 0, -152, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 };
 
-static bool rng_has(const uint32_t r[][2], size_t n, uint32_t cp) {
+static bool rng_has(size_t n, const uint32_t r[static n][2], uint32_t cp) {
     size_t lo = 0, hi = n;
     while (lo < hi) {
         size_t mid = lo + (hi - lo) / 2;
@@ -63,10 +63,10 @@ static inline unsigned cp_width(uint32_t cp) {
     if (cp >= 32 && cp < 127) return ASCII_W[cp - 32];
     if (cp < 32) return 0;
     if (cp >= 0xA0 && cp <= 0xFF) return LAT1_W[cp - 0xA0];
-    if (rng_has(COMB_MN, countof(COMB_MN), cp)) return 0;
+    if (rng_has(countof(COMB_MN), COMB_MN, cp)) return 0;
     if (cp >= 0x1F300 && cp <= 0x1FAFF) return 2048; /* emoji pictographs, incl. East_Asian_Width=N */
     if ((cp >= 0xFF61 && cp <= 0xFFDC) || (cp >= 0xFFE8 && cp <= 0xFFEE)) return 1024;
-    if (rng_has(EAW_WF, countof(EAW_WF), cp)) return 2048;
+    if (rng_has(countof(EAW_WF), EAW_WF, cp)) return 2048;
     return 1188;
 }
 
