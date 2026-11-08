@@ -77,7 +77,7 @@ DIAG_FN(packet_render) {
             dg_rect(out, x, y, w - 1, RH, 0, "pb");
             dg_text(out, f->label, 12, x + w / 2, y + RH / 2, "middle", "pl");
             dg_text(out, (Str){.p = nb, .n = (size_t)snprintf(nb, sizeof nb, "%u", s)}, 10, x + 2, y - 6,
-                    s == e ? "start" : "start", "pn");
+                    "start", "pn");
             if (e != s) dg_text(out, (Str){.p = nb, .n = (size_t)snprintf(nb, sizeof nb, "%u", e)}, 10, x + w - 3, y - 6, "end", "pn");
             s = e + 1;
         }
