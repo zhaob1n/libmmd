@@ -205,13 +205,15 @@ static mmd_status render(Arena ap[static 1], Buf bp[static 1], size_t n, const c
         PMARK("svg");
     } else if (str_eq(kw, S("sequenceDiagram"))) {
         if ((st = seq_render(&arena, n, src, off, cfg.title, fs, &b, &eoff, msg))) goto fail;
-    } else if (diag_lookup(kw)) {
-        if ((st = diag_lookup(kw)(&arena, n, src, off, cfg.title, fs, &b, &eoff, msg))) goto fail;
     } else {
-        st = MMD_ERR_UNSUPPORTED;
-        snprintf(msg, sizeof msg, "unsupported diagram type '%.*s'", (int)(kw.n > 40 ? 40 : kw.n), kw.p);
-        eoff = off;
-        goto fail;
+        DiagFn fn = diag_lookup(kw);
+        if (!fn) {
+            st = MMD_ERR_UNSUPPORTED;
+            snprintf(msg, sizeof msg, "unsupported diagram type '%.*s'", (int)(kw.n > 40 ? 40 : kw.n), kw.p);
+            eoff = off;
+            goto fail;
+        }
+        if ((st = fn(&arena, n, src, off, cfg.title, fs, &b, &eoff, msg))) goto fail;
     }
     if (b.oom) { st = MMD_ERR_NOMEM; goto fail; }
     b.p[b.n] = 0;
