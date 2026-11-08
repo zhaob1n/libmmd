@@ -215,7 +215,7 @@ static mmd_status render(Arena ap[static 1], Buf bp[static 1], size_t n, const c
         }
         if ((st = fn(&arena, n, src, off, cfg.title, fs, &b, &eoff, msg))) goto fail;
     }
-    if (b.oom) { st = MMD_ERR_NOMEM; goto fail; }
+    if (b.oom || !buf_reserve(&b, 0)) { st = MMD_ERR_NOMEM; goto fail; } /* empty output has no buffer yet */
     b.p[b.n] = 0;
     if (err) *err = (mmd_error){};
 fail:
