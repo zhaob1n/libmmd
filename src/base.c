@@ -190,9 +190,6 @@ static size_t fmt_num_slow(char *o, double v) {
         o[k++] = '.';
         o[k++] = (char)('0' + fp / 10);
         if (fp % 10) o[k++] = (char)('0' + fp % 10);
-    } else if (c < 0 && ip == 0) {
-        k = 0;
-        o[k++] = '0';
     }
     return k;
 }
