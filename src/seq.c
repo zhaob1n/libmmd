@@ -575,7 +575,7 @@ DIAG_FN(seq_render) {
                     if (acts[q].p == ev->a) {
                         double ax = pa[acts[q].p].x - 5 + acts[q].depth * 5;
                         rect(&mid, ax, acts[q].y0, 10, ly - acts[q].y0, "act");
-                        acts[q] = acts[--nact];
+                        memmove(&acts[q], &acts[q + 1], (--nact - q) * sizeof *acts);
                         break;
                     }
             for (unsigned q = 0; q < 2; q++) {
@@ -715,7 +715,7 @@ DIAG_FN(seq_render) {
                 if (acts[q].p == ev->a) {
                     double ax = pa[acts[q].p].x - 5 + acts[q].depth * 5;
                     rect(&mid, ax, acts[q].y0, 10, y - 10 - acts[q].y0, "act");
-                    acts[q] = acts[--nact];
+                    memmove(&acts[q], &acts[q + 1], (--nact - q) * sizeof *acts);
                     break;
                 }
             break;
