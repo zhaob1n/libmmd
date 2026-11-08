@@ -106,7 +106,7 @@ double text_width(Str s, double fs) {
 size_t label_br_len(Str s, size_t i) {
     if (i + 4 > s.n || s.p[i] != '<' || (s.p[i + 1] | 32) != 'b' || (s.p[i + 2] | 32) != 'r') return 0;
     size_t j = i + 3;
-    while (j < s.n && s.p[j] == ' ') j++;
+    while (j < s.n && (s.p[j] == ' ' || s.p[j] == '\t')) j++;
     if (j < s.n && s.p[j] == '/') j++;
     return j < s.n && s.p[j] == '>' ? j + 1 - i : 0;
 }
