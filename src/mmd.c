@@ -1,7 +1,5 @@
 #include "mmd.h"
 
-#include <locale.h>
-#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -228,27 +226,14 @@ fail:
     return st;
 }
 
-/* The "C" locale, made once and never freed; nullptr if it can't be made. */
-static locale_t c_locale(void) {
-    static _Atomic(locale_t) cached;
-    locale_t l = atomic_load_explicit(&cached, memory_order_acquire);
-    if (l) return l;
-    locale_t made = newlocale(LC_ALL_MASK, "C", (locale_t)0), seen = nullptr;
-    if (made && !atomic_compare_exchange_strong(&cached, &seen, made)) {
-        freelocale(made); /* another thread won */
-        return seen;
-    }
-    return made;
-}
-
 /* Rendering runs in the C locale on this thread only, whatever the host's setlocale(): the diagram
  * code formats with printf %g/%f and reads config numbers with strtod, and SVG wants '.' decimals.
  * One switch per render instead of a locale-free twin of each of those calls. */
 static mmd_status render(Arena ap[static 1], Buf bp[static 1], size_t n, const char *src, const mmd_options *opt,
                          mmd_error *err) {
-    locale_t c = c_locale(), host = c ? uselocale(c) : nullptr;
+    locale_t host = c_locale_enter();
     mmd_status st = render_c(ap, bp, n, src, opt, err);
-    if (c) uselocale(host);
+    uselocale(host);
     return st;
 }
 
