@@ -40,7 +40,8 @@ static void term(mmd_writer w[static 1]) {
 /* at: text offset of the rejected value */
 [[gnu::format(printf, 3, 4)]] static void fail(mmd_writer *w, size_t at, const char *fmt, ...) {
     w->st = MMD_ERR_SYNTAX;
-    w->err_at = at;
+    w->err_at = w->b.n = at; /* drop what the rejected value had begun */
+    term(w);
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(w->msg, sizeof w->msg, fmt, ap);
@@ -124,19 +125,20 @@ static bool must_esc(const char *s, size_t i, unsigned ctx) {
     return false;
 }
 
-static void put_esc(mmd_writer w[static 1], size_t at, const char *fn, const char *s, unsigned ctx, unsigned flags) {
+/* false (and the error set) when s can't be written in ctx */
+static bool put_esc(mmd_writer w[static 1], size_t at, const char *fn, const char *s, unsigned ctx, unsigned flags) {
     size_t run = 0, i = 0;
     for (; s[i]; i++) {
         unsigned char c = (unsigned char)s[i];
         if (c >= 0x80) {
             size_t k = utf8_len((const unsigned char *)s + i);
-            if (!k) return fail(w, at, "%s: invalid UTF-8 at byte %zu", fn, i);
+            if (!k) return fail(w, at, "%s: invalid UTF-8 at byte %zu", fn, i), false;
             i += k - 1;
             continue;
         }
         if (c < 0x20 && c != '\t') {
-            if (c != '\n') return fail(w, at, "%s: control character 0x%02x at byte %zu", fn, c, i);
-            if (!(flags & MMD_W_BR)) return fail(w, at, "%s: line break at byte %zu (MMD_W_BR where the diagram draws them)", fn, i);
+            if (c != '\n') return fail(w, at, "%s: control character 0x%02x at byte %zu", fn, c, i), false;
+            if (!(flags & MMD_W_BR)) return fail(w, at, "%s: line break at byte %zu (MMD_W_BR where the diagram draws them)", fn, i), false;
             buf_put(&w->b, i - run, s + run);
             buf_lit(&w->b, "<br>");
             run = i + 1;
@@ -155,6 +157,7 @@ static void put_esc(mmd_writer w[static 1], size_t at, const char *fn, const cha
         run = i + 1;
     }
     buf_put(&w->b, i - run, s + run);
+    return true;
 }
 
 void mmd_w_line(mmd_writer *w, unsigned depth) {
@@ -174,15 +177,14 @@ void mmd_w_str(mmd_writer *w, const char *s, unsigned flags) {
     if (!live(w)) return;
     size_t at = w->b.n;
     buf_ch(&w->b, '"');
-    put_esc(w, at, "mmd_w_str", s, CQ, flags);
+    if (!put_esc(w, at, "mmd_w_str", s, CQ, flags)) return;
     buf_ch(&w->b, '"');
     term(w);
 }
 
 void mmd_w_text(mmd_writer *w, const char *s, unsigned flags) {
     if (!live(w)) return;
-    put_esc(w, w->b.n, "mmd_w_text", s, CT, flags);
-    term(w);
+    if (put_esc(w, w->b.n, "mmd_w_text", s, CT, flags)) term(w);
 }
 
 void mmd_w_id(mmd_writer *w, const char *s) {
@@ -209,7 +211,7 @@ void mmd_w_csv(mmd_writer *w, const char *s) {
     bool q = !n || strpbrk(s, ",\"") || is_sp(s[0]) || is_sp(s[n - 1]) || s[0] == '%';
     size_t at = w->b.n;
     if (q) buf_ch(&w->b, '"');
-    put_esc(w, at, "mmd_w_csv", s, CC, 0);
+    if (!put_esc(w, at, "mmd_w_csv", s, CC, 0)) return;
     if (q) buf_ch(&w->b, '"');
     term(w);
 }
