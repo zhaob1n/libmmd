@@ -1112,8 +1112,7 @@ static mmd_status layout_core(Graph g[static 1]) {
             int32_t *p = k ? &b : &a;
             esub[2 * e + k] = NONE;
             if (g->nflags[*p] & NF_SUBREF) {
-                int32_t s = NONE;
-                for (size_t i = 0; i < S; i++) if (str_eq(g->sid[i], g->nid[*p])) { s = (int32_t)i; break; }
+                int32_t s = graph_find_sg(g, g->nid[*p]);
                 *p = s == NONE ? NONE : !k && slast ? slast[s] : srep[s];
                 esub[2 * e + k] = s;
             }
@@ -1871,8 +1870,8 @@ static mmd_status layout_rec(Graph g[static 1], unsigned depth) {
             int32_t x = side ? b : a, y = side ? a : b;
             if (g->nflags[x] & NF_SUBREF) continue;
             int32_t yloc = g->nparent[y];
-            if (g->nflags[y] & NF_SUBREF)
-                for (size_t t = 0; t < S; t++) if (str_eq(g->sid[t], g->nid[y])) { yloc = (int32_t)t; break; }
+            int32_t ys = g->nflags[y] & NF_SUBREF ? graph_find_sg(g, g->nid[y]) : NONE;
+            if (ys != NONE) yloc = ys;
             for (int32_t c = g->nparent[x]; c != NONE; c = g->sparent[c]) {
                 bool inside = false;
                 for (int32_t d = yloc; d != NONE; d = g->sparent[d]) if (d == c) { inside = true; break; }
@@ -1907,7 +1906,7 @@ static mmd_status layout_rec(Graph g[static 1], unsigned depth) {
         sref[v] = NONE;
         int32_t loc = g->nparent[v];
         if (g->nflags[v] & NF_SUBREF) {
-            for (size_t s = 0; s < S; s++) if (str_eq(g->sid[s], g->nid[v])) { sref[v] = (int32_t)s; break; }
+            sref[v] = graph_find_sg(g, g->nid[v]);
             loc = sref[v];
         }
         int32_t c = loc == NONE ? NONE : cand[loc];

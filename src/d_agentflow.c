@@ -75,9 +75,8 @@ static mmd_status collapse(Graph g[static 1], AfInfo inf[static 1]) {
     for (size_t v = 0; v < N; v++) {
         rep[v] = (int32_t)v, inf->coll[v] = NONE;
         int32_t s = g->nparent[v];
-        if (g->nflags[v] & NF_SUBREF) /* an edge to a container: to its collapsed node if inside one */
-            for (size_t k = 0; k < S; k++)
-                if (str_eq(g->sid[k], g->nid[v]) && root[k] != NONE) { rep[v] = sv[root[k]]; break; }
+        int32_t k = g->nflags[v] & NF_SUBREF ? graph_find_sg(g, g->nid[v]) : NONE;
+        if (k != NONE && root[k] != NONE) rep[v] = sv[root[k]]; /* an edge to a container: to its collapsed node if inside one */
         if (s != NONE && root[s] != NONE && sv[s] != (int32_t)v) rep[v] = sv[root[s]];
         if (rep[v] != (int32_t)v) g->nflags[v] |= NF_HIDDEN, g->nparent[v] = NONE;
     }

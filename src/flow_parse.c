@@ -57,36 +57,6 @@ static Str rest_of_line(P p[static 1]) {
     return str_trim((Str){.p = p->s + st, .n = p->i - st});
 }
 
-static int32_t find_sg(const Graph g[static 1], Str id) {
-    for (size_t i = 0; i < g->ns; i++)
-        if (str_eq(g->sid[i], id)) return (int32_t)i;
-    return NONE;
-}
-
-[[nodiscard]] static bool append_css(Arena a[static 1], Str dst[static 1], Str add) {
-    add = str_trim(add);
-    while (add.n && add.p[add.n - 1] == ';') add.n--;
-    if (!add.n) return true;
-    if (!dst->n) { *dst = add; return true; }
-    char *o = arena_alloc(a, dst->n + add.n + 2, 1);
-    if (!o) return false;
-    memcpy(o, dst->p, dst->n);
-    o[dst->n] = ',';
-    memcpy(o + dst->n + 1, add.p, add.n);
-    *dst = (Str){.p = o, .n = dst->n + add.n + 1};
-    return true;
-}
-[[nodiscard]] static bool append_class(Arena a[static 1], Str dst[static 1], Str add) {
-    if (!dst->n) { *dst = add; return true; }
-    char *o = arena_alloc(a, dst->n + add.n + 2, 1);
-    if (!o) return false;
-    memcpy(o, dst->p, dst->n);
-    o[dst->n] = ' ';
-    memcpy(o + dst->n + 1, add.p, add.n);
-    *dst = (Str){.p = o, .n = dst->n + add.n + 1};
-    return true;
-}
-
 /* ---- node shapes ---- */
 typedef struct ShapeTok { char open[4]; char close[4]; Shape sh; uint8_t ol, cl; } ShapeTok;
 #define ST(o, c, s) {o, c, s, sizeof o - 1, sizeof c - 1}
@@ -169,30 +139,6 @@ static Shape af_shape(Str n) {
     return SH_ROUND;
 }
 
-/* next `key: value` of an @{ } body (',' or newline separated; a quoted value keeps its quotes) */
-[[nodiscard]] static bool kv_next(Str body[static 1], Str key[static 1], Str val[static 1]) {
-    size_t i = 0, n = body->n;
-    const char *s = body->p;
-    while (i < n && (is_sp(s[i]) || s[i] == ',' || s[i] == '\n')) i++;
-    size_t ks = i;
-    while (i < n && s[i] != ':') i++;
-    if (i >= n) return false;
-    *key = str_trim((Str){.p = s + ks, .n = i - ks});
-    i++;
-    while (i < n && is_sp(s[i])) i++;
-    size_t vs = i;
-    if (i < n && s[i] == '"') {
-        i++;
-        while (i < n && s[i] != '"') i++;
-        if (i < n) i++;
-    } else {
-        while (i < n && s[i] != ',' && s[i] != '\n') i++;
-    }
-    *val = str_trim((Str){.p = s + vs, .n = i - vs});
-    *body = (Str){.p = s + i, .n = n - i};
-    return true;
-}
-
 /* @{ … } at p->i: its body, p->i past the '}' */
 static mmd_status at_body(P p[static 1], Str body[static 1]) {
     p->i += 2;
@@ -209,7 +155,7 @@ static mmd_status parse_at_shape(P p[static 1], Graph g[static 1], int32_t v) {
     Str body, key, val;
     mmd_status st = at_body(p, &body);
     if (st) return st;
-    while (kv_next(&body, &key, &val)) {
+    while (graph_kv_next(&body, &key, &val)) {
         if (str_eq(key, S("shape"))) g->nshape[v] = p->af ? af_shape(val) : shape_by_name(val);
         else if (str_eq(key, S("label"))) {
             bool ok;
@@ -239,7 +185,7 @@ static mmd_status parse_node(P p[static 1], int32_t out[static 1]) {
         p->i += 3;
         Str cls = read_word(p);
         if (!cls.n) return fail(p, "expected class name after :::");
-        if (!append_class(g->arena, &g->nclass[v], cls)) return MMD_ERR_NOMEM;
+        if (!graph_add_class(g->arena, &g->nclass[v], cls)) return MMD_ERR_NOMEM;
     }
     *out = v;
     return MMD_OK;
@@ -422,12 +368,12 @@ static mmd_status parse_chain(P p[static 1]) {
         if (w.n && pk(p, 0) == '@' && pk(p, 1) == '{') {
             int32_t e = find_edge_id(p->g, w);
             if (e != NONE) return parse_edge_props(p, e);
-            int32_t s = p->af ? find_sg(p->g, w) : NONE;
+            int32_t s = p->af ? graph_find_sg(p->g, w) : NONE;
             if (s != NONE) { /* agentflow container metadata: only `view: collapsed` is drawn */
                 Str body, key, val;
                 mmd_status st = at_body(p, &body);
                 if (st) return st;
-                while (kv_next(&body, &key, &val))
+                while (graph_kv_next(&body, &key, &val))
                     if (str_eq(key, S("view")) && (str_eq(val, S("collapsed")) || str_eq(val, S("\"collapsed\"")))) p->g->sflags[s] |= SF_COLLAPSED;
                 return MMD_OK;
             }
@@ -549,7 +495,7 @@ static mmd_status parse_stmt(P p[static 1], Str w) {
         int32_t v;
         mmd_status st = parse_node(p, &v);
         if (st) return st;
-        return append_class(g->arena, &g->nclass[v], S("af-kind-connector")) ? MMD_OK : MMD_ERR_NOMEM;
+        return graph_add_class(g->arena, &g->nclass[v], S("af-kind-connector")) ? MMD_OK : MMD_ERR_NOMEM;
     }
     if (str_eq(w, S("end"))) {
         if (!p->sgd) return fail(p, "'end' without subgraph");
@@ -570,7 +516,7 @@ static mmd_status parse_stmt(P p[static 1], Str w) {
         Str css = rest_of_line(p), item;
         while (list_next(&names, &item)) {
             ClassDef cd = {.name = item};
-            if (!append_css(g->arena, &cd.css, css)) return MMD_ERR_NOMEM;
+            if (!graph_add_css(g->arena, &cd.css, css)) return MMD_ERR_NOMEM;
             if (!VEC_PUSH(g->arena, &g->classdefs, cd)) return MMD_ERR_NOMEM;
         }
         return MMD_OK;
@@ -581,11 +527,11 @@ static mmd_status parse_stmt(P p[static 1], Str w) {
         Str cls = read_word(p), item;
         if (!cls.n) return fail(p, "expected class name");
         while (list_next(&ids, &item)) {
-            int32_t s = find_sg(g, item);
-            if (s != NONE) { if (!append_class(g->arena, &g->sclass[s], cls)) return MMD_ERR_NOMEM; continue; }
+            int32_t s = graph_find_sg(g, item);
+            if (s != NONE) { if (!graph_add_class(g->arena, &g->sclass[s], cls)) return MMD_ERR_NOMEM; continue; }
             int32_t v = graph_intern(g, item, nullptr);
             if (v == NONE) return MMD_ERR_NOMEM;
-            if (!append_class(g->arena, &g->nclass[v], cls)) return MMD_ERR_NOMEM;
+            if (!graph_add_class(g->arena, &g->nclass[v], cls)) return MMD_ERR_NOMEM;
         }
         return MMD_OK;
     }
@@ -594,11 +540,11 @@ static mmd_status parse_stmt(P p[static 1], Str w) {
         Str id = read_word(p);
         if (!id.n) return fail(p, "expected id after style");
         Str css = rest_of_line(p);
-        int32_t s = find_sg(g, id);
-        if (s != NONE) return append_css(g->arena, &g->sstyle[s], css) ? MMD_OK : MMD_ERR_NOMEM;
+        int32_t s = graph_find_sg(g, id);
+        if (s != NONE) return graph_add_css(g->arena, &g->sstyle[s], css) ? MMD_OK : MMD_ERR_NOMEM;
         int32_t v = graph_intern(g, id, nullptr);
         if (v == NONE) return MMD_ERR_NOMEM;
-        return append_css(g->arena, &g->nstyle[v], css) ? MMD_OK : MMD_ERR_NOMEM;
+        return graph_add_css(g->arena, &g->nstyle[v], css) ? MMD_OK : MMD_ERR_NOMEM;
     }
     if (str_eq(w, S("linkStyle"))) {
         Str idx = read_list(p), item;
@@ -614,7 +560,7 @@ static mmd_status parse_stmt(P p[static 1], Str w) {
                 }
                 ls.idx = (int32_t)v;
             }
-            if (!append_css(g->arena, &ls.css, css)) return MMD_ERR_NOMEM;
+            if (!graph_add_css(g->arena, &ls.css, css)) return MMD_ERR_NOMEM;
             if (!VEC_PUSH(g->arena, &g->linkstyles, ls)) return MMD_ERR_NOMEM;
         }
         return MMD_OK;
@@ -689,7 +635,7 @@ mmd_status flow_parse(Graph g[static 1], size_t n, const char src[static n], siz
     /* edges/refs to subgraph ids */
     for (size_t v = 0; v < g->nn; v++) {
         if (g->nflags[v] & NF_DEFINED) continue;
-        if (find_sg(g, g->nid[v]) != NONE) g->nflags[v] |= NF_SUBREF | NF_HIDDEN;
+        if (graph_find_sg(g, g->nid[v]) != NONE) g->nflags[v] |= NF_SUBREF | NF_HIDDEN;
     }
 out:
     *err_off = p.err;

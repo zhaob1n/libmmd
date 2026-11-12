@@ -75,8 +75,7 @@ static mmd_status open_composite(StP p[static 1], int32_t v, size_t off) {
     Graph *g = &p->g;
     p->kind.v[v] = SK_COMPOSITE;
     g->nflags[v] |= NF_SUBREF | NF_HIDDEN;
-    int32_t c = NONE;
-    for (size_t s = 0; s < g->ns; s++) if (str_eq(g->sid[s], g->nid[v])) { c = (int32_t)s; break; }
+    int32_t c = graph_find_sg(g, g->nid[v]);
     if (c == NONE) {
         c = dg_cluster(g, g->nid[v], g->nlabel[v], g->nparent[v]);
         if (c == NONE) return MMD_ERR_NOMEM;

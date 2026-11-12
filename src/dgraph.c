@@ -445,9 +445,8 @@ typedef struct { double x, y, w, h; } Box; /* centre and size */
 
 /* a node's box; an edge end naming a subgraph (NF_SUBREF) uses the cluster's */
 static Box nbox(const Graph g[static 1], int32_t v) {
-    if (g->nflags[v] & NF_SUBREF)
-        for (size_t s = 0; s < g->ns; s++)
-            if (str_eq(g->sid[s], g->nid[v])) return (Box){g->sx[s] + g->sw[s] / 2, g->sy[s] + g->sh[s] / 2, g->sw[s], g->sh[s]};
+    int32_t s = g->nflags[v] & NF_SUBREF ? graph_find_sg(g, g->nid[v]) : NONE;
+    if (s != NONE) return (Box){g->sx[s] + g->sw[s] / 2, g->sy[s] + g->sh[s] / 2, g->sw[s], g->sh[s]};
     return (Box){g->nx[v], g->ny[v], g->nw[v], g->nh[v]};
 }
 

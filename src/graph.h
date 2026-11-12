@@ -92,6 +92,15 @@ int32_t graph_find(const Graph g[static 1], Str id);
 /* node index of id, added (rect, label = id, no parent, sizes 0) if new: *fresh says so; NONE on OOM */
 int32_t graph_intern(Graph g[static 1], Str id, bool *fresh);
 
+/* subgraph index of id, or NONE */
+int32_t graph_find_sg(const Graph g[static 1], Str id);
+/* append a style declaration list (',' joined; trailing ';' dropped) / a class name (' ' joined) */
+[[nodiscard]] bool graph_add_css(Arena a[static 1], Str dst[static 1], Str add);
+[[nodiscard]] bool graph_add_class(Arena a[static 1], Str dst[static 1], Str add);
+/* next `key: value` of an @{ } metadata body (',' or newline separated; a quoted value keeps its
+ * quotes), body advanced past it; false at the end */
+[[nodiscard]] bool graph_kv_next(Str body[static 1], Str key[static 1], Str val[static 1]);
+
 /* TB/TD/v, BT/^, LR/>, RL/<: false (d untouched) for anything else, so callers keep their default */
 [[nodiscard]] bool graph_dir(Str w, Dir d[static 1]);
 

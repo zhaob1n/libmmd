@@ -1,5 +1,6 @@
-/* the Graph tables (graph.h) shared by the flowchart parser and dgraph: growth, node interning and
- * direction words. One place grows every parse-time SoA array, so a new field can't be missed. */
+/* the Graph tables (graph.h) shared by the flowchart parser and dgraph: growth, node interning,
+ * direction words and the small parse helpers (subgraph lookup, class/style lists, @{ } bodies).
+ * One place grows every parse-time SoA array, so a new field can't be missed. */
 #include "graph.h"
 
 /* 8 bytes a step; as well spread as FNV-1a and faster on ids longer than a few bytes */
@@ -118,4 +119,58 @@ bool graph_dir(Str w, Dir d[static 1]) {
     if (str_eq(w, S("LR")) || str_eq(w, S(">"))) return *d = DIR_LR, true;
     if (str_eq(w, S("RL")) || str_eq(w, S("<"))) return *d = DIR_RL, true;
     return false;
+}
+
+int32_t graph_find_sg(const Graph g[static 1], Str id) {
+    for (size_t i = 0; i < g->ns; i++)
+        if (str_eq(g->sid[i], id)) return (int32_t)i;
+    return NONE;
+}
+
+bool graph_add_css(Arena a[static 1], Str dst[static 1], Str add) {
+    add = str_trim(add);
+    while (add.n && add.p[add.n - 1] == ';') add.n--;
+    if (!add.n) return true;
+    if (!dst->n) { *dst = add; return true; }
+    char *o = arena_alloc(a, dst->n + add.n + 2, 1);
+    if (!o) return false;
+    memcpy(o, dst->p, dst->n);
+    o[dst->n] = ',';
+    memcpy(o + dst->n + 1, add.p, add.n);
+    *dst = (Str){.p = o, .n = dst->n + add.n + 1};
+    return true;
+}
+
+bool graph_add_class(Arena a[static 1], Str dst[static 1], Str add) {
+    if (!dst->n) { *dst = add; return true; }
+    char *o = arena_alloc(a, dst->n + add.n + 2, 1);
+    if (!o) return false;
+    memcpy(o, dst->p, dst->n);
+    o[dst->n] = ' ';
+    memcpy(o + dst->n + 1, add.p, add.n);
+    *dst = (Str){.p = o, .n = dst->n + add.n + 1};
+    return true;
+}
+
+bool graph_kv_next(Str body[static 1], Str key[static 1], Str val[static 1]) {
+    size_t i = 0, n = body->n;
+    const char *s = body->p;
+    while (i < n && (is_sp(s[i]) || s[i] == ',' || s[i] == '\n')) i++;
+    size_t ks = i;
+    while (i < n && s[i] != ':') i++;
+    if (i >= n) return false;
+    *key = str_trim((Str){.p = s + ks, .n = i - ks});
+    i++;
+    while (i < n && is_sp(s[i])) i++;
+    size_t vs = i;
+    if (i < n && s[i] == '"') {
+        i++;
+        while (i < n && s[i] != '"') i++;
+        if (i < n) i++;
+    } else {
+        while (i < n && s[i] != ',' && s[i] != '\n') i++;
+    }
+    *val = str_trim((Str){.p = s + vs, .n = i - vs});
+    *body = (Str){.p = s + i, .n = n - i};
+    return true;
 }
