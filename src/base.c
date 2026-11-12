@@ -50,6 +50,9 @@ void *arena_alloc_slow(Arena a[static 1], size_t size, size_t align) {
 }
 
 void *arena_grow(Arena a[static 1], void *old, size_t cap[static 1], size_t elem, size_t align) {
+#ifdef MMD_FAULT_INJECT
+    if (mmd_fault_inject()) return a->oom = true, nullptr;
+#endif
     size_t ncap = *cap ? *cap * 2 : 8;
     size_t oldb = *cap * elem, newb = 0;
     if (ckd_mul(&newb, ncap, elem)) return a->oom = true, nullptr;

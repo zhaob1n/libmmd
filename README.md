@@ -209,6 +209,7 @@ More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 | ASan + UBSan build | `make asan` → `build-asan/mmd` |
 | Fuzzing (mutational, under ASan or MSan) | `python3 tests/fuzz.py build-asan/mmd 1000 [seed]` |
 | Uninitialised arena reads (malloc poisoned with two fill bytes, output compared) | `sh tests/poison.sh` |
+| Allocation failure: each malloc fails in turn in `make test` (0.2 s); `make oom` also fails arena allocations, sampled, under ASan (2 s run) | `make oom` |
 | ASan+UBSan and MemorySanitizer over the tests and the corpus | `tools/sancheck.sh` |
 | Stress generator (every type, density 1×–5×) | `python3 tools/stress_gen.py OUT 2 SEED SCALE` |
 | Visual quality scanner (edges through nodes, label overlaps, labels on edges, out-of-bounds…) | `python3 tools/quality_scan.py files… [-v]` |

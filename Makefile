@@ -75,6 +75,7 @@ $(BUILD)/test-%: tests/%_test.c $(BUILD)/libmmd.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
 $(BUILD)/bench-%: bench/%_bench.c $(BUILD)/libmmd.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
+$(BUILD)/test-oom: LDFLAGS += -Wl,--wrap=malloc,--wrap=calloc,--wrap=realloc
 $(BUILD)/test-shared: tests/shared_test.c $(BUILD)/libmmd.so $(BUILD)/mmd.pc
 	$(CC) $(CFLAGS) $< -L$(BUILD) -lmmd -Wl,-rpath,'$$ORIGIN' -o $@
 
@@ -97,20 +98,26 @@ pgo:
 	if $(CC) --version | grep -qi clang; then $(HOME)/.local/bin/llvm-profdata merge -o $(PGO_DIR)/default.profdata $(PGO_DIR)/*.profraw; fi
 	$(MAKE) BUILD=build-pgo PGO_USE=$(PGO_DIR) LTO=$(LTO) MARCH=$(MARCH)
 
-test: all $(BUILD)/test-shared $(BUILD)/test-locale $(BUILD)/test-writer
+test: all $(BUILD)/test-shared $(BUILD)/test-locale $(BUILD)/test-writer $(BUILD)/test-oom
 	./tests/run_tests.sh $(BUILD)/mmd
 	$(BUILD)/test-shared
 	$(BUILD)/test-locale tests/cases/*.mmd tests/docs/*/*.mmd
 	$(BUILD)/test-writer
+	$(BUILD)/test-oom tests/cases/*.mmd tests/docs/*/*.mmd
 	python3 tools/docs_audit.py -q -v $(BUILD)/mmd
 
 both:
 	$(MAKE) CC=$(HOME)/.local/bin/clang BUILD=build
 	$(MAKE) CC=gcc-16 BUILD=build-gcc
 
+# test-oom failing arena allocations too, under ASan: ~40 s to build, ~2 s to run
+oom:
+	$(MAKE) BUILD=build-oom OPT="-O1 -g -DMMD_FAULT_INJECT -fsanitize=address,undefined -fno-omit-frame-pointer" LDLIBS="-lm -fsanitize=address,undefined" build-oom/test-oom
+	UBSAN_OPTIONS=halt_on_error=1 build-oom/test-oom tests/cases/*.mmd tests/docs/*/*.mmd
+
 asan:
 	$(MAKE) BUILD=build-asan OPT="-O1 -fsanitize=address,undefined -fno-omit-frame-pointer" LDLIBS="-lm -fsanitize=address,undefined"
 
 clean:
-	rm -rf build build-gcc build-asan build-msan build-pgo build-pgo-gen build-pgo-prof
-.PHONY: all test both asan clean install pgo
+	rm -rf build build-gcc build-asan build-msan build-oom build-pgo build-pgo-gen build-pgo-prof
+.PHONY: all test both asan oom clean install pgo
