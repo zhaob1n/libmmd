@@ -399,3 +399,183 @@ void dg_css_put(Buf b[static 1], Str css) {
         if (ch != '"' && ch != '<' && ch != '&') buf_ch(b, ch);
     }
 }
+
+/* ---- mermaid 12 neo look ---- */
+NeoColor dg_redux(size_t i) {
+    static const NeoColor P[] = { /* redux-color borderColorArray, with the fills its slots pair them with */
+        {"#E879F9", "#FDF4FF"}, {"#2DD4BF", "#F0FDFA"}, {"#FB923C", "#FFF7ED"}, {"#22D3EE", "#ECFEFF"},
+        {"#4ADE80", "#F0FDF4"}, {"#A78BFA", "#F5F3FF"}, {"#F87171", "#FEF2F2"}, {"#FACC15", "#FEFCE8"},
+        {"#818CF8", "#EEF2FF"}, {"#A3E635", "#F7FEE7"}, {"#38BDF8", "#F0F9FF"}, {"#FB7185", "#FFF1F2"},
+    };
+    return P[i % countof(P)];
+}
+
+void dg_neo_defs(Buf b[static 1]) {
+    buf_lit(b, "<defs><filter id=\"neo-shadow\" height=\"130%\" width=\"130%\"><feDropShadow dx=\"4\" dy=\"4\" "
+               "stdDeviation=\"0\" flood-opacity=\"0.06\" flood-color=\"#000000\"/></filter>");
+    static const struct { const char *id, *vb, *ref, *size, *shape; } M[] = {
+        {"neo-point-end", "0 0 11.5 14", "refX=\"11.5\" refY=\"7\"", "10.5\" markerHeight=\"14", "<path d=\"M0,0L11.5,7L0,14z\" class=\"mk\"/>"},
+        {"neo-point-start", "0 0 11.5 14", "refX=\"0\" refY=\"7\"", "10.5\" markerHeight=\"14", "<path d=\"M11.5,0L0,7L11.5,14z\" class=\"mk\"/>"},
+        {"neo-circle-end", "0 0 10 10", "refX=\"10\" refY=\"5\"", "11\" markerHeight=\"11", "<circle cx=\"5\" cy=\"5\" r=\"5\" class=\"mk\"/>"},
+        {"neo-circle-start", "0 0 10 10", "refX=\"0\" refY=\"5\"", "11\" markerHeight=\"11", "<circle cx=\"5\" cy=\"5\" r=\"5\" class=\"mk\"/>"},
+        {"neo-cross-end", "0 0 11 11", "refX=\"9\" refY=\"5.5\"", "11\" markerHeight=\"11", "<path d=\"M1,1L10,10M10,1L1,10\" class=\"mkx\"/>"},
+        {"neo-cross-start", "0 0 11 11", "refX=\"2\" refY=\"5.5\"", "11\" markerHeight=\"11", "<path d=\"M1,1L10,10M10,1L1,10\" class=\"mkx\"/>"},
+        {"neo-ext-end", "0 0 20 16", "refX=\"19\" refY=\"8\"", "20\" markerHeight=\"16", "<path d=\"M1,1L19,8L1,15z\" class=\"mke\"/>"},
+    };
+    for (size_t i = 0; i < countof(M); i++) {
+        buf_lit(b, "<marker id=\""); buf_cstr(b, M[i].id); buf_lit(b, "\" viewBox=\""); buf_cstr(b, M[i].vb);
+        buf_lit(b, "\" "); buf_cstr(b, M[i].ref);
+        buf_lit(b, " markerUnits=\"userSpaceOnUse\" markerWidth=\""); buf_cstr(b, M[i].size);
+        buf_lit(b, "\" orient=\"auto\">"); buf_cstr(b, M[i].shape); buf_lit(b, "</marker>");
+    }
+    buf_lit(b, "</defs>");
+}
+
+const char *dg_neo_marker(Arrow a, bool end) {
+    switch (a) {
+    case AH_ARROW: return end ? "neo-point-end" : "neo-point-start";
+    case AH_CIRCLE: return end ? "neo-circle-end" : "neo-circle-start";
+    case AH_CROSS: return end ? "neo-cross-end" : "neo-cross-start";
+    default: return nullptr;
+    }
+}
+
+/* the side of v's box facing (x,y): its centre, or the layout's own end point p for a cluster */
+typedef struct { double x, y, w, h; } Box; /* centre and size */
+
+/* a node's box; an edge end naming a subgraph (NF_SUBREF) uses the cluster's */
+static Box nbox(const Graph g[static 1], int32_t v) {
+    if (g->nflags[v] & NF_SUBREF)
+        for (size_t s = 0; s < g->ns; s++)
+            if (str_eq(g->sid[s], g->nid[v])) return (Box){g->sx[s] + g->sw[s] / 2, g->sy[s] + g->sh[s] / 2, g->sw[s], g->sh[s]};
+    return (Box){g->nx[v], g->ny[v], g->nw[v], g->nh[v]};
+}
+
+/* the point of box n's face towards (x, y), on the rank axis (vert) or across it, off its centre by
+ * `off`; a diamond's face is its corner, so an offset slides down the slanted side */
+static void face(Box n, bool diamond, bool vert, double x, double y, double off, double out[static 2]) {
+    out[0] = n.x, out[1] = n.y;
+    double sg = vert ? (y > n.y ? 1 : -1) : (x > n.x ? 1 : -1);
+    double in = diamond ? fabs(off) * (vert ? n.h / n.w : n.w / n.h) : 0;
+    if (vert) out[1] += sg * (n.h / 2 - in), out[0] += off;
+    else out[0] += sg * (n.w / 2 - in), out[1] += off;
+}
+
+/* both ends' boxes and whether the edge runs along the rank axis */
+static bool ends(const Graph g[static 1], size_t e, Box *A, Box *B) {
+    *A = nbox(g, g->efrom[e]), *B = nbox(g, g->eto[e]);
+    bool vert = g->dir == DIR_TB || g->dir == DIR_BT;
+    /* an edge across the rank axis (same rank, or a cluster laid out the other way) bends the other way */
+    if (vert) return fabs(B->y - A->y) >= (A->h + B->h) / 2;
+    return fabs(B->x - A->x) < (A->w + B->w) / 2;
+}
+
+typedef struct { int32_t v; int8_t side; double at; uint32_t slot; } PortEnd; /* slot = 2e + (to end) */
+
+static int port_cmp(const void *x, const void *y) {
+    const PortEnd *a = x, *b = y;
+    if (a->v != b->v) return a->v < b->v ? -1 : 1;
+    if (a->side != b->side) return a->side < b->side ? -1 : 1;
+    if (a->at != b->at) return a->at < b->at ? -1 : 1;
+    return a->slot < b->slot ? -1 : a->slot > b->slot;
+}
+
+double *dg_ports(const Graph g[static 1]) {
+    size_t E = g->ne, m = 0;
+    double *off = ANEW(g->arena, double, 2 * E + 1);
+    PortEnd *pe = ANEW(g->arena, PortEnd, 2 * E + 1);
+    if (!off || !pe) return nullptr;
+    for (size_t e = 0; e < E; e++) {
+        off[2 * e] = off[2 * e + 1] = 0;
+        int32_t a = g->efrom[e], t = g->eto[e];
+        if (a == NONE || t == NONE || a == t || g->estroke[e] == ST_INVISIBLE) continue;
+        Box A, B;
+        bool vert = ends(g, e, &A, &B);
+        /* side: which face (sign on the bend axis); at: where the far end lies across it */
+        pe[m++] = (PortEnd){a, (int8_t)(vert ? (B.y > A.y) : (B.x > A.x)), vert ? B.x : B.y, (uint32_t)(2 * e)};
+        pe[m++] = (PortEnd){t, (int8_t)(vert ? (A.y > B.y) : (A.x > B.x)), vert ? A.x : A.y, (uint32_t)(2 * e + 1)};
+        pe[m - 2].side += vert ? 0 : 2, pe[m - 1].side += vert ? 0 : 2;
+    }
+    qsort(pe, m, sizeof *pe, port_cmp);
+    for (size_t i = 0, j; i < m; i = j) {
+        for (j = i + 1; j < m && pe[j].v == pe[i].v && pe[j].side == pe[i].side; j++) {}
+        size_t k = j - i;
+        if (k < 2) continue;
+        Box n = nbox(g, pe[i].v);
+        double len = pe[i].side < 2 ? n.w : n.h, step = fmin(20, len / (double)(k + 1));
+        for (size_t q = i; q < j; q++) off[pe[q].slot] = ((double)(q - i) - (double)(k - 1) / 2) * step;
+    }
+    return off;
+}
+
+/* does the 3-segment route S -> mid -> E (bending at the main-axis midpoint) avoid every other node? */
+static bool z_clear(const Graph g[static 1], int32_t a, int32_t t, bool vert, const double S[static 2], const double E[static 2]) {
+    int k = vert ? 1 : 0, o = !k;
+    double m = (S[k] + E[k]) / 2, seg[3][4] = {{S[k], m, S[o], S[o]}, {m, m, S[o], E[o]}, {m, E[k], E[o], E[o]}};
+    for (size_t v = 0; v < g->nn; v++) {
+        if ((int32_t)v == a || (int32_t)v == t || (g->nflags[v] & (NF_HIDDEN | NF_SUBREF | NF_PROXY))) continue;
+        double c[2] = {g->nx[v], g->ny[v]}, hd[2] = {g->nw[v] / 2, g->nh[v] / 2};
+        for (size_t i = 0; i < 3; i++) /* segment i: [seg0, seg1] on the main axis, [seg2, seg3] across */
+            if (fmax(seg[i][0], seg[i][1]) > c[k] - hd[k] && fmin(seg[i][0], seg[i][1]) < c[k] + hd[k] &&
+                fmax(seg[i][2], seg[i][3]) > c[o] - hd[o] && fmin(seg[i][2], seg[i][3]) < c[o] + hd[o]) return false;
+    }
+    return true;
+}
+
+bool dg_ortho_d(Buf b[restrict static 1], const Graph g[restrict static 1], size_t e, const double *ports,
+                double mid[restrict static 2]) {
+    uint32_t n = g->eptn[e];
+    int32_t a = g->efrom[e], t = g->eto[e];
+    if (n < 2 || a == t) return false;
+    const double *P = g->pts.v + g->eptoff[e];
+    Box A, B;
+    bool vert = ends(g, e, &A, &B);
+    double S[2], E[2];
+    bool da = !(g->nflags[a] & NF_SUBREF) && g->nshape[a] == SH_RHOMBUS, dt = !(g->nflags[t] & NF_SUBREF) && g->nshape[t] == SH_RHOMBUS;
+    face(A, da, vert, B.x, B.y, ports ? ports[2 * e] : 0, S);
+    face(B, dt, vert, A.x, A.y, ports ? ports[2 * e + 1] : 0, E);
+    double *Q = ANEW(g->arena, double, 6 * n + 8);
+    if (!Q) return false;
+    size_t m = 0;
+    Q[m++] = S[0], Q[m++] = S[1];
+    int k = vert ? 1 : 0; /* main coordinate */
+    double lo = fmin(S[k], E[k]) + 1, hi = fmax(S[k], E[k]) - 1;
+    bool direct = z_clear(g, a, t, vert, S, E);
+    for (uint32_t i = 0; i <= n; i++) { /* the layout's inner bends (long edges) unless a Z clears, then E */
+        const double *T = i < n ? P + 2 * i : E;
+        if (i < n && (direct || i == 0 || i == n - 1 || T[k] <= lo || T[k] >= hi)) continue;
+        double cx = Q[m - 2], cy = Q[m - 1];
+        if (fabs(vert ? T[0] - cx : T[1] - cy) > 0.5) {
+            double mm = ((vert ? cy : cx) + T[k]) / 2;
+            if (vert) { Q[m++] = cx, Q[m++] = mm, Q[m++] = T[0], Q[m++] = mm; }
+            else { Q[m++] = mm, Q[m++] = cy, Q[m++] = mm, Q[m++] = T[1]; }
+        }
+        Q[m++] = T[0], Q[m++] = T[1];
+    }
+    size_t np = m / 2;
+    double len = 0;
+    for (size_t i = 1; i < np; i++) len += hypot(Q[2 * i] - Q[2 * i - 2], Q[2 * i + 1] - Q[2 * i - 1]);
+    double half = len / 2;
+    mid[0] = Q[0], mid[1] = Q[1];
+    for (size_t i = 1; i < np; i++) {
+        double l = hypot(Q[2 * i] - Q[2 * i - 2], Q[2 * i + 1] - Q[2 * i - 1]);
+        if (l >= half && l > 0) {
+            mid[0] = Q[2 * i - 2] + (Q[2 * i] - Q[2 * i - 2]) * half / l;
+            mid[1] = Q[2 * i - 1] + (Q[2 * i + 1] - Q[2 * i - 1]) * half / l;
+            break;
+        }
+        half -= l;
+    }
+    buf_ch(b, 'M'); buf_pt(b, Q[0], Q[1]);
+    for (size_t i = 1; i + 1 < np; i++) { /* rounded corners (mermaid neo: radius 5) */
+        const double *A = Q + 2 * i - 2, *C = Q + 2 * i, *D = Q + 2 * i + 2;
+        double l1 = hypot(C[0] - A[0], C[1] - A[1]), l2 = hypot(D[0] - C[0], D[1] - C[1]);
+        double r = fmin(5, fmin(l1, l2) / 2);
+        if (r < 0.01) { buf_ch(b, 'L'); buf_pt(b, C[0], C[1]); continue; }
+        buf_ch(b, 'L'); buf_pt(b, C[0] + (A[0] - C[0]) * r / l1, C[1] + (A[1] - C[1]) * r / l1);
+        buf_ch(b, 'Q'); buf_pt(b, C[0], C[1]); buf_ch(b, ' ');
+        buf_pt(b, C[0] + (D[0] - C[0]) * r / l2, C[1] + (D[1] - C[1]) * r / l2);
+    }
+    buf_ch(b, 'L'); buf_pt(b, Q[2 * np - 2], Q[2 * np - 1]);
+    return true;
+}

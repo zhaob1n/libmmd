@@ -60,6 +60,20 @@ static inline Dir dg_dir(Str d) {
     Dir r;
     return graph_dir(d, &r) ? r : DIR_TB;
 }
+/* ---- mermaid 12's neo look (agentflow, usecase) ---- */
+typedef struct NeoColor { const char *stroke, *fill; } NeoColor;
+/* slot i of the redux-color palette */
+NeoColor dg_redux(size_t i);
+/* <defs>: drop shadow `neo-shadow` and markers dg_neo_marker() names (classes mk, mkx, mke) */
+void dg_neo_defs(Buf b[static 1]);
+const char *dg_neo_marker(Arrow a, bool end);
+/* per edge end (2e: from, 2e+1: to), an offset that spreads the ends sharing a node face; nullptr on OOM */
+double *dg_ports(const Graph g[static 1]);
+/* path data of edge e routed orthogonally between the facing sides of its ends (moved by dg_ports'
+ * offsets when given), corners rounded; mid = the point halfway along it (label anchor).
+ * false (nothing written) for self-loops */
+[[nodiscard]] bool dg_ortho_d(Buf b[restrict static 1], const Graph g[restrict static 1], size_t e, const double *ports,
+                              double mid[restrict static 2]);
 /* user-supplied CSS value safe to splice into a style attribute */
 static inline bool dg_css_ok(Str v) {
     if (!v.n || v.n > 40) return false;
