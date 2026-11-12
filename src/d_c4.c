@@ -423,6 +423,7 @@ DIAG_FN(c4_render) {
        gap widens it, so the label sits between them instead of on a box */
     double *gap = ANEW(a, double, g.nn + 1);
     if (gap) {
+        memset(gap, 0, (g.nn + 1) * sizeof *gap);
         int32_t prev = NONE;
         for (size_t i = 0; i < items.n; i++) {
             if (items.v[i].box) continue;

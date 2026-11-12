@@ -217,9 +217,11 @@ DIAG_FN(gitgraph_render) {
      * lanes below it down so the labels clear the next branch line */
     double *lq = ANEW(a, double, br.n + 1);
     if (!lq) return MMD_ERR_NOMEM;
+    lq[0] = 0;
     {
         double *drop = ANEW(a, double, br.n + 1);
         if (!drop) return MMD_ERR_NOMEM;
+        memset(drop, 0, (br.n + 1) * sizeof *drop);
         if (dir == 0 && rot)
             for (size_t i = 0; i < cm.n; i++) {
                 if (cm.v[i].type == C_CHERRY) continue;
