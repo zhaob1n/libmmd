@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "mmd_writer.h"
+#include "mmd.h"
 
 typedef enum Ctx { STR, TEXT, CSV, ID } Ctx;
 typedef struct Case {

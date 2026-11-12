@@ -1,7 +1,7 @@
 /* Mermaid source writer: a Buf with a sticky error. Labels are escaped with
  * mermaid entities (#35; ...), which every diagram type decodes on output;
  * docs/dev/writer.md has the per-diagram audit behind the escape sets. */
-#include "mmd_writer.h"
+#include "mmd.h"
 
 #include <math.h>
 #include <stdarg.h>

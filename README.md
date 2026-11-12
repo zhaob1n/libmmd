@@ -112,7 +112,7 @@ cc -std=gnu23 -Iinclude example.c build/libmmd.a -lm      # or: $(pkg-config --c
 - The shared library exports only `mmd_*` symbols.
 - Output does not depend on the host's `setlocale()`: each render runs in the C locale on the calling thread only (`uselocale`), then restores the host's.
 
-To *write* diagrams (test data, benchmark results), [`include/mmd_writer.h`](include/mmd_writer.h)
+To *write* diagrams (test data, benchmark results), the writer half of [`include/mmd.h`](include/mmd.h)
 builds the text and escapes every value for its context, so a label can hold any character:
 
 ```c

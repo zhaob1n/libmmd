@@ -1,6 +1,6 @@
 # mmd_writer: escape contexts and the per-diagram audit
 
-`include/mmd_writer.h`, `src/writer.c`. Tested by `tests/writer_test.c` (`make test`); timed by
+`include/mmd.h` (writer section), `src/writer.c`. Tested by `tests/writer_test.c` (`make test`); timed by
 `bench/writer_bench.c` (`make build/bench-writer`).
 
 ## Decisions

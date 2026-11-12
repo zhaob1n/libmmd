@@ -6,7 +6,7 @@
 #include <string.h>
 #include <time.h>
 
-#include "mmd_writer.h"
+#include "mmd.h"
 
 constexpr size_t N = 200;
 constexpr int RUNS = 2000;

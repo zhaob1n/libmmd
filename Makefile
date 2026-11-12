@@ -85,7 +85,7 @@ $(BUILD)/test-shared: tests/shared_test.c $(BUILD)/libmmd.so $(BUILD)/mmd.pc
 
 install: all
 	install -d $(DESTDIR)$(LIBDIR)/pkgconfig $(DESTDIR)$(INCDIR) $(DESTDIR)$(BINDIR)
-	install -m644 include/mmd.h include/mmd_writer.h $(DESTDIR)$(INCDIR)/
+	install -m644 include/mmd.h $(DESTDIR)$(INCDIR)/
 	install -m644 $(BUILD)/libmmd.a $(DESTDIR)$(LIBDIR)/
 	install -m755 $(BUILD)/libmmd.so.$(VERSION) $(DESTDIR)$(LIBDIR)/
 	ln -sf libmmd.so.$(VERSION) $(DESTDIR)$(LIBDIR)/$(SONAME)
