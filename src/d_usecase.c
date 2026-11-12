@@ -22,6 +22,7 @@ typedef struct Ent {
     Kind kind;
     ActorType at;
     bool business;
+    bool labelled; /* a declaration gave the label */
     int32_t parent; /* boundary, or NONE */
     VEC(Row) rows;  /* json */
 } Ent;
@@ -198,7 +199,10 @@ static const char *declare(U u[static 1], const Decl d[static 1], bool actor) {
     Ent *e = &u->ents.v[v];
     if (actor) e->kind = K_ACTOR;
     else if (d->has_label && e->kind != K_ACTOR) e->kind = d->shape;
-    if (d->has_label) e->label = d->label;
+    if (d->has_label) {
+        if (e->labelled && !str_eq(e->label, d->label)) return "ID declared again with a different label";
+        e->label = d->label, e->labelled = true;
+    }
     if (d->stereo.n) e->stereo = d->stereo;
     if (d->cls.n && !graph_add_class(u->a, &e->cls, d->cls)) return OOM;
     if (u->bnd != NONE) e->parent = u->bnd;

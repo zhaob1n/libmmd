@@ -476,6 +476,7 @@ afbaa6b4ebd14b86 tests/cases/er_sub_dir.mmd
 db21aebcf656ffce tests/cases/er_sub_iso.mmd
 1bba53cc7c93fb4d tests/cases/er_subgraph.mmd
 e3b0c44298fc1c14 tests/cases/err1.mmd
+e3b0c44298fc1c14 tests/cases/err_usecase_label.mmd
 9d4e350b9eb52396 tests/cases/eventmodeling_04.mmd
 af7e6f9cbf935c8d tests/cases/eventmodeling_06.mmd
 9a9ab2cb2a653126 tests/cases/eventmodeling_09.mmd
