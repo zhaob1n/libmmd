@@ -52,6 +52,11 @@ CSV: mermaid's sankey grammar reads printable ASCII and runs no entity decoding 
 non-ASCII, tab, `<` `>` (shown as `&lt;` or dropped), `#name;` and `%%{` (a directive) are refused.
 Fields are quoted (`""` for `"`) when they hold `,` `"`, edge blanks or a leading `%`.
 
+`MMD_W_LINESTART` (`mmd_w_text` that starts a statement): when the text's first word is a keyword of
+the diagram the writer holds (its header line: timeline, journey, ishikawa, wardley, gantt, sequence,
+treeView; else `title`/`accTitle`/`accDescr` and the header word), the first character becomes an
+entity, as the typed helpers do. Keywords come from mermaid's jison and langium grammars.
+
 Extra escapes the typed helpers add:
 - treeView names: `(` (`icon(…)`), a trailing `/` (folder), a leading `"` or `'` (strings),
   `title`/`accTitle`/`accDescr`, and every box-drawing character (one `├` anywhere switches
@@ -89,7 +94,7 @@ grammar has no comments).
 ## Audit: slots per diagram type
 
 Q = `mmd_w_str`, T = `mmd_w_text`, I = `mmd_w_id`, C = `mmd_w_csv`; **br** = draws `<br>` (in
-mermaid).
+mermaid); **ls** = starts a statement (`MMD_W_LINESTART`).
 Every listed slot is in `tests/writer_test.c` and survives random labels built from all of the
 above (CJK, emoji, `#quot;`, `%%`, `-->`, `fa:fa-car`, newlines...).
 
@@ -101,9 +106,9 @@ above (CJK, emoji, `#quot;`, `%%`, `-->`, `fa:fa-car`, newlines...).
 | stateDiagram | `state … as A` (br) | description, transition, note (br) | state ids | `mmd_state_*` refuse keyword ids (`state`, `note`, `class`, ...) |
 | erDiagram | relation, attribute comment, alias `p[…]` | | entities | `mmd_er_*` quote every name, so `-`, blanks and keywords (`one`, `to`) are fine |
 | pie | slice | title | | |
-| gantt | | task, section, title | | `mmd_gantt_task` writes dates and `Nd` durations, refuses tag-like ids |
-| journey | | task, section (br); actor | | |
-| timeline | | period, event, section (br) | | |
+| gantt | | task (ls), section, title | | `mmd_gantt_task` writes dates and `Nd` durations, refuses tag-like ids |
+| journey | | task (ls), section (br); actor | | |
+| timeline | | period (ls), event, section (br) | | |
 | mindmap | shape `id[…]` (br) | | node ids | bare node lines are node specs (`[`, `(`, `:::`, `::icon`); `mmd_mindmap_node` nests by depth |
 | quadrantChart | point, quadrant, axis | title | | mermaid's unquoted quadrant/axis text rejects `( ) @ ^ > ~` and more |
 | xychart | title, axis titles, categories, series | | | |
@@ -118,22 +123,21 @@ above (CJK, emoji, `#quot;`, `%%`, `-->`, `fa:fa-car`, newlines...).
 | radar | axis and curve `id[…]` | title | | |
 | treemap | leaf, section | | | nest with `mmd_w_line` |
 | zenuml | | message, title | | mermaid's zenuml plugin shows entities literally |
-| ishikawa | | head, causes (br) | | nest with `mmd_w_line` |
+| ishikawa | | head, causes (br, ls) | | nest with `mmd_w_line` |
 | cynefin | item, transition | title | | |
 | venn | set, text `[…]` | | | |
 | treeView | | `## description` | node names | `/` (folder), `:::`, `icon(` are syntax in names; `mmd_tree_node` escapes them |
 | eventmodeling | | `data` values | names | names are dotted identifiers; mermaid: ASCII, letter first |
 | railroad | terminals (EBNF, function form) | | | `title` is accepted but not drawn, as in mermaid-cli |
-| wardley | note | component, title | | mermaid's component lexer takes no entity |
+| wardley | note | component (ls), title | | mermaid's component lexer takes no entity |
 
 ## Not representable (refused or documented)
 
 - A line break outside a **br** slot (pie, xychart, gantt, sankey, ...): refused.
 - An empty xychart category or series list: mermaid's grammar needs one item, so it is refused.
 - Leading/trailing blanks: trimmed by every parser.
-- T at the start of a statement can't start with that diagram's keyword (`section`, `title`, ...).
-  The typed helpers handle it (gantt tasks, sequence ids, treeView names); written by hand with
-  `mmd_w_text` (timeline period, ishikawa cause, wardley component) it is not checked.
+- T at the start of a statement can't start with that diagram's keyword (`section`, `title`, ...):
+  the typed helpers handle it, `mmd_w_text` with `MMD_W_LINESTART` elsewhere.
 - mermaid.js limits no escape gets around: C4 and architecture print entities literally, as does the
   zenuml plugin; wardley components, eventmodeling names and gitGraph branches take a narrow
   character set; a literal `<br>` or `fa:fa-x` is drawn as markup whatever its spelling; mermaid

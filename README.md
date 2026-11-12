@@ -144,7 +144,8 @@ mmd_end(w);
 ```
 
 Errors are sticky (checked once at the end), numbers are written shortest-round-trip, and
-`mmd_w_str` / `mmd_w_text` / `mmd_w_id` / `mmd_w_csv` / `mmd_w_line` cover every other diagram type.
+`mmd_w_str` / `mmd_w_text` / `mmd_w_id` / `mmd_w_csv` / `mmd_w_line` cover every other diagram type
+(`MMD_W_LINESTART` when text starts a statement, e.g. a timeline period or wardley component).
 Which context each diagram slot takes is in [docs/dev/writer.md](docs/dev/writer.md).
 
 ## Benchmarks

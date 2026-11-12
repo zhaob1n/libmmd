@@ -102,7 +102,9 @@ MMD_API mmd_status mmd_writer_render_svg(const mmd_writer *w, const mmd_options 
 
 /* ---- escape contexts: work in every diagram type ---- */
 enum {
-    MMD_W_BR = 1u, /* '\n' becomes <br>; only where the diagram draws line breaks */
+    MMD_W_BR = 1u,        /* '\n' becomes <br>; only where the diagram draws line breaks */
+    MMD_W_LINESTART = 2u, /* mmd_w_text at the start of a statement (timeline period, ishikawa cause,
+                             wardley component ...): a leading keyword of the diagram becomes an entity */
 };
 /* end the current line (if any) and indent depth levels: statements, and the
  * nesting of mindmap, treeView, treemap, kanban, ishikawa, venn ... */

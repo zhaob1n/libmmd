@@ -15,102 +15,103 @@ typedef enum Ctx { STR, TEXT, CSV, ID } Ctx;
 typedef struct Case {
     const char *name, *pre, *post;
     Ctx ctx;
-    bool br; /* the diagram draws line breaks here */
+    unsigned flags; /* MMD_W_BR: the diagram draws line breaks here; MMD_W_LINESTART: text that starts
+                       a statement, so labels may start with a keyword */
 } Case;
 
 static const Case CASES[] = {
-    {"flowchart node", "flowchart LR\n  A[", "] --> B\n", STR, true},
-    {"flowchart round", "flowchart LR\n  A(", ") --> B\n", STR, true},
-    {"flowchart rhombus", "flowchart LR\n  A{", "} --> B\n", STR, true},
-    {"flowchart @{label}", "flowchart LR\n  A@{ shape: rect, label: ", " } --> B\n", STR, true},
-    {"flowchart edge |l|", "flowchart LR\n  A -->|", "| B\n", STR, true},
-    {"flowchart edge -- l -->", "flowchart LR\n  A -- ", " --> B\n", STR, true},
-    {"flowchart subgraph", "flowchart LR\n  subgraph s1 [", "]\n    A\n  end\n", STR, true},
-    {"swimlane node", "swimlane-beta LR\n  subgraph L\n    A[", "]\n  end\n", STR, true},
-    {"swimlane lane", "swimlane-beta LR\n  subgraph l1 [", "]\n    A\n  end\n", STR, true},
-    {"sequence message", "sequenceDiagram\n  A->>B: ", "\n", TEXT, true},
-    {"sequence note", "sequenceDiagram\n  A->>B: x\n  Note over A: ", "\n", TEXT, true},
-    {"sequence alias", "sequenceDiagram\n  participant A as ", "\n  A->>B: x\n", TEXT, true},
-    {"sequence loop", "sequenceDiagram\n  loop ", "\n  A->>B: x\n  end\n", TEXT, false},
-    {"sequence title", "sequenceDiagram\n  title ", "\n  A->>B: x\n", TEXT, false},
-    {"class label", "classDiagram\n  class A[", "]\n", STR, true},
-    {"class note", "classDiagram\n  class A\n  note for A ", "\n", STR, true},
-    {"class relation", "classDiagram\n  A --> B : ", "\n", TEXT, true},
-    {"state description", "stateDiagram-v2\n  A --> B\n  A : ", "\n", TEXT, true},
-    {"state alias", "stateDiagram-v2\n  state ", " as A\n  A --> B\n", STR, true},
-    {"state transition", "stateDiagram-v2\n  A --> B : ", "\n", TEXT, true},
-    {"state note", "stateDiagram-v2\n  A --> B\n  note right of A : ", "\n", TEXT, true},
-    {"er relation", "erDiagram\n  A ||--o{ B : ", "\n", STR, false},
-    {"er comment", "erDiagram\n  A {\n    string name ", "\n  }\n", STR, false},
-    {"er alias", "erDiagram\n  p[", "] {\n    string x\n  }\n", STR, false},
-    {"pie slice", "pie\n  ", " : 3\n  \"b\" : 4\n", STR, false},
-    {"pie title", "pie title ", "\n  \"a\" : 3\n", TEXT, false},
-    {"gantt task", "gantt\n  dateFormat YYYY-MM-DD\n  section S\n  ", " :a1, 2026-01-01, 3d\n", TEXT, false},
-    {"gantt section", "gantt\n  dateFormat YYYY-MM-DD\n  section ", "\n  t :a1, 2026-01-01, 3d\n", TEXT, false},
-    {"gantt title", "gantt\n  title ", "\n  dateFormat YYYY-MM-DD\n  t :a1, 2026-01-01, 3d\n", TEXT, false},
-    {"journey task", "journey\n  section S\n    ", ": 5: Me\n", TEXT, true},
-    {"journey section", "journey\n  section ", "\n    t: 5: Me\n", TEXT, true},
-    {"journey actor", "journey\n  section S\n    t: 5: ", "\n", TEXT, false},
-    {"timeline event", "timeline\n  2002 : ", "\n", TEXT, true},
-    {"timeline period", "timeline\n  ", " : x\n", TEXT, true},
-    {"timeline section", "timeline\n  section ", "\n  2002 : x\n", TEXT, true},
-    {"mindmap node", "mindmap\n  root\n    a[", "]\n", STR, true},
-    {"quadrant point", "quadrantChart\n  ", ": [0.3, 0.6]\n", STR, false},
-    {"quadrant label", "quadrantChart\n  quadrant-1 ", "\n  A: [0.3, 0.6]\n", STR, false},
-    {"quadrant axis", "quadrantChart\n  x-axis ", " --> High\n  A: [0.3, 0.6]\n", STR, false},
-    {"quadrant title", "quadrantChart\n  title ", "\n  A: [0.3, 0.6]\n", TEXT, false},
-    {"xychart title", "xychart\n  title ", "\n  bar [1, 2]\n", STR, false},
-    {"xychart category", "xychart\n  x-axis [", ", b]\n  bar [1, 2]\n", STR, false},
-    {"xychart axis title", "xychart\n  x-axis ", " [a, b]\n  bar [1, 2]\n", STR, false},
-    {"xychart series", "xychart\n  x-axis [a, b]\n  bar ", " [1, 2]\n", STR, false},
-    {"gitGraph commit id", "gitGraph\n  commit id: ", "\n", STR, false},
-    {"gitGraph tag", "gitGraph\n  commit tag: ", "\n", STR, false},
-    {"sankey node", "sankey-beta\n", ",B,3\n", CSV, false},
-    {"block node", "block-beta\n  a[", "] b\n", STR, false},
-    {"block edge", "block-beta\n  a b\n  a -- ", " --> b\n", STR, false},
-    {"requirement text", "requirementDiagram\n  requirement r {\n  id: 1\n  text: ", "\n  }\n", STR, false},
-    {"requirement type", "requirementDiagram\n  element e {\n  type: ", "\n  }\n", STR, false},
-    {"C4 label", "C4Context\n  Person(p, ", ", \"d\")\n", STR, true},
-    {"C4 description", "C4Context\n  Person(p, \"x\", ", ")\n", STR, true},
-    {"C4 relation", "C4Context\n  Person(p, \"x\")\n  System(s, \"y\")\n  Rel(p, s, ", ")\n", STR, false},
-    {"C4 title", "C4Context\n  title ", "\n  Person(p, \"x\")\n", TEXT, false},
-    {"architecture service", "architecture-beta\n  service s(server)[", "]\n", TEXT, false},
-    {"architecture group", "architecture-beta\n  group g(cloud)[", "]\n  service s(server)[x] in g\n", TEXT, false},
-    {"architecture edge", "architecture-beta\n  service a(server)[x]\n  service b(server)[y]\n  a:R -[", "]- L:b\n", TEXT, false},
-    {"packet field", "packet-beta\n0-15: ", "\n", STR, false},
-    {"packet title", "packet-beta\ntitle ", "\n0-15: \"x\"\n", TEXT, false},
-    {"kanban card", "kanban\n  Todo\n    c1[", "]\n", STR, true},
-    {"kanban column", "kanban\n  c0[", "]\n    c1[x]\n", STR, true},
-    {"radar axis", "radar-beta\n  axis a[", "], b[\"y\"], c[\"z\"]\n  curve k[\"K\"]{1,2,3}\n", STR, false},
-    {"radar curve", "radar-beta\n  axis a[\"x\"], b[\"y\"], c[\"z\"]\n  curve k[", "]{1,2,3}\n", STR, false},
-    {"radar title", "radar-beta\n  title ", "\n  axis a[\"x\"], b[\"y\"], c[\"z\"]\n  curve k[\"K\"]{1,2,3}\n", TEXT, false},
-    {"treemap leaf", "treemap-beta\n\"S\"\n    ", ": 5\n    \"o\": 3\n", STR, false},
-    {"treemap section", "treemap-beta\n", "\n    \"l\": 5\n", STR, false},
-    {"zenuml message", "zenuml\n  A->B: ", "\n", TEXT, false},
-    {"zenuml title", "zenuml\n  title ", "\n  A->B: x\n", TEXT, false},
-    {"ishikawa head", "ishikawa-beta\n    ", "\n    Process\n        x\n", TEXT, true},
-    {"ishikawa cause", "ishikawa-beta\n    H\n    Process\n        ", "\n", TEXT, true},
-    {"cynefin item", "cynefin-beta\n  complex\n    ", "\n", STR, false},
-    {"cynefin transition", "cynefin-beta\n  complex\n    \"x\"\n  complex --> clear : ", "\n", STR, false},
-    {"cynefin title", "cynefin-beta\n  title ", "\n  complex\n    \"x\"\n", TEXT, false},
-    {"venn set", "venn-beta\n  set A[", "]\n  set B[\"y\"]\n", STR, false},
-    {"venn text", "venn-beta\n  set A[\"x\"]\n    text A1[", "]\n", STR, false},
-    {"treeView description", "treeView-beta\n    root/\n        f.txt ## ", "\n", TEXT, false},
-    {"eventmodeling data", "eventmodeling\ntf 01 evt E [[D]]\n\ndata D {\n  a: ", "\n}\n", TEXT, false},
-    {"railroad terminal", "railroad-ebnf-beta\nr = ", " ;\n", STR, false},
-    {"railroad fn terminal", "railroad-beta\nr = terminal(", ") ;\n", STR, false},
-    {"wardley component", "wardley-beta\ncomponent ", " [0.5, 0.5]\n", TEXT, false},
-    {"wardley note", "wardley-beta\ncomponent X [0.5, 0.5]\nnote ", " [0.3, 0.4]\n", STR, false},
-    {"wardley title", "wardley-beta\ntitle ", "\ncomponent X [0.5, 0.5]\n", TEXT, false},
-    {"flowchart id", "flowchart LR\n  ", " --> B\n", ID, false},
-    {"sequence participant", "sequenceDiagram\n  ", "->>B: x\n", ID, false},
-    {"class name", "classDiagram\n  class ", "\n", ID, false},
-    {"state id", "stateDiagram-v2\n  ", " --> B\n", ID, false},
-    {"er entity", "erDiagram\n  ", " ||--o{ B : r\n", ID, false},
-    {"gitGraph branch", "gitGraph\n  commit\n  branch ", "\n  commit\n", ID, false},
-    {"mindmap id", "mindmap\n  root\n    ", "\n", ID, false},
-    {"treeView node", "treeView-beta\n    root/\n        ", "\n", ID, false},
-    {"eventmodeling name", "eventmodeling\ntf 01 evt ", "\n", ID, false},
+    {"flowchart node", "flowchart LR\n  A[", "] --> B\n", STR, MMD_W_BR},
+    {"flowchart round", "flowchart LR\n  A(", ") --> B\n", STR, MMD_W_BR},
+    {"flowchart rhombus", "flowchart LR\n  A{", "} --> B\n", STR, MMD_W_BR},
+    {"flowchart @{label}", "flowchart LR\n  A@{ shape: rect, label: ", " } --> B\n", STR, MMD_W_BR},
+    {"flowchart edge |l|", "flowchart LR\n  A -->|", "| B\n", STR, MMD_W_BR},
+    {"flowchart edge -- l -->", "flowchart LR\n  A -- ", " --> B\n", STR, MMD_W_BR},
+    {"flowchart subgraph", "flowchart LR\n  subgraph s1 [", "]\n    A\n  end\n", STR, MMD_W_BR},
+    {"swimlane node", "swimlane-beta LR\n  subgraph L\n    A[", "]\n  end\n", STR, MMD_W_BR},
+    {"swimlane lane", "swimlane-beta LR\n  subgraph l1 [", "]\n    A\n  end\n", STR, MMD_W_BR},
+    {"sequence message", "sequenceDiagram\n  A->>B: ", "\n", TEXT, MMD_W_BR},
+    {"sequence note", "sequenceDiagram\n  A->>B: x\n  Note over A: ", "\n", TEXT, MMD_W_BR},
+    {"sequence alias", "sequenceDiagram\n  participant A as ", "\n  A->>B: x\n", TEXT, MMD_W_BR},
+    {"sequence loop", "sequenceDiagram\n  loop ", "\n  A->>B: x\n  end\n", TEXT, 0},
+    {"sequence title", "sequenceDiagram\n  title ", "\n  A->>B: x\n", TEXT, 0},
+    {"class label", "classDiagram\n  class A[", "]\n", STR, MMD_W_BR},
+    {"class note", "classDiagram\n  class A\n  note for A ", "\n", STR, MMD_W_BR},
+    {"class relation", "classDiagram\n  A --> B : ", "\n", TEXT, MMD_W_BR},
+    {"state description", "stateDiagram-v2\n  A --> B\n  A : ", "\n", TEXT, MMD_W_BR},
+    {"state alias", "stateDiagram-v2\n  state ", " as A\n  A --> B\n", STR, MMD_W_BR},
+    {"state transition", "stateDiagram-v2\n  A --> B : ", "\n", TEXT, MMD_W_BR},
+    {"state note", "stateDiagram-v2\n  A --> B\n  note right of A : ", "\n", TEXT, MMD_W_BR},
+    {"er relation", "erDiagram\n  A ||--o{ B : ", "\n", STR, 0},
+    {"er comment", "erDiagram\n  A {\n    string name ", "\n  }\n", STR, 0},
+    {"er alias", "erDiagram\n  p[", "] {\n    string x\n  }\n", STR, 0},
+    {"pie slice", "pie\n  ", " : 3\n  \"b\" : 4\n", STR, 0},
+    {"pie title", "pie title ", "\n  \"a\" : 3\n", TEXT, 0},
+    {"gantt task", "gantt\n  dateFormat YYYY-MM-DD\n  section S\n  ", " :a1, 2026-01-01, 3d\n", TEXT, MMD_W_LINESTART},
+    {"gantt section", "gantt\n  dateFormat YYYY-MM-DD\n  section ", "\n  t :a1, 2026-01-01, 3d\n", TEXT, 0},
+    {"gantt title", "gantt\n  title ", "\n  dateFormat YYYY-MM-DD\n  t :a1, 2026-01-01, 3d\n", TEXT, 0},
+    {"journey task", "journey\n  section S\n    ", ": 5: Me\n", TEXT, MMD_W_BR | MMD_W_LINESTART},
+    {"journey section", "journey\n  section ", "\n    t: 5: Me\n", TEXT, MMD_W_BR},
+    {"journey actor", "journey\n  section S\n    t: 5: ", "\n", TEXT, 0},
+    {"timeline event", "timeline\n  2002 : ", "\n", TEXT, MMD_W_BR},
+    {"timeline period", "timeline\n  ", " : x\n", TEXT, MMD_W_BR | MMD_W_LINESTART},
+    {"timeline section", "timeline\n  section ", "\n  2002 : x\n", TEXT, MMD_W_BR},
+    {"mindmap node", "mindmap\n  root\n    a[", "]\n", STR, MMD_W_BR},
+    {"quadrant point", "quadrantChart\n  ", ": [0.3, 0.6]\n", STR, 0},
+    {"quadrant label", "quadrantChart\n  quadrant-1 ", "\n  A: [0.3, 0.6]\n", STR, 0},
+    {"quadrant axis", "quadrantChart\n  x-axis ", " --> High\n  A: [0.3, 0.6]\n", STR, 0},
+    {"quadrant title", "quadrantChart\n  title ", "\n  A: [0.3, 0.6]\n", TEXT, 0},
+    {"xychart title", "xychart\n  title ", "\n  bar [1, 2]\n", STR, 0},
+    {"xychart category", "xychart\n  x-axis [", ", b]\n  bar [1, 2]\n", STR, 0},
+    {"xychart axis title", "xychart\n  x-axis ", " [a, b]\n  bar [1, 2]\n", STR, 0},
+    {"xychart series", "xychart\n  x-axis [a, b]\n  bar ", " [1, 2]\n", STR, 0},
+    {"gitGraph commit id", "gitGraph\n  commit id: ", "\n", STR, 0},
+    {"gitGraph tag", "gitGraph\n  commit tag: ", "\n", STR, 0},
+    {"sankey node", "sankey-beta\n", ",B,3\n", CSV, 0},
+    {"block node", "block-beta\n  a[", "] b\n", STR, 0},
+    {"block edge", "block-beta\n  a b\n  a -- ", " --> b\n", STR, 0},
+    {"requirement text", "requirementDiagram\n  requirement r {\n  id: 1\n  text: ", "\n  }\n", STR, 0},
+    {"requirement type", "requirementDiagram\n  element e {\n  type: ", "\n  }\n", STR, 0},
+    {"C4 label", "C4Context\n  Person(p, ", ", \"d\")\n", STR, MMD_W_BR},
+    {"C4 description", "C4Context\n  Person(p, \"x\", ", ")\n", STR, MMD_W_BR},
+    {"C4 relation", "C4Context\n  Person(p, \"x\")\n  System(s, \"y\")\n  Rel(p, s, ", ")\n", STR, 0},
+    {"C4 title", "C4Context\n  title ", "\n  Person(p, \"x\")\n", TEXT, 0},
+    {"architecture service", "architecture-beta\n  service s(server)[", "]\n", TEXT, 0},
+    {"architecture group", "architecture-beta\n  group g(cloud)[", "]\n  service s(server)[x] in g\n", TEXT, 0},
+    {"architecture edge", "architecture-beta\n  service a(server)[x]\n  service b(server)[y]\n  a:R -[", "]- L:b\n", TEXT, 0},
+    {"packet field", "packet-beta\n0-15: ", "\n", STR, 0},
+    {"packet title", "packet-beta\ntitle ", "\n0-15: \"x\"\n", TEXT, 0},
+    {"kanban card", "kanban\n  Todo\n    c1[", "]\n", STR, MMD_W_BR},
+    {"kanban column", "kanban\n  c0[", "]\n    c1[x]\n", STR, MMD_W_BR},
+    {"radar axis", "radar-beta\n  axis a[", "], b[\"y\"], c[\"z\"]\n  curve k[\"K\"]{1,2,3}\n", STR, 0},
+    {"radar curve", "radar-beta\n  axis a[\"x\"], b[\"y\"], c[\"z\"]\n  curve k[", "]{1,2,3}\n", STR, 0},
+    {"radar title", "radar-beta\n  title ", "\n  axis a[\"x\"], b[\"y\"], c[\"z\"]\n  curve k[\"K\"]{1,2,3}\n", TEXT, 0},
+    {"treemap leaf", "treemap-beta\n\"S\"\n    ", ": 5\n    \"o\": 3\n", STR, 0},
+    {"treemap section", "treemap-beta\n", "\n    \"l\": 5\n", STR, 0},
+    {"zenuml message", "zenuml\n  A->B: ", "\n", TEXT, 0},
+    {"zenuml title", "zenuml\n  title ", "\n  A->B: x\n", TEXT, 0},
+    {"ishikawa head", "ishikawa-beta\n    ", "\n    Process\n        x\n", TEXT, MMD_W_BR | MMD_W_LINESTART},
+    {"ishikawa cause", "ishikawa-beta\n    H\n    Process\n        ", "\n", TEXT, MMD_W_BR | MMD_W_LINESTART},
+    {"cynefin item", "cynefin-beta\n  complex\n    ", "\n", STR, 0},
+    {"cynefin transition", "cynefin-beta\n  complex\n    \"x\"\n  complex --> clear : ", "\n", STR, 0},
+    {"cynefin title", "cynefin-beta\n  title ", "\n  complex\n    \"x\"\n", TEXT, 0},
+    {"venn set", "venn-beta\n  set A[", "]\n  set B[\"y\"]\n", STR, 0},
+    {"venn text", "venn-beta\n  set A[\"x\"]\n    text A1[", "]\n", STR, 0},
+    {"treeView description", "treeView-beta\n    root/\n        f.txt ## ", "\n", TEXT, 0},
+    {"eventmodeling data", "eventmodeling\ntf 01 evt E [[D]]\n\ndata D {\n  a: ", "\n}\n", TEXT, 0},
+    {"railroad terminal", "railroad-ebnf-beta\nr = ", " ;\n", STR, 0},
+    {"railroad fn terminal", "railroad-beta\nr = terminal(", ") ;\n", STR, 0},
+    {"wardley component", "wardley-beta\ncomponent ", " [0.5, 0.5]\n", TEXT, MMD_W_LINESTART},
+    {"wardley note", "wardley-beta\ncomponent X [0.5, 0.5]\nnote ", " [0.3, 0.4]\n", STR, 0},
+    {"wardley title", "wardley-beta\ntitle ", "\ncomponent X [0.5, 0.5]\n", TEXT, 0},
+    {"flowchart id", "flowchart LR\n  ", " --> B\n", ID, 0},
+    {"sequence participant", "sequenceDiagram\n  ", "->>B: x\n", ID, 0},
+    {"class name", "classDiagram\n  class ", "\n", ID, 0},
+    {"state id", "stateDiagram-v2\n  ", " --> B\n", ID, 0},
+    {"er entity", "erDiagram\n  ", " ||--o{ B : r\n", ID, 0},
+    {"gitGraph branch", "gitGraph\n  commit\n  branch ", "\n  commit\n", ID, 0},
+    {"mindmap id", "mindmap\n  root\n    ", "\n", ID, 0},
+    {"treeView node", "treeView-beta\n    root/\n        ", "\n", ID, 0},
+    {"eventmodeling name", "eventmodeling\ntf 01 evt ", "\n", ID, 0},
 };
 
 static const char *const PIECES[] = {
@@ -118,6 +119,10 @@ static const char *const PIECES[] = {
     "/", "*", "_", "~", "@", "!", "$", "^", "+", ".", "?", " ", "\t", "\n", "中文", "é", "😀", "#35;",
     "#quot;", "%%", "<br>", "-->", "fa:fa-car", "::", ":::", "--", "..", "a1",
 };
+
+/* statement keywords of the MMD_W_LINESTART slots' diagrams */
+static const char *const LSKW[] = {"title ", "section ", "accTitle", "accDescr", "timeline", "journey", "ishikawa",
+                                   "component ", "evolve", "anchor ", "note ", "pipeline", "dateFormat", "excludes", "click"};
 
 static const char *const IDS[] = {"_", "0", "9", "x", "A", "中文", "é", "😀"};
 
@@ -191,8 +196,8 @@ static bool csv_ok(const char *s) {
 static int one(const Case c[static 1], const char *label, bool verbose) {
     mmd_writer *w = mmd_writer_new();
     mmd_w_raw(w, c->pre);
-    if (c->ctx == STR) mmd_w_str(w, label, c->br ? MMD_W_BR : 0);
-    else if (c->ctx == TEXT) mmd_w_text(w, label, c->br ? MMD_W_BR : 0);
+    if (c->ctx == STR) mmd_w_str(w, label, c->flags);
+    else if (c->ctx == TEXT) mmd_w_text(w, label, c->flags);
     else if (c->ctx == CSV) mmd_w_csv(w, label);
     else mmd_w_id(w, label);
     mmd_w_raw(w, c->post);
@@ -204,7 +209,7 @@ static int one(const Case c[static 1], const char *label, bool verbose) {
     bool refused = mmd_writer_text(w, &src, &n, nullptr) != MMD_OK;
     int r = 0;
     if (refused) {
-        r = (strchr(label, '\n') && !c->br) || (c->ctx == CSV && !csv_ok(label)) ||
+        r = (strchr(label, '\n') && !(c->flags & MMD_W_BR)) || (c->ctx == CSV && !csv_ok(label)) ||
             (c->ctx == ID && strstr(label, "😀")) ? 1 : -1;
     } else if (st) {
         r = -1;
@@ -234,6 +239,7 @@ static int roundtrip(unsigned iters) {
         int cbad = 0;
         for (unsigned it = 0; it < iters && cbad < 3; it++) {
             char label[128] = "";
+            if (c->flags & MMD_W_LINESTART && rnd(2)) strcat(label, LSKW[rnd(countof(LSKW))]);
             for (unsigned part = 0; part < 3; part++) {
                 for (unsigned k = rnd(3); k--;) {
                     strcat(label, c->ctx == ID ? IDS[rnd(sizeof IDS / sizeof *IDS)] : PIECES[rnd(sizeof PIECES / sizeof *PIECES)]);

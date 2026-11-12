@@ -232,9 +232,12 @@ void mmd_w_str(mmd_writer *w, const char *s, unsigned flags) {
     term(w);
 }
 
+static bool line_kw(const mmd_writer w[static 1], const char *s);
+
 void mmd_w_text(mmd_writer *w, const char *s, unsigned flags) {
     if (!live(w)) return;
-    if (put_esc(w, w->b.n, "mmd_w_text", s, CT, flags)) term(w);
+    if (flags & MMD_W_LINESTART && line_kw(w, s)) flags |= W_LEAD;
+    if (put_esc(w, w->b.n, "mmd_w_text", s, CT, flags & ~(unsigned)MMD_W_LINESTART)) term(w);
 }
 
 void mmd_w_id(mmd_writer *w, const char *s) {
@@ -882,6 +885,52 @@ void mmd_tree_begin(mmd_writer *w) {
 }
 
 static const char *const TREE_KW[] = {"title", "accTitle", "accDescr"};
+
+/* MMD_W_LINESTART: the keywords that start a statement in the diagram the text so far declares
+ * (mermaid's lexers: timeline/journey/ishikawa jison, wardley langium); others get the common ones */
+static const char *const TIMELINE_KW[] = {"timeline", "title", "accTitle", "accDescr", "section"};
+static const char *const JOURNEY_KW[] = {"journey", "title", "accTitle", "accDescr", "section"};
+static const char *const ISHIKAWA_KW[] = {"ishikawa"};
+static const char *const WARDLEY_KW[] = {"wardley-beta", "title", "accTitle", "accDescr", "size", "evolution",
+                                         "anchor", "component", "label", "inertia", "evolve", "pipeline", "note",
+                                         "annotations", "annotation", "accelerator", "deaccelerator", "build",
+                                         "buy", "outsource", "market"};
+static const struct {
+    const char *header;
+    size_t n;
+    const char *const *kw;
+} LINE_KW[] = {
+    {"timeline", countof(TIMELINE_KW), TIMELINE_KW},  {"journey", countof(JOURNEY_KW), JOURNEY_KW},
+    {"ishikawa", countof(ISHIKAWA_KW), ISHIKAWA_KW},  {"ishikawa-beta", countof(ISHIKAWA_KW), ISHIKAWA_KW},
+    {"wardley-beta", countof(WARDLEY_KW), WARDLEY_KW}, {"gantt", countof(GANTT_KW), GANTT_KW},
+    {"sequenceDiagram", countof(SEQ_KW), SEQ_KW},     {"treeView-beta", countof(TREE_KW), TREE_KW},
+};
+
+static bool line_kw(const mmd_writer w[static 1], const char *s) {
+    /* the header: first word of the first line that is not blank, a %% comment or --- front matter */
+    const char *p = w->b.p, *e = p + w->b.n;
+    bool fm = false;
+    while (p < e) {
+        const char *nl = memchr(p, '\n', (size_t)(e - p)), *q = p;
+        if (!nl) nl = e;
+        while (q < nl && (*q == ' ' || *q == '\t' || *q == '\r')) q++;
+        if (nl - q >= 3 && !memcmp(q, "---", 3)) fm = !fm;
+        else if (!fm && q < nl && !(nl - q >= 2 && q[0] == '%' && q[1] == '%')) {
+            size_t n = 0;
+            while (q + n < nl && q[n] != ' ' && q[n] != '\t' && q[n] != '\r') n++;
+            for (size_t k = 0; k < countof(LINE_KW); k++)
+                if (strlen(LINE_KW[k].header) == n && !memcmp(q, LINE_KW[k].header, n))
+                    return has_kw(s, LINE_KW[k].n, LINE_KW[k].kw, false);
+            static const char *const COMMON[] = {"title", "accTitle", "accDescr"};
+            if (HAS_KW(s, COMMON, false)) return true;
+            /* the header word itself */
+            while (*s == ' ' || *s == '\t') s++;
+            return !strncasecmp(s, q, n);
+        }
+        p = nl + 1;
+    }
+    return false;
+}
 
 void mmd_tree_node(mmd_writer *w, unsigned depth, const char *name, bool dir, const char *desc) {
     if (!live(w) || !need(w, "mmd_tree_node", "name", name)) return;
