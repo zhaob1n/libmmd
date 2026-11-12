@@ -1,5 +1,5 @@
-/* the Graph tables (graph.h) shared by the flowchart parser and dgraph: growth and node
- * interning. One place grows every parse-time SoA array, so a new field can't be missed. */
+/* the Graph tables (graph.h) shared by the flowchart parser and dgraph: growth, node interning and
+ * direction words. One place grows every parse-time SoA array, so a new field can't be missed. */
 #include "graph.h"
 
 /* 8 bytes a step; as well spread as FNV-1a and faster on ids longer than a few bytes */
@@ -110,4 +110,12 @@ int32_t graph_intern(Graph g[static 1], Str id, bool *fresh) {
     g->htab[h] = (uint32_t)v + 1;
     if (fresh) *fresh = true;
     return (int32_t)v;
+}
+
+bool graph_dir(Str w, Dir d[static 1]) {
+    if (str_eq(w, S("TD")) || str_eq(w, S("TB")) || str_eq(w, S("v"))) return *d = DIR_TB, true;
+    if (str_eq(w, S("BT")) || str_eq(w, S("^"))) return *d = DIR_BT, true;
+    if (str_eq(w, S("LR")) || str_eq(w, S(">"))) return *d = DIR_LR, true;
+    if (str_eq(w, S("RL")) || str_eq(w, S("<"))) return *d = DIR_RL, true;
+    return false;
 }

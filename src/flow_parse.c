@@ -82,14 +82,6 @@ static int32_t find_sg(const Graph g[static 1], Str id) {
     return true;
 }
 
-static bool parse_dir(Str w, Dir d[static 1]) {
-    if (str_eq(w, S("TD")) || str_eq(w, S("TB")) || str_eq(w, S("v"))) { *d = DIR_TB; return true; }
-    if (str_eq(w, S("BT")) || str_eq(w, S("^"))) { *d = DIR_BT; return true; }
-    if (str_eq(w, S("LR")) || str_eq(w, S(">"))) { *d = DIR_LR; return true; }
-    if (str_eq(w, S("RL")) || str_eq(w, S("<"))) { *d = DIR_RL; return true; }
-    return false;
-}
-
 /* ---- node shapes ---- */
 typedef struct ShapeTok { char open[4]; char close[4]; Shape sh; uint8_t ol, cl; } ShapeTok;
 #define ST(o, c, s) {o, c, s, sizeof o - 1, sizeof c - 1}
@@ -494,7 +486,7 @@ static mmd_status parse_stmt(P p[static 1], Str w) {
     if (str_eq(w, S("direction"))) {
         skip_sp(p);
         Dir d;
-        if (!parse_dir(read_list(p), &d)) return fail(p, "invalid direction");
+        if (!graph_dir(read_list(p), &d)) return fail(p, "invalid direction");
         if (p->sgd) { int32_t s = p->sg[p->sgd - 1]; g->sdir[s] = d; g->sflags[s] |= SF_DIRSET; }
         else g->dir = d;
         return MMD_OK;
@@ -592,7 +584,7 @@ mmd_status flow_parse(Graph g[static 1], size_t n, const char src[static n], siz
         size_t st0 = p.i;
         while (p.i < p.n && !is_sp(p.s[p.i]) && p.s[p.i] != '\n' && p.s[p.i] != ';') p.i++;
         Dir d;
-        if (parse_dir((Str){.p = p.s + st0, .n = p.i - st0}, &d)) g->dir = d;
+        if (graph_dir((Str){.p = p.s + st0, .n = p.i - st0}, &d)) g->dir = d;
         else { p.i = st0; st = fail(&p, "invalid direction"); goto out; }
     }
     for (;;) {

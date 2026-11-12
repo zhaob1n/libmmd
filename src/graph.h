@@ -90,6 +90,9 @@ int32_t graph_find(const Graph g[static 1], Str id);
 /* node index of id, added (rect, label = id, no parent, sizes 0) if new: *fresh says so; NONE on OOM */
 int32_t graph_intern(Graph g[static 1], Str id, bool *fresh);
 
+/* TB/TD/v, BT/^, LR/>, RL/<: false (d untouched) for anything else, so callers keep their default */
+[[nodiscard]] bool graph_dir(Str w, Dir d[static 1]);
+
 /* parse flowchart body starting at offset `off` within src */
 mmd_status flow_parse(Graph g[static 1], size_t n, const char src[static n], size_t off,
                                     size_t err_off[static 1], char msg[static 160]);

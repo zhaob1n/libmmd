@@ -56,8 +56,10 @@ static inline Str dg_unquote(Str s, bool apos) {
     return s;
 }
 /* `direction` argument; anything but LR/RL/BT is TB */
+/* direction word, TB if unknown */
 static inline Dir dg_dir(Str d) {
-    return str_eq(d, S("LR")) ? DIR_LR : str_eq(d, S("RL")) ? DIR_RL : str_eq(d, S("BT")) ? DIR_BT : DIR_TB;
+    Dir r;
+    return graph_dir(d, &r) ? r : DIR_TB;
 }
 /* user-supplied CSS value safe to splice into a style attribute */
 static inline bool dg_css_ok(Str v) {
