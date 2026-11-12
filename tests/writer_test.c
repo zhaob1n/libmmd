@@ -179,6 +179,30 @@ static void squeeze(char *s) {
 
 static char svgt[1 << 20];
 
+/* --dump DIR: also save each diagram the test builds as DIR/NNNN.mmd, with the labels its SVG must
+ * show (whitespace dropped, one per line) in NNNN.want, for tools/writer_mmdc_check.py */
+static const char *dump_dir;
+static unsigned ndump;
+static void dump(const char *name, const char *src, size_t n, const char *const labels[static n]) {
+    if (!dump_dir) return;
+    char path[4096];
+    snprintf(path, sizeof path, "%s/%04u.mmd", dump_dir, ndump);
+    FILE *f = fopen(path, "w");
+    if (!f) perror(path), exit(1);
+    fputs(src, f);
+    fclose(f);
+    snprintf(path, sizeof path, "%s/%04u.want", dump_dir, ndump++);
+    if (!(f = fopen(path, "w"))) perror(path), exit(1);
+    fprintf(f, "# %s\n", name);
+    for (size_t i = 0; i < n; i++) {
+        char want[256];
+        snprintf(want, sizeof want, "%s", labels[i]);
+        squeeze(want);
+        fprintf(f, "%s\n", want);
+    }
+    fclose(f);
+}
+
 /* mermaid's sankey reads printable ASCII (no tab) without entities (#name;) or %%{, and can't show < > */
 static bool csv_ok(const char *s) {
     for (; *s; s++) {
@@ -219,6 +243,7 @@ static int one(const Case c[static 1], const char *label, bool verbose) {
         squeeze(want);
         svg_text(svg.data, sizeof svgt, svgt);
         r = strstr(svgt, want) ? 0 : -1;
+        dump(c->name, src, 1, &label);
     }
     if (r < 0 && verbose) {
         printf("FAIL %s: label \"", c->name);
@@ -266,9 +291,15 @@ static void rnd_label(char out[static 64], bool nl) {
     }
 }
 
-static bool shows(const mmd_writer *w, size_t n, char labels[][64]) {
+static bool shows(const char *name, const mmd_writer *w, size_t n, char labels[][64]) {
     mmd_buffer svg = {};
     mmd_error e;
+    if (dump_dir) {
+        const char *src, *ls[32];
+        size_t len;
+        for (size_t i = 0; i < n; i++) ls[i] = labels[i];
+        if (!mmd_writer_text(w, &src, &len, nullptr)) dump(name, src, n, ls);
+    }
     if (mmd_writer_render_svg(w, nullptr, &svg, &e)) {
         const char *src;
         size_t len;
@@ -315,7 +346,7 @@ static int typed(unsigned iters) {
                 mmd_flow_edge(w, prev, id, L[n++]);
             }
         }
-        bad += !shows(w, n, L);
+        bad += !shows("flowchart helpers", w, n, L);
 
         mmd_writer_reset(w);
         rnd_label(L[0], false);
@@ -335,7 +366,7 @@ static int typed(unsigned iters) {
         double v[4] = {1e-4 * it, 3.25e-4, 1e-7, 7.5e-4};
         mmd_xy_bar(w, L[7], 4, v);
         mmd_xy_line(w, nullptr, 4, v);
-        bad += !shows(w, 8, L);
+        bad += !shows("xychart helpers", w, 8, L);
 
         mmd_writer_reset(w);
         rnd_label(L[0], false), strcat(L[0], "Pie");
@@ -345,7 +376,7 @@ static int typed(unsigned iters) {
             snprintf(L[k] + strlen(L[k]), 8, "S%zu", k);
             mmd_pie_slice(w, L[k], 0.125 * (double)k);
         }
-        bad += !shows(w, 4, L);
+        bad += !shows("pie helpers", w, 4, L);
     }
     mmd_writer_free(w);
     printf("writer typed helpers: %u flowchart/xychart/pie diagrams, %d failed\n", 3 * iters, bad);
@@ -388,7 +419,7 @@ static int typed2(unsigned iters) {
         mmd_end(w);
         if (!(it & 2)) strcpy(L[n++], b);
         strcpy(L[n++], a);
-        bad += !shows(w, n, L);
+        bad += !shows("sequence helpers", w, n, L);
 
         static const char *const GKW[] = {"section x", "title", "2026-01-01 go", "5% done", "call me", "click", "Weekday"};
         mmd_writer_reset(w), n = 0;
@@ -399,7 +430,7 @@ static int typed2(unsigned iters) {
         mmd_gantt_task(w, L[n++], "t2", MMD_TASK_DONE, "t1", 2);
         mmd_gantt_task(w, lab(L, n++, false), nullptr, MMD_TASK_ACTIVE, nullptr, 3);
         mmd_gantt_task(w, lab(L, n++, false), nullptr, MMD_TASK_MILESTONE, "t2", 0);
-        bad += !shows(w, n, L);
+        bad += !shows("gantt helpers", w, n, L);
 
         mmd_writer_reset(w), n = 0;
         mmd_state_begin(w, it & 1 ? "LR" : nullptr);
@@ -413,7 +444,7 @@ static int typed2(unsigned iters) {
         mmd_state_note(w, (mmd_side)rnd(2), "S2", lab(L, n++, true));
         snprintf(L[n++], 64, "direction LR, %s", it & 1 ? "a" : "b");
         mmd_state(w, "S3", L[n - 1]);
-        bad += !shows(w, n, L);
+        bad += !shows("state helpers", w, n, L);
 
         mmd_writer_reset(w), n = 0;
         mmd_sankey_begin(w);
@@ -422,7 +453,7 @@ static int typed2(unsigned iters) {
         n = 3;
         mmd_sankey_flow(w, L[0], L[1], 2.5);
         mmd_sankey_flow(w, L[1], L[2], 1);
-        bad += !shows(w, n, L);
+        bad += !shows("sankey helpers", w, n, L);
 
         mmd_writer_reset(w), n = 0;
         mmd_mindmap_begin(w);
@@ -432,7 +463,7 @@ static int typed2(unsigned iters) {
         mmd_mindmap_node(w, 1, "c", lab(L, n++, true), MMD_SHAPE_ROUND);
         mmd_mindmap_node(w, 2, "plain", nullptr, MMD_SHAPE_RECT);
         strcpy(L[n++], "plain");
-        bad += !shows(w, n, L);
+        bad += !shows("mindmap helpers", w, n, L);
 
         static const char *const TKW[] = {"title x", "accTitle", "├── a", "\"q\"", "'q'", "icon(x)", "a :::b", "d/"};
         mmd_writer_reset(w), n = 0;
@@ -443,7 +474,7 @@ static int typed2(unsigned iters) {
         snprintf(L[n], 64, "%s", TKW[rnd(countof(TKW))]);
         mmd_tree_node(w, 1, L[n++], it & 1, nullptr);
         mmd_tree_node(w, 2, lab(L, n++, false), false, nullptr);
-        bad += !shows(w, n, L);
+        bad += !shows("treeView helpers", w, n, L);
 
         mmd_writer_reset(w), n = 0;
         mmd_er_begin(w);
@@ -457,7 +488,7 @@ static int typed2(unsigned iters) {
         mmd_end(w);
         mmd_er_rel(w, L[e1], (mmd_card)rnd(4), "E2", (mmd_card)rnd(4), it & 1, lab(L, n++, false));
         strcpy(L[n++], "varchar(255)");
-        bad += !shows(w, n, L);
+        bad += !shows("ER helpers", w, n, L);
 
         static const char *const BR[] = {"feature/x-1.0", "release-2", "a.b_c", "x"};
         mmd_writer_reset(w), n = 0;
@@ -472,7 +503,7 @@ static int typed2(unsigned iters) {
         const char *br = L[n - 2], *m = lab(L, n++, false);
         mmd_git_merge(w, br, m, nullptr, MMD_COMMIT_NORMAL);
         mmd_git_cherry_pick(w, L[n - 2]);
-        bad += !shows(w, n, L);
+        bad += !shows("gitGraph helpers", w, n, L);
     }
     mmd_writer_free(w);
     printf("writer typed helpers: %u sequence/gantt/state/sankey/mindmap/treeView/ER/gitGraph sets, %d failed\n", iters, bad);
@@ -621,6 +652,13 @@ static int errors(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc > 2 && !strcmp(argv[1], "--dump")) { /* a small corpus: a few labels per slot; [SEED] another one */
+        dump_dir = argv[2];
+        if (argc > 3) rng ^= strtoull(argv[3], nullptr, 0) * 0x9E3779B97F4A7C15ull | 1;
+        int bad = roundtrip(4) + typed(8) + typed2(8);
+        printf("writer dump: %u diagrams in %s\n", ndump, dump_dir);
+        return bad != 0;
+    }
     unsigned iters = argc > 1 ? (unsigned)atoi(argv[1]) : 200;
     int bad = roundtrip(iters) + typed(iters / 4) + typed2(iters / 4) + numbers(iters * 50) + errors();
     return bad != 0;

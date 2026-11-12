@@ -1,7 +1,8 @@
 # mmd_writer: escape contexts and the per-diagram audit
 
-`include/mmd.h` (writer section), `src/writer.c`. Tested by `tests/writer_test.c` (`make test`); timed by
-`bench/writer_bench.c` (`make build/bench-writer`).
+`include/mmd.h` (writer section), `src/writer.c`. Tested by `tests/writer_test.c` (`make test`),
+checked against mermaid.js by `tools/writer_mmdc_check.py`; timed by `bench/writer_bench.c`
+(`make build/bench-writer`).
 mermaid.js is the reference: where libmmd and mermaid disagree on what a text means, mermaid wins.
 
 ## Decisions
@@ -138,9 +139,20 @@ above (CJK, emoji, `#quot;`, `%%`, `-->`, `fa:fa-car`, newlines...).
 - Leading/trailing blanks: trimmed by every parser.
 - T at the start of a statement can't start with that diagram's keyword (`section`, `title`, ...):
   the typed helpers handle it, `mmd_w_text` with `MMD_W_LINESTART` elsewhere.
-- mermaid.js limits no escape gets around: C4 and architecture print entities literally, as does the
-  zenuml plugin; wardley components, eventmodeling names and gitGraph branches take a narrow
-  character set; a literal `<br>` or `fa:fa-x` is drawn as markup whatever its spelling; mermaid
-  hyphenates long unspaced sequence block labels, sometimes inside an escape; sankey, gitGraph and
-  xychart show `<` `>` as `&lt;` `&gt;`; xychart omits some series names; a decoded `\` before
-  punctuation in markdown text (class notes, mindmap, ER, state) escapes it.
+- mermaid.js limits no escape gets around (the cross-check skips or allows for them): C4 and
+  architecture print entities literally, as does the zenuml plugin; wardley components,
+  eventmodeling names and gitGraph branches take a narrow character set; a literal `<br>` or
+  `fa:fa-x` is drawn as markup whatever its spelling; mermaid hyphenates long unspaced sequence
+  block labels, sometimes inside an escape; sankey, gitGraph and xychart show `<` `>` as `&lt;`
+  `&gt;`; xychart omits some series names; a decoded `\` before punctuation in markdown text (class
+  notes, mindmap, ER, state) escapes it.
+
+## Cross-check against mermaid.js
+
+`tools/writer_mmdc_check.py [-v] [--seeds=N]` runs `build/test-writer --dump DIR [SEED]` (the round
+trip and typed-helper corpus, ~400 diagrams), renders them with `env.mermaid_render()` (the mermaid,
+zenuml plugin and page mermaid-cli ships, in one browser: ~12 s per corpus instead of ~10 s per file
+through `mmdc`; `docs_audit.py --mmdc` uses it too) and checks that each parses and its SVG text holds
+every label. mermaid-cli comes from `MMDC`, `MMDC_PUPPETEER` is the puppeteer config
+(`{"args": ["--no-sandbox"]}` as root); without it the check prints a skip and exits 0. Last run:
+mermaid 12.3.0, 25 seeds clean.

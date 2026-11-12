@@ -218,6 +218,7 @@ More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 | Golden + sanity tests (152 cases; XML well-formedness, error positions, viewBox bounds, mermaid docs corpus) | `make test` (`UPDATE_GOLDEN=1 make test` to refresh) |
 | Locale independence: the corpus rendered under a comma-decimal locale must match the C locale byte for byte (skipped when none is installed) | `make test` |
 | Writer round trip: random labels through 92 slots of every diagram type, every typed helper (keyword-like ids included), number round trip, error paths | `make test` (`build/test-writer [iterations]`) |
+| Writer vs mermaid.js: the writer test's corpus (~400 diagrams per seed) must parse in mermaid and show every label (skips without mermaid-cli) | `python3 tools/writer_mmdc_check.py [-v] [--seeds=N]` |
 | Mermaid docs corpus: 432 examples from mermaid's syntax docs, 396/396 that mermaid itself renders | `python3 tools/docs_audit.py [-v]` |
 | ASan + UBSan build | `make asan` → `build-asan/mmd` |
 | Fuzzing (mutational, under ASan or MSan; crashing inputs are saved under `TMPDIR` and printed) | `python3 tests/fuzz.py build-asan/mmd 1000 [seed]` |
