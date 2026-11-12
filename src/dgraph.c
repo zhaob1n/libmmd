@@ -279,7 +279,7 @@ bool dg_next_line(LineIt it[static 1], Str line[static 1], size_t off[static 1])
                 t = str_trim((Str){.p = t.p, .n = k});
                 break;
             }
-        while (t.n && t.p[t.n - 1] == ';') t.n--;
+        while (t.n && t.p[t.n - 1] == ';' && !ent_tail(t)) t.n--;
         if (!t.n) continue;
         bool blk;
         if (dcfg_is_acc(t, &blk)) { /* handled by dcfg (emitted as <title>/<desc>) */

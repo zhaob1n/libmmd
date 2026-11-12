@@ -1,9 +1,22 @@
 #include "base.h"
 
+#include <stdatomic.h>
 #include <stdckdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
+locale_t c_locale_enter(void) {
+    static _Atomic(locale_t) cached;
+    locale_t c = atomic_load_explicit(&cached, memory_order_acquire);
+    if (!c) {
+        locale_t made = newlocale(LC_ALL_MASK, "C", (locale_t)0), seen = nullptr;
+        if (!made) return (locale_t)0;
+        if (atomic_compare_exchange_strong(&cached, &seen, made)) c = made;
+        else freelocale(made), c = seen; /* another thread won */
+    }
+    return uselocale(c);
+}
 
 constexpr size_t ARENA_MIN_BLOCK = 64 * 1024;
 

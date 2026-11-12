@@ -1,5 +1,6 @@
 #ifndef MMD_BASE_H
 #define MMD_BASE_H
+#include <locale.h>
 #include <stdalign.h>
 #include <stdckdint.h>
 #include <stdbool.h>
@@ -105,6 +106,12 @@ static inline size_t ent_end(size_t n, const char s[static n], size_t i) {
     while (j < n && j - i < 12 && ((unsigned)((s[j] | 32) - 'a') < 26u || (unsigned)(s[j] - '0') < 10u)) j++;
     return j < n && s[j] == ';' && j > i + 1 ? j : 0;
 }
+/* s ends in an entity, so its last ';' is not a statement terminator */
+static inline bool ent_tail(Str s) {
+    for (size_t i = s.n; i-- > 0 && s.n - i <= 12;)
+        if (s.p[i] == '#') return ent_end(s.n, s.p, i) == s.n - 1;
+    return false;
+}
 static inline bool str_starts(Str s, Str pre) { return s.n >= pre.n && memcmp(s.p, pre.p, pre.n) == 0; }
 /* s[i, j); callers guarantee i <= j <= s.n */
 static inline Str str_sub(Str s, size_t i, size_t j) { return (Str){.p = s.p + i, .n = j - i}; }
@@ -203,6 +210,10 @@ static inline void buf_freep(Buf b[static 1]) { free(b->p); }
 #define AUTOFREE [[gnu::cleanup(freep)]]
 #define AUTOCLOSE [[gnu::cleanup(fclosep)]]
 #define AUTO_BUF [[gnu::cleanup(buf_freep)]]
+
+/* Switch this thread to the C locale (made once) for printf/strtod; uselocale() the result to switch
+ * back. If the locale can't be made this is a no-op and so is switching back: uselocale(0) only asks. */
+[[nodiscard]] locale_t c_locale_enter(void);
 #define TAKE_PTR(p) ({ auto take_ = (p); (p) = nullptr; take_; })
 static inline Buf buf_take(Buf b[static 1]) { Buf r = *b; *b = (Buf){}; return r; }
 

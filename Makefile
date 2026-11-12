@@ -46,14 +46,14 @@ CFLAGS += -std=gnu2y -fms-extensions -fPIC -fvisibility=hidden $(WARN) -Iinclude
 LDLIBS = -lm
 BUILD ?= build
 DIAG_SRCS := $(wildcard src/d_*.c)
-SRCS := src/base.c src/text.c src/flow_parse.c src/layout.c src/nsimplex.c src/dorder.c src/drank.c src/flow_svg.c src/seq.c src/rich.c src/dgraph.c $(DIAG_SRCS) src/mmd.c
+SRCS := src/base.c src/text.c src/flow_parse.c src/layout.c src/nsimplex.c src/dorder.c src/drank.c src/flow_svg.c src/seq.c src/rich.c src/dgraph.c $(DIAG_SRCS) src/mmd.c src/writer.c
 OBJS := $(SRCS:src/%.c=$(BUILD)/%.o)
 
 SONAME := libmmd.so.$(SOMAJOR)
 
 all: $(BUILD)/libmmd.a $(BUILD)/libmmd.so $(BUILD)/mmd $(BUILD)/bench $(BUILD)/mmd.pc
 
-$(BUILD)/%.o: src/%.c $(wildcard src/*.h) include/mmd.h | $(BUILD)
+$(BUILD)/%.o: src/%.c $(wildcard src/*.h include/*.h) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD):
 	mkdir -p $@
@@ -70,14 +70,18 @@ $(BUILD)/mmd: tools/mmd.c $(BUILD)/libmmd.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
 $(BUILD)/bench: bench/bench.c $(BUILD)/libmmd.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
+$(BUILD)/bench-writer: bench/writer_bench.c $(BUILD)/libmmd.a
+	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
 $(BUILD)/test-locale: tests/locale_test.c $(BUILD)/libmmd.a
+	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
+$(BUILD)/test-writer: tests/writer_test.c $(BUILD)/libmmd.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
 $(BUILD)/test-shared: tests/shared_test.c $(BUILD)/libmmd.so $(BUILD)/mmd.pc
 	$(CC) $(CFLAGS) $< -L$(BUILD) -lmmd -Wl,-rpath,'$$ORIGIN' -o $@
 
 install: all
 	install -d $(DESTDIR)$(LIBDIR)/pkgconfig $(DESTDIR)$(INCDIR) $(DESTDIR)$(BINDIR)
-	install -m644 include/mmd.h $(DESTDIR)$(INCDIR)/
+	install -m644 include/mmd.h include/mmd_writer.h $(DESTDIR)$(INCDIR)/
 	install -m644 $(BUILD)/libmmd.a $(DESTDIR)$(LIBDIR)/
 	install -m755 $(BUILD)/libmmd.so.$(VERSION) $(DESTDIR)$(LIBDIR)/
 	ln -sf libmmd.so.$(VERSION) $(DESTDIR)$(LIBDIR)/$(SONAME)
@@ -94,10 +98,11 @@ pgo:
 	if $(CC) --version | grep -qi clang; then $(HOME)/.local/bin/llvm-profdata merge -o $(PGO_DIR)/default.profdata $(PGO_DIR)/*.profraw; fi
 	$(MAKE) BUILD=build-pgo PGO_USE=$(PGO_DIR) LTO=$(LTO) MARCH=$(MARCH)
 
-test: all $(BUILD)/test-shared $(BUILD)/test-locale
+test: all $(BUILD)/test-shared $(BUILD)/test-locale $(BUILD)/test-writer
 	./tests/run_tests.sh $(BUILD)/mmd
 	$(BUILD)/test-shared
 	$(BUILD)/test-locale tests/cases/*.mmd tests/docs/*/*.mmd
+	$(BUILD)/test-writer
 	python3 tools/docs_audit.py -q -v $(BUILD)/mmd
 
 both:
