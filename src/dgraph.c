@@ -314,28 +314,34 @@ Str dg_word(Str s[static 1]) {
     return w;
 }
 
+static size_t skip_digits(Str s, size_t i) {
+    while (i < s.n && (unsigned)(s.p[i] - '0') < 10u) i++;
+    return i;
+}
+
+/* JS Number() on mermaid's number tokens: [+-]digits[.digits][e[+-]digits], at least one digit.
+ * The grammar is checked here; strtod rounds correctly (renders run in the C locale). */
 bool dg_parse_num(Str s, double out[static 1]) {
     s = str_trim(s);
-    size_t i = 0;
-    bool neg = false, any = false;
-    if (i < s.n && (s.p[i] == '-' || s.p[i] == '+')) neg = s.p[i++] == '-';
-    double v = 0;
-    while (i < s.n && (unsigned)(s.p[i] - '0') < 10u) { v = v * 10 + (s.p[i++] - '0'); any = true; }
-    if (i < s.n && s.p[i] == '.') {
-        double f = 0.1;
-        for (i++; i < s.n && (unsigned)(s.p[i] - '0') < 10u; i++, f /= 10) { v += (s.p[i] - '0') * f; any = true; }
+    size_t i = s.n && (s.p[0] == '-' || s.p[0] == '+'), m = i;
+    i = skip_digits(s, i);
+    size_t nd = i - m;
+    if (i < s.n && s.p[i] == '.') m = ++i, i = skip_digits(s, i), nd += i - m;
+    if (!nd) return false;
+    if (i < s.n && (s.p[i] | 32) == 'e') {
+        size_t j = i + 1 + (i + 1 < s.n && (s.p[i + 1] == '-' || s.p[i + 1] == '+'));
+        if (skip_digits(s, j) > j) i = skip_digits(s, j);
     }
-    if (i < s.n && (s.p[i] == 'e' || s.p[i] == 'E')) {
-        size_t j = i + 1;
-        bool en = false;
-        if (j < s.n && (s.p[j] == '-' || s.p[j] == '+')) en = s.p[j++] == '-';
-        int ex = 0;
-        bool ed = false;
-        while (j < s.n && (unsigned)(s.p[j] - '0') < 10u && ex < 400) { ex = ex * 10 + (s.p[j++] - '0'); ed = true; }
-        if (ed) { v *= pow(10, en ? -ex : ex); i = j; }
-    }
-    if (!any || i != s.n || !isfinite(v)) return false;
-    *out = neg ? -v : v;
+    if (i != s.n) return false;
+    char tmp[64];
+    AUTOFREE char *big = s.n < sizeof tmp ? nullptr : malloc(s.n + 1);
+    char *t = big ? big : tmp;
+    if (s.n >= sizeof tmp && !big) return false;
+    memcpy(t, s.p, s.n);
+    t[s.n] = 0;
+    double v = strtod(t, nullptr);
+    if (!isfinite(v)) return false;
+    *out = v;
     return true;
 }
 

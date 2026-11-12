@@ -103,5 +103,3 @@ above (CJK, emoji, `#quot;`, `%%`, `-->`, `fa:fa-car`, newlines...).
 - T at the start of a statement (gantt task, timeline period, ishikawa cause, wardley component)
   can't start with that diagram's keyword (`section`, `title`, ...). The writer can't know the
   diagram, so this is not checked; typed helpers should.
-- libmmd's `dg_parse_num` accumulates digit by digit, so a rendered value can differ from the
-  written one in the last ulp (invisible); mermaid.js reads it with `parseFloat`.
