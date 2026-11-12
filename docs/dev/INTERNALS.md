@@ -77,6 +77,18 @@ Known remaining differences:
 - C4: arbitrary bgColor strings are rejected.
 mermaid itself fails to render `block_full` and `radar_full` (partial named curve).
 
+### mermaid 12 defaults (checked against mermaid-cli 12.2 / mermaid 12.3)
+
+mermaid 12's config schema gives flowchart, swimlane, sequence, class, state, ER, requirement,
+usecase, venn and agentflow `look: neo` and `theme: redux-color`, and the global `layout` is `elk`
+(bundled, so flowcharts are laid out by ELK unless `layout: dagre`). `look: classic` alone keeps the
+redux palette; the classic look needs a classic theme too (`dcfg_neo()`). Side by side, the neo
+flowchart (120px minimum label boxes, 171px diamonds for one-word labels, a monospace-looking font)
+is roomier without being clearer, so flowcharts stay classic and dagre. agentflow and usecase only
+exist in mermaid 12 and follow its neo default; `look: classic` with a classic theme switches them.
+Compare libmmd's flowcharts with mermaid 12 under `look: classic`, `theme: default`, `layout: dagre`:
+on the nested-cluster cases checked, ranks and ordering then agree and libmmd's cluster padding is the tighter of the two.
+
 ## Flowchart features (v2)
 - `direction` inside subgraphs: clusters with their own direction are laid out recursively and placed as
   fixed-size proxy nodes; edges to a subgraph id attach to the cluster box; cluster titles are moved

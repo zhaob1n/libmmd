@@ -9,7 +9,7 @@ It needs no browser, no Node.js, no JavaScript engine and no dependencies beyond
 - Flowchart layout follows dagre's algorithm, so node positions match mermaid's closely (mean node-centre error 1.6 px on the fixture set).
 - All 432 syntax examples from mermaid's documentation render here (mermaid itself renders each of them).
 
-> **Status:** this is a young project. Output is meant to look like mermaid-cli 11.17, not to match it pixel for pixel. See [Status and limitations](#status-and-limitations).
+> **Status:** this is a young project. Output is meant to look like mermaid-cli 11.17's classic look (agentflow and use case, new in mermaid 12, like mermaid-cli 12.2), not to match it pixel for pixel. See [Status and limitations](#status-and-limitations).
 
 ## Supported diagram types
 
@@ -47,7 +47,7 @@ It needs no browser, no Node.js, no JavaScript engine and no dependencies beyond
 | Railroad | `railroad-beta`, `railroad-ebnf-beta`, `railroad-abnf-beta`, `railroad-peg-beta` |
 | Wardley map | `wardley-beta` |
 | Agent flow | `agentflow-beta` (mermaid 12's neo look; `look: classic` with a classic theme draws a flowchart) |
-| Use case | `usecase-beta` (actors, system boundaries and packages, include/extend/generalization, notes, JSON tables) |
+| Use case | `usecase-beta` (actors, system boundaries and packages, include/extend/generalization, notes, JSON tables; mermaid 12's neo look, or `look: classic` with a classic theme) |
 
 Every type also supports:
 - the `default`, `dark`, `forest` and `neutral` themes;
@@ -197,7 +197,7 @@ mermaid-cli spends most of its time starting Chrome. Its per-diagram cost is low
 
 ## Gallery: libmmd vs mermaid-cli
 
-Each image puts libmmd on the left and mermaid-cli 11.17 on the right, rendered from the same source in `tests/cases/`. To regenerate them, run `python3 tools/gallery.py tests/cases/<name>.mmd`.
+Each image puts libmmd on the left and mermaid-cli on the right (11.17; 12.2 for agent flow and use case, which 11.17 lacks), rendered from the same source in `tests/cases/`. To regenerate them, run `python3 tools/gallery.py tests/cases/<name>.mmd`.
 
 | | |
 |---|---|
@@ -236,7 +236,7 @@ More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 
 ## Status and limitations
 
-- **Similar, not identical.** Output follows mermaid-cli 11.17 in style and, for flowcharts, in layout (mermaid/dagre ordering and ranking). Mermaid-generated CSS selectors and pixel-exact SVGs are not goals.
+- **Similar, not identical.** Output follows mermaid-cli 11.17 in style and, for flowcharts, in layout (mermaid/dagre ordering and ranking). mermaid 12 draws flowcharts, sequence, class, state and ER in a new neo look by default, laid out with ELK; libmmd keeps the classic look and dagre layout for them, which mermaid 12 still draws with `look: classic`, `theme: default` and `layout: dagre`. Mermaid-generated CSS selectors and pixel-exact SVGs are not goals.
 - **Mindmap** does not use mermaid's cose-bilkent layout. It uses its own radial and spring layout, so mindmaps look different from mermaid's.
 - **Architecture** also has its own grid layout, not fcose.
 - **Text** is measured with built-in Helvetica/Arial-compatible advance tables, not a real font engine. Unusual fonts can be sized imperfectly. CJK ideographs, kana and fullwidth forms are 1em (as in Noto Sans CJK, YaHei and PingFang); halfwidth forms are half an em; combining marks have no advance of their own; other letters use a Latin average.
