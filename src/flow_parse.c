@@ -391,6 +391,11 @@ static mmd_status parse_link(P p[static 1], Link l[static 1]) {
         for (;;) {
             if (p->i >= p->n || p->s[p->i] == '\n') return fail(p, "unterminated edge label");
             char d = p->s[p->i];
+            if (d == '"') { /* a quoted label is opaque: -- "a--b" --> */
+                size_t j = p->i + 1;
+                while (j < p->n && p->s[j] != '"' && p->s[j] != '\n') j++;
+                if (j < p->n && p->s[j] == '"') { p->i = j + 1; continue; }
+            }
             if ((d == '-' || d == '=' || d == '.') && (pk(p, 1) == '-' || pk(p, 1) == '=' ||
                                                        pk(p, 1) == '>' || pk(p, 1) == '.'))
                 break;
