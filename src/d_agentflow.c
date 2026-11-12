@@ -136,8 +136,7 @@ static void neo_size(Graph g[static 1], size_t v, bool coll) {
 mmd_status af_prepare(Graph *g, AfInfo *out[static 1]) {
     AfInfo *inf = ANEW(g->arena, AfInfo, 1);
     if (!inf) return MMD_ERR_NOMEM;
-    Str theme = dcfg_get("theme"); /* mermaid 12: classic shapes need look classic and a non-redux theme */
-    *inf = (AfInfo){.neo = !str_eq(dcfg_get("look"), S("classic")) || !theme.n || str_starts(theme, S("redux"))};
+    *inf = (AfInfo){.neo = dcfg_neo()};
     inf->sord = ANEW(g->arena, int32_t, g->ns + 1);
     if (!inf->sord) return MMD_ERR_NOMEM;
     for (size_t s = 0; s < g->ns; s++) inf->sord[s] = (int32_t)s;

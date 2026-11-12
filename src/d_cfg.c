@@ -326,6 +326,11 @@ const char *dcfg_list(const char var[static 1], size_t i, const char def[static 
     return ring_str(str_trim((Str){.p = v.p + b, .n = (c ? (size_t)(c - v.p) : v.n) - b}), def);
 }
 
+bool dcfg_neo(void) {
+    Str theme = dcfg_get("theme");
+    return !str_eq(dcfg_get("look"), S("classic")) || !theme.n || str_starts(theme, S("redux"));
+}
+
 Str dcfg_background(void) {
     Str v = dcfg_tv("background");
     return (cur_theme > MMD_THEME_DEFAULT && v.n == 5 && !memcmp(v.p, "white", 5)) ? (Str){} : v;

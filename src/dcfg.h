@@ -24,6 +24,8 @@ Str dcfg_get(const char key[static 1]);         /* last match, or empty; "themeV
 Str dcfg_get_str(Str key);                      /* same, for a key whose length is known: dcfg_get_str(S("x")) */
 double dcfg_num(const char key[static 1], double def); /* bounded number, optional "px" suffix */
 bool dcfg_bool(const char key[static 1], bool def);
+/* mermaid 12's neo default (agentflow, usecase): the classic look needs `look: classic` and a non-redux theme */
+bool dcfg_neo(void);
 Str dcfg_css(const char key[static 1]);         /* value only if safe inside CSS / an attribute */
 bool dcfg_is_acc(Str line, bool block[static 1]); /* accTitle:/accDescr: line; *block if "accDescr {" */
 void dcfg_theme_css(Buf b[static 1], const char kind[static 1]); /* CSS overrides from themeVariables */
