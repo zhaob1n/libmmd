@@ -1,0 +1,15 @@
+flowchart TB
+  %% mermaid: the first subgraph to end claims a node, so the inner one wins
+  subgraph outer["Outer"]
+    a["declared in outer"]
+    subgraph inner["Inner"]
+      b
+      a --> b
+    end
+  end
+  subgraph s1
+    c
+  end
+  subgraph s2
+    c --> d
+  end

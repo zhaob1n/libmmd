@@ -6,6 +6,7 @@
 #include "rich.h"
 #include "text.h"
 
+typedef struct Mention { int32_t v, sg; } Mention; /* node v mentioned directly inside subgraph sg */
 typedef struct P {
     Graph *g;
     const char *s;
@@ -13,7 +14,9 @@ typedef struct P {
     size_t err;
     char *msg;
     int32_t sg[64];
+    size_t sgm[64]; /* ments.n when sg[k] opened */
     unsigned sgd;
+    VEC(Mention) ments;
 } P;
 
 /* character classes, table driven */
@@ -191,7 +194,7 @@ static mmd_status parse_node(P p[static 1], int32_t out[static 1]) {
     if (!id.n) return fail(p, "expected node identifier");
     int32_t v = graph_intern(g, id, nullptr);
     if (v == NONE) return MMD_ERR_NOMEM;
-    if (p->sgd && g->nparent[v] == NONE) g->nparent[v] = p->sg[p->sgd - 1];
+    if (p->sgd && !VEC_PUSH(g->arena, &p->ments, ((Mention){v, p->sg[p->sgd - 1]}))) return MMD_ERR_NOMEM;
     mmd_status st = MMD_OK;
     if (pk(p, 0) == '@' && pk(p, 1) == '{') st = parse_at_shape(p, g, v);
     else st = parse_shape_text(p, g, v);
@@ -471,8 +474,19 @@ static mmd_status parse_subgraph(P p[static 1]) {
     g->sparent[s] = p->sgd ? p->sg[p->sgd - 1] : NONE;
     g->sdir[s] = g->dir;
     g->sflags[s] = 0;
+    p->sgm[p->sgd] = p->ments.n;
     p->sg[p->sgd++] = (int32_t)s;
     return MMD_OK;
+}
+
+/* mermaid (flowDb makeUniq): subgraphs claim the nodes mentioned directly in them in the order they
+ * end, so the innermost one wins over its parents and the first-closed sibling over later ones */
+static void close_subgraph(P p[static 1]) {
+    int32_t s = p->sg[--p->sgd];
+    for (size_t k = p->sgm[p->sgd]; k < p->ments.n; k++) {
+        const Mention *m = &p->ments.v[k];
+        if (m->sg == s && p->g->nparent[m->v] == NONE) p->g->nparent[m->v] = s;
+    }
 }
 
 static mmd_status parse_stmt(P p[static 1], Str w) {
@@ -480,7 +494,7 @@ static mmd_status parse_stmt(P p[static 1], Str w) {
     if (str_eq(w, S("subgraph"))) return parse_subgraph(p);
     if (str_eq(w, S("end"))) {
         if (!p->sgd) return fail(p, "'end' without subgraph");
-        p->sgd--;
+        close_subgraph(p);
         return MMD_OK;
     }
     if (str_eq(w, S("direction"))) {
@@ -604,6 +618,7 @@ mmd_status flow_parse(Graph g[static 1], size_t n, const char src[static n], siz
         skip_sp(&p);
         if (pk(&p, 0) == '%' && pk(&p, 1) == '%') (void)rest_of_line(&p);
     }
+    while (p.sgd) close_subgraph(&p);
     /* edges/refs to subgraph ids */
     for (size_t v = 0; v < g->nn; v++) {
         if (g->nflags[v] & NF_DEFINED) continue;

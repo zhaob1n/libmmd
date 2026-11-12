@@ -526,6 +526,7 @@ c30d794f7e2c5580 tests/cases/seq_types.mmd
 5241240d5626fc35 tests/cases/state_full.mmd
 11fe6505c2707180 tests/cases/state_stress_looplabels.mmd
 715f5012f0d8902c tests/cases/styles.mmd
+d5e4e73584499e6d tests/cases/subgraph_claim.mmd
 cd68ad5b79474019 tests/cases/subgraphs.mmd
 4c13b5c1ecd51ad8 tests/cases/swimlane_01.mmd
 01d6928d322a4e9f tests/cases/swimlane_03.mmd
