@@ -370,6 +370,60 @@ void mmd_w_num(mmd_writer *w, double v) {
     put_num(&w->b, v);
     term(w);
 }
+/* dotted key -> nested JSON object keys; value is a JSON string (the config parser strips the quotes) */
+static bool cfg_key_ok(const char *key) {
+    if (!key || !key[0] || key[0] == '.') return false;
+    for (const char *p = key; *p; p++) {
+        unsigned char c = (unsigned char)*p;
+        if (c == '.') {
+            if (p[1] == '.' || !p[1]) return false;
+            continue;
+        }
+        if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_')) return false;
+    }
+    return true;
+}
+static bool cfg_preamble(const mmd_writer *w) {
+    size_t i = 0;
+    while (i < w->b.n) {
+        size_t e = i;
+        while (e < w->b.n && w->b.p[e] != '\n') e++;
+        size_t s = i;
+        while (s < e && (w->b.p[s] == ' ' || w->b.p[s] == '\t')) s++;
+        if (s < e && !(e - s >= 3 && !memcmp(w->b.p + s, "%%{", 3))) return false;
+        i = e < w->b.n ? e + 1 : e;
+    }
+    return true;
+}
+void mmd_w_config(mmd_writer *w, const char *key, const char *value) {
+    if (!live(w)) return;
+    if (!key || !value) return fail(w, w->b.n, "mmd_w_config: key and value are required");
+    if (!cfg_key_ok(key)) return fail(w, w->b.n, "mmd_w_config: '%s' is not a dotted config key", key);
+    for (const char *p = value; *p; p++)
+        if (*p == '"' || *p == '\\' || (unsigned char)*p < 0x20)
+            return fail(w, w->b.n, "mmd_w_config: value cannot contain quotes, backslashes or controls");
+    if (!cfg_preamble(w)) return fail(w, w->b.n, "mmd_w_config: config goes before the diagram");
+    buf_lit(&w->b, "%%{init: {");
+    int depth = 0;
+    for (const char *p = key; *p;) {
+        const char *dot = strchr(p, '.');
+        size_t n = dot ? (size_t)(dot - p) : strlen(p);
+        buf_ch(&w->b, '"');
+        buf_put(&w->b, n, p);
+        buf_lit(&w->b, "\":");
+        if (!dot) break;
+        buf_ch(&w->b, '{');
+        depth++;
+        p = dot + 1;
+    }
+    buf_ch(&w->b, '"');
+    buf_cstr(&w->b, value);
+    buf_ch(&w->b, '"');
+    while (depth--) buf_ch(&w->b, '}');
+    buf_lit(&w->b, "}}%%\n");
+    term(w);
+}
+
 
 /* ---- typed helpers ---- */
 
