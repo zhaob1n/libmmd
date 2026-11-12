@@ -2,6 +2,7 @@
 
 `include/mmd.h` (writer section), `src/writer.c`. Tested by `tests/writer_test.c` (`make test`); timed by
 `bench/writer_bench.c` (`make build/bench-writer`).
+mermaid.js is the reference: where libmmd and mermaid disagree on what a text means, mermaid wins.
 
 ## Decisions
 
@@ -40,28 +41,28 @@
 
 | | quoted `"…"` | text to end of line | CSV |
 |---|---|---|---|
-| always `#NN;` | `" : [ ] { } \| < `` ` `` | `" : [ ] { } \| < ; , ~` | `<` |
-| `#` | before `\w+;` | same | same |
-| `%` | before `%` | same | same |
+| always `#NN;` | `" : [ ] { } \| < # % \ * = `` ` `` | `" : [ ] { } \| < # % \ * ; , ~` | never (refused instead) |
+| `_` | at a word edge | same | |
 | `-` | | before `-` `>` `.` | |
 | `/` | | before `/` | |
 | `\n` | `<br>` with `MMD_W_BR`, else refused | same | refused |
-| control bytes, bad UTF-8 | refused | refused | refused |
+| control bytes, bad UTF-8 | refused | refused | refused, and tab |
 
-CSV fields are quoted (`""` for `"`) when they hold `,` `"`, edge blanks or a leading `%`.
+CSV: mermaid's sankey grammar reads printable ASCII and runs no entity decoding past its lexer, so
+non-ASCII, tab, `<` `>` (shown as `&lt;` or dropped), `#name;` and `%%{` (a directive) are refused.
+Fields are quoted (`""` for `"`) when they hold `,` `"`, edge blanks or a leading `%`.
 
 Extra escapes the typed helpers add:
-- gantt task names: every `%` (`x%…` at a token start is a comment);
-- treeView names: `(` (`icon(…)`), every `#` (`##` starts the description, also as `##35;`),
-  a trailing `/` (folder), a leading `"`, `title`/`accTitle`/`accDescr`, and a leading box-drawing
-  character (`├──` is tree syntax);
+- treeView names: `(` (`icon(…)`), a trailing `/` (folder), a leading `"` or `'` (strings),
+  `title`/`accTitle`/`accDescr`, and every box-drawing character (one `├` anywhere switches
+  mermaid to box-drawing indentation);
+- mindmap nodes and states without a label, whose id holds `_`: the id is written as a quoted label
+  too (bare text is markdown);
 - state labels and ER names and labels: the `d` of `direction` before a blank (`.*direction\s+LR`
   anywhere on the line sets the layout direction);
-- ER names: `%` and `\` (excluded from mermaid's quoted ENTITY_NAME), `_` and `*` (quoted names
-  are markdown).
-Identifiers: `[A-Za-z0-9_]` and non-ASCII UTF-8, non-empty; `mmd_flow_*` also refuse flowchart
-keywords (`end`, `subgraph`, `class`, `style`, ...). Leading/trailing blanks are trimmed by every
-parser; that is not reported.
+Identifiers: `[A-Za-z0-9_]` and non-ASCII UTF-8 up to U+FFFF (mermaid's lexers take no emoji),
+non-empty; `mmd_flow_*` also refuse flowchart keywords (`end`, `subgraph`, `class`, `style`, ...).
+Leading/trailing blanks are trimmed by every parser; that is not reported.
 
 Why each one (raw probes against every slot below; `#` columns are the parser that breaks):
 - `"` ends quoted strings everywhere; unquoted it is stripped by `dg_unquote`.
@@ -73,14 +74,22 @@ Why each one (raw probes against every slot below; `#` columns are the parser th
 - `,` splits journey actors; `~` is class generics; `-->` `--` `..` turn state/class text into
   relations; `//` starts a zenuml comment; `` ` `` opens a markdown string inside quotes.
 - `<br>` is a line break wherever labels are normalised, so `<` is always escaped.
-- ` %%` starts a comment anywhere on a `dg_next_line()` line.
+- ` %%` starts a comment anywhere on a `dg_next_line()` line; mermaid's timeline takes a `%` at a
+  line start as one, and finds `%%{` directives anywhere.
+- `#` starts a comment in mermaid's sequence, journey and timeline lexers (`\#[^\n]*`).
+- `\` is an escape in mermaid's quoted strings (pie, gitGraph, flowchart `@{label}`, ER).
+- `*` and `_` at a word edge are markdown emphasis in mindmap, ER and state text.
+- `=` in a quoted gitGraph commit id or tag shows as `&equals;`.
 
 Fixed in the parsers along the way: an entity's `;` at line end was stripped (`dg_next_line`,
-sequence) or split the ZenUML statement; `A -- "a--b" --> B` ended the label inside the quotes.
+sequence) or split the ZenUML statement; `A -- "a--b" --> B` ended the label inside the quotes;
+quadrant axes kept their quotes; sankey lost a trailing ` %%…` or `;` of a field (mermaid's CSV
+grammar has no comments).
 
 ## Audit: slots per diagram type
 
-Q = `mmd_w_str`, T = `mmd_w_text`, I = `mmd_w_id`, C = `mmd_w_csv`; **br** = draws `<br>`.
+Q = `mmd_w_str`, T = `mmd_w_text`, I = `mmd_w_id`, C = `mmd_w_csv`; **br** = draws `<br>` (in
+mermaid).
 Every listed slot is in `tests/writer_test.c` and survives random labels built from all of the
 above (CJK, emoji, `#quot;`, `%%`, `-->`, `fa:fa-car`, newlines...).
 
@@ -96,26 +105,26 @@ above (CJK, emoji, `#quot;`, `%%`, `-->`, `fa:fa-car`, newlines...).
 | journey | | task, section (br); actor | | |
 | timeline | | period, event, section (br) | | |
 | mindmap | shape `id[…]` (br) | | node ids | bare node lines are node specs (`[`, `(`, `:::`, `::icon`); `mmd_mindmap_node` nests by depth |
-| quadrantChart | point | quadrant (br); axis, title | | |
+| quadrantChart | point, quadrant, axis | title | | mermaid's unquoted quadrant/axis text rejects `( ) @ ^ > ~` and more |
 | xychart | title, axis titles, categories, series | | | |
 | gitGraph | commit `id:`, `tag:` | | branches | `mmd_git_*` check branch names against `\w([-./\w]*[-\w])?` and the keywords |
 | sankey | | | | C: source, target (`mmd_sankey_*`) |
 | block | node, edge | | | |
-| requirementDiagram | `text:` | `type:` | | |
-| C4 | label, description (br); `Rel` label | title | | |
-| architecture | | `[…]` of service, group, edge | | |
+| requirementDiagram | `text:`, `type:` | | | |
+| C4 | label, description (br); `Rel` label | title | | mermaid shows entities literally (`&#58;`) |
+| architecture | | `[…]` of service, group, edge | | mermaid shows entities literally and lexes few characters |
 | packet | field | title | | |
 | kanban | `[…]` card, column (br) | | | nest with `mmd_w_line` |
 | radar | axis and curve `id[…]` | title | | |
 | treemap | leaf, section | | | nest with `mmd_w_line` |
-| zenuml | | message, title | | |
+| zenuml | | message, title | | mermaid's zenuml plugin shows entities literally |
 | ishikawa | | head, causes (br) | | nest with `mmd_w_line` |
-| cynefin | item (br), transition | title | | |
-| venn | set, text `[…]` (br) | | | |
+| cynefin | item, transition | title | | |
+| venn | set, text `[…]` | | | |
 | treeView | | `## description` | node names | `/` (folder), `:::`, `icon(` are syntax in names; `mmd_tree_node` escapes them |
-| eventmodeling | | `data` values | names | names are dotted identifiers |
+| eventmodeling | | `data` values | names | names are dotted identifiers; mermaid: ASCII, letter first |
 | railroad | terminals (EBNF, function form) | | | `title` is accepted but not drawn, as in mermaid-cli |
-| wardley | note | component, title | | |
+| wardley | note | component, title | | mermaid's component lexer takes no entity |
 
 ## Not representable (refused or documented)
 
@@ -125,3 +134,9 @@ above (CJK, emoji, `#quot;`, `%%`, `-->`, `fa:fa-car`, newlines...).
 - T at the start of a statement can't start with that diagram's keyword (`section`, `title`, ...).
   The typed helpers handle it (gantt tasks, sequence ids, treeView names); written by hand with
   `mmd_w_text` (timeline period, ishikawa cause, wardley component) it is not checked.
+- mermaid.js limits no escape gets around: C4 and architecture print entities literally, as does the
+  zenuml plugin; wardley components, eventmodeling names and gitGraph branches take a narrow
+  character set; a literal `<br>` or `fa:fa-x` is drawn as markup whatever its spelling; mermaid
+  hyphenates long unspaced sequence block labels, sometimes inside an escape; sankey, gitGraph and
+  xychart show `<` `>` as `&lt;` `&gt;`; xychart omits some series names; a decoded `\` before
+  punctuation in markdown text (class notes, mindmap, ER, state) escapes it.

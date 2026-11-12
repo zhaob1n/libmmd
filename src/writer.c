@@ -101,16 +101,16 @@ enum : uint8_t { CQ = 1, CT = 2, CC = 4 }; /* quoted "…", text to end of line,
 /* extra escapes the typed helpers ask for, beside MMD_W_BR (writer.md has why) */
 enum : unsigned {
     W_LEAD = 1u << 8,  /* the first non-blank character: it would start a keyword */
-    W_PCT = 1u << 9,   /* every '%' (gantt: "x%" starts a comment; ER names) */
-    W_BSL = 1u << 10,  /* '\\' (ER names) */
-    W_TREE = 1u << 11, /* treeView names: '(' (icon()), '#' ("##", also before an entity), a trailing '/' */
-    W_DIR = 1u << 12,  /* "direction LR" anywhere on a state / ER line sets the direction */
-    W_MD = 1u << 13,   /* '_' '*': quoted ER names are markdown */
+    W_TREE = 1u << 9,  /* treeView names: '(' (icon()), a trailing '/', box drawing (└── ├── │ draw the tree) */
+    W_DIR = 1u << 10,  /* "direction LR" anywhere on a state / ER line sets the direction */
 };
-/* always escaped: they end or split a label somewhere (audit in docs/dev/writer.md) */
+/* always escaped: they end or split a label somewhere, or mermaid.js drops them ('#' starts a sequence
+ * or journey comment, '%' a timeline one, '\\' an escape in quoted strings, '*' markdown emphasis,
+ * gitGraph shows a quoted '=' as "&equals;"; audit in docs/dev/writer.md) */
 static constexpr uint8_t ESC[128] = {
-    ['"'] = CQ | CT, [':'] = CQ | CT, ['['] = CQ | CT, [']'] = CQ | CT, ['{'] = CQ | CT,
-    ['}'] = CQ | CT, ['|'] = CQ | CT, ['<'] = CQ | CT | CC, ['`'] = CQ, [';'] = CT, [','] = CT, ['~'] = CT,
+    ['"'] = CQ | CT, [':'] = CQ | CT, ['['] = CQ | CT, [']'] = CQ | CT, ['{'] = CQ | CT, ['}'] = CQ | CT,
+    ['|'] = CQ | CT, ['<'] = CQ | CT, ['#'] = CQ | CT, ['%'] = CQ | CT, ['\\'] = CQ | CT, ['*'] = CQ | CT, ['='] = CQ,
+    ['`'] = CQ, [';'] = CT, [','] = CT, ['~'] = CT,
 };
 
 static inline bool u8_cont(unsigned char c) { return (c & 0xC0u) == 0x80u; }
@@ -130,22 +130,23 @@ static size_t utf8_len(const unsigned char *s) {
     return 0;
 }
 
+/* a letter, digit or non-ASCII byte: markdown's '_' inside one is not emphasis */
+static inline bool md_word(char c) {
+    unsigned char u = (unsigned char)c;
+    return u >= 0x80 || (unsigned)((u | 32) - 'a') < 26u || (unsigned)(u - '0') < 10u;
+}
+
 /* byte at s[i] must become an entity in context ctx */
 static bool must_esc(const char *s, size_t i, unsigned ctx, unsigned flags) {
     unsigned char c = (unsigned char)s[i];
     if (c >= 0x80) return false;
     if (ESC[c] & ctx) return true;
-    if ((flags & W_PCT && c == '%') || (flags & W_BSL && c == '\\') || (flags & W_MD && (c == '_' || c == '*'))) return true;
-    if (flags & W_TREE && (c == '(' || c == '#' || (c == '/' && !s[i + 1]))) return true;
+    if (flags & W_TREE && (c == '(' || (c == '/' && !s[i + 1]))) return true;
     if (flags & W_DIR && (c | 32) == 'd' && !strncasecmp(s + i, "direction", 9) && (s[i + 9] == ' ' || s[i + 9] == '\t'))
         return true;
     switch (c) {
-    case '#': { /* would start an entity, mermaid's #\w+; */
-        size_t j = i + 1;
-        while ((unsigned)((s[j] | 32) - 'a') < 26u || (unsigned)(s[j] - '0') < 10u || s[j] == '_') j++;
-        return j > i + 1 && s[j] == ';';
-    }
-    case '%': return s[i + 1] == '%';                                                /* comment */
+    case '_': /* mindmap, ER and state text is markdown: _x_ at a word edge is emphasis */
+        return ctx != CC && (!i || !md_word(s[i - 1]) || !md_word(s[i + 1]));
     case '-': return ctx == CT && (s[i + 1] == '-' || s[i + 1] == '>' || s[i + 1] == '.'); /* arrow */
     case '/': return ctx == CT && s[i + 1] == '/';                                    /* zenuml comment */
     }
@@ -161,19 +162,21 @@ static uint32_t utf8_cp(const unsigned char *s, size_t k) {
 
 /* false (and the error set) when s can't be written in ctx */
 static bool put_esc(mmd_writer w[static 1], size_t at, const char *fn, const char *s, unsigned ctx, unsigned flags) {
-    size_t run = 0, i = 0, lead = SIZE_MAX;
-    if (flags & W_LEAD) {
-        lead = 0;
-        while (s[lead] == ' ' || s[lead] == '\t') lead++;
-    }
+    size_t run = 0, i = 0, lead = flags & W_LEAD ? strspn(s, " \t") : SIZE_MAX;
     for (; s[i]; i++) {
         unsigned char c = (unsigned char)s[i];
         size_t k = c >= 0x80 ? utf8_len((const unsigned char *)s + i) : 1;
         if (!k) return fail(w, at, "%s: invalid UTF-8 at byte %zu", fn, i), false;
-        if (i == lead && c > ' ') {
+        uint32_t cp = utf8_cp((const unsigned char *)s + i, k);
+        if (ctx == CC) { /* mermaid's sankey CSV: printable ASCII, no entity, no %%{ directive (even quoted);
+                          * it shows < > as &lt; &gt; or drops "<x" */
+            if (c >= 0x80 || c == '\t' || c == '<' || c == '>' || (c == '%' && !strncmp(s + i, "%%{", 3)) ||
+                (c == '#' && ent_end(strnlen(s + i, 16), s + i, 0)))
+                return fail(w, at, "%s: mermaid's sankey cannot show '%.*s' (byte %zu)", fn, (int)k, s + i, i), false;
+        } else if ((i == lead && c > ' ') || (flags & W_TREE && cp >= 0x2500 && cp <= 0x257F)) {
             buf_put(&w->b, i - run, s + run);
             buf_ch(&w->b, '#');
-            buf_int(&w->b, utf8_cp((const unsigned char *)s + i, k));
+            buf_int(&w->b, cp);
             buf_ch(&w->b, ';');
             run = i + k;
             i += k - 1;
@@ -243,6 +246,7 @@ void mmd_w_id(mmd_writer *w, const char *s) {
         if (c >= 0x80) {
             size_t k = utf8_len((const unsigned char *)s + i);
             if (!k) return fail(w, w->b.n, "mmd_w_id: invalid UTF-8 at byte %zu", i);
+            if (k == 4) return fail(w, w->b.n, "mmd_w_id: mermaid's ids stop at U+FFFF (byte %zu)", i); /* emoji */
             i += k - 1;
         } else if (!(c == '_' || (unsigned)(c - '0') < 10u || (unsigned)((c | 32) - 'a') < 26u))
             return fail(w, w->b.n, "mmd_w_id: '%c' (0x%02x) cannot appear in an identifier", c >= 0x20 && c < 0x7F ? c : '?', c);
@@ -722,7 +726,7 @@ void mmd_gantt_task(mmd_writer *w, const char *name, const char *id, unsigned fl
     mmd_w_line(w, 1 + w->nopen);
     size_t at = w->b.n;
     bool lead = HAS_KW(name, GANTT_KW, false) || (unsigned)(name[strspn(name, " \t")] - '0') < 10u; /* a date */
-    if (!put_esc(w, at, "mmd_gantt_task", name, CT, W_PCT | (lead ? W_LEAD : 0))) return;
+    if (!put_esc(w, at, "mmd_gantt_task", name, CT, lead ? W_LEAD : 0)) return;
     mmd_w_raw(w, " :");
     const char *sep = "";
     for (size_t k = 0; k < countof(TAG); k++)
@@ -770,6 +774,7 @@ void mmd_state_begin(mmd_writer *w, const char *dir) {
 static void state_decl(mmd_writer w[static 1], const char *id, const char *label, bool group) {
     if (!live(w)) return;
     if (!id) return fail(w, w->b.n, "%s: [*] cannot be declared", group ? "mmd_state_group" : "mmd_state");
+    if (!label && strchr(id, '_')) label = id; /* a bare id is markdown: a_b_ */
     if (!label && !group) {
         stmt(w, "");
         state_id(w, id);
@@ -862,7 +867,7 @@ void mmd_mindmap_node(mmd_writer *w, unsigned depth, const char *id, const char 
     if (!tree_depth(w, "mmd_mindmap_node", depth, true)) return;
     mmd_w_line(w, 1 + depth);
     mmd_w_id(w, id);
-    if (label || shape != MMD_SHAPE_RECT) {
+    if (label || shape != MMD_SHAPE_RECT || strchr(id, '_')) { /* bare text is markdown: a_b_ */
         mmd_w_raw(w, DELIM[shape][0]);
         mmd_w_str(w, label ? label : id, MMD_W_BR);
         mmd_w_raw(w, DELIM[shape][1]);
@@ -882,8 +887,8 @@ void mmd_tree_node(mmd_writer *w, unsigned depth, const char *name, bool dir, co
     if (!live(w) || !need(w, "mmd_tree_node", "name", name)) return;
     if (!tree_depth(w, "mmd_tree_node", depth, false)) return;
     mmd_w_line(w, 1 + depth);
-    unsigned c0 = (unsigned char)name[strspn(name, " \t")];
-    bool lead = HAS_KW(name, TREE_KW, false) || c0 == '"' || c0 >= 0x80; /* └── ├── │ draw the tree */
+    char c0 = name[strspn(name, " \t")];
+    bool lead = HAS_KW(name, TREE_KW, false) || c0 == '"' || c0 == '\''; /* "…" and '…' are strings */
     if (!put_esc(w, w->b.n, "mmd_tree_node", name, CT, W_TREE | (lead ? W_LEAD : 0))) return;
     if (dir) mmd_w_raw(w, "/");
     if (desc && *desc) {
@@ -906,7 +911,7 @@ static void er_name(mmd_writer w[static 1], const char *fn, const char *name) {
     if (!need(w, fn, "entity name", name)) return;
     size_t at = w->b.n;
     buf_ch(&w->b, '"');
-    if (!put_esc(w, at, fn, name, CQ, W_PCT | W_BSL | W_DIR | W_MD)) return;
+    if (!put_esc(w, at, fn, name, CQ, W_DIR)) return;
     buf_ch(&w->b, '"');
     term(w);
 }

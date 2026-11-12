@@ -113,11 +113,11 @@ MMD_API void mmd_w_raw(mmd_writer *w, const char *s);
 MMD_API void mmd_w_str(mmd_writer *w, const char *s, unsigned flags);
 /* label running to the end of the line, e.g. A->>B: …, title …, section … */
 MMD_API void mmd_w_text(mmd_writer *w, const char *s, unsigned flags);
-/* node / participant / entity id: [A-Za-z0-9_] and non-ASCII, non-empty */
+/* node / participant / entity id: [A-Za-z0-9_] and non-ASCII up to U+FFFF (no emoji), non-empty */
 MMD_API void mmd_w_id(mmd_writer *w, const char *s);
 /* shortest decimal that reads back as v; never an exponent; finite only */
 MMD_API void mmd_w_num(mmd_writer *w, double v);
-/* one sankey CSV field, quoted only when needed */
+/* one sankey CSV field, quoted only when needed; mermaid's sankey takes printable ASCII only */
 MMD_API void mmd_w_csv(mmd_writer *w, const char *s);
 
 /* ---- typed helpers: each writes whole lines ---- */
@@ -204,7 +204,7 @@ MMD_API void mmd_state_transition(mmd_writer *w, const char *from, const char *t
 /* side: MMD_LEFT_OF or MMD_RIGHT_OF */
 MMD_API void mmd_state_note(mmd_writer *w, mmd_side side, const char *id, const char *text);
 
-/* sankey-beta: value >= 0 */
+/* sankey-beta: value >= 0; names are printable ASCII (mermaid's CSV grammar) */
 MMD_API void mmd_sankey_begin(mmd_writer *w);
 MMD_API void mmd_sankey_flow(mmd_writer *w, const char *source, const char *target, double value);
 

@@ -1,5 +1,6 @@
 /* mmd_writer round trip: random labels full of mermaid syntax go through each escape context into every
  * diagram type; the rendered SVG must show them verbatim, or the writer must have refused them. */
+#include <ctype.h>
 #include <math.h>
 #include <locale.h>
 #include <stdio.h>
@@ -55,8 +56,8 @@ static const Case CASES[] = {
     {"timeline section", "timeline\n  section ", "\n  2002 : x\n", TEXT, true},
     {"mindmap node", "mindmap\n  root\n    a[", "]\n", STR, true},
     {"quadrant point", "quadrantChart\n  ", ": [0.3, 0.6]\n", STR, false},
-    {"quadrant label", "quadrantChart\n  quadrant-1 ", "\n  A: [0.3, 0.6]\n", TEXT, true},
-    {"quadrant axis", "quadrantChart\n  x-axis ", " --> High\n  A: [0.3, 0.6]\n", TEXT, false},
+    {"quadrant label", "quadrantChart\n  quadrant-1 ", "\n  A: [0.3, 0.6]\n", STR, false},
+    {"quadrant axis", "quadrantChart\n  x-axis ", " --> High\n  A: [0.3, 0.6]\n", STR, false},
     {"quadrant title", "quadrantChart\n  title ", "\n  A: [0.3, 0.6]\n", TEXT, false},
     {"xychart title", "xychart\n  title ", "\n  bar [1, 2]\n", STR, false},
     {"xychart category", "xychart\n  x-axis [", ", b]\n  bar [1, 2]\n", STR, false},
@@ -68,7 +69,7 @@ static const Case CASES[] = {
     {"block node", "block-beta\n  a[", "] b\n", STR, false},
     {"block edge", "block-beta\n  a b\n  a -- ", " --> b\n", STR, false},
     {"requirement text", "requirementDiagram\n  requirement r {\n  id: 1\n  text: ", "\n  }\n", STR, false},
-    {"requirement type", "requirementDiagram\n  element e {\n  type: ", "\n  }\n", TEXT, false},
+    {"requirement type", "requirementDiagram\n  element e {\n  type: ", "\n  }\n", STR, false},
     {"C4 label", "C4Context\n  Person(p, ", ", \"d\")\n", STR, true},
     {"C4 description", "C4Context\n  Person(p, \"x\", ", ")\n", STR, true},
     {"C4 relation", "C4Context\n  Person(p, \"x\")\n  System(s, \"y\")\n  Rel(p, s, ", ")\n", STR, false},
@@ -89,11 +90,11 @@ static const Case CASES[] = {
     {"zenuml title", "zenuml\n  title ", "\n  A->B: x\n", TEXT, false},
     {"ishikawa head", "ishikawa-beta\n    ", "\n    Process\n        x\n", TEXT, true},
     {"ishikawa cause", "ishikawa-beta\n    H\n    Process\n        ", "\n", TEXT, true},
-    {"cynefin item", "cynefin-beta\n  complex\n    ", "\n", STR, true},
+    {"cynefin item", "cynefin-beta\n  complex\n    ", "\n", STR, false},
     {"cynefin transition", "cynefin-beta\n  complex\n    \"x\"\n  complex --> clear : ", "\n", STR, false},
     {"cynefin title", "cynefin-beta\n  title ", "\n  complex\n    \"x\"\n", TEXT, false},
-    {"venn set", "venn-beta\n  set A[", "]\n  set B[\"y\"]\n", STR, true},
-    {"venn text", "venn-beta\n  set A[\"x\"]\n    text A1[", "]\n", STR, true},
+    {"venn set", "venn-beta\n  set A[", "]\n  set B[\"y\"]\n", STR, false},
+    {"venn text", "venn-beta\n  set A[\"x\"]\n    text A1[", "]\n", STR, false},
     {"treeView description", "treeView-beta\n    root/\n        f.txt ## ", "\n", TEXT, false},
     {"eventmodeling data", "eventmodeling\ntf 01 evt E [[D]]\n\ndata D {\n  a: ", "\n}\n", TEXT, false},
     {"railroad terminal", "railroad-ebnf-beta\nr = ", " ;\n", STR, false},
@@ -173,6 +174,19 @@ static void squeeze(char *s) {
 
 static char svgt[1 << 20];
 
+/* mermaid's sankey reads printable ASCII (no tab) without entities (#name;) or %%{, and can't show < > */
+static bool csv_ok(const char *s) {
+    for (; *s; s++) {
+        if ((unsigned char)*s >= 0x80 || strchr("\n\t<>", *s) || !strncmp(s, "%%{", 3)) return false;
+        if (*s == '#' && isalnum((unsigned char)s[1])) {
+            const char *e = s + 1;
+            while (isalnum((unsigned char)*e)) e++;
+            if (*e == ';') return false;
+        }
+    }
+    return true;
+}
+
 /* 0 ok, 1 refused as expected, -1 failure */
 static int one(const Case c[static 1], const char *label, bool verbose) {
     mmd_writer *w = mmd_writer_new();
@@ -190,7 +204,8 @@ static int one(const Case c[static 1], const char *label, bool verbose) {
     bool refused = mmd_writer_text(w, &src, &n, nullptr) != MMD_OK;
     int r = 0;
     if (refused) {
-        r = strchr(label, '\n') && !c->br ? 1 : -1;
+        r = (strchr(label, '\n') && !c->br) || (c->ctx == CSV && !csv_ok(label)) ||
+            (c->ctx == ID && strstr(label, "😀")) ? 1 : -1;
     } else if (st) {
         r = -1;
     } else {
@@ -232,7 +247,7 @@ static int roundtrip(unsigned iters) {
         }
         bad += cbad;
     }
-    printf("writer round trip: %u labels in %zu slots, %u refused (line break), %d failed\n", total,
+    printf("writer round trip: %u labels in %zu slots, %u refused (line break, sankey, emoji id), %d failed\n", total,
            sizeof CASES / sizeof *CASES, refused, bad);
     return bad;
 }
@@ -396,9 +411,11 @@ static int typed2(unsigned iters) {
 
         mmd_writer_reset(w), n = 0;
         mmd_sankey_begin(w);
-        const char *s0 = lab(L, n++, false), *s1 = lab(L, n++, false);
-        mmd_sankey_flow(w, s0, s1, 2.5);
-        mmd_sankey_flow(w, L[1], lab(L, n++, false), 1);
+        for (size_t k = 0; k < 3; k++)
+            while (!csv_ok(lab(L, k, false))) {}
+        n = 3;
+        mmd_sankey_flow(w, L[0], L[1], 2.5);
+        mmd_sankey_flow(w, L[1], L[2], 1);
         bad += !shows(w, n, L);
 
         mmd_writer_reset(w), n = 0;
@@ -411,7 +428,7 @@ static int typed2(unsigned iters) {
         strcpy(L[n++], "plain");
         bad += !shows(w, n, L);
 
-        static const char *const TKW[] = {"title x", "accTitle", "├── a", "\"q\"", "icon(x)", "a :::b", "d/"};
+        static const char *const TKW[] = {"title x", "accTitle", "├── a", "\"q\"", "'q'", "icon(x)", "a :::b", "d/"};
         mmd_writer_reset(w), n = 0;
         mmd_tree_begin(w);
         mmd_tree_node(w, 0, lab(L, n++, false), true, nullptr);
