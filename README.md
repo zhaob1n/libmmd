@@ -115,6 +115,26 @@ cc -std=gnu23 -Iinclude example.c build/libmmd.a -lm      # or: $(pkg-config --c
 - The shared library exports only `mmd_*` symbols.
 - Output does not depend on the host's `setlocale()`: each render runs in the C locale on the calling thread only (`uselocale`), then restores the host's.
 
+To *write* diagrams (test data, benchmark results), [`include/mmd_writer.h`](include/mmd_writer.h)
+builds the text and escapes every value for its context, so a label can hold any character:
+
+```c
+mmd_writer *w = mmd_writer_new();
+mmd_xy_begin(w, "Latency", false);
+mmd_xy_x_cats(w, nullptr, 3, (const char *[]){"1 KiB", "64 KiB", "1 MiB"});
+mmd_xy_bar(w, "p50 µs", 3, (double[]){12.5, 40.25, 610});
+const char *text; size_t len;
+if (mmd_writer_text(w, &text, &len, nullptr) == MMD_OK)     /* save it as a .mmd... */
+    fwrite(text, 1, len, stdout);
+if (mmd_writer_render_svg(w, nullptr, &svg, &err) == MMD_OK) /* ...or render it in memory */
+    use(svg.data, svg.len);
+mmd_writer_free(w);
+```
+
+Errors are sticky (checked once at the end), numbers are written shortest-round-trip, and
+`mmd_w_str` / `mmd_w_text` / `mmd_w_id` / `mmd_w_csv` / `mmd_w_line` cover every other diagram type.
+Which context each diagram slot takes is in [docs/dev/writer.md](docs/dev/writer.md).
+
 ## Benchmarks
 
 All numbers below were measured on the same 8-vCPU Intel Xeon VM. Times are wall-clock for a whole process run, including process start-up. Each value is the best of N runs: N = 20 for libmmd, 5 for mmdr and 3 for mmdc.
@@ -184,6 +204,7 @@ More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 |---|---|
 | Golden + sanity tests (151 cases; XML well-formedness, error positions, viewBox bounds, mermaid docs corpus) | `make test` (`UPDATE_GOLDEN=1 make test` to refresh) |
 | Locale independence: the corpus rendered under a comma-decimal locale must match the C locale byte for byte (skipped when none is installed) | `make test` |
+| Writer round trip: random labels through 92 slots of every diagram type, typed helpers, number round trip, error paths | `make test` (`build/test-writer [iterations]`) |
 | Mermaid docs corpus: 432 examples from mermaid's syntax docs, 396/396 that mermaid itself renders | `python3 tools/docs_audit.py [-v]` |
 | ASan + UBSan build | `make asan` → `build-asan/mmd` |
 | Fuzzing (mutational, under ASan) | `python3 tests/fuzz.py build-asan/mmd 1000` |

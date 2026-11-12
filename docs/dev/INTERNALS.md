@@ -14,6 +14,7 @@ Numbers here are historical; see bench/results_v*.txt.
 | sequence | `src/seq.c` | participants/actors, all arrows, activations, notes, blocks, autonumber, `A->>()B` / `A()->>B` central-connection dots |
 | diagram registry | `src/d_registry.c`, `src/diagrams.h` | keyword → renderer table; new types live in `src/d_*.c` |
 | shared helpers | `src/dgraph.[ch]` | graph building on top of `flow_layout`, line scanner, SVG primitives |
+| writer | `src/writer.c`, `include/mmd_writer.h` | builds mermaid text by escape context (entities `#NN;`), shortest round-trip numbers, xychart/pie/flowchart helpers; per-diagram audit in [writer.md](writer.md) |
 | stateDiagram(-v2) | `src/d_state.c` | composites (recursive per-scope layout), `--` regions, `[*]`, fork/join/choice, notes, classDef |
 | classDiagram | `src/d_class.c` | members, `~generics~`, visibility/`$`/`*`, annotations, all relations + lollipop, cardinality, namespaces, notes |
 | erDiagram | `src/d_er.c` | attribute tables (type/name/keys/comment), aliases, all crow's-foot cardinalities (symbolic + word forms), `:::cls` / classDef / class / style, `subgraph` clusters (relations may target a subgraph id) |
