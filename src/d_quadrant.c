@@ -44,15 +44,20 @@ static bool safe_color(Str c) {
     }
     return c.n > 0;
 }
-/* split "a --> b" */
+/* split "a --> b"; either side may be a "string" (with "-->" inside), as in mermaid */
 static void axis_pair(Str s, Str lo[static 1], Str hi[static 1]) {
-    for (size_t i = 0; i + 3 <= s.n; i++)
+    size_t i = 0;
+    if (s.n && s.p[0] == '"') {
+        const char *e = memchr(s.p + 1, '"', s.n - 1);
+        i = e ? (size_t)(e - s.p) + 1 : s.n;
+    }
+    for (; i + 3 <= s.n; i++)
         if (!memcmp(s.p + i, "-->", 3)) {
-            *lo = str_trim((Str){.p = s.p, .n = i});
-            *hi = str_trim((Str){.p = s.p + i + 3, .n = s.n - i - 3});
+            *lo = dg_unquote((Str){.p = s.p, .n = i}, false);
+            *hi = dg_unquote((Str){.p = s.p + i + 3, .n = s.n - i - 3}, false);
             return;
         }
-    *lo = str_trim(s), *hi = (Str){};
+    *lo = dg_unquote(s, false), *hi = (Str){};
 }
 
 DIAG_FN(quadrant_render) {
