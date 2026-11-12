@@ -435,6 +435,7 @@ DIAG_FN(wardley_render) {
         }
         buf_lit(&b, "</g>");
         buf_lit(&pl, "</g>");
+        if (pl.oom) return MMD_ERR_NOMEM;
         buf_put(&b, pl.n, pl.p);
     }
     /* component labels without a user offset: the default up-right spot, or the first of a few
