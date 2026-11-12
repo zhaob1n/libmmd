@@ -162,6 +162,7 @@ static mmd_status render_c(Arena ap[static 1], Buf bp[static 1], size_t n, const
     if (kw.n > 1 && kw.p[kw.n - 1] == ':') kw.n--; /* "gitGraph:" */
 
     Arena arena = *ap;
+    arena.oom = false;
     Buf b = *bp;
     b.n = 0;
     b.oom = false;
@@ -219,6 +220,7 @@ static mmd_status render_c(Arena ap[static 1], Buf bp[static 1], size_t n, const
     b.p[b.n] = 0;
     if (err) *err = (mmd_error){};
 fail:
+    if (arena.oom) st = MMD_ERR_NOMEM, msg[0] = 0; /* whatever a fallback made of the failed allocation */
     dcfg_end();
     *ap = arena;
     *bp = b;

@@ -34,12 +34,12 @@ void *arena_alloc_slow(Arena a[static 1], size_t size, size_t align) {
     size_t cap = ARENA_MIN_BLOCK;
     if (b && b->cap < (size_t)64 << 20) cap = b->cap * 2;
     size_t need = 0;
-    if (ckd_add(&need, size, align)) return nullptr;
+    if (ckd_add(&need, size, align)) return a->oom = true, nullptr;
     if (cap < need) cap = need;
     size_t total = 0;
-    if (ckd_add(&total, cap, sizeof(ArenaBlock))) return nullptr;
+    if (ckd_add(&total, cap, sizeof(ArenaBlock))) return a->oom = true, nullptr;
     ArenaBlock *nb = malloc(total);
-    if (!nb) return nullptr;
+    if (!nb) return a->oom = true, nullptr;
     nb->next = b;
     nb->cap = cap;
     nb->used = size;
@@ -52,7 +52,7 @@ void *arena_alloc_slow(Arena a[static 1], size_t size, size_t align) {
 void *arena_grow(Arena a[static 1], void *old, size_t cap[static 1], size_t elem, size_t align) {
     size_t ncap = *cap ? *cap * 2 : 8;
     size_t oldb = *cap * elem, newb = 0;
-    if (ckd_mul(&newb, ncap, elem)) return nullptr;
+    if (ckd_mul(&newb, ncap, elem)) return a->oom = true, nullptr;
     ArenaBlock *b = a->head;
     /* in-place growth if old is the most recent allocation */
     if (old && old == a->last && b) {

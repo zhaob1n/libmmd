@@ -136,6 +136,7 @@ typedef struct Arena {
     ArenaBlock *head;
     void *last; /* last allocation (for in-place growth) */
     size_t last_size;
+    bool oom; /* an allocation failed: sticky, so a caller's fallback cannot hide it from render() */
 } Arena;
 
 [[nodiscard, gnu::malloc, gnu::alloc_size(2)]] void *arena_alloc_slow(Arena a[static 1], size_t size, size_t align);
@@ -156,7 +157,7 @@ typedef struct Arena {
 [[nodiscard, gnu::malloc, gnu::alloc_size(2, 3)]]
 static inline void *arena_alloc_array(Arena a[static 1], size_t n, size_t size, size_t align) {
     size_t total = 0;
-    if (ckd_mul(&total, n, size)) return nullptr;
+    if (ckd_mul(&total, n, size)) return a->oom = true, nullptr;
     return arena_alloc(a, total ? total : 1, align);
 }
 /* grow an array previously allocated from the arena (or nullptr). */
