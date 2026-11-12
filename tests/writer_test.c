@@ -651,6 +651,54 @@ static int errors(void) {
     return bad;
 }
 
+/* mmd_w_config is a directive before the diagram; the render honours the keys */
+static int config_round(void) {
+    int bad = 0;
+    mmd_writer *w = mmd_writer_new();
+    mmd_w_config(w, "xyChart.showDataLabel", "true");
+    mmd_w_config(w, "xyChart.showDataLabelOutsideBar", "true");
+    mmd_w_config(w, "xyChart.barOverlap", "true");
+    mmd_xy_begin(w, "Groups", true);
+    const char *cats[] = {"a", "b"};
+    mmd_xy_x_cats(w, nullptr, 2, cats);
+    mmd_xy_bar(w, "g1", 2, (double[]){3, 0});
+    mmd_xy_bar(w, "g2", 2, (double[]){0, 4});
+    const char *s;
+    size_t n;
+    mmd_error e = {};
+    if (mmd_writer_text(w, &s, &n, &e) || !strstr(s, "%%{init: {\"xyChart\":{\"showDataLabel\":\"true\"}}}%%") ||
+        !strstr(s, "barOverlap")) {
+        printf("FAIL config text: %s\n", s ? s : e.message);
+        bad++;
+    }
+    mmd_buffer svg = {};
+    if (mmd_writer_render_svg(w, nullptr, &svg, &e)) {
+        printf("FAIL config render: %s\n", e.message);
+        bad++;
+    } else {
+        if (!strstr(svg.data, ">3</tspan>") || !strstr(svg.data, ">4</tspan>"))
+            printf("FAIL config svg missing values\n%s\n", svg.data), bad++;
+        /* one bar per group colour: the swatch plus one bar, not a zero-value bar as well */
+        int c0 = 0, c1 = 0;
+        for (const char *p = svg.data; (p = strstr(p, "#ECECFF")); p++) c0++;
+        for (const char *p = svg.data; (p = strstr(p, "#8493A6")); p++) c1++;
+        if (c0 != 2 || c1 != 2)
+            printf("FAIL config overlap: colours %d %d, want 2 2 (bar + swatch, no zero bar)\n", c0, c1), bad++;
+        mmd_buffer_free(&svg);
+    }
+    mmd_writer_reset(w);
+    mmd_xy_begin(w, nullptr, false);
+    mmd_w_config(w, "xyChart.showDataLabel", "true");
+    if (mmd_writer_text(w, &s, &n, &e) != MMD_ERR_SYNTAX) printf("FAIL config after diagram not refused\n"), bad++;
+    mmd_writer_reset(w);
+    mmd_w_config(w, "xyChart.showDataLabel", "a\"b");
+    if (mmd_writer_text(w, &s, &n, &e) != MMD_ERR_SYNTAX) printf("FAIL config quote not refused\n"), bad++;
+    mmd_writer_free(w);
+    printf("writer config: %d failed\n", bad);
+    return bad;
+}
+
+
 int main(int argc, char **argv) {
     if (argc > 2 && !strcmp(argv[1], "--dump")) { /* a small corpus: a few labels per slot; [SEED] another one */
         dump_dir = argv[2];
@@ -660,6 +708,6 @@ int main(int argc, char **argv) {
         return bad != 0;
     }
     unsigned iters = argc > 1 ? (unsigned)atoi(argv[1]) : 200;
-    int bad = roundtrip(iters) + typed(iters / 4) + typed2(iters / 4) + numbers(iters * 50) + errors();
+    int bad = roundtrip(iters) + typed(iters / 4) + typed2(iters / 4) + numbers(iters * 50) + errors() + config_round();
     return bad != 0;
 }

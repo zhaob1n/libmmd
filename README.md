@@ -128,6 +128,14 @@ if (mmd_writer_render_svg(w, nullptr, &svg, &err) == MMD_OK) /* ...or render it 
 mmd_writer_free(w);
 ```
 
+Chart config is the same text mermaid reads. `mmd_w_config` writes an `%%{init}%%` directive
+before the diagram (`mmd_w_config(w, "xyChart.showDataLabel", "true")`). XY chart keys:
+`xyChart.showDataLabel`, `xyChart.showDataLabelOutsideBar` (value inside the bar, or past its
+end), `xyChart.barOverlap` (libmmd only: several `bar` series share the full band, and a `0`
+draws nothing, so one series per group colours the bars; mermaid.js still parses the text and
+draws the series side by side), `xyChart.width` / `xyChart.height`. A vertical chart wraps a
+category label at spaces when it is wider than its band.
+
 Typed helpers cover xychart (`mmd_xy_*`), pie, flowchart, sequence (`mmd_seq_*`), gantt, state,
 sankey, mindmap, treeView, ER and gitGraph; they also handle each type's own traps (keywords at the
 start of a statement, ER names with `-`, branch-name rules, gantt dates). Blocks they open (sequence
