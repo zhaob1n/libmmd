@@ -1,6 +1,7 @@
 /* mmd_writer round trip: random labels full of mermaid syntax go through each escape context into every
  * diagram type; the rendered SVG must show them verbatim, or the writer must have refused them. */
 #include <math.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -365,6 +366,7 @@ static int numbers(unsigned iters) {
 }
 
 /* the error sticks: later calls are no-ops, line:col points at the rejected value, reset clears it */
+enum { NBAD = 16 };
 static void bad_call(mmd_writer *w, int k) {
     switch (k) {
     case 0: mmd_w_id(w, "a b"); break;
@@ -385,10 +387,35 @@ static void bad_call(mmd_writer *w, int k) {
     case 15: mmd_xy_bar(w, nullptr, 1, (const double[]){NAN}); break;
     }
 }
+/* the host's LC_NUMERIC must leak into neither the text nor the messages */
+static int comma_locale(void) {
+    static const double V[] = {1.5, 1e-7, -2.5e-30, 1.25e30, 0x1p60};
+    char out[2][512] = {};
+    for (int pass = 0; pass < 2; pass++) {
+        if (pass && !setlocale(LC_NUMERIC, "de_DE.UTF-8") && !setlocale(LC_NUMERIC, "fr_FR.UTF-8")) return 0;
+        mmd_writer *w = mmd_writer_new();
+        for (size_t i = 0; i < sizeof V / sizeof *V; i++) mmd_w_num(w, V[i]), mmd_w_raw(w, " ");
+        const char *s;
+        size_t n;
+        mmd_error e;
+        if (mmd_writer_text(w, &s, &n, nullptr)) s = "";
+        int k = snprintf(out[pass], sizeof out[pass], "%s| ", s);
+        mmd_writer_reset(w);
+        mmd_pie_slice(w, "a", -1.5);
+        (void)mmd_writer_text(w, &s, &n, &e);
+        snprintf(out[pass] + k, sizeof out[pass] - (size_t)k, "%s", e.message);
+        mmd_writer_free(w);
+    }
+    setlocale(LC_NUMERIC, "C");
+    if (!strstr(out[0], "0.0000001 ") || !strstr(out[0], "-1.5") || strcmp(out[0], out[1]))
+        return printf("FAIL comma locale:\n  %s\n  %s\n", out[0], out[1]), 1;
+    return 0;
+}
+
 static int errors(void) {
     int bad = 0;
     mmd_writer *w = mmd_writer_new();
-    for (int k = 0; k < 16; k++) {
+    for (int k = 0; k < NBAD; k++) {
         mmd_writer_reset(w);
         mmd_w_raw(w, "pie\n  ");
         bad_call(w, k);
@@ -412,7 +439,8 @@ static int errors(void) {
     const char *s;
     size_t n;
     if (mmd_writer_text(nullptr, &s, &n, nullptr) != MMD_ERR_NOMEM) printf("FAIL null writer\n"), bad++;
-    printf("writer errors: 16 cases, %d failed\n", bad);
+    bad += comma_locale();
+    printf("writer errors: %d cases, %d failed\n", NBAD, bad);
     return bad;
 }
 

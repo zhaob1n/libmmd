@@ -282,16 +282,18 @@ static void put_num(Buf b[static 1], double v) {
      * expanded to positional digits */
     char t[40];
     int lo = 0, hi = 16;
+    locale_t host = c_locale_enter();
     while (lo < hi) {
         int m = (lo + hi) / 2;
         snprintf(t, sizeof t, "%.*e", m, a);
         if (strtod(t, nullptr) == a) hi = m; else lo = m + 1;
     }
     snprintf(t, sizeof t, "%.*e", lo, a);
+    uselocale(host);
     char dig[20];
     size_t nd = 0;
     char *e = strchr(t, 'e');
-    for (char *q = t; q < e; q++) if ((unsigned)(*q - '0') < 10u) dig[nd++] = *q; /* any locale's point */
+    for (char *q = t; q < e; q++) if (*q != '.') dig[nd++] = *q;
     long ex = strtol(e + 1, nullptr, 10); /* value = 0.dig × 10^(ex + 1) */
     if (v < 0) buf_ch(b, '-');
     if (ex < 0) {
@@ -310,7 +312,7 @@ static void put_num(Buf b[static 1], double v) {
 
 void mmd_w_num(mmd_writer *w, double v) {
     if (!live(w)) return;
-    if (!isfinite(v)) return fail(w, w->b.n, "mmd_w_num: %g is not a finite number", v);
+    if (!isfinite(v)) return fail(w, w->b.n, "mmd_w_num: %s is not a finite number", isnan(v) ? "NaN" : v < 0 ? "-Infinity" : "Infinity");
     put_num(&w->b, v);
     term(w);
 }
@@ -398,7 +400,12 @@ void mmd_pie_begin(mmd_writer *w, const char *title, bool show_data) {
 
 void mmd_pie_slice(mmd_writer *w, const char *label, double v) {
     if (!live(w)) return;
-    if (v < 0) return fail(w, w->b.n, "mmd_pie_slice: negative value %g", v);
+    if (v < 0) {
+        AUTO_BUF Buf t = {};
+        put_num(&t, v);
+        buf_ch(&t, 0);
+        return fail(w, w->b.n, "mmd_pie_slice: negative value %s", t.oom ? "" : t.p);
+    }
     mmd_w_line(w, 1);
     mmd_w_str(w, label, 0);
     mmd_w_raw(w, " : ");
