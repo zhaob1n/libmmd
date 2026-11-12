@@ -70,6 +70,8 @@ $(BUILD)/mmd: tools/mmd.c $(BUILD)/libmmd.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
 $(BUILD)/bench: bench/bench.c $(BUILD)/libmmd.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
+$(BUILD)/test-locale: tests/locale_test.c $(BUILD)/libmmd.a
+	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
 $(BUILD)/test-shared: tests/shared_test.c $(BUILD)/libmmd.so $(BUILD)/mmd.pc
 	$(CC) $(CFLAGS) $< -L$(BUILD) -lmmd -Wl,-rpath,'$$ORIGIN' -o $@
 
@@ -92,9 +94,10 @@ pgo:
 	if $(CC) --version | grep -qi clang; then $(HOME)/.local/bin/llvm-profdata merge -o $(PGO_DIR)/default.profdata $(PGO_DIR)/*.profraw; fi
 	$(MAKE) BUILD=build-pgo PGO_USE=$(PGO_DIR) LTO=$(LTO) MARCH=$(MARCH)
 
-test: all $(BUILD)/test-shared
+test: all $(BUILD)/test-shared $(BUILD)/test-locale
 	./tests/run_tests.sh $(BUILD)/mmd
 	$(BUILD)/test-shared
+	$(BUILD)/test-locale tests/cases/*.mmd tests/docs/*/*.mmd
 	python3 tools/docs_audit.py -q -v $(BUILD)/mmd
 
 both:
