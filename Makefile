@@ -1,6 +1,10 @@
-CC ?= $(HOME)/.local/bin/clang
+# Needs a C compiler with -std=gnu2y (recent clang, gcc 15+). Unless CC is given, take the first that has it.
+gnu2y = $(shell for c in $(1); do echo 'int x;' | $$c -std=gnu2y -fsyntax-only -x c - 2>/dev/null && { echo $$c; break; }; done)
 ifeq ($(origin CC),default)
-CC := $(HOME)/.local/bin/clang
+CC := $(call gnu2y,clang gcc gcc-16 gcc-15)
+ifeq ($(CC),)
+$(error no compiler with -std=gnu2y (recent clang, gcc 15+) found: make CC=...)
+endif
 endif
 IS_CLANG := $(shell $(CC) --version 2>/dev/null | grep -qi clang && echo 1)
 WARN := -Wall -Wextra -Wno-microsoft-anon-tag
@@ -26,7 +30,7 @@ CFLAGS += -flto
 LDFLAGS += -flto
 ifeq ($(IS_CLANG),1)
 LDFLAGS += -fuse-ld=lld
-AR := $(dir $(CC))llvm-ar
+AR := $(shell $(CC) -print-prog-name=llvm-ar)
 else
 AR := gcc-ar
 endif
@@ -95,7 +99,7 @@ pgo:
 	rm -rf $(PGO_DIR) build-pgo-gen build-pgo
 	$(MAKE) BUILD=build-pgo-gen PGO_GEN=$(PGO_DIR) LTO=$(LTO) MARCH=$(MARCH) build-pgo-gen/bench
 	for f in bench/inputs/*.mmd; do ./build-pgo-gen/bench $$f 20 >/dev/null; done
-	if $(CC) --version | grep -qi clang; then $(HOME)/.local/bin/llvm-profdata merge -o $(PGO_DIR)/default.profdata $(PGO_DIR)/*.profraw; fi
+	if $(CC) --version | grep -qi clang; then $$($(CC) -print-prog-name=llvm-profdata) merge -o $(PGO_DIR)/default.profdata $(PGO_DIR)/*.profraw; fi
 	$(MAKE) BUILD=build-pgo PGO_USE=$(PGO_DIR) LTO=$(LTO) MARCH=$(MARCH)
 
 test: all $(BUILD)/test-shared $(BUILD)/test-locale $(BUILD)/test-writer $(BUILD)/test-oom
@@ -106,9 +110,13 @@ test: all $(BUILD)/test-shared $(BUILD)/test-locale $(BUILD)/test-writer $(BUILD
 	$(BUILD)/test-oom tests/cases/*.mmd tests/docs/*/*.mmd
 	python3 tools/docs_audit.py -q -v $(BUILD)/mmd
 
+# both compilers must stay warning-free: make both [CLANG=clang-23] [GCC=gcc-16]
+CLANG ?= clang
+GCC ?= $(call gnu2y,gcc gcc-16 gcc-15)
 both:
-	$(MAKE) CC=$(HOME)/.local/bin/clang BUILD=build
-	$(MAKE) CC=gcc-16 BUILD=build-gcc
+	$(if $(GCC),,$(error no gcc with -std=gnu2y (gcc 15+) found: make both GCC=...))
+	$(MAKE) CC=$(CLANG) BUILD=build
+	$(MAKE) CC=$(GCC) BUILD=build-gcc
 
 # test-oom failing arena allocations too, under ASan: ~40 s to build, ~2 s to run
 oom:

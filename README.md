@@ -56,21 +56,18 @@ Per-type feature notes are in [docs/dev/INTERNALS.md](docs/dev/INTERNALS.md).
 
 ## Build
 
-You need a C compiler with C23 support:
-- **clang** (the default; tested with clang 23);
-- or **gcc 16**.
-
-The Makefile builds with `-std=gnu2y -fms-extensions`. You also need GNU make. Python 3 is needed only for the test and benchmark scripts.
+You need a C compiler that takes `-std=gnu2y`: a recent **clang** or **gcc** 15 or later (developed with clang 23 and gcc 16). Without `CC=`, the Makefile uses the first of `clang`, `gcc`, `gcc-16`, `gcc-15` that has it, and says so if none does. It builds with `-std=gnu2y -fms-extensions`. You also need GNU make. Python 3 is needed only for the test and benchmark scripts.
 
 ```sh
 make                      # -> build/mmd, build/libmmd.{a,so}, build/mmd.pc, build/bench
-make CC=gcc-16            # build with gcc instead
+make CC=gcc-16            # pick the compiler
+make both                 # clang into build/, gcc into build-gcc/ (CLANG=, GCC= to choose)
 make MARCH=native LTO=1   # optional: tuned build
 make pgo                  # optional: profile-guided build in build-pgo/
 make install PREFIX=/usr/local   # header, static + shared lib, pkg-config file, mmd
 ```
 
-The build has zero warnings under `-Wall -Wextra` with both gcc 16 and clang.
+The build has zero warnings under `-Wall -Wextra` with both gcc and clang.
 
 ## CLI
 
