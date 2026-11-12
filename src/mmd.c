@@ -172,15 +172,16 @@ static mmd_status render_c(Arena ap[static 1], Buf bp[static 1], size_t n, const
     PMARK("");
     dcfg_begin(&arena, n, src, off); /* %%{init}%% / frontmatter keys + accTitle/accDescr, all diagram kinds */
     dcfg_set_theme(opt && opt->theme ? opt->theme : cfg.theme);
-    if (str_eq(kw, S("graph")) || str_eq(kw, S("flowchart")) || str_eq(kw, S("flowchart-elk")) || str_eq(kw, S("swimlane-beta"))) {
+    bool af = str_eq(kw, S("agentflow-beta"));
+    if (str_eq(kw, S("graph")) || str_eq(kw, S("flowchart")) || str_eq(kw, S("flowchart-elk")) || str_eq(kw, S("swimlane-beta")) || af) {
         dcfg_set_theme(0); /* flowchart applies named themes itself (Graph.theme) */
         Graph g = {.arena = &arena, .title = cfg.title,
                    .theme = (uint8_t)(opt && opt->theme ? opt->theme : cfg.theme ? cfg.theme : MMD_THEME_DEFAULT),
                    .flags = opt ? opt->flags : 0, .node_sep = cfg.node_sep,
                    .rank_sep = cfg.rank_sep, .font_size = fs};
         /* config: flowchart.nodeSpacing / rankSpacing (init or frontmatter; API options win), cycleRemoval */
-        if (!(opt && opt->node_spacing > 0)) g.node_sep = dcfg_num("flowchart.nodeSpacing", g.node_sep);
-        if (!(opt && opt->rank_spacing > 0)) g.rank_sep = dcfg_num("flowchart.rankSpacing", g.rank_sep);
+        if (!(opt && opt->node_spacing > 0)) g.node_sep = dcfg_num(af ? "agentflow.nodeSpacing" : "flowchart.nodeSpacing", g.node_sep);
+        if (!(opt && opt->rank_spacing > 0)) g.rank_sep = dcfg_num(af ? "agentflow.rankSpacing" : "flowchart.rankSpacing", g.rank_sep);
         Str cr = dcfg_get_str(S("flowchart.cycleRemoval"));
         g.acyclicer = str_eq(cr, S("dfs")) ? MMD_ACYC_DFS : str_eq(cr, S("greedy")) ? MMD_ACYC_GREEDY : MMD_ACYC_AUTO;
         if (g.flags & MMD_F_FAS_DFS) g.acyclicer = MMD_ACYC_DFS;
@@ -195,13 +196,16 @@ static mmd_status render_c(Arena ap[static 1], Buf bp[static 1], size_t n, const
         PMARK("setup");
         if ((st = flow_parse(&g, n, src, off, &eoff, msg))) goto fail;
         PMARK("parse");
-        g.iso_toggle = true; /* mermaid: isolated subgraphs flip direction */
+        AfInfo *afi = nullptr;
+        if (af && (st = af_prepare(&g, &afi))) goto fail;
+        g.iso_toggle = !af_neo(afi); /* mermaid (dagre): isolated subgraphs flip direction; agentflow's ELK doesn't */
+        g.iso_keep = !g.iso_toggle;
         if ((st = flow_layout(&g))) goto fail;
         PMARK("layout-misc");
         Str *lanes = nullptr;
         if (str_eq(kw, S("swimlane-beta")) && (st = swim_layout(&g, &lanes))) goto fail;
         if (!buf_reserve(&b, 256 + g.nn * 320 + g.ne * 200)) { st = MMD_ERR_NOMEM; goto fail; }
-        if ((st = flow_svg(&g, &b))) goto fail;
+        if ((st = af_neo(afi) ? af_svg(&g, afi, &b) : flow_svg(&g, &b))) goto fail;
         if (lanes && (st = swim_titles(&g, lanes, &b))) goto fail;
         PMARK("svg");
     } else if (str_eq(kw, S("sequenceDiagram"))) {

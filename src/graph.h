@@ -6,6 +6,7 @@
 typedef enum : uint8_t {
     SH_RECT, SH_ROUND, SH_STADIUM, SH_SUBROUTINE, SH_CYLINDER, SH_CIRCLE, SH_DCIRCLE,
     SH_ASYM, SH_RHOMBUS, SH_HEXAGON, SH_LEAN_R, SH_LEAN_L, SH_TRAP, SH_TRAP_ALT,
+    SH_DOC, /* lin-doc: lined document, wavy bottom (agentflow refdoc) */
     SH_COUNT
 } Shape;
 typedef enum : uint8_t { DIR_TB, DIR_BT, DIR_LR, DIR_RL } Dir;
@@ -30,6 +31,7 @@ typedef struct Graph {
     uint8_t order_mode; /* MMD_ORDER_* */
     uint8_t curve;     /* CURVE_* (flowchart.curve) */
     bool iso_toggle;   /* mermaid unified renderer (er/class/state): clusters with no external links lay out in the other direction */
+    bool iso_keep;     /* ELK-like (agentflow): such clusters lay out on their own in their own direction */
     double node_sep, rank_sep, font_size;
 
     /* nodes, edges, subgraphs are SoA: graph.c grows every array above the layout-output comments
@@ -76,7 +78,7 @@ typedef struct Graph {
 } Graph;
 
 enum { NF_DEFINED = 1u, NF_HIDDEN = 2u, NF_SUBREF = 4u, NF_FIXED = 8u /* size preset (cluster proxy) */, NF_PROXY = 16u /* stands in for an isolated cluster */ };
-enum { SF_DIRSET = 1u };
+enum { SF_DIRSET = 1u, SF_COLLAPSED = 2u /* agentflow: drawn as one node */ };
 enum { EF_ANIM = 1u, EF_ANIM_SLOW = 2u, EF_LOOPPTS = 4u /* self-loop routed as a polyline (mermaid helpers) */ };
 
 /* ---- tables (graph.c) ---- */
@@ -98,6 +100,11 @@ mmd_status flow_parse(Graph g[static 1], size_t n, const char src[static n], siz
                                     size_t err_off[static 1], char msg[static 160]);
 mmd_status flow_layout(Graph g[static 1]);
 mmd_status flow_svg(const Graph g[restrict static 1], Buf out[restrict static 1]);
+/* ` style="…"` from classDef default (node), the classes, then style; text = the `color` declarations
+ * only, as fill; nothing when all are empty */
+void flow_style_attr(Buf b[restrict static 1], const Graph g[restrict static 1], Str classes, Str style, bool text, bool node);
+/* path data of a lin-doc (SH_DOC) box w x h centred at cx,cy: outline, then the inner line */
+void flow_doc_d(Buf b[static 1], double cx, double cy, double w, double h);
 /* mermaid flowchart.curve name -> CURVE_* (unknown => basis) */
 uint8_t flow_curve_kind(Str name);
 /* self-loop k (0-based, nested outward) on the right side of a node: cubic with both controls at +r,

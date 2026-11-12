@@ -84,6 +84,7 @@ void node_size(Graph g[static 1], size_t v) {
     case SH_RHOMBUS: { double s = tw + th + 2 * PAD_NODE; w = h = s; break; }
     case SH_HEXAGON: w = tw + 2 * PAD_NODE + h / 2; break;
     case SH_LEAN_R: case SH_LEAN_L: case SH_TRAP: case SH_TRAP_ALT: w = tw + 2 * PAD_NODE + h * 2 / 3; break;
+    case SH_DOC: w *= 1.1, h *= 1.5; break; /* mermaid linedWaveEdgedRect: 10% side, wave below */
     default: break;
     }
     g->nw[v] = w;
@@ -1079,6 +1080,29 @@ static mmd_status layout_core(Graph g[static 1]) {
             if (in) { srep[s] = (int32_t)v; break; }
         }
     }
+    /* ELK-like (iso_keep): an edge leaving a cluster starts below all of it, so anchor it on the member
+     * deepest along the edges (a bounded longest-path estimate; cycles just stop growing at the bound) */
+    int32_t *slast = nullptr;
+    if (g->iso_keep && S) {
+        int32_t *dep = ANEW(A, int32_t, N + 1);
+        slast = ANEW(A, int32_t, S + 1);
+        if (!dep || !slast) return MMD_ERR_NOMEM;
+        for (size_t v = 0; v < N; v++) dep[v] = 0;
+        for (int pass = 0, grew = 1; grew && pass < 32; pass++) {
+            grew = 0;
+            for (size_t e = 0; e < E; e++) {
+                int32_t a = g->efrom[e], b = g->eto[e];
+                if (a == NONE || b == NONE || a == b || ((g->nflags[a] | g->nflags[b]) & (NF_HIDDEN | NF_SUBREF))) continue;
+                if (dep[b] < dep[a] + 1) dep[b] = dep[a] + 1, grew = 1;
+            }
+        }
+        for (size_t s = 0; s < S; s++) slast[s] = srep[s];
+        for (size_t v = 0; v < N; v++) {
+            if (g->nflags[v] & (NF_HIDDEN | NF_SUBREF)) continue;
+            for (int32_t c = g->nparent[v]; c != NONE; c = g->sparent[c])
+                if (slast[c] == NONE || dep[v] > dep[slast[c]]) slast[c] = (int32_t)v;
+        }
+    }
     bool has_labels = false;
     int32_t *esub = ANEW(A, int32_t, 2 * E + 1);
     if (!esub) return MMD_ERR_NOMEM;
@@ -1090,7 +1114,7 @@ static mmd_status layout_core(Graph g[static 1]) {
             if (g->nflags[*p] & NF_SUBREF) {
                 int32_t s = NONE;
                 for (size_t i = 0; i < S; i++) if (str_eq(g->sid[i], g->nid[*p])) { s = (int32_t)i; break; }
-                *p = s == NONE ? NONE : srep[s];
+                *p = s == NONE ? NONE : !k && slast ? slast[s] : srep[s];
                 esub[2 * e + k] = s;
             }
         }
@@ -1808,7 +1832,7 @@ static inline double iso_pad_rank(const Graph g[static 1]) { return (g->rank_sep
 static inline double iso_pad_cross(const Graph g[static 1]) { return (g->node_sep + 20) / 2; }
 
 [[nodiscard]] static bool gsub_alloc(Graph d[static 1], const Graph g[static 1], Dir dir, size_t nn, size_t ne, size_t ns) {
-    *d = (Graph){.arena = g->arena, .dir = dir, .theme = g->theme, .flags = g->flags, .acyclicer = g->acyclicer, .order_mode = g->order_mode, .iso_toggle = g->iso_toggle, .node_sep = g->node_sep,
+    *d = (Graph){.arena = g->arena, .dir = dir, .theme = g->theme, .flags = g->flags, .acyclicer = g->acyclicer, .order_mode = g->order_mode, .iso_toggle = g->iso_toggle, .iso_keep = g->iso_keep, .node_sep = g->node_sep,
                  .rank_sep = g->rank_sep, .font_size = g->font_size};
     if (!graph_reserve(d, nn + 1, ne + 1, ns + 1)) return false;
     d->nn = nn, d->ne = ne, d->ns = ns;
@@ -1862,8 +1886,8 @@ static mmd_status layout_rec(Graph g[static 1], unsigned depth) {
         int32_t p = g->sparent[s], pc = p == NONE ? NONE : cand[p];
         gix[s] = NONE;
         if (pc != NONE) cand[s] = pc;
-        else if (g->iso_toggle && !ext[s]) { /* mermaid renders it as its own graph */
-            if (!(g->sflags[s] & SF_DIRSET)) g->sdir[s] = g->dir == DIR_TB ? DIR_LR : DIR_TB;
+        else if ((g->iso_toggle || g->iso_keep) && !ext[s]) { /* mermaid renders it as its own graph */
+            if (!(g->sflags[s] & SF_DIRSET)) g->sdir[s] = g->iso_keep ? g->dir : g->dir == DIR_TB ? DIR_LR : DIR_TB;
             cand[s] = (int32_t)s; gix[s] = (int32_t)++K;
         } else if ((g->sflags[s] & SF_DIRSET) && g->sdir[s] != g->dir && !ext[s]) { cand[s] = (int32_t)s; gix[s] = (int32_t)++K; }
         else cand[s] = NONE;

@@ -1,0 +1,14 @@
+---
+config:
+  theme: default
+  look: classic
+---
+agentflow-beta LR
+  brief["Brief"]@{ shape: input }
+  flow team["Team"]
+    draft["Draft copy"]@{ shape: task }
+    guide["Style guide"]@{ shape: refdoc }
+    draft -.- guide
+  end
+  brief --> draft --> check{"OK?"}
+  check --> pub["Publish"]@{ shape: action }

@@ -43,6 +43,12 @@ struct Graph;
 mmd_status swim_layout(struct Graph *g, Str *keep[static 1]);
 mmd_status swim_titles(const struct Graph *g, const Str *keep, Buf b[static 1]);
 
+/* agentflow-beta: flowchart parse/layout, collapsed containers folded and the neo look drawn (d_agentflow.c) */
+typedef struct AfInfo AfInfo;
+mmd_status af_prepare(struct Graph *g, AfInfo *out[static 1]);
+bool af_neo(const AfInfo *inf);
+mmd_status af_svg(const struct Graph *g, const AfInfo *inf, Buf *b);
+
 /* keyword -> renderer, nullptr when not a diagram type handled here */
 DiagFn diag_lookup(Str kw);
 

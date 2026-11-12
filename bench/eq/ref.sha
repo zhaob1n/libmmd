@@ -433,6 +433,8 @@ c9d684788f746e24 bench/mmdr_fixtures/flowchart_weave.mmd
 c4a028d8cbe586f2 bench/inputs/medium.mmd
 4ae2dd5a2e67289b bench/inputs/small.mmd
 80b4ddd715359954 bench/inputs/xlarge.mmd
+09d1a57579824001 tests/cases/agentflow.mmd
+90d22300dee7ce45 tests/cases/agentflow_classic.mmd
 7d2d06a9117ce59f tests/cases/architecture_full.mmd
 82d5d592ed315e67 tests/cases/architecture_groups.mmd
 a902f82afcc5bd32 tests/cases/architecture_outsider.mmd

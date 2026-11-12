@@ -99,7 +99,7 @@ static Str find_classdef(const Graph g[static 1], Str name) {
     return (Str){};
 }
 
-static void style_attr(Buf b[restrict static 1], const Graph g[restrict static 1], Str classes, Str style, bool text, bool node) {
+void flow_style_attr(Buf b[restrict static 1], const Graph g[restrict static 1], Str classes, Str style, bool text, bool node) {
     size_t mark = b->n;
     buf_lit(b, " style=\"");
     size_t body = b->n;
@@ -183,21 +183,33 @@ static void node_shape(Buf b[restrict static 1], const Graph g[restrict static 1
     case SH_LEAN_L: { double d = h / 3; double p[] = {-hw, -hh, hw - d, -hh, hw, hh, -hw + d, hh}; poly(b, 4, p); break; }
     case SH_TRAP: { double d = h / 3; double p[] = {-hw + d, -hh, hw - d, -hh, hw, hh, -hw, hh}; poly(b, 4, p); break; }
     case SH_TRAP_ALT: { double d = h / 3; double p[] = {-hw, -hh, hw, -hh, hw - d, hh, -hw + d, hh}; poly(b, 4, p); break; }
+    case SH_DOC: buf_lit(b, "<path d=\""); flow_doc_d(b, 0, 0, w, h); buf_ch(b, '"'); break;
     default: break;
     }
-    style_attr(b, g, g->nclass[v], g->nstyle[v], false, true);
+    flow_style_attr(b, g, g->nclass[v], g->nstyle[v], false, true);
     buf_lit(b, "/>");
     if (g->nshape[v] == SH_DCIRCLE) {
         buf_lit(b, "<circle r=\""); buf_num(b, hw - 5); buf_ch(b, '"');
-        style_attr(b, g, g->nclass[v], g->nstyle[v], false, true);
+        flow_style_attr(b, g, g->nclass[v], g->nstyle[v], false, true);
         buf_lit(b, "/>");
     } else if (g->nshape[v] == SH_SUBROUTINE) {
         for (int s = -1; s <= 1; s += 2) {
             buf_lit(b, "<path d=\"M"); pt(b, s * (hw - 8), -hh); buf_lit(b, "V"); buf_num(b, hh); buf_ch(b, '"');
-            style_attr(b, g, g->nclass[v], g->nstyle[v], false, true);
+            flow_style_attr(b, g, g->nclass[v], g->nstyle[v], false, true);
             buf_lit(b, "/>");
         }
     }
+}
+
+void flow_doc_d(Buf b[static 1], double cx, double cy, double w, double h) {
+    double hw = w / 2, top = cy - h / 2, amp = h / 6, base = top + h * 5 / 6, in = w * 0.045;
+    buf_ch(b, 'M'); pt(b, cx - hw, top); buf_ch(b, 'L'); pt(b, cx - hw, base);
+    for (int i = 1; i <= 40; i++) { /* 0.8 of a sine period across the bottom */
+        double t = i / 40.0;
+        buf_ch(b, 'L'); pt(b, cx - hw + t * w, base + amp * sin(2 * M_PI * 0.8 * t));
+    }
+    buf_ch(b, 'L'); pt(b, cx + hw, top); buf_lit(b, "Z");
+    buf_ch(b, 'M'); pt(b, cx - hw + in, top); buf_ch(b, 'L'); pt(b, cx - hw + in, base + amp * 0.6);
 }
 
 uint8_t flow_curve_kind(Str c) {
@@ -301,7 +313,7 @@ mmd_status flow_svg(const Graph g[restrict static 1], Buf b[restrict static 1]) 
         buf_lit(b, "\" id=\""); buf_xml(b, g->sid[s]); buf_lit(b, "\"><rect x=\"");
         buf_num(b, g->sx[s]); buf_lit(b, "\" y=\""); buf_num(b, g->sy[s]);
         buf_lit(b, "\" width=\""); buf_num(b, g->sw[s]); buf_lit(b, "\" height=\""); buf_num(b, g->sh[s]); buf_ch(b, '"');
-        style_attr(b, g, g->sclass[s], g->sstyle[s], false, false);
+        flow_style_attr(b, g, g->sclass[s], g->sstyle[s], false, false);
         buf_lit(b, "/>");
         text_lines(b, g->stitle[s], fs, g->stx ? g->stx[s] : g->sx[s] + g->sw[s] / 2, g->sy[s] + 12, "cluster-label");
         buf_lit(b, "</g>");
@@ -375,7 +387,7 @@ mmd_status flow_svg(const Graph g[restrict static 1], Buf b[restrict static 1]) 
         /* inject text colour if class/style specifies color: */
         if (b->n > mark) {
             AUTO_BUF Buf tmp = {};
-            style_attr(&tmp, g, g->nclass[v], g->nstyle[v], true, true);
+            flow_style_attr(&tmp, g, g->nclass[v], g->nstyle[v], true, true);
             if (tmp.oom) return MMD_ERR_NOMEM;
             if (tmp.n) {
                 /* insert after "<text" */

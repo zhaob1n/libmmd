@@ -17,7 +17,9 @@ typedef struct P {
     size_t sgm[64]; /* ments.n when sg[k] opened */
     unsigned sgd;
     VEC(Mention) ments;
+    bool af; /* agentflow-beta: flow/global/connector, shape aliases, container metadata */
 } P;
+constexpr int32_t AF_GLOBAL = -2; /* sg[] entry for `global … end`, nparent of a node mentioned there */
 
 /* character classes, table driven */
 enum { C_ID = 1u, C_SP = 2u, C_LINK = 4u };
@@ -151,33 +153,64 @@ static Shape shape_by_name(Str n) {
     return SH_RECT;
 }
 
-/* A@{ shape: x, label: "y" } (v11 syntax, basic) */
-static mmd_status parse_at_shape(P p[static 1], Graph g[static 1], int32_t v) {
+/* agentflow's shape vocabulary (mermaid agentflow/shapes.ts): its aliases and the canonical names it
+ * allows; anything else, removed shapes included, falls back to the rounded default */
+static Shape af_shape(Str n) {
+    static const NamedShape M[] = {
+        {S("tool"), SH_SUBROUTINE}, {S("subroutine"), SH_SUBROUTINE}, {S("subprocess"), SH_SUBROUTINE},
+        {S("subproc"), SH_SUBROUTINE}, {S("framed-rectangle"), SH_SUBROUTINE}, {S("input"), SH_LEAN_R},
+        {S("lean_right"), SH_LEAN_R}, {S("lean-right"), SH_LEAN_R}, {S("decision"), SH_RHOMBUS},
+        {S("diamond"), SH_RHOMBUS}, {S("refdoc"), SH_DOC}, {S("lin-doc"), SH_DOC},
+        {S("lined-document"), SH_DOC}, {S("action"), SH_HEXAGON}, {S("hexagon"), SH_HEXAGON},
+        {S("hex"), SH_HEXAGON},
+    };
+    for (size_t k = 0; k < countof(M); k++)
+        if (str_eq(M[k].name, n)) return M[k].sh;
+    return SH_ROUND;
+}
+
+/* next `key: value` of an @{ } body (',' or newline separated; a quoted value keeps its quotes) */
+[[nodiscard]] static bool kv_next(Str body[static 1], Str key[static 1], Str val[static 1]) {
+    size_t i = 0, n = body->n;
+    const char *s = body->p;
+    while (i < n && (is_sp(s[i]) || s[i] == ',' || s[i] == '\n')) i++;
+    size_t ks = i;
+    while (i < n && s[i] != ':') i++;
+    if (i >= n) return false;
+    *key = str_trim((Str){.p = s + ks, .n = i - ks});
+    i++;
+    while (i < n && is_sp(s[i])) i++;
+    size_t vs = i;
+    if (i < n && s[i] == '"') {
+        i++;
+        while (i < n && s[i] != '"') i++;
+        if (i < n) i++;
+    } else {
+        while (i < n && s[i] != ',' && s[i] != '\n') i++;
+    }
+    *val = str_trim((Str){.p = s + vs, .n = i - vs});
+    *body = (Str){.p = s + i, .n = n - i};
+    return true;
+}
+
+/* @{ … } at p->i: its body, p->i past the '}' */
+static mmd_status at_body(P p[static 1], Str body[static 1]) {
     p->i += 2;
     size_t st = p->i;
     const char *e = memchr(p->s + st, '}', p->n - st);
     if (!e) return fail(p, "unterminated @{ }");
-    Str body = {.p = p->s + st, .n = (size_t)(e - (p->s + st))};
+    *body = (Str){.p = p->s + st, .n = (size_t)(e - (p->s + st))};
     p->i = (size_t)(e - p->s) + 1;
-    size_t i = 0;
-    while (i < body.n) {
-        while (i < body.n && (is_sp(body.p[i]) || body.p[i] == ',' || body.p[i] == '\n')) i++;
-        size_t ks = i;
-        while (i < body.n && body.p[i] != ':') i++;
-        Str key = str_trim((Str){.p = body.p + ks, .n = i - ks});
-        if (i >= body.n) break;
-        i++;
-        while (i < body.n && is_sp(body.p[i])) i++;
-        size_t vs = i;
-        if (i < body.n && body.p[i] == '"') {
-            i++;
-            while (i < body.n && body.p[i] != '"') i++;
-            if (i < body.n) i++;
-        } else {
-            while (i < body.n && body.p[i] != ',' && body.p[i] != '\n') i++;
-        }
-        Str val = str_trim((Str){.p = body.p + vs, .n = i - vs});
-        if (str_eq(key, S("shape"))) g->nshape[v] = shape_by_name(val);
+    return MMD_OK;
+}
+
+/* A@{ shape: x, label: "y" } (v11 syntax, basic) */
+static mmd_status parse_at_shape(P p[static 1], Graph g[static 1], int32_t v) {
+    Str body, key, val;
+    mmd_status st = at_body(p, &body);
+    if (st) return st;
+    while (kv_next(&body, &key, &val)) {
+        if (str_eq(key, S("shape"))) g->nshape[v] = p->af ? af_shape(val) : shape_by_name(val);
         else if (str_eq(key, S("label"))) {
             bool ok;
             g->nlabel[v] = rich_normalize(g->arena, val, &ok);
@@ -194,10 +227,13 @@ static mmd_status parse_node(P p[static 1], int32_t out[static 1]) {
     if (!id.n) return fail(p, "expected node identifier");
     int32_t v = graph_intern(g, id, nullptr);
     if (v == NONE) return MMD_ERR_NOMEM;
-    if (p->sgd && !VEC_PUSH(g->arena, &p->ments, ((Mention){v, p->sg[p->sgd - 1]}))) return MMD_ERR_NOMEM;
+    int32_t top = p->sgd ? p->sg[p->sgd - 1] : NONE;
+    if (top == AF_GLOBAL) g->nparent[v] = AF_GLOBAL; /* wins over any flow, before or after */
+    else if (top != NONE && !VEC_PUSH(g->arena, &p->ments, ((Mention){v, top}))) return MMD_ERR_NOMEM;
     mmd_status st = MMD_OK;
     if (pk(p, 0) == '@' && pk(p, 1) == '{') st = parse_at_shape(p, g, v);
-    else st = parse_shape_text(p, g, v);
+    else if (!(st = parse_shape_text(p, g, v)) && p->af && pk(p, 0) == '@' && pk(p, 1) == '{')
+        st = parse_at_shape(p, g, v); /* agentflow: id["label"]@{ shape: tool } */
     if (st) return st;
     if (pk(p, 0) == ':' && pk(p, 1) == ':' && pk(p, 2) == ':') {
         p->i += 3;
@@ -386,6 +422,15 @@ static mmd_status parse_chain(P p[static 1]) {
         if (w.n && pk(p, 0) == '@' && pk(p, 1) == '{') {
             int32_t e = find_edge_id(p->g, w);
             if (e != NONE) return parse_edge_props(p, e);
+            int32_t s = p->af ? find_sg(p->g, w) : NONE;
+            if (s != NONE) { /* agentflow container metadata: only `view: collapsed` is drawn */
+                Str body, key, val;
+                mmd_status st = at_body(p, &body);
+                if (st) return st;
+                while (kv_next(&body, &key, &val))
+                    if (str_eq(key, S("view")) && (str_eq(val, S("collapsed")) || str_eq(val, S("\"collapsed\"")))) p->g->sflags[s] |= SF_COLLAPSED;
+                return MMD_OK;
+            }
         }
         p->i = save;
     }
@@ -471,7 +516,7 @@ static mmd_status parse_subgraph(P p[static 1]) {
     g->stitle[s] = title;
     g->sclass[s] = (Str){};
     g->sstyle[s] = (Str){};
-    g->sparent[s] = p->sgd ? p->sg[p->sgd - 1] : NONE;
+    g->sparent[s] = p->sgd && p->sg[p->sgd - 1] >= 0 ? p->sg[p->sgd - 1] : NONE;
     g->sdir[s] = g->dir;
     g->sflags[s] = 0;
     p->sgm[p->sgd] = p->ments.n;
@@ -483,6 +528,7 @@ static mmd_status parse_subgraph(P p[static 1]) {
  * end, so the innermost one wins over its parents and the first-closed sibling over later ones */
 static void close_subgraph(P p[static 1]) {
     int32_t s = p->sg[--p->sgd];
+    if (s == AF_GLOBAL) return;
     for (size_t k = p->sgm[p->sgd]; k < p->ments.n; k++) {
         const Mention *m = &p->ments.v[k];
         if (m->sg == s && p->g->nparent[m->v] == NONE) p->g->nparent[m->v] = s;
@@ -491,7 +537,20 @@ static void close_subgraph(P p[static 1]) {
 
 static mmd_status parse_stmt(P p[static 1], Str w) {
     Graph *g = p->g;
-    if (str_eq(w, S("subgraph"))) return parse_subgraph(p);
+    if (str_eq(w, S("subgraph")) || (p->af && str_eq(w, S("flow")))) return parse_subgraph(p);
+    if (p->af && str_eq(w, S("global"))) {
+        if (p->sgd >= countof(p->sg)) return fail(p, "subgraphs nested too deeply");
+        p->sgm[p->sgd] = p->ments.n;
+        p->sg[p->sgd++] = AF_GLOBAL;
+        return MMD_OK;
+    }
+    if (p->af && str_eq(w, S("connector"))) {
+        skip_sp(p);
+        int32_t v;
+        mmd_status st = parse_node(p, &v);
+        if (st) return st;
+        return append_class(g->arena, &g->nclass[v], S("af-kind-connector")) ? MMD_OK : MMD_ERR_NOMEM;
+    }
     if (str_eq(w, S("end"))) {
         if (!p->sgd) return fail(p, "'end' without subgraph");
         close_subgraph(p);
@@ -501,8 +560,9 @@ static mmd_status parse_stmt(P p[static 1], Str w) {
         skip_sp(p);
         Dir d;
         if (!graph_dir(read_list(p), &d)) return fail(p, "invalid direction");
-        if (p->sgd) { int32_t s = p->sg[p->sgd - 1]; g->sdir[s] = d; g->sflags[s] |= SF_DIRSET; }
-        else g->dir = d;
+        int32_t s = p->sgd ? p->sg[p->sgd - 1] : NONE;
+        if (s >= 0) { g->sdir[s] = d; g->sflags[s] |= SF_DIRSET; }
+        else if (s == NONE) g->dir = d;
         return MMD_OK;
     }
     if (str_eq(w, S("classDef"))) {
@@ -574,12 +634,12 @@ static mmd_status parse_stmt(P p[static 1], Str w) {
     return fail(p, "unknown statement");
 }
 
-static bool is_keyword(Str w) {
+static bool is_keyword(const P p[static 1], Str w) {
     static const Str K[] = {S("subgraph"), S("end"), S("direction"), S("classDef"), S("class"),
                             S("style"), S("linkStyle"), S("click"), S("accTitle"), S("accDescr")};
     for (size_t k = 0; k < countof(K); k++)
         if (str_eq(K[k], w)) return true;
-    return false;
+    return p->af && (str_eq(w, S("flow")) || str_eq(w, S("global")) || str_eq(w, S("connector")));
 }
 
 mmd_status flow_parse(Graph g[static 1], size_t n, const char src[static n], size_t off, size_t err_off[static 1],
@@ -589,6 +649,7 @@ mmd_status flow_parse(Graph g[static 1], size_t n, const char src[static n], siz
     /* header */
     Str kw = read_word(&p);
     if (str_eq(kw, S("swimlane")) && p.n - p.i >= 5 && !memcmp(src + p.i, "-beta", 5)) p.i += 5, kw = S("flowchart");
+    if (str_eq(kw, S("agentflow")) && p.n - p.i >= 5 && !memcmp(src + p.i, "-beta", 5)) p.i += 5, kw = S("flowchart"), p.af = true;
     if (!str_eq(kw, S("graph")) && !str_eq(kw, S("flowchart")) && !str_eq(kw, S("flowchart-elk"))) {
         st = fail(&p, "expected 'graph' or 'flowchart'");
         goto out;
@@ -609,7 +670,7 @@ mmd_status flow_parse(Graph g[static 1], size_t n, const char src[static n], siz
         Str w = read_word(&p);
         bool kwb = w.n && (p.i >= p.n || is_sp(p.s[p.i]) || p.s[p.i] == '\n' || p.s[p.i] == ';' ||
                            ((p.s[p.i] == ':' || p.s[p.i] == '{') && (str_eq(w, S("accTitle")) || str_eq(w, S("accDescr")))));
-        if (kwb && is_keyword(w)) {
+        if (kwb && is_keyword(&p, w)) {
             if ((st = parse_stmt(&p, w))) goto out;
         } else {
             p.i = save;
@@ -619,6 +680,12 @@ mmd_status flow_parse(Graph g[static 1], size_t n, const char src[static n], siz
         if (pk(&p, 0) == '%' && pk(&p, 1) == '%') (void)rest_of_line(&p);
     }
     while (p.sgd) close_subgraph(&p);
+    if (p.af) /* every node is one of agentflow's shapes; `global` leaves its nodes top-level */
+        for (size_t v = 0; v < g->nn; v++) {
+            if (g->nparent[v] == AF_GLOBAL) g->nparent[v] = NONE;
+            Shape s = g->nshape[v];
+            if (s != SH_SUBROUTINE && s != SH_LEAN_R && s != SH_RHOMBUS && s != SH_DOC && s != SH_HEXAGON) g->nshape[v] = SH_ROUND;
+        }
     /* edges/refs to subgraph ids */
     for (size_t v = 0; v < g->nn; v++) {
         if (g->nflags[v] & NF_DEFINED) continue;

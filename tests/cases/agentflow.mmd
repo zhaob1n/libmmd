@@ -1,0 +1,33 @@
+agentflow-beta TB
+  connector api["Search API"]
+  brief["Release brief"]@{ shape: input }
+  flow writer["Drafting Agent"]
+    draft["Draft the notes"]@{ shape: task }
+    lookup["changelog_search"]@{ shape: tool }
+    guide["Tone of voice"]@{ shape: refdoc }
+    draft --> lookup
+    draft -.- guide
+    global
+      shared["Shared corpus"]@{ shape: refdoc }
+    end
+  end
+  flow review["Review Agent"]
+    check["Check the claims"]
+    ok{"Accurate?"}
+    check --> ok
+  end
+  flow archive["Archive"]
+    store["Store"]@{ shape: task }
+    index["Index"]@{ shape: tool }
+    store --> index
+  end
+  archive@{ view: collapsed }
+  publish["Publish"]@{ shape: action }
+  brief --> writer
+  writer --> review
+  ok -- yes --> publish
+  ok -- no --x check
+  publish --> store
+  lookup -.- shared
+  classDef hot fill:#fee,stroke:#c00,color:#900
+  class publish hot
