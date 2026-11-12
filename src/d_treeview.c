@@ -162,7 +162,7 @@ DIAG_FN(treeview_render) {
                     if (!det.n && dot) {
                         char ext[100];
                         size_t en = t->name.n - (size_t)(dot - t->name.p);
-                        for (size_t k = 0; k < en && k < 99; k++) ext[k] = (char)(dot[k] >= 'A' && dot[k] <= 'Z' ? dot[k] + 32 : dot[k]);
+                        for (size_t k = 0; k < en && k < 99; k++) ext[k] = (char)ascii_lower(dot[k]);
                         ext[en < 99 ? en : 99] = 0;
                         snprintf(key, sizeof key, "treeView.extensionIcons.%s", ext);
                         det = dcfg_get(key);

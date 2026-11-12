@@ -4,7 +4,6 @@
  * intra-lane edges advance the rank (cross-lane edges may stay in the same column, as in mermaid),
  * and edges are routed orthogonally. */
 #define _GNU_SOURCE
-#include <ctype.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -70,12 +69,12 @@ static int32_t top_lane(const Graph g[static 1], int32_t s) {
 static int key_cmp(Str a, Str b) {
     size_t n = a.n < b.n ? a.n : b.n;
     for (size_t i = 0; i < n; i++) {
-        int x = tolower((unsigned char)a.p[i]), y = tolower((unsigned char)b.p[i]);
+        int x = ascii_lower(a.p[i]), y = ascii_lower(b.p[i]);
         if (x != y) return x - y;
     }
     if (a.n != b.n) return a.n < b.n ? -1 : 1;
     for (size_t i = 0; i < n; i++)
-        if (a.p[i] != b.p[i]) return islower((unsigned char)a.p[i]) ? -1 : 1;
+        if (a.p[i] != b.p[i]) return (unsigned)(a.p[i] - 'a') < 26u ? -1 : 1;
     return 0;
 }
 

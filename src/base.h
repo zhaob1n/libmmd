@@ -23,14 +23,12 @@ typedef struct Str {
 #define S(lit) ((Str){.p = (lit), .n = sizeof(lit) - 1})
 
 static inline bool str_eq(Str a, Str b) { return a.n == b.n && (a.n == 0 || memcmp(a.p, b.p, a.n) == 0); }
+/* ASCII only, whatever the locale: mermaid syntax is ASCII and UTF-8 bytes must pass through */
+static inline unsigned char ascii_lower(char c) { return (unsigned char)c + ((unsigned)(c - 'A') < 26u ? 32 : 0); }
 static inline bool str_ieq(Str a, Str b) {
     if (a.n != b.n) return false;
-    for (size_t i = 0; i < a.n; i++) {
-        unsigned char x = (unsigned char)a.p[i], y = (unsigned char)b.p[i];
-        if ((unsigned)(x - 'A') < 26u) x += 32;
-        if ((unsigned)(y - 'A') < 26u) y += 32;
-        if (x != y) return false;
-    }
+    for (size_t i = 0; i < a.n; i++)
+        if (ascii_lower(a.p[i]) != ascii_lower(b.p[i])) return false;
     return true;
 }
 /* control bytes XML text can't carry; \t and \n pass through */
