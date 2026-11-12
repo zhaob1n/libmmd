@@ -131,6 +131,8 @@ above (CJK, emoji, `#quot;`, `%%`, `-->`, `fa:fa-car`, newlines...).
 | eventmodeling | | `data` values | names | names are dotted identifiers; mermaid: ASCII, letter first |
 | railroad | terminals (EBNF, function form) | | | `title` is accepted but not drawn, as in mermaid-cli |
 | wardley | note | component (ls), title | | mermaid's component lexer takes no entity |
+| agentflow | node shapes, `-- … -->`, `flow f[…]` (br) | | | the flowchart parser |
+| usecase | actor `A(…)`, use case `(…)` `[…]`, `-- … -->`, note, boundary `s[…]` | | actor ids | mermaid draws `<br>` as text; ids: ASCII only in mermaid |
 
 ## Not representable (refused or documented)
 
@@ -141,7 +143,7 @@ above (CJK, emoji, `#quot;`, `%%`, `-->`, `fa:fa-car`, newlines...).
   the typed helpers handle it, `mmd_w_text` with `MMD_W_LINESTART` elsewhere.
 - mermaid.js limits no escape gets around (the cross-check skips or allows for them): C4 and
   architecture print entities literally, as does the zenuml plugin; wardley components,
-  eventmodeling names and gitGraph branches take a narrow character set; a literal `<br>` or
+  usecase ids, eventmodeling names and gitGraph branches take a narrow character set; a literal `<br>` or
   `fa:fa-x` is drawn as markup whatever its spelling; mermaid hyphenates long unspaced sequence
   block labels, sometimes inside an escape; sankey, gitGraph and xychart show `<` `>` as `&lt;`
   `&gt;`; xychart omits some series names; a decoded `\` before punctuation in markdown text (class

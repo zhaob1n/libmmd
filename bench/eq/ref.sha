@@ -568,6 +568,7 @@ a52073d38ed7205f tests/cases/treeview_annot.mmd
 ffc1e30144073275 tests/cases/treeview_box.mmd
 dd81f9158ac2a5ba tests/cases/treeview_cfg.mmd
 43af58d0153da63e tests/cases/treeview_icons.mmd
+b3ce1138a85c86e1 tests/cases/usecase.mmd
 4c651dda832dd6cd tests/cases/venn_edge.mmd
 b601d6a85e59422d tests/cases/venn_styled.mmd
 008512d134e5187a tests/cases/venn_text.mmd

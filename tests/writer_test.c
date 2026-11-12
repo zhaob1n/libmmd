@@ -102,6 +102,15 @@ static const Case CASES[] = {
     {"railroad fn terminal", "railroad-beta\nr = terminal(", ") ;\n", STR, 0},
     {"wardley component", "wardley-beta\ncomponent ", " [0.5, 0.5]\n", TEXT, MMD_W_LINESTART},
     {"wardley note", "wardley-beta\ncomponent X [0.5, 0.5]\nnote ", " [0.3, 0.4]\n", STR, 0},
+    {"agentflow node", "agentflow-beta\n  A[", "] --> B\n", STR, MMD_W_BR},
+    {"agentflow edge", "agentflow-beta\n  A -- ", " --> B\n", STR, MMD_W_BR},
+    {"agentflow flow", "agentflow-beta\n  flow f[", "]\n    A\n  end\n", STR, MMD_W_BR},
+    {"usecase actor", "usecase-beta\n  actor A(", ")\n  A --> B\n", STR, 0},
+    {"usecase ellipse", "usecase-beta\n  A --> B(", ")\n", STR, 0},
+    {"usecase rect", "usecase-beta\n  A --> B[", "]\n", STR, 0},
+    {"usecase edge", "usecase-beta\n  A -- ", " --> B\n", STR, 0},
+    {"usecase note", "usecase-beta\n  actor A\n  note for A ", "\n", STR, 0},
+    {"usecase boundary", "usecase-beta\n  systemBoundary s[", "]\n    A\n  end\n", STR, 0},
     {"wardley title", "wardley-beta\ntitle ", "\ncomponent X [0.5, 0.5]\n", TEXT, 0},
     {"flowchart id", "flowchart LR\n  ", " --> B\n", ID, 0},
     {"sequence participant", "sequenceDiagram\n  ", "->>B: x\n", ID, 0},
@@ -111,6 +120,7 @@ static const Case CASES[] = {
     {"gitGraph branch", "gitGraph\n  commit\n  branch ", "\n  commit\n", ID, 0},
     {"mindmap id", "mindmap\n  root\n    ", "\n", ID, 0},
     {"treeView node", "treeView-beta\n    root/\n        ", "\n", ID, 0},
+    {"usecase id", "usecase-beta\n  actor ", "\n  A --> B\n", ID, 0},
     {"eventmodeling name", "eventmodeling\ntf 01 evt ", "\n", ID, 0},
 };
 

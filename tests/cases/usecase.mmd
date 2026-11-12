@@ -1,0 +1,28 @@
+---
+config:
+  usecase:
+    actorFontWeight: bold
+---
+usecase-beta
+  direction LR
+  actor Customer@{ type: hollow }
+  actor desk("Help desk") <<Staff>>
+  actor admin("Main administrator")@{ business: true }
+  systemBoundary Shop
+    browse(Browse catalogue)
+    pay[Pay by card]
+    checkout("Check out") <<Core>>
+  end
+  systemBoundary Ops@{ type: package }
+    refund(Issue refund):::warn
+  end
+  Customer --> browse
+  Customer --> checkout
+  checkout ..> : include pay
+  refund ..> : extend checkout
+  desk -- handles --> refund
+  admin --|> desk
+  admin o-- refund
+  note for refund "Needs a receipt"
+  json Session@{ "user": "ann", "cart": { "items": [ { "sku": 7 } ], "promo": null }, "tags": [] }
+  classDef warn fill:#fee,stroke:#c33

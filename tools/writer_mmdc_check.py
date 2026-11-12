@@ -23,6 +23,7 @@ SKIP = {
     'architecture ': 'mermaid prints entities literally, and lexes only a few characters',
     'wardley component': 'the lexer takes no entity and few characters',
     'eventmodeling name': 'ASCII names starting with a letter only',
+    'usecase id': 'ASCII ids only',
     'gitGraph branch': 'ASCII names only (mmd_git_* check that)',
     'xychart series': 'mermaid leaves out some series names (\"::x::\", after a category it escapes)',
 }

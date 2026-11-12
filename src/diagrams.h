@@ -28,6 +28,7 @@ DIAG_FN(block_render);
 DIAG_FN(sankey_render);
 DIAG_FN(kanban_render);
 DIAG_FN(treemap_render);
+DIAG_FN(usecase_render);
 DIAG_FN(radar_render);
 DIAG_FN(packet_render);
 DIAG_FN(zenuml_render);

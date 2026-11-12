@@ -58,6 +58,7 @@ static const DiagEnt DIAGS[] = {
     {S("railroad-abnf-beta"), railroad_render},
     {S("railroad-peg-beta"), railroad_render},
     {S("wardley-beta"), wardley_render},
+    {S("usecase-beta"), usecase_render},
 };
 
 DiagFn diag_lookup(Str kw) {
