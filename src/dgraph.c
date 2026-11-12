@@ -274,12 +274,12 @@ bool dg_next_line(LineIt it[static 1], Str line[static 1], size_t off[static 1])
         it->i = nl ? e + 1 : e;
         Str t = str_trim(raw);
         if (str_starts(t, S("%%"))) continue;
-        for (size_t k = 1; k + 2 <= t.n; k++) /* trailing `  %% comment` (mermaid lexers drop it anywhere) */
+        for (size_t k = 1; !it->keep_tail && k + 2 <= t.n; k++) /* trailing ` %% comment`: mermaid lexers drop it */
             if (t.p[k] == '%' && t.p[k + 1] == '%' && is_sp(t.p[k - 1]) && (k + 2 >= t.n || t.p[k + 2] != '{')) {
                 t = str_trim((Str){.p = t.p, .n = k});
                 break;
             }
-        while (t.n && t.p[t.n - 1] == ';' && !ent_tail(t)) t.n--;
+        while (!it->keep_tail && t.n && t.p[t.n - 1] == ';' && !ent_tail(t)) t.n--;
         if (!t.n) continue;
         bool blk;
         if (dcfg_is_acc(t, &blk)) { /* handled by dcfg (emitted as <title>/<desc>) */

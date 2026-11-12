@@ -50,7 +50,7 @@ static constexpr char PAL[][8] = {"#4e79a7", "#f28e2c", "#e15759", "#76b7b2", "#
 }
 
 DIAG_FN(sankey_render) {
-    LineIt it = {.s = src, .n = n, .i = off};
+    LineIt it = {.s = src, .n = n, .i = off, .keep_tail = true};
     Str line;
     size_t lo;
     if (!dg_next_line(&it, &line, &lo)) return diag_fail(err_off, msg, off, "empty sankey");

@@ -41,7 +41,11 @@ void dg_rect(Buf b[restrict static 1], double x, double y, double w, double h, d
 void dg_line(Buf b[restrict static 1], double x1, double y1, double x2, double y2, const char *restrict cls);
 
 /* tiny line scanner shared by line-oriented diagram parsers */
-typedef struct LineIt { const char *s; size_t n, i, lstart; } LineIt;
+typedef struct LineIt {
+    const char *s;
+    size_t n, i, lstart;
+    bool keep_tail; /* keep a trailing ` %%…` and ';' (sankey: mermaid's CSV grammar has neither) */
+} LineIt;
 /* next non-empty, non-comment trimmed line; *off = offset of its first byte */
 [[nodiscard]] bool dg_next_line(LineIt it[static 1], Str line[static 1], size_t off[static 1]);
 /* indentation (columns, tab = 4) of the raw line starting at offset off */
