@@ -366,7 +366,7 @@ static int numbers(unsigned iters) {
 }
 
 /* the error sticks: later calls are no-ops, line:col points at the rejected value, reset clears it */
-enum { NBAD = 16 };
+enum { NBAD = 18 };
 static void bad_call(mmd_writer *w, int k) {
     switch (k) {
     case 0: mmd_w_id(w, "a b"); break;
@@ -385,6 +385,8 @@ static void bad_call(mmd_writer *w, int k) {
     case 13: mmd_pie_slice(w, "a", -1); break;
     case 14: mmd_flow_node(w, "a", nullptr, (mmd_shape)99); break;
     case 15: mmd_xy_bar(w, nullptr, 1, (const double[]){NAN}); break;
+    case 16: mmd_xy_x_cats(w, nullptr, 0, nullptr); break; /* mermaid's [] needs an item */
+    case 17: mmd_xy_line(w, "l", 0, nullptr); break;
     }
 }
 /* the host's LC_NUMERIC must leak into neither the text nor the messages */

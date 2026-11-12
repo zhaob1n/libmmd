@@ -98,6 +98,7 @@ above (CJK, emoji, `#quot;`, `%%`, `-->`, `fa:fa-car`, newlines...).
 ## Not representable (refused or documented)
 
 - A line break outside a **br** slot (pie, xychart, gantt, sankey, ...): refused.
+- An empty xychart category or series list: mermaid's grammar needs one item, so it is refused.
 - Leading/trailing blanks: trimmed by every parser.
 - T at the start of a statement (gantt task, timeline period, ishikawa cause, wardley component)
   can't start with that diagram's keyword (`section`, `title`, ...). The writer can't know the

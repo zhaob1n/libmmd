@@ -346,6 +346,7 @@ static void axis(mmd_writer w[static 1], const char kw[static 1], const char *ti
 
 void mmd_xy_x_cats(mmd_writer *w, const char *title, size_t n, const char *const *cats) {
     if (!live(w)) return;
+    if (!n) return fail(w, w->b.n, "mmd_xy_x_cats: mermaid needs at least one category");
     axis(w, "x-axis", title);
     mmd_w_raw(w, " [");
     for (size_t i = 0; i < n; i++) {
@@ -375,6 +376,7 @@ void mmd_xy_y_range(mmd_writer *w, const char *title, double lo, double hi) {
 
 static void series(mmd_writer w[static 1], const char kw[static 1], const char *name, size_t n, const double *v) {
     if (!live(w)) return;
+    if (!n) return fail(w, w->b.n, "mmd_xy_%s: mermaid needs at least one value", kw);
     axis(w, kw, name);
     mmd_w_raw(w, " [");
     for (size_t i = 0; i < n; i++) {
