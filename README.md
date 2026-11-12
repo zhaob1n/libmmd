@@ -204,10 +204,10 @@ More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 | Writer round trip: random labels through 92 slots of every diagram type, typed helpers, number round trip, error paths | `make test` (`build/test-writer [iterations]`) |
 | Mermaid docs corpus: 432 examples from mermaid's syntax docs, 396/396 that mermaid itself renders | `python3 tools/docs_audit.py [-v]` |
 | ASan + UBSan build | `make asan` → `build-asan/mmd` |
-| Fuzzing (mutational, under ASan or MSan) | `python3 tests/fuzz.py build-asan/mmd 1000 [seed]` |
-| Uninitialised arena reads (malloc poisoned with two fill bytes, output compared) | `sh tests/poison.sh` |
+| Fuzzing (mutational, under ASan or MSan; crashing inputs are saved under `TMPDIR` and printed) | `python3 tests/fuzz.py build-asan/mmd 1000 [seed]` |
+| Uninitialised arena reads (malloc poisoned with two fill bytes, output compared; needs `make` and `make asan` first) | `sh tests/poison.sh` |
 | Allocation failure: each malloc fails in turn in `make test` (0.2 s); `make oom` also fails arena allocations, sampled, under ASan (2 s run) | `make oom` |
-| ASan+UBSan and MemorySanitizer over the tests and the corpus | `tools/sancheck.sh` |
+| ASan+UBSan and MemorySanitizer over the tests and the corpus (needs clang) | `tools/sancheck.sh` (`CC=clang-23` to pick one) |
 | Stress generator (every type, density 1×–5×) | `python3 tools/stress_gen.py OUT 2 SEED SCALE` |
 | Visual quality scanner (edges through nodes, label overlaps, labels on edges, out-of-bounds…) | `python3 tools/quality_scan.py files… [-v]` |
 | Layout agreement with mermaid (rank/cross-axis order, node-centre error) | `python3 bench/posagree.py` |

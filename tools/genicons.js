@@ -1,4 +1,5 @@
-const fs=require('fs');const H=process.env.HOME+'/node_modules/';
+// usage: [NODE_MODULES=dir] node tools/genicons.js  (dir holds simple-icons and @fortawesome; default ./node_modules)
+const fs=require('fs');const H=(process.env.NODE_MODULES||process.cwd()+'/node_modules')+'/';
 const si=['github','docker','kubernetes','postgresql','redis','mongodb','nginx','python','nodedotjs','react','googlecloud','linux','git','gitlab','mysql','apachekafka','terraform','cloudflare','rabbitmq','elasticsearch','grafana','prometheus'];
 const alias={nodedotjs:['nodejs','node'],googlecloud:['gcp','google-cloud'],apachekafka:['kafka'],postgresql:['postgres']};
 const fab=require(H+'@fortawesome/free-brands-svg-icons').fab;

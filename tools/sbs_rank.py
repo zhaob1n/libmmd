@@ -2,28 +2,29 @@
 """Rank docs examples by rendered-size mismatch vs cached mermaid-cli PNGs (run docs_sbs.py first)."""
 import glob, math, os, re, subprocess, sys
 import atexit as _ax, shutil as _sh, tempfile as _tf
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import env
+env.at_root([])
+D = env.scratch('dsbs')
 # chrome/puppeteer leave scoped_dir*/profile dirs in TMPDIR: confine them to one dir removed at exit
 if 'MMD_TMP' not in os.environ:
-    os.makedirs('/tmp/mmd-mmdc', exist_ok=True)
-    os.environ['MMD_TMP'] = os.environ['TMPDIR'] = _tf.mkdtemp(dir='/tmp/mmd-mmdc')
+    os.environ['MMD_TMP'] = os.environ['TMPDIR'] = _tf.mkdtemp(dir=env.scratch('mmdc'))
     _tf.tempdir = None
     _ax.register(_sh.rmtree, os.environ['MMD_TMP'], True)
 from PIL import Image
 rows = []
 for src in sorted(glob.glob('tests/docs/**/*.mmd', recursive=True)):
     tag = os.path.relpath(src, 'tests/docs')[:-4].replace('/', '_')
-    mp = f'/tmp/dsbs/m_{tag}.png'
+    mp = f'{D}/m_{tag}.png'
     if not os.path.exists(mp): continue
-    r = subprocess.run(['build/mmd', src, '-o', '/tmp/rank.svg'], capture_output=True)
+    r = subprocess.run(['build/mmd', src, '-o', f'{D}/rank.svg'], capture_output=True)
     if r.returncode: rows.append((99, tag, 'ERR')); continue
-    m = re.search(r'viewBox="([-\d.e ]+)"', open('/tmp/rank.svg').read())
+    m = re.search(r'viewBox="([-\d.e ]+)"', open(f'{D}/rank.svg').read())
     if not m: continue
     _, _, w, h = map(float, m.group(1).split())
     mw, mh = Image.open(mp).size
     ms = mp[:-4] + '.svg'  # exact mermaid viewBox when cached: PNGs are scaled/cropped to 784px wide
     if mw == 784 and not os.path.exists(ms) and os.environ.get('SBS_FETCH'):
-        subprocess.run([os.path.expanduser('~/node_modules/.bin/mmdc'), '-p', os.path.expanduser('~/pptr.json'),
-                        '-i', src, '-o', ms], capture_output=True)
+        subprocess.run([*env.mmdc(), '-i', src, '-o', ms], capture_output=True)
     if os.path.exists(ms):
         mv = re.search(r'viewBox="([-\d.e ]+)"', open(ms).read())
         if mv: mw, mh = (round(float(x)) for x in mv.group(1).split()[2:])

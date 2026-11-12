@@ -5,7 +5,8 @@ Columns: process wall-clock median (both CLIs, SVG to file), plus in-library tim
 import subprocess, sys, time, statistics, os, json, re
 MMD = os.environ.get('MMD', 'build/mmd')
 BENCH = os.environ.get('BENCH', 'build/bench')
-MMDR = os.environ.get('MMDR', '/workspace/mmdr/target/release/mmdr')
+import shutil
+MMDR = os.environ.get('MMDR') or shutil.which('mmdr') or sys.exit('mmdr not found: put it on PATH or set MMDR')
 TIMEOUT = float(os.environ.get('TIMEOUT', '120'))
 EXTRA = os.environ.get('MMDR_ARGS', '').split()
 def wall(cmd, n):
@@ -25,14 +26,15 @@ def ms(x): return f'{x*1000:9.2f}' if x is not None else '        -'
 # library times are often a few microseconds: report them in us (ms with 2dp rounded them to 0.00)
 def us(x): return f'{x*1e6:9.1f}' if x is not None else '        -'
 files = sys.argv[1:]
+import tempfile; T = tempfile.mkdtemp(prefix='mmd-cmp.')
 print(f"{'input':44} {'mmd lib us':>10} {'mmd cli ms':>10} {'mmdr lib us':>11} {'mmdr cli ms':>11} {'lib x':>7} {'cli x':>7}")
 for f in files:
     n = 15
     b = subprocess.run([BENCH, f, '30'], capture_output=True, text=True).stdout
     m = re.search(r'median=([\d.]+)us', b)
     clib = float(m.group(1)) / 1e6 if m else None
-    c, _ = wall([MMD, f, '-o', '/tmp/_mmd.svg'], n)
-    d, err = wall([MMDR, *EXTRA, '--timing', '-i', f, '-o', '/tmp/_mmdr.svg'], n)
+    c, _ = wall([MMD, f, '-o', f'{T}/mmd.svg'], n)
+    d, err = wall([MMDR, *EXTRA, '--timing', '-i', f, '-o', f'{T}/mmdr.svg'], n)
     dlib = None
     if d is not None:
         try: dlib = json.loads(err.strip().splitlines()[-1])['total_us'] / 1e6
@@ -41,3 +43,4 @@ for f in files:
     lx = f'{dlib / clib:6.0f}x' if clib and dlib else '     -'
     sp = f'{d / c:6.1f}x' if c and d else '     -'
     print(f'{os.path.basename(f)[:44]:44} {us(clib):>10} {ms(c):>10} {us(dlib):>11} {ms(d):>11} {lx:>7} {sp:>7}{note}', flush=True)
+import shutil; shutil.rmtree(T)

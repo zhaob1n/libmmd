@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Side-by-side gallery for the README: libmmd (left) vs mermaid-cli (right).
 usage: TMPDIR=... python3 tools/gallery.py case.mmd...   -> docs/gallery/<case>.png
-Needs ~/node_modules/.bin/mmdc, google-chrome, Pillow."""
+Needs mermaid-cli and Chrome (see tools/env.py) and Pillow."""
 import os, subprocess, sys, tempfile
 from PIL import Image, ImageDraw, ImageFont
-MMDC = os.path.expanduser('~/node_modules/.bin/mmdc'); PP = os.path.expanduser('~/pptr.json')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import env
+sys.argv[1:] = env.at_root(sys.argv[1:]); MMDC = env.mmdc()
 T = tempfile.mkdtemp(prefix='mmd-gal.')
 try: F = ImageFont.truetype('DejaVuSans-Bold.ttf', 18)
 except OSError: F = ImageFont.load_default()
@@ -14,7 +15,7 @@ def fit(im, w, h):
 for src in sys.argv[1:]:
     n = os.path.basename(src)[:-4]; a, b = f'{T}/{n}_c.png', f'{T}/{n}_m.png'
     subprocess.run(['tools/render_png.sh', src, a], check=True, capture_output=True)
-    subprocess.run([MMDC, '-p', PP, '-i', src, '-o', b, '-b', 'white'], check=True, timeout=120, capture_output=True)
+    subprocess.run([*MMDC, '-i', src, '-o', b, '-b', 'white'], check=True, timeout=120, capture_output=True)
     A, B = (fit(Image.open(p).convert('RGB'), 700, 640) for p in (a, b))
     W, H = A.width + B.width + 30, max(A.height, B.height) + 40
     o = Image.new('RGB', (W, H), 'white'); d = ImageDraw.Draw(o)

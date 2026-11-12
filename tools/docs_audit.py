@@ -3,6 +3,8 @@
 Usage: docs_audit.py [-v] [-q] [--mmdc] [mmd binary]; exits 1 if any mermaid-ok example fails.
 Mermaid results are cached in tests/docs/mermaid_status.txt (path ok|fail) so runs without --mmdc are fast."""
 import os, sys, glob, subprocess, concurrent.futures as cf
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import env
+sys.argv[1:] = env.at_root(sys.argv[1:])
 files = sorted(glob.glob('tests/docs/*/*.mmd'))
 cache = 'tests/docs/mermaid_status.txt'
 exe = next((a for a in sys.argv[1:] if not a.startswith('-')), 'build/mmd')
@@ -11,10 +13,9 @@ def ours(f):
     r = subprocess.run([exe, f, '-o', '/dev/null'], capture_output=True, timeout=20)
     return 'ok' if r.returncode == 0 else 'fail:' + r.stderr.decode(errors='replace').strip().split('\n')[0][:120]
 def merm(f):
-    os.makedirs('/tmp/da', exist_ok=True)
-    o = '/tmp/da/' + f.replace('/', '_')[11:-4] + '.svg'
+    o = os.path.join(env.scratch('da'), f.replace('/', '_')[11:-4] + '.svg')
     try:
-        r = subprocess.run([os.path.expanduser('~/node_modules/.bin/mmdc'), '-p', os.path.expanduser('~/pptr.json'), '-i', f, '-o', o, '-q'], capture_output=True, timeout=90)
+        r = subprocess.run([*env.mmdc(), '-i', f, '-o', o, '-q'], capture_output=True, timeout=90)
         return 'ok' if r.returncode == 0 and os.path.exists(o) and b'Syntax error' not in open(o, 'rb').read() else 'fail'
     except subprocess.TimeoutExpired: return 'fail'
 if '--mmdc' in sys.argv:

@@ -1,10 +1,11 @@
 #!/bin/sh
-# usage: [CC=clang-23] tools/sancheck.sh   (from the repo root)
+# usage: [CC=clang-23] tools/sancheck.sh   (MSan needs clang; default CC=clang)
 # Golden tests under ASan+UBSan; allocation-failure injection (make oom); the locale and writer tests under ASan+UBSan and MemorySanitizer; every
 # corpus file through an MSan build of the CLI. MSan needs every object instrumented: own build-msan.
 set -u
+cd "$(dirname "$0")/.." || exit 1
 CORPUS="tests/cases/*.mmd tests/docs/*/*.mmd"
-CCARG=${CC:+CC=$CC}
+CCARG=CC=${CC:-clang}
 rc=0
 step() { out=$("$@" 2>&1) || { echo "$out" | tail -20; echo "FAIL: $*"; rc=1; return; }; echo "$out" | tail -1; }
 

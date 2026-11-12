@@ -1,8 +1,10 @@
 // Generates src/d_themes.h from mermaid's own theme objects (values that differ from the default theme).
-// usage: node tools/gen_themes.mjs $(cat tools/theme_vars.txt) > src/d_themes.h
-const m = await import(process.env.HOME + '/node_modules/mermaid/dist/chunks/mermaid.core/chunk-DU6HZSFF.mjs');
+// usage: [NODE_MODULES=dir] node tools/gen_themes.mjs $(cat tools/theme_vars.txt) > src/d_themes.h
+// NODE_MODULES: where mermaid and khroma are installed (default ./node_modules); the chunk name is mermaid 11's.
+const NM = (process.env.NODE_MODULES || process.cwd() + '/node_modules') + '/';
+const m = await import(NM + 'mermaid/dist/chunks/mermaid.core/chunk-DU6HZSFF.mjs');
 const themes = Object.values(m).find(v => v && v.dark && v.forest && v.neutral);
-const kh = await import(process.env.HOME + '/node_modules/khroma/dist/index.js');
+const kh = await import(NM + 'khroma/dist/index.js');
 const get = (o, k) => k.split('.').reduce((a, p) => a == null ? a : a[p], o);
 const vars = process.argv.slice(2);
 const def = themes.default.getThemeVariables();

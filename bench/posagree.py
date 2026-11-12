@@ -1,12 +1,16 @@
+"""Node-order agreement with mermaid's flowchart layout.
+usage: bench/posagree.py REFSVG_DIR [BIN]   REFSVG_DIR holds mermaid-cli SVGs named after bench/mmdr_fixtures/*.mmd"""
 import re,sys,glob,os,subprocess,itertools
+R=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if len(sys.argv)<2: sys.exit(__doc__)
 def pos(s):
     d={}
     for m in re.finditer(r'<g class="node[^"]*" id="(?:my-svg-)?flowchart-(.+?)-\d+"[^>]*?transform="translate\(([-\d.e]+), ?([-\d.e]+)\)',s): d[m.group(1)]=(float(m.group(2)),float(m.group(3)))
     return d
-B=sys.argv[1] if len(sys.argv)>1 else '/workspace/libmmd/build/mmd'
+B=sys.argv[2] if len(sys.argv)>2 else f'{R}/build/mmd'
 T=[0,0,0,0];rows=[];E=[]
-for f in sorted(glob.glob('/workspace/sbsf/refsvg/*.svg')):
-    n=os.path.basename(f)[:-4]; src=f'/workspace/libmmd/bench/mmdr_fixtures/{n}.mmd'
+for f in sorted(glob.glob(os.path.join(sys.argv[1],'*.svg'))):
+    n=os.path.basename(f)[:-4]; src=f'{R}/bench/mmdr_fixtures/{n}.mmd'
     ref=pos(open(f).read()); me=pos(subprocess.run([B,src],capture_output=True,text=True).stdout)
     lr=bool(re.search(r'^\s*(flowchart|graph)\s+(LR|RL)',open(src).read(),re.M)); X=1 if lr else 0
     k=[v for v in ref if v in me]; ok=t=0; okr=0

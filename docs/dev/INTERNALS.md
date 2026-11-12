@@ -167,6 +167,7 @@ Build with `-DMMD_PROFILE` to get per-phase cycle counters. See bench/results_v1
 
 ## Toolchain
 - Builds use `-std=gnu2y -fms-extensions -Wno-microsoft-anon-tag` with clang and gcc (`make both`; developed on clang 23 and gcc 16). Code must compile warning-free under both. Where no distro ships a recent gcc, a C-only build is quick: `configure --enable-languages=c --disable-bootstrap --disable-multilib --program-suffix=-16` (about 5 minutes on 8 cores). `gcc-16 -fanalyzer` is clean on `src/`; `clang --analyze` only reports leaks through `[[gnu::cleanup]]` owners, which it does not model.
+- Scripts run from any directory and assume no machine layout: mermaid-cli, its puppeteer config and Chrome come from `MMDC`, `MMDC_PUPPETEER` and `CHROME` or `PATH` (`tools/env.py`), scratch files go under `TMPDIR`.
 - Byte-identity gate: `bench/eq/cmp.sh build/mmd` must print `bad=0`.
 - Before writing a string helper, check `src/base.h` (`str_sub`/`str_from`/`str_span`, `str_split`, `str_cat`/`STR_CAT`, `buf_cstr`), `src/text.h` (`label_br_len`) and `src/dgraph.h` (`dg_unquote`, `dg_css_ok`, `dg_arrowhead`). Literal config keys go through `dcfg_get_str(S("..."))`.
 - `restrict` is a caller contract, not decoration: use it only where every caller provably passes disjoint objects (Buf appends vs. their source, independent scratch arrays). Never append a Buf into itself — `buf_reserve` may move it. `str_cat`, `str_split` and `arena_grow` stay unqualified (their inputs and results may legitimately share storage), and the public `include/mmd.h` stays unrestricted.
