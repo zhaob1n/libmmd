@@ -46,14 +46,14 @@ CFLAGS += -std=gnu2y -fms-extensions -fPIC -fvisibility=hidden $(WARN) -Iinclude
 LDLIBS = -lm
 BUILD ?= build
 DIAG_SRCS := $(wildcard src/d_*.c)
-SRCS := src/base.c src/text.c src/flow_parse.c src/layout.c src/nsimplex.c src/dorder.c src/drank.c src/flow_svg.c src/seq.c src/rich.c src/dgraph.c $(DIAG_SRCS) src/mmd.c
+SRCS := src/base.c src/text.c src/flow_parse.c src/layout.c src/nsimplex.c src/dorder.c src/drank.c src/flow_svg.c src/seq.c src/rich.c src/dgraph.c $(DIAG_SRCS) src/mmd.c src/writer.c
 OBJS := $(SRCS:src/%.c=$(BUILD)/%.o)
 
 SONAME := libmmd.so.$(SOMAJOR)
 
 all: $(BUILD)/libmmd.a $(BUILD)/libmmd.so $(BUILD)/mmd $(BUILD)/bench $(BUILD)/mmd.pc
 
-$(BUILD)/%.o: src/%.c $(wildcard src/*.h) include/mmd.h | $(BUILD)
+$(BUILD)/%.o: src/%.c $(wildcard src/*.h include/*.h) | $(BUILD)
 	$(CC) $(CFLAGS) -c $< -o $@
 $(BUILD):
 	mkdir -p $@
@@ -77,7 +77,7 @@ $(BUILD)/test-shared: tests/shared_test.c $(BUILD)/libmmd.so $(BUILD)/mmd.pc
 
 install: all
 	install -d $(DESTDIR)$(LIBDIR)/pkgconfig $(DESTDIR)$(INCDIR) $(DESTDIR)$(BINDIR)
-	install -m644 include/mmd.h $(DESTDIR)$(INCDIR)/
+	install -m644 include/mmd.h include/mmd_writer.h $(DESTDIR)$(INCDIR)/
 	install -m644 $(BUILD)/libmmd.a $(DESTDIR)$(LIBDIR)/
 	install -m755 $(BUILD)/libmmd.so.$(VERSION) $(DESTDIR)$(LIBDIR)/
 	ln -sf libmmd.so.$(VERSION) $(DESTDIR)$(LIBDIR)/$(SONAME)
