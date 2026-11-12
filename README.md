@@ -113,6 +113,7 @@ cc -std=gnu23 -Iinclude example.c build/libmmd.a -lm      # or: $(pkg-config --c
 - For batch rendering, `mmd_context_new()` / `mmd_context_render_svg()` / `mmd_context_free()` reuse the arena and output buffer between calls. Use one context per thread.
 - Errors come back as `mmd_status` together with `mmd_error` (code, 1-based line and column, message).
 - The shared library exports only `mmd_*` symbols.
+- Output does not depend on the host's `setlocale()`: each render runs in the C locale on the calling thread only (`uselocale`), then restores the host's.
 
 ## Benchmarks
 
@@ -182,6 +183,7 @@ More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 | what | how |
 |---|---|
 | Golden + sanity tests (151 cases; XML well-formedness, error positions, viewBox bounds, mermaid docs corpus) | `make test` (`UPDATE_GOLDEN=1 make test` to refresh) |
+| Locale independence: the corpus rendered under a comma-decimal locale must match the C locale byte for byte (skipped when none is installed) | `make test` |
 | Mermaid docs corpus: 432 examples from mermaid's syntax docs, 396/396 that mermaid itself renders | `python3 tools/docs_audit.py [-v]` |
 | ASan + UBSan build | `make asan` → `build-asan/mmd` |
 | Fuzzing (mutational, under ASan) | `python3 tests/fuzz.py build-asan/mmd 1000` |
