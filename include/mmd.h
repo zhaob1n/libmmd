@@ -12,7 +12,7 @@ extern "C" {
 #define MMD_API [[gnu::visibility("default")]]
 
 /* ---- rendering: Mermaid text to SVG ---- */
-typedef enum mmd_status {
+typedef enum [[nodiscard]] mmd_status {
     MMD_OK = 0,
     MMD_ERR_SYNTAX,      /* parse error, see mmd_error line/col */
     MMD_ERR_UNSUPPORTED, /* diagram type not implemented */
@@ -55,7 +55,7 @@ typedef struct mmd_options {
 
 /* Render Mermaid source (n bytes, need not be NUL-terminated) to SVG.
  * opt may be nullptr. err may be nullptr. On success *out owns a buffer. */
-[[nodiscard]] MMD_API mmd_status mmd_render_svg(size_t n, const char *src,
+MMD_API mmd_status mmd_render_svg(size_t n, const char *src,
                                         const mmd_options *opt,
                                         mmd_buffer *out, mmd_error *err);
 
@@ -69,11 +69,11 @@ MMD_API void mmd_context_free(mmd_context *ctx);
 /* On success *svg (NUL-terminated, *len bytes) is owned by ctx and stays
  * valid until the next call on ctx or mmd_context_free. Not thread-safe per
  * ctx; use one context per thread. */
-[[nodiscard]] MMD_API mmd_status mmd_context_render_svg(mmd_context *ctx, size_t n, const char *src,
+MMD_API mmd_status mmd_context_render_svg(mmd_context *ctx, size_t n, const char *src,
                                                 const mmd_options *opt, const char **svg, size_t *len,
                                                 mmd_error *err);
 
-[[nodiscard]] MMD_API const char *mmd_status_str(mmd_status s);
+MMD_API const char *mmd_status_str(mmd_status s);
 
 /* ---- writer: Mermaid source text ----
  * The text it builds is the only interface: mmd_writer_text() hands it out (to save as .mmd), mmd_writer_render_svg()
@@ -95,9 +95,9 @@ MMD_API void mmd_writer_reset(mmd_writer *w);
 /* *s (NUL-terminated, *len bytes) stays valid until the next call on w.
  * On error *s is nullptr and err (nullable) says which call failed and where
  * in the text (line/col) its value would have gone. */
-[[nodiscard]] MMD_API mmd_status mmd_writer_text(const mmd_writer *w, const char **s, size_t *len, mmd_error *err);
+MMD_API mmd_status mmd_writer_text(const mmd_writer *w, const char **s, size_t *len, mmd_error *err);
 /* mmd_render_svg() of exactly that text */
-[[nodiscard]] MMD_API mmd_status mmd_writer_render_svg(const mmd_writer *w, const mmd_options *opt,
+MMD_API mmd_status mmd_writer_render_svg(const mmd_writer *w, const mmd_options *opt,
                                                        mmd_buffer *out, mmd_error *err);
 
 /* ---- escape contexts: work in every diagram type ---- */

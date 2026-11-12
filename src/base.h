@@ -220,10 +220,10 @@ static inline void buf_freep(Buf b[static 1]) { free(b->p); }
  * back. If the locale can't be made this is a no-op and so is switching back: uselocale(0) only asks. */
 [[nodiscard]] locale_t c_locale_enter(void);
 #define TAKE_PTR(p) ({ auto take_ = (p); (p) = nullptr; take_; })
-static inline Buf buf_take(Buf b[static 1]) { Buf r = *b; *b = (Buf){}; return r; }
+[[nodiscard]] static inline Buf buf_take(Buf b[static 1]) { Buf r = *b; *b = (Buf){}; return r; }
 
-bool buf_reserve_slow(Buf b[static 1], size_t extra);
-static inline bool buf_reserve(Buf b[static 1], size_t extra) {
+[[nodiscard]] bool buf_reserve_slow(Buf b[static 1], size_t extra);
+[[nodiscard]] static inline bool buf_reserve(Buf b[static 1], size_t extra) {
     if (MMD_LIKELY(b->cap - b->n > extra)) return true;
     return buf_reserve_slow(b, extra);
 }

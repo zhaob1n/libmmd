@@ -138,7 +138,7 @@ static constexpr CardTok WCARD[] = { /* word forms, longest first */
     return false;
 }
 
-[[nodiscard]] static mmd_status parse(EP p[static 1], LineIt it[static 1]) {
+static mmd_status parse(EP p[static 1], LineIt it[static 1]) {
     Graph *g = &p->g;
     Str line;
     size_t off;

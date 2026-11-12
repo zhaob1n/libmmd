@@ -46,7 +46,7 @@ static void t_nodes(const RG g[static 1], uint32_t *out) {
     memcpy(out + g->nint, g->tnon, g->nnon * sizeof *out);
 }
 
-static bool t_add_edge(RG g[static 1], int32_t a, int32_t b, int32_t ge) {
+[[nodiscard]] static bool t_add_edge(RG g[static 1], int32_t a, int32_t b, int32_t ge) {
     if (g->nte >= g->maxte) return false;
     if (g->sord[a] > g->sord[b]) { int32_t t = a; a = b; b = t; }
     g->ta[g->nte] = a, g->tb[g->nte] = b, g->tge[g->nte] = ge, g->talive[g->nte] = 1, g->tcut[g->nte] = 0;
@@ -214,7 +214,7 @@ static void ft_add(RG g[static 1], uint32_t *nout, uint32_t v) {
     nout[v] = n;
 }
 
-static bool feasible_tree(RG g[static 1], uint32_t *snap) {
+[[nodiscard]] static bool feasible_tree(RG g[static 1], uint32_t *snap) {
     size_t M = g->M;
     uint32_t *nout = g->acnt; /* free until the simplex loop */
     ft_add(g, nout, 0);
@@ -250,7 +250,7 @@ static bool feasible_tree(RG g[static 1], uint32_t *snap) {
     }
 }
 
-static bool network_simplex_dagre(RG g[static 1], size_t maxit) {
+[[nodiscard]] static bool network_simplex_dagre(RG g[static 1], size_t maxit) {
     size_t M = g->M;
     /* longestPath: rank(v) = min over out-edges (rank(w) - minlen), sinks 0 */
     {

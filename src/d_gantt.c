@@ -119,7 +119,7 @@ static double add_months(double t, double n) {
 }
 
 /* "3d", "1.5h", "2w", "1M", "1y", "500ms" -> adds to t; false when not a duration */
-static bool add_duration(Str s, double t, double out[static 1]) {
+[[nodiscard]] static bool add_duration(Str s, double t, double out[static 1]) {
     s = str_trim(s);
     size_t i = 0;
     while (i < s.n && ((unsigned)(s.p[i] - '0') < 10u || s.p[i] == '.')) i++;
@@ -176,7 +176,7 @@ static bool ref_time(GCtx c[static 1], Str list, bool want_end, double out[stati
     if (any) *out = best;
     return any;
 }
-static bool resolve(GCtx c[static 1], size_t i) {
+[[nodiscard]] static bool resolve(GCtx c[static 1], size_t i) {
     Task *t = &c->t[i];
     if (t->state == 2) return true;
     if (t->state == 1) return false; /* cycle */

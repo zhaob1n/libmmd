@@ -454,7 +454,7 @@ static constexpr Ent ENTS[] = {
 };
 
 /* HTML named entity -> code point (0 if unknown); names are case-sensitive */
-[[nodiscard]] uint32_t ent_lookup(size_t n, const char s[static n]) {
+uint32_t ent_lookup(size_t n, const char s[static n]) {
     size_t lo = 0, hi = countof(ENTS);
     while (lo < hi) {
         size_t m = (lo + hi) / 2;

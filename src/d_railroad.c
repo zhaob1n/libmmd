@@ -133,7 +133,7 @@ static RNode *mk(RP p[static 1], RKind k, Str s) {
     *r = (RNode){.k = k, .s = s};
     return r;
 }
-static bool add(RP p[static 1], RNode par[static 1], RNode *c) {
+[[nodiscard]] static bool add(RP p[static 1], RNode par[static 1], RNode *c) {
     RNode **nk = ANEW(p->a, RNode *, par->nk + 1);
     if (!nk) { p->err = "out of memory"; return false; }
     if (par->nk) memcpy(nk, par->kid, par->nk * sizeof *nk);

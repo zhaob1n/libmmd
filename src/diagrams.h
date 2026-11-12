@@ -10,42 +10,42 @@
                     Buf out[restrict static 1], size_t err_off[restrict static 1], char msg[restrict static 160])
 typedef DIAG_FN((*DiagFn));
 
-[[nodiscard]] DIAG_FN(state_render);
-[[nodiscard]] DIAG_FN(class_render);
-[[nodiscard]] DIAG_FN(er_render);
-[[nodiscard]] DIAG_FN(pie_render);
-[[nodiscard]] DIAG_FN(gantt_render);
-[[nodiscard]] DIAG_FN(journey_render);
-[[nodiscard]] DIAG_FN(mindmap_render);
-[[nodiscard]] DIAG_FN(timeline_render);
-[[nodiscard]] DIAG_FN(quadrant_render);
-[[nodiscard]] DIAG_FN(xychart_render);
-[[nodiscard]] DIAG_FN(gitgraph_render);
-[[nodiscard]] DIAG_FN(architecture_render);
-[[nodiscard]] DIAG_FN(c4_render);
-[[nodiscard]] DIAG_FN(requirement_render);
-[[nodiscard]] DIAG_FN(block_render);
-[[nodiscard]] DIAG_FN(sankey_render);
-[[nodiscard]] DIAG_FN(kanban_render);
-[[nodiscard]] DIAG_FN(treemap_render);
-[[nodiscard]] DIAG_FN(radar_render);
-[[nodiscard]] DIAG_FN(packet_render);
-[[nodiscard]] DIAG_FN(zenuml_render);
-[[nodiscard]] DIAG_FN(ishikawa_render);
-[[nodiscard]] DIAG_FN(cynefin_render);
-[[nodiscard]] DIAG_FN(venn_render);
-[[nodiscard]] DIAG_FN(treeview_render);
-[[nodiscard]] DIAG_FN(eventmodeling_render);
-[[nodiscard]] DIAG_FN(railroad_render);
-[[nodiscard]] DIAG_FN(wardley_render);
+DIAG_FN(state_render);
+DIAG_FN(class_render);
+DIAG_FN(er_render);
+DIAG_FN(pie_render);
+DIAG_FN(gantt_render);
+DIAG_FN(journey_render);
+DIAG_FN(mindmap_render);
+DIAG_FN(timeline_render);
+DIAG_FN(quadrant_render);
+DIAG_FN(xychart_render);
+DIAG_FN(gitgraph_render);
+DIAG_FN(architecture_render);
+DIAG_FN(c4_render);
+DIAG_FN(requirement_render);
+DIAG_FN(block_render);
+DIAG_FN(sankey_render);
+DIAG_FN(kanban_render);
+DIAG_FN(treemap_render);
+DIAG_FN(radar_render);
+DIAG_FN(packet_render);
+DIAG_FN(zenuml_render);
+DIAG_FN(ishikawa_render);
+DIAG_FN(cynefin_render);
+DIAG_FN(venn_render);
+DIAG_FN(treeview_render);
+DIAG_FN(eventmodeling_render);
+DIAG_FN(railroad_render);
+DIAG_FN(wardley_render);
 /* swimlane-beta: flowchart parse/draw with a lane layout (d_swimlanes.c) */
 struct Graph;
-[[nodiscard]] mmd_status swim_layout(struct Graph *g, Str *keep[static 1]);
-[[nodiscard]] mmd_status swim_titles(const struct Graph *g, const Str *keep, Buf b[static 1]);
+mmd_status swim_layout(struct Graph *g, Str *keep[static 1]);
+mmd_status swim_titles(const struct Graph *g, const Str *keep, Buf b[static 1]);
 
 /* keyword -> renderer, nullptr when not a diagram type handled here */
-[[nodiscard]] DiagFn diag_lookup(Str kw);
+DiagFn diag_lookup(Str kw);
 
 /* shared error helper */
-[[nodiscard]] mmd_status diag_fail(size_t err_off[static 1], char msg[static 160], size_t off, const char m[static 1]);
+mmd_status diag_fail(size_t err_off[static 1], char msg[static 160], size_t off, const char m[static 1]);
 #endif

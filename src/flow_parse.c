@@ -337,7 +337,7 @@ static bool link_start(const P p[static 1]) {
 }
 
 /* parse a link body at p->i: [-=.~]+ followed by optional head */
-static bool link_body(P p[static 1], Link l[static 1], size_t nd[static 1], size_t ne[static 1],
+[[nodiscard]] static bool link_body(P p[static 1], Link l[static 1], size_t nd[static 1], size_t ne[static 1],
                       size_t ndot[static 1], size_t nt[static 1]) {
     *nd = *ne = *ndot = *nt = 0;
     size_t st = p->i;
@@ -514,7 +514,7 @@ static Str read_list(P p[static 1]) {
     while (p->i < p->n && !is_sp(p->s[p->i]) && p->s[p->i] != '\n') p->i++;
     return (Str){.p = p->s + st, .n = p->i - st};
 }
-static bool list_next(Str list[static 1], Str item[static 1]) {
+[[nodiscard]] static bool list_next(Str list[static 1], Str item[static 1]) {
     while (list->n && list->p[0] == ',') list->p++, list->n--;
     if (!list->n) return false;
     const char *c = memchr(list->p, ',', list->n);

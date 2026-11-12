@@ -369,7 +369,7 @@ typedef struct Ctx {
 typedef struct ElemList { Scope *s; size_t cnt, cap; } ElemList;
 
 /* add element e as a layout node of the scope's graph, sized w x h */
-[[nodiscard]] static mmd_status add_elem(Ctx c[static 1], ElemList el[static 1], int32_t e, Str id, double w, double h, Shape shape) {
+static mmd_status add_elem(Ctx c[static 1], ElemList el[static 1], int32_t e, Str id, double w, double h, Shape shape) {
     Graph *lg = &el->s->lg;
     int32_t lv = dg_node(lg, id, nullptr);
     if (lv == NONE) return MMD_ERR_NOMEM;
@@ -386,7 +386,7 @@ typedef struct ElemList { Scope *s; size_t cnt, cap; } ElemList;
 
 /* the notes of node v (r == NONE) or of cluster r; mermaid inserts a state's note node before the
  * state itself (dagre initial order) */
-[[nodiscard]] static mmd_status add_notes(Ctx c[static 1], ElemList el[static 1], int32_t v, int32_t r) {
+static mmd_status add_notes(Ctx c[static 1], ElemList el[static 1], int32_t v, int32_t r) {
     const StP *p = c->p;
     const Graph *g = &p->g;
     for (size_t i = 0; i < p->notes.n; i++) {

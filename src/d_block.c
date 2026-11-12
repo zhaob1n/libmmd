@@ -54,7 +54,7 @@ typedef struct P { const char *s; size_t i, n; } P;
 static void sp(P p[static 1]) { while (p->i < p->n && is_sp(p->s[p->i])) p->i++; }
 
 /* id + optional shape/label + optional :span. returns false on syntax error */
-static bool node_tok(P p[static 1], Str id[static 1], Str label[static 1], uint8_t shape[static 1],
+[[nodiscard]] static bool node_tok(P p[static 1], Str id[static 1], Str label[static 1], uint8_t shape[static 1],
                      uint32_t span[static 1], bool has_label[static 1]) {
     size_t st = p->i;
     while (p->i < p->n && isid(p->s[p->i])) p->i++;
@@ -175,7 +175,7 @@ static Str node_css(size_t n, const Str L[static n], Str id) {
     return sty.n ? sty : out;
 }
 /* insert style="css" after every class="bn" written since offset `from` */
-static bool style_shape(Buf b[static 1], size_t from, Str css) {
+[[nodiscard]] static bool style_shape(Buf b[static 1], size_t from, Str css) {
     static constexpr char K[] = "class=\"bn\"";
     for (size_t i = from; i + sizeof K - 1 <= b->n; i++) {
         if (memcmp(b->p + i, K, sizeof K - 1)) continue;

@@ -9,7 +9,7 @@ void dg_init(Graph g[static 1], Arena A[static 1], Dir dir, double fs);
 /* intern node by id; NONE on OOM. *fresh set when created now (may be nullptr). */
 [[nodiscard]] int32_t dg_node(Graph g[static 1], Str id, bool *fresh);
 /* lookup only */
-[[nodiscard]] int32_t dg_find(const Graph g[static 1], Str id);
+int32_t dg_find(const Graph g[static 1], Str id);
 static inline void dg_size(Graph g[static 1], int32_t v, double w, double h) {
     g->nw[v] = w;
     g->nh[v] = h;
@@ -21,7 +21,7 @@ static inline void dg_size(Graph g[static 1], int32_t v, double w, double h) {
 /* ---- SVG ---- */
 constexpr BBox BB_EMPTY = {.x0 = 1e300, .y0 = 1e300, .x1 = -1e300, .y1 = -1e300};
 /* bbox of laid-out nodes, edge points, edge labels and clusters */
-[[nodiscard]] BBox dg_bbox(const Graph g[static 1]);
+BBox dg_bbox(const Graph g[static 1]);
 /* filled 10-long arrowhead at tip, pointing away from from; half = half the base width */
 void dg_arrowhead(Buf b[restrict static 1], const char cls[restrict static 1], const double tip[restrict static 2],
                   const double from[restrict static 2], double half);
@@ -45,8 +45,8 @@ typedef struct LineIt { const char *s; size_t n, i, lstart; } LineIt;
 /* next non-empty, non-comment trimmed line; *off = offset of its first byte */
 [[nodiscard]] bool dg_next_line(LineIt it[static 1], Str line[static 1], size_t off[static 1]);
 /* indentation (columns, tab = 4) of the raw line starting at offset off */
-[[nodiscard]] unsigned dg_indent(const LineIt it[static 1], size_t off);
-[[nodiscard]] Str dg_word(Str s[static 1]);
+unsigned dg_indent(const LineIt it[static 1], size_t off);
+Str dg_word(Str s[static 1]);
 /* trim, then drop one pair of matching outer quotes: '"' always, '\'' too when apos */
 static inline Str dg_unquote(Str s, bool apos) {
     s = str_trim(s);
@@ -73,11 +73,11 @@ typedef enum TBase { TB_ALPHA, TB_MIDDLE, TB_HANG } TBase;
 unsigned dg_tspans(Buf b[restrict static 1], BBox *restrict bb, Str s, double fs, double lh, double x, double y, bool centre,
                    const char anchor[restrict static 1], TBase base, const char *restrict cls);
 /* estimated bbox of such a text block (same arguments) */
-[[nodiscard]] BBox dg_tbox(Str s, double fs, double lh, double x, double y, bool centre, const char anchor[static 1], TBase base);
+BBox dg_tbox(Str s, double fs, double lh, double x, double y, bool centre, const char anchor[static 1], TBase base);
 /* greedy word wrap at maxc characters per line (mermaid wrapText), '\n'-joined; {} on OOM */
 [[nodiscard]] Str dg_wrapc(Arena a[static 1], Str s, size_t maxc);
 /* svg head for bb + margin, then body, then </svg>; frees body */
-[[nodiscard]] mmd_status dg_finish(Buf out[restrict static 1], Buf body[restrict static 1], BBox bb, double m,
+mmd_status dg_finish(Buf out[restrict static 1], Buf body[restrict static 1], BBox bb, double m,
                                    const char kind[restrict static 1], size_t ncss, const char css[restrict static ncss]);
 #define DG_FINISH(o, body, bb, m, kind, css) dg_finish((o), (body), (bb), (m), (kind), sizeof(css) - 1, (css))
 #endif
@@ -88,7 +88,7 @@ void dg_text_open(Buf b[restrict static 1], double x, double cy, const char anch
 void dg_rect_fill(Buf b[restrict static 1], double x, double y, double w, double h, double rx, const char *restrict cls,
                   const char *restrict fill);
 /* palette of mermaid default theme accents, cycling */
-[[nodiscard]] const char *dg_palette(size_t i);
+const char *dg_palette(size_t i);
 /* normalise (<br>, quotes) then greedily word-wrap to maxw; nullptr-safe: returns {} on OOM */
 [[nodiscard]] Str dg_wrap(Arena a[static 1], Str raw, double fs, double maxw);
 [[nodiscard]] Str dg_wrapf(Arena a[static 1], Str raw, double fs, double maxw, double (*meas)(Str, double));

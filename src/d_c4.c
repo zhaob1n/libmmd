@@ -32,7 +32,7 @@ static const Str FILL[2][4] = {{S("#08427B"), S("#1168BD"), S("#438DD5"), S("#85
 static const Str STROKE[2][4] = {{S("#073B6F"), S("#3C7FC0"), S("#3C7FC0"), S("#78A8D8")}, {S("#8A8A8A"), S("#8A8A8A"), S("#A6A6A6"), S("#D0D0D0")}};
 
 /* next comma-separated argument of in from *i on, commas inside "..." kept; false when exhausted */
-static bool next_arg(Str in, size_t i[static 1], Str out[static 1]) {
+[[nodiscard]] static bool next_arg(Str in, size_t i[static 1], Str out[static 1]) {
     if (*i > in.n) return false;
     size_t st = *i, j = st;
     for (bool q = false; j < in.n && (in.p[j] != ',' || q); j++) q ^= in.p[j] == '"';

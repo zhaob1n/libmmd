@@ -728,7 +728,7 @@ static int64_t js_ikey(Str s) {
 typedef struct SuccRec { int32_t tgt, next; uint32_t cnt, seq; } SuccRec;
 typedef struct SuccSim { SuccRec *r; size_t n, cap; int32_t *head; uint32_t seq; Arena *A; } SuccSim;
 
-static bool succ_add(SuccSim s[static 1], int32_t u, int32_t w) {
+[[nodiscard]] static bool succ_add(SuccSim s[static 1], int32_t u, int32_t w) {
     for (int32_t i = s->head[u]; i >= 0; i = s->r[i].next)
         if (s->r[i].tgt == w && s->r[i].cnt) { s->r[i].cnt++; return true; }
     if (s->n == s->cap) {

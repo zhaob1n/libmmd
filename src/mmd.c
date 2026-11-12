@@ -78,7 +78,7 @@ static void apply_cfg_text(Config c[static 1], Str s) {
     if ((v = parse_num_after(s, S("rankSpacing"))) > 0) c->rank_sep = v;
 }
 
-static bool next_line(Str src, size_t i[static 1], Str line[static 1]) {
+[[nodiscard]] static bool next_line(Str src, size_t i[static 1], Str line[static 1]) {
     if (*i >= src.n) return false;
     const char *nl = memchr(src.p + *i, '\n', src.n - *i);
     size_t e = nl ? (size_t)(nl - src.p) : src.n;
