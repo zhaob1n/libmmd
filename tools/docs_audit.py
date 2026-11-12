@@ -12,14 +12,8 @@ ms = dict(l.split() for l in open(cache)) if os.path.exists(cache) else {}
 def ours(f):
     r = subprocess.run([exe, f, '-o', '/dev/null'], capture_output=True, timeout=20)
     return 'ok' if r.returncode == 0 else 'fail:' + r.stderr.decode(errors='replace').strip().split('\n')[0][:120]
-def merm(f):
-    o = os.path.join(env.scratch('da'), f.replace('/', '_')[11:-4] + '.svg')
-    try:
-        r = subprocess.run([*env.mmdc(), '-i', f, '-o', o, '-q'], capture_output=True, timeout=90)
-        return 'ok' if r.returncode == 0 and os.path.exists(o) and b'Syntax error' not in open(o, 'rb').read() else 'fail'
-    except subprocess.TimeoutExpired: return 'fail'
 if '--mmdc' in sys.argv:
-    with cf.ThreadPoolExecutor(6) as ex: ms = dict(zip(files, ex.map(merm, files)))
+    ms = {f: 'ok' if r['ok'] and 'Syntax error' not in r['svg'] else 'fail' for f, r in env.mermaid_render(files).items()}
     open(cache, 'w').write(''.join(f'{k} {v}\n' for k, v in sorted(ms.items())))
 with cf.ThreadPoolExecutor(8) as ex: us = dict(zip(files, ex.map(ours, files)))
 by = {}
