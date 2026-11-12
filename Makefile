@@ -70,11 +70,10 @@ $(BUILD)/mmd: tools/mmd.c $(BUILD)/libmmd.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
 $(BUILD)/bench: bench/bench.c $(BUILD)/libmmd.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
-$(BUILD)/bench-writer: bench/writer_bench.c $(BUILD)/libmmd.a
+# in-process programs linked against the static library: tests/X_test.c -> test-X, bench/X_bench.c -> bench-X
+$(BUILD)/test-%: tests/%_test.c $(BUILD)/libmmd.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
-$(BUILD)/test-locale: tests/locale_test.c $(BUILD)/libmmd.a
-	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
-$(BUILD)/test-writer: tests/writer_test.c $(BUILD)/libmmd.a
+$(BUILD)/bench-%: bench/%_bench.c $(BUILD)/libmmd.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
 $(BUILD)/test-shared: tests/shared_test.c $(BUILD)/libmmd.so $(BUILD)/mmd.pc
 	$(CC) $(CFLAGS) $< -L$(BUILD) -lmmd -Wl,-rpath,'$$ORIGIN' -o $@
