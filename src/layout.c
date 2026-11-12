@@ -801,9 +801,10 @@ static mmd_status dagre_prep_order(Lay L[static 1], const Graph g[static 1], siz
                 done[c] = 1, post[np++] = c, sp--;
             }
         }
-        for (size_t i = np; i-- > 0;) nord[nn++] = (uint32_t)V + post[i];
+        if (!g->clusters_last) for (size_t i = np; i-- > 0;) nord[nn++] = (uint32_t)V + post[i];
     }
     for (size_t v = 0; v < N; v++) if (L->rank[v] >= 0) nord[nn++] = (uint32_t)v;
+    if (g->clusters_last) for (size_t c = 0; c < S; c++) nord[nn++] = (uint32_t)(V + c);
     { /* stable: integer-like keys first, ascending */
         size_t a = 0;
         uint32_t *tmp = ANEW(A, uint32_t, nn + 1);
@@ -963,6 +964,8 @@ static mmd_status dagre_rank_graph(Arena A[static 1], const Graph g[static 1], s
             }
         }
         for (size_t i = np; i-- > 0;) ins[N + post[i]] = (uint32_t)nq++;
+        if (g->clusters_last)
+            for (size_t x = 0; x < N + S; x++) ins[x] = (uint32_t)x;
     }
     /* items ordered by g.nodes(): integer keys ascending first, then insertion */
     size_t NI = N + S, ni = 0;
@@ -1831,7 +1834,7 @@ static inline double iso_pad_rank(const Graph g[static 1]) { return (g->rank_sep
 static inline double iso_pad_cross(const Graph g[static 1]) { return (g->node_sep + 20) / 2; }
 
 [[nodiscard]] static bool gsub_alloc(Graph d[static 1], const Graph g[static 1], Dir dir, size_t nn, size_t ne, size_t ns) {
-    *d = (Graph){.arena = g->arena, .dir = dir, .theme = g->theme, .flags = g->flags, .acyclicer = g->acyclicer, .order_mode = g->order_mode, .iso_toggle = g->iso_toggle, .iso_keep = g->iso_keep, .node_sep = g->node_sep,
+    *d = (Graph){.arena = g->arena, .dir = dir, .theme = g->theme, .flags = g->flags, .acyclicer = g->acyclicer, .order_mode = g->order_mode, .iso_toggle = g->iso_toggle, .iso_keep = g->iso_keep, .clusters_last = g->clusters_last, .node_sep = g->node_sep,
                  .rank_sep = g->rank_sep, .font_size = g->font_size};
     if (!graph_reserve(d, nn + 1, ne + 1, ns + 1)) return false;
     d->nn = nn, d->ne = ne, d->ns = ns;

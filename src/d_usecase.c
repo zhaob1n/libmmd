@@ -749,6 +749,7 @@ DIAG_FN(usecase_render) {
             g.estroke[e] = x->type == R_ASSOC || x->type == R_GEN ? ST_NORMAL : ST_DOTTED;
             rel[e] = (int32_t)r;
         }
+    g.clusters_last = true; /* mermaid's node order above */
     mmd_status st = flow_layout(&g);
     if (st) return st;
 

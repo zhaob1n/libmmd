@@ -31,6 +31,7 @@ typedef struct Graph {
     uint8_t order_mode; /* MMD_ORDER_* */
     uint8_t curve;     /* CURVE_* (flowchart.curve) */
     bool iso_toggle;   /* mermaid unified renderer (er/class/state): clusters with no external links lay out in the other direction */
+    bool clusters_last; /* g.nodes(): vertices, then clusters by index (usecase), not clusters first (flowDb) */
     bool iso_keep;     /* ELK-like (agentflow): such clusters lay out on their own in their own direction */
     double node_sep, rank_sep, font_size;
 
