@@ -70,6 +70,8 @@ $(BUILD)/mmd: tools/mmd.c $(BUILD)/libmmd.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
 $(BUILD)/bench: bench/bench.c $(BUILD)/libmmd.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
+$(BUILD)/bench-writer: bench/writer_bench.c $(BUILD)/libmmd.a
+	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
 $(BUILD)/test-locale: tests/locale_test.c $(BUILD)/libmmd.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
 $(BUILD)/test-writer: tests/writer_test.c $(BUILD)/libmmd.a
