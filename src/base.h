@@ -105,6 +105,12 @@ static inline size_t ent_end(size_t n, const char s[static n], size_t i) {
     while (j < n && j - i < 12 && ((unsigned)((s[j] | 32) - 'a') < 26u || (unsigned)(s[j] - '0') < 10u)) j++;
     return j < n && s[j] == ';' && j > i + 1 ? j : 0;
 }
+/* s ends in an entity, so its last ';' is not a statement terminator */
+static inline bool ent_tail(Str s) {
+    for (size_t i = s.n; i-- > 0 && s.n - i <= 12;)
+        if (s.p[i] == '#') return ent_end(s.n, s.p, i) == s.n - 1;
+    return false;
+}
 static inline bool str_starts(Str s, Str pre) { return s.n >= pre.n && memcmp(s.p, pre.p, pre.n) == 0; }
 /* s[i, j); callers guarantee i <= j <= s.n */
 static inline Str str_sub(Str s, size_t i, size_t j) { return (Str){.p = s.p + i, .n = j - i}; }

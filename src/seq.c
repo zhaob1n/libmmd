@@ -456,7 +456,7 @@ DIAG_FN(seq_render) {
         Str line = str_trim((Str){.p = src + i, .n = le - i});
         size_t loff = (size_t)(line.p - src);
         /* strip trailing comment-free semicolons */
-        while (line.n && line.p[line.n - 1] == ';') line.n--;
+        while (line.n && line.p[line.n - 1] == ';' && !ent_tail(line)) line.n--;
         if (line.n && !str_starts(line, S("%%")) && (st = parse_line(&p, line, loff))) goto done;
         i = le + 1;
     }

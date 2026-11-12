@@ -442,6 +442,7 @@ DIAG_FN(zenuml_render) {
         else if (c == ')' && paren_d) paren_d--;
         if (paren_d && c != '\n') continue;
         if (c == '\n') paren_d = 0;
+        if (c == ';' && ent_tail((Str){.p = src + s0, .n = i + 1 - s0})) continue; /* #59; is text */
         if (c == '{' || c == '}' || c == '\n' || c == ';') {
             Str t = str_trim((Str){.p = src + s0, .n = i - s0});
             bool acc;
