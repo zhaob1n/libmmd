@@ -154,7 +154,7 @@ DIAG_FN(ishikawa_render) {
     for (size_t v = 0; v < N; v++) s.nd[v].c0 = acc, acc += s.nd[v].nc, s.nd[v].nc = 0;
     for (size_t v = 1; v < N; v++) { INode *p = &s.nd[s.nd[v].par]; s.kids[p->c0 + p->nc++] = (uint32_t)v; }
 
-    Buf body = {};
+    AUTO_BUF Buf body = {};
     s.b = &body;
     buf_lit(&body, "<defs><marker id=\"ish-arrow\" viewBox=\"0 0 10 10\" refX=\"0\" refY=\"5\" markerWidth=\"6\" "
                    "markerHeight=\"6\" orient=\"auto\"><path d=\"M 10 0 L 0 5 L 10 10 Z\" class=\"iar\"/></marker></defs>");
@@ -191,6 +191,7 @@ DIAG_FN(ishikawa_render) {
     }
     line(&s, sx, sy, 0, sy, "isp");
     /* the spine is drawn last here; mermaid has no marker on it */
+    if (body.oom) return MMD_ERR_NOMEM; /* else nothing to cut */
     body.n -= sizeof("\" marker-start=\"url(#ish-arrow)\"/>") - 1;
     buf_lit(&body, "\"/>");
     buf_lit(&body, "<path class=\"ihd\" d=\"M 0 "); buf_num(&body, sy - hh / 2); buf_lit(&body, " L 0 ");
