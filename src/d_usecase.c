@@ -2,7 +2,8 @@
  * (rect or package), notes, JSON tables; associations with their markers, include / extend,
  * generalization. mermaid lays it out with dagre, so the layered layout places it; it is drawn in
  * mermaid's default neo look on redux-color: one colour per role (or per element with
- * `colorScheme: rotate`), a palette slot per boundary, orthogonal rounded edges. */
+ * `colorScheme: rotate`), a palette slot per boundary, orthogonal rounded edges. `look: classic`
+ * with a classic theme draws the theme's colours and dagre's curves instead. */
 #include <math.h>
 #include <string.h>
 
@@ -579,7 +580,8 @@ static Str concat(Arena a[static 1], Str x, Str y) {
     return (Str){.p = o, .n = x.n + y.n};
 }
 
-static constexpr char CSS[] =
+#define UC_TAIL "#mermaid .bm{fill:none;}#mermaid .ic{fill:#1976d2;stroke:#0d47a1;stroke-width:1px;}#mermaid .iq{fill:#ffffff;font-size:20px;}"
+static constexpr char NEO_CSS[] =
     "#mermaid{font-family:\"Recursive Variable\",arial,sans-serif;fill:#28253D;}"
     "#mermaid .gl{stroke-width:2px;}#mermaid .uc{stroke-width:2px;filter:url(#neo-shadow);}"
     "#mermaid .bd{stroke-width:1px;}#mermaid .bt{font-size:14px;fill:#000000;}"
@@ -587,11 +589,23 @@ static constexpr char CSS[] =
     "#mermaid .nt{fill:#fff5ad;stroke:#FACC15;stroke-width:1.3px;}"
     "#mermaid .js{fill:#ffffff;stroke:#28253D;stroke-width:1px;}"
     "#mermaid .rel{fill:none;stroke:#000000;stroke-width:2px;}#mermaid .rel.d{stroke-dasharray:3;}"
-    "#mermaid .rel.inc{stroke:#38BDF8;}#mermaid .rel.ext{stroke:#FB923C;}"
-    "#mermaid .bm{fill:none;}#mermaid .ic{fill:#1976d2;stroke:#0d47a1;stroke-width:1px;}#mermaid .iq{fill:#ffffff;font-size:20px;}"
-    DG_NEO_CSS;
+    "#mermaid .rel.inc{stroke:#38BDF8;}#mermaid .rel.ext{stroke:#FB923C;}" UC_TAIL DG_NEO_CSS;
+/* `look: classic` on a classic theme: the theme's node, cluster and line colours (themeVariables via
+ * dcfg_theme_css), thin curved edges */
+static constexpr char CLASSIC_CSS[] =
+    "#mermaid{font-family:\"trebuchet ms\",verdana,arial,sans-serif;fill:#333;}"
+    "#mermaid .gl,#mermaid .uc,#mermaid .bm{fill:#ECECFF;stroke:#9370DB;stroke-width:2px;}"
+    "#mermaid .bd{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}#mermaid .bt{font-size:14px;fill:#333;}"
+    "#mermaid .tl{font-size:14px;}#mermaid .el{font-size:10px;}#mermaid .ul,#mermaid .el{fill:#131300;}"
+    "#mermaid .nt{fill:#fff5ad;stroke:#aaaa33;stroke-width:1px;}"
+    "#mermaid .js{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
+    "#mermaid .rel{fill:none;stroke:#333333;stroke-width:1px;}#mermaid .rel.d{stroke-dasharray:3;}" UC_TAIL
+    "#mermaid .mk{fill:#333333;stroke:#333333;stroke-width:1;}#mermaid .mkx{fill:none;stroke:#333333;stroke-width:2;}"
+    "#mermaid .mke{fill:#ECECFF;stroke:#333333;stroke-width:1;}#mermaid .elbl{fill:rgba(232,232,232,0.8);}";
 
+/* neo colours as attributes; the classic look takes them from CSS (c.fill null) */
 static void color_attrs(Buf b[static 1], NeoColor c) {
+    if (!c.fill) return;
     buf_lit(b, " fill=\""); buf_cstr(b, c.fill); buf_lit(b, "\" stroke=\""); buf_cstr(b, c.stroke); buf_ch(b, '"');
 }
 
@@ -676,7 +690,7 @@ DIAG_FN(usecase_render) {
     g.node_sep = dcfg_num("usecase.nodeSpacing", 50);
     g.rank_sep = dcfg_num("usecase.rankSpacing", 50);
     Fonts f = {dcfg_num("usecase.actorFontSize", 14), dcfg_num("usecase.usecaseFontSize", 12)};
-    bool rotate = str_eq(dcfg_get("usecase.colorScheme"), S("rotate"));
+    bool rotate = str_eq(dcfg_get("usecase.colorScheme"), S("rotate")), neo = dcfg_neo();
 
     /* mermaid's node order: actors, use cases, notes, json tables, then the boundaries */
     size_t E = u.ents.n;
@@ -758,7 +772,8 @@ DIAG_FN(usecase_render) {
     if (!buf_reserve(out, 4096 + g.nn * 800 + g.ne * 400 + g.ns * 300)) return MMD_ERR_NOMEM;
     { /* the actor / use case fonts are configurable (usecase.actorFont*, usecaseFont*) */
         Buf css = {};
-        buf_lit(&css, CSS);
+        buf_cstr(&css, neo ? NEO_CSS : CLASSIC_CSS);
+        if (!neo) dcfg_theme_css(&css, "usecase");
         static const char *const KEY[2][2] = {{"usecase.actorFontWeight", "usecase.actorFontFamily"},
                                               {"usecase.usecaseFontWeight", "usecase.usecaseFontFamily"}};
         for (int r = 0; r < 2; r++) {
@@ -783,7 +798,7 @@ DIAG_FN(usecase_render) {
         unsigned tl;
         meas(g.stitle[s], 14, &tw, &tl);
         double th = tl * 21, tab = u.bnds.v[s].package ? th + 10 : 0, tabw = fmin(w, fmax(80, tw + 20));
-        NeoColor c = dg_redux(s);
+        NeoColor c = neo ? dg_redux(s) : (NeoColor){};
         for (int part = u.bnds.v[s].package ? 0 : 1; part < 2; part++) {
             buf_lit(out, "<rect class=\"bd\" x=\""); buf_num(out, x); buf_lit(out, "\" y=\""); buf_num(out, part ? y + tab : y);
             buf_lit(out, "\" width=\""); buf_num(out, part ? w : tabw); buf_lit(out, "\" height=\""); buf_num(out, part ? h - tab : tab);
@@ -794,7 +809,7 @@ DIAG_FN(usecase_render) {
         if (tab) dg_text(out, g.stitle[s], 14, x + tabw / 2, y + tab / 2, "middle", "bt");
         else dg_text(out, g.stitle[s], 14, x + w / 2, y + th / 2 + 4, "middle", "bt");
     }
-    const double *ports = dg_ports(&g);
+    const double *ports = neo ? dg_ports(&g) : nullptr;
     for (size_t e = 0; e < g.ne; e++) {
         const Rel *x = &u.rels.v[rel[e]];
         double mid[2];
@@ -804,7 +819,7 @@ DIAG_FN(usecase_render) {
         if (x->type == R_INCLUDE) buf_lit(out, " inc");
         else if (x->type == R_EXTEND) buf_lit(out, " ext");
         buf_lit(out, "\" d=\"");
-        if (!dg_ortho_d(out, &g, e, ports, mid)) {
+        if (!neo || !dg_ortho_d(out, &g, e, ports, mid)) {
             if (!g.eptn[e]) { out->n = mark; continue; }
             dg_edge_d(out, &g, e);
             mid[0] = g.elx[e], mid[1] = g.ely[e];
@@ -826,7 +841,8 @@ DIAG_FN(usecase_render) {
         const Ent *e = &u.ents.v[i];
         size_t v = (size_t)gv[i];
         double x = g.nx[v], y = g.ny[v], w = g.nw[v], h = g.nh[v];
-        NeoColor c = dg_redux(rotate && slot[i] != NONE ? (size_t)slot[i] : e->kind == K_ACTOR ? 5 : 1);
+        NeoColor c = !neo ? (NeoColor){}
+                     : dg_redux(rotate && slot[i] != NONE ? (size_t)slot[i] : e->kind == K_ACTOR ? 5 : 1);
         if (e->kind == K_ACTOR) {
             actor(out, &g, e, v, c, f.act, e->stereo.n ? guillemets(a, e->stereo, false) : (Str){});
             continue;

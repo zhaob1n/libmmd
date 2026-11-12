@@ -569,6 +569,7 @@ ffc1e30144073275 tests/cases/treeview_box.mmd
 dd81f9158ac2a5ba tests/cases/treeview_cfg.mmd
 43af58d0153da63e tests/cases/treeview_icons.mmd
 b3ce1138a85c86e1 tests/cases/usecase.mmd
+fd2741f63073b78e tests/cases/usecase_classic.mmd
 869841938e6292fe tests/cases/usecase_order.mmd
 4c651dda832dd6cd tests/cases/venn_edge.mmd
 b601d6a85e59422d tests/cases/venn_styled.mmd

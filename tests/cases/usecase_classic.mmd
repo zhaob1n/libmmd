@@ -1,0 +1,17 @@
+---
+config:
+  theme: forest
+  look: classic
+---
+usecase-beta
+direction LR
+actor Customer
+actor Clerk@{ type: hollow }
+systemBoundary Shop
+  Buy("Buy an item")@{ business: true }
+  Pay["Pay"]
+end
+note for Pay "Card only"
+Customer --> Buy
+Clerk --> Pay
+Buy ..> : include Pay
