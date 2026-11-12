@@ -5,6 +5,7 @@
 
 #include <math.h>
 #include <stdarg.h>
+#include <strings.h>
 
 #include "base.h"
 
@@ -13,6 +14,9 @@ struct mmd_writer {
     mmd_status st;
     size_t err_at; /* text offset where the rejected value would have gone */
     char msg[120];
+    unsigned nopen; /* blocks the helpers opened: open[] says which, mmd_end() closes them */
+    char open[32];
+    int level; /* depth of the last mindmap / treeView node, -1 before the first */
 };
 
 mmd_writer *mmd_writer_new(void) { return calloc(1, sizeof(mmd_writer)); }
@@ -28,6 +32,8 @@ void mmd_writer_reset(mmd_writer *w) {
     w->b.n = 0;
     w->b.oom = false;
     w->st = MMD_OK;
+    w->nopen = 0;
+    w->level = -1;
     if (w->b.p) w->b.p[0] = 0;
 }
 
@@ -66,6 +72,13 @@ mmd_status mmd_writer_text(const mmd_writer *w, const char **s, size_t *len, mmd
         if (err) snprintf(err->message, sizeof err->message, "%s", st == MMD_ERR_SYNTAX ? w->msg : mmd_status_str(st));
         return st;
     }
+    if (w->nopen) { /* the text would not parse */
+        if (err) {
+            *err = (mmd_error){.code = MMD_ERR_SYNTAX};
+            snprintf(err->message, sizeof err->message, "%u block(s) still open: close them with mmd_end()", w->nopen);
+        }
+        return MMD_ERR_SYNTAX;
+    }
     *s = w->b.p ? w->b.p : "";
     *len = w->b.n;
     return MMD_OK;
@@ -85,6 +98,15 @@ mmd_status mmd_writer_render_svg(const mmd_writer *w, const mmd_options *opt, mm
 /* ---- escape contexts ---- */
 
 enum : uint8_t { CQ = 1, CT = 2, CC = 4 }; /* quoted "…", text to end of line, CSV field */
+/* extra escapes the typed helpers ask for, beside MMD_W_BR (writer.md has why) */
+enum : unsigned {
+    W_LEAD = 1u << 8,  /* the first non-blank character: it would start a keyword */
+    W_PCT = 1u << 9,   /* every '%' (gantt: "x%" starts a comment; ER names) */
+    W_BSL = 1u << 10,  /* '\\' (ER names) */
+    W_TREE = 1u << 11, /* treeView names: '(' (icon()), '#' ("##", also before an entity), a trailing '/' */
+    W_DIR = 1u << 12,  /* "direction LR" anywhere on a state / ER line sets the direction */
+    W_MD = 1u << 13,   /* '_' '*': quoted ER names are markdown */
+};
 /* always escaped: they end or split a label somewhere (audit in docs/dev/writer.md) */
 static constexpr uint8_t ESC[128] = {
     ['"'] = CQ | CT, [':'] = CQ | CT, ['['] = CQ | CT, [']'] = CQ | CT, ['{'] = CQ | CT,
@@ -109,10 +131,14 @@ static size_t utf8_len(const unsigned char *s) {
 }
 
 /* byte at s[i] must become an entity in context ctx */
-static bool must_esc(const char *s, size_t i, unsigned ctx) {
+static bool must_esc(const char *s, size_t i, unsigned ctx, unsigned flags) {
     unsigned char c = (unsigned char)s[i];
     if (c >= 0x80) return false;
     if (ESC[c] & ctx) return true;
+    if ((flags & W_PCT && c == '%') || (flags & W_BSL && c == '\\') || (flags & W_MD && (c == '_' || c == '*'))) return true;
+    if (flags & W_TREE && (c == '(' || c == '#' || (c == '/' && !s[i + 1]))) return true;
+    if (flags & W_DIR && (c | 32) == 'd' && !strncasecmp(s + i, "direction", 9) && (s[i + 9] == ' ' || s[i + 9] == '\t'))
+        return true;
     switch (c) {
     case '#': { /* would start an entity, mermaid's #\w+; */
         size_t j = i + 1;
@@ -126,14 +152,34 @@ static bool must_esc(const char *s, size_t i, unsigned ctx) {
     return false;
 }
 
+/* code point of the valid k-byte sequence at s */
+static uint32_t utf8_cp(const unsigned char *s, size_t k) {
+    uint32_t cp = k == 1 ? s[0] : s[0] & (0x7Fu >> k);
+    for (size_t j = 1; j < k; j++) cp = cp << 6 | (s[j] & 0x3Fu);
+    return cp;
+}
+
 /* false (and the error set) when s can't be written in ctx */
 static bool put_esc(mmd_writer w[static 1], size_t at, const char *fn, const char *s, unsigned ctx, unsigned flags) {
-    size_t run = 0, i = 0;
+    size_t run = 0, i = 0, lead = SIZE_MAX;
+    if (flags & W_LEAD) {
+        lead = 0;
+        while (s[lead] == ' ' || s[lead] == '\t') lead++;
+    }
     for (; s[i]; i++) {
         unsigned char c = (unsigned char)s[i];
+        size_t k = c >= 0x80 ? utf8_len((const unsigned char *)s + i) : 1;
+        if (!k) return fail(w, at, "%s: invalid UTF-8 at byte %zu", fn, i), false;
+        if (i == lead && c > ' ') {
+            buf_put(&w->b, i - run, s + run);
+            buf_ch(&w->b, '#');
+            buf_int(&w->b, utf8_cp((const unsigned char *)s + i, k));
+            buf_ch(&w->b, ';');
+            run = i + k;
+            i += k - 1;
+            continue;
+        }
         if (c >= 0x80) {
-            size_t k = utf8_len((const unsigned char *)s + i);
-            if (!k) return fail(w, at, "%s: invalid UTF-8 at byte %zu", fn, i), false;
             i += k - 1;
             continue;
         }
@@ -150,7 +196,7 @@ static bool put_esc(mmd_writer w[static 1], size_t at, const char *fn, const cha
             run = i;
             continue;
         }
-        if (!must_esc(s, i, ctx)) continue;
+        if (!must_esc(s, i, ctx, flags)) continue;
         buf_put(&w->b, i - run, s + run);
         buf_ch(&w->b, '#');
         buf_int(&w->b, c);
@@ -320,16 +366,24 @@ void mmd_w_num(mmd_writer *w, double v) {
 
 /* ---- typed helpers ---- */
 
+/* every *_begin: a new diagram, nothing open */
+static void begin(mmd_writer w[static 1], const char header[static 1]) {
+    w->nopen = 0;
+    w->level = -1;
+    mmd_w_line(w, 0);
+    mmd_w_raw(w, header);
+}
+
+/* a statement line, indented one level per open block */
 static void stmt(mmd_writer w[static 1], const char kw[static 1]) {
-    mmd_w_line(w, 1);
+    mmd_w_line(w, 1 + w->nopen);
     mmd_w_raw(w, kw);
 }
 static void eol(mmd_writer w[static 1]) { mmd_w_raw(w, "\n"); }
 
 void mmd_xy_begin(mmd_writer *w, const char *title, bool horizontal) {
     if (!live(w)) return;
-    mmd_w_line(w, 0);
-    mmd_w_raw(w, horizontal ? "xychart horizontal" : "xychart");
+    begin(w, horizontal ? "xychart horizontal" : "xychart");
     if (title) {
         stmt(w, "title ");
         mmd_w_str(w, title, 0);
@@ -392,8 +446,7 @@ void mmd_xy_line(mmd_writer *w, const char *name, size_t n, const double *v) { s
 
 void mmd_pie_begin(mmd_writer *w, const char *title, bool show_data) {
     if (!live(w)) return;
-    mmd_w_line(w, 0);
-    mmd_w_raw(w, show_data ? "pie showData" : "pie");
+    begin(w, show_data ? "pie showData" : "pie");
     if (title) {
         stmt(w, "title ");
         mmd_w_text(w, title, 0);
@@ -422,8 +475,7 @@ void mmd_flow_begin(mmd_writer *w, const char *dir) {
     size_t k = 0;
     while (k < countof(DIRS) && strcmp(DIRS[k], dir)) k++;
     if (k == countof(DIRS)) return fail(w, w->b.n, "mmd_flow_begin: direction must be TB, TD, BT, LR or RL");
-    mmd_w_line(w, 0);
-    mmd_w_raw(w, "flowchart ");
+    begin(w, "flowchart ");
     mmd_w_raw(w, dir);
     eol(w);
 }
@@ -471,5 +523,522 @@ void mmd_flow_edge(mmd_writer *w, const char *from, const char *to, const char *
     }
     mmd_w_raw(w, " ");
     flow_id(w, to);
+    eol(w);
+}
+
+/* ---- blocks, keywords and checks shared by the helpers below ---- */
+
+/* kind: what mmd_end() writes: '}' for a brace block, else "end" (and for sequence blocks, the
+ * opener: 'a'lt, 'p'ar, 'c'ritical take else / and / option) */
+static void open_block(mmd_writer w[static 1], char kind) {
+    if (w->nopen == sizeof w->open) return fail(w, w->b.n, "blocks nested deeper than %zu", sizeof w->open);
+    w->open[w->nopen++] = kind;
+}
+
+void mmd_end(mmd_writer *w) {
+    if (!live(w)) return;
+    if (!w->nopen) return fail(w, w->b.n, "mmd_end: no block is open");
+    char k = w->open[--w->nopen];
+    stmt(w, k == '}' ? "}" : "end");
+    eol(w);
+}
+
+/* s, after leading blanks, starts with one of kw (ASCII case-insensitively); whole: and the keyword
+ * is the whole of s, else any prefix counts (mermaid's jison lexers take the first rule that matches,
+ * so "endpoint" lexes as "end" + "point") */
+static bool has_kw(const char *s, size_t n, const char *const kw[static n], bool whole) {
+    while (*s == ' ' || *s == '\t') s++;
+    for (size_t k = 0; k < n; k++) {
+        size_t m = strlen(kw[k]);
+        if (!strncasecmp(s, kw[k], m) && (!whole || !s[m])) return true;
+    }
+    return false;
+}
+#define HAS_KW(s, kw, whole) has_kw((s), countof(kw), (kw), (whole))
+
+static bool is_word(unsigned char c) { return c == '_' || (unsigned)(c - '0') < 10u || (unsigned)((c | 32) - 'a') < 26u; }
+
+/* mmd_w_id, but with the first character as an entity when lead (a keyword would lex there) */
+static void id_lead(mmd_writer w[static 1], const char *id, bool lead) {
+    if (!lead) return mmd_w_id(w, id);
+    size_t at = w->b.n;
+    mmd_w_id(w, id); /* validates */
+    if (!live(w)) return;
+    w->b.n = at;
+    put_esc(w, at, "mmd_w_id", id, CT, W_LEAD);
+    term(w);
+}
+
+/* a nonempty T value (a keyword followed by nothing is not a statement) */
+static bool need(mmd_writer w[static 1], const char *fn, const char *what, const char *s) {
+    const char *p = s ? s : "";
+    while (*p == ' ' || *p == '\t') p++;
+    if (!*p) fail(w, w->b.n, "%s: empty %s", fn, what);
+    return *p;
+}
+
+/* ---- sequenceDiagram ---- */
+
+static const char *const SEQ_KW[] = {"participant", "actor", "box", "create", "destroy", "loop", "rect", "opt",
+                                     "alt", "else", "par", "and", "critical", "option", "break", "end", "over",
+                                     "activate", "deactivate", "autonumber", "off", "note", "sequenceDiagram"};
+
+static void seq_id(mmd_writer w[static 1], const char *id) {
+    id_lead(w, id, HAS_KW(id, SEQ_KW, false) || (unsigned)(id[0] - '0') < 10u); /* a leading number lexes as NUM */
+}
+
+void mmd_seq_begin(mmd_writer *w, const char *title, bool autonumber) {
+    if (!live(w)) return;
+    begin(w, "sequenceDiagram");
+    if (autonumber) stmt(w, "autonumber");
+    if (title && need(w, "mmd_seq_begin", "title", title)) {
+        stmt(w, "title ");
+        mmd_w_text(w, title, 0);
+    }
+    eol(w);
+}
+
+void mmd_seq_participant(mmd_writer *w, const char *id, const char *alias, bool actor) {
+    if (!live(w)) return;
+    stmt(w, actor ? "actor " : "participant ");
+    seq_id(w, id);
+    if (alias && need(w, "mmd_seq_participant", "alias", alias)) {
+        mmd_w_raw(w, " as ");
+        mmd_w_text(w, alias, MMD_W_BR);
+    }
+    eol(w);
+}
+
+void mmd_seq_message(mmd_writer *w, const char *from, const char *to, mmd_arrow arrow, const char *text) {
+    static const char *const ARROW[] = {
+        [MMD_ARROW_SOLID] = "->>", [MMD_ARROW_DOTTED] = "-->>", [MMD_ARROW_LINE] = "->",
+        [MMD_ARROW_DOTTED_LINE] = "-->", [MMD_ARROW_CROSS] = "-x", [MMD_ARROW_DOTTED_CROSS] = "--x",
+        [MMD_ARROW_ASYNC] = "-)", [MMD_ARROW_DOTTED_ASYNC] = "--)",
+    };
+    if (!live(w)) return;
+    if (arrow >= countof(ARROW)) return fail(w, w->b.n, "mmd_seq_message: unknown arrow %u", (unsigned)arrow);
+    stmt(w, "");
+    seq_id(w, from);
+    mmd_w_raw(w, ARROW[arrow]);
+    seq_id(w, to);
+    mmd_w_raw(w, ": ");
+    mmd_w_text(w, text ? text : "", MMD_W_BR);
+    eol(w);
+}
+
+void mmd_seq_note(mmd_writer *w, mmd_side side, const char *a, const char *b, const char *text) {
+    if (!live(w)) return;
+    if (side > MMD_OVER) return fail(w, w->b.n, "mmd_seq_note: unknown side %u", (unsigned)side);
+    if (b && side != MMD_OVER) return fail(w, w->b.n, "mmd_seq_note: only a note over spans two participants");
+    stmt(w, side == MMD_LEFT_OF ? "Note left of " : side == MMD_RIGHT_OF ? "Note right of " : "Note over ");
+    seq_id(w, a);
+    if (b) {
+        mmd_w_raw(w, ",");
+        seq_id(w, b);
+    }
+    mmd_w_raw(w, ": ");
+    mmd_w_text(w, text ? text : "", MMD_W_BR);
+    eol(w);
+}
+
+void mmd_seq_activate(mmd_writer *w, const char *id, bool on) {
+    if (!live(w)) return;
+    stmt(w, on ? "activate " : "deactivate ");
+    seq_id(w, id);
+    eol(w);
+}
+
+void mmd_seq_block(mmd_writer *w, const char *kw, const char *label) {
+    static const struct { char kw[9], kind, in; } K[] = {
+        {"loop", 'e', 0}, {"opt", 'e', 0}, {"break", 'e', 0}, {"alt", 'a', 0}, {"par", 'p', 0},
+        {"critical", 'c', 0}, {"else", 0, 'a'}, {"and", 0, 'p'}, {"option", 0, 'c'},
+    };
+    if (!live(w)) return;
+    size_t k = 0;
+    while (k < countof(K) && strcmp(K[k].kw, kw)) k++;
+    if (k == countof(K)) return fail(w, w->b.n, "mmd_seq_block: '%s' is not loop, opt, break, alt, else, par, and, critical or option", kw);
+    if (K[k].in && (!w->nopen || w->open[w->nopen - 1] != K[k].in))
+        return fail(w, w->b.n, "mmd_seq_block: '%s' outside its %s block", kw, K[k].in == 'a' ? "alt" : K[k].in == 'p' ? "par" : "critical");
+    if (K[k].in) w->nopen--; /* else / and / option sit at their opener's depth */
+    stmt(w, kw);
+    if (K[k].in) w->nopen++;
+    if (label && *label) {
+        mmd_w_raw(w, " ");
+        mmd_w_text(w, label, 0);
+    }
+    eol(w);
+    if (K[k].kind) open_block(w, K[k].kind);
+}
+
+/* ---- gantt ---- */
+
+static const char *const GANTT_KW[] = {"gantt", "dateFormat", "inclusiveEndDates", "topAxis", "axisFormat",
+                                       "tickInterval", "includes", "excludes", "todayMarker", "weekday",
+                                       "weekend", "title", "accDescription", "accTitle", "accDescr",
+                                       "section", "click", "call", "href"};
+/* task data words that are not ids */
+static const char *const GANTT_TAG[] = {"done", "active", "crit", "milestone", "after", "until", "vert"};
+
+void mmd_gantt_begin(mmd_writer *w, const char *title) {
+    if (!live(w)) return;
+    begin(w, "gantt");
+    stmt(w, "dateFormat YYYY-MM-DD");
+    if (title && need(w, "mmd_gantt_begin", "title", title)) {
+        stmt(w, "title ");
+        mmd_w_text(w, title, 0);
+    }
+    eol(w);
+}
+
+void mmd_gantt_section(mmd_writer *w, const char *name) {
+    if (!live(w) || !need(w, "mmd_gantt_section", "name", name)) return;
+    stmt(w, "section ");
+    mmd_w_text(w, name, 0);
+    eol(w);
+}
+
+/* YYYY-MM-DD naming a real day */
+static bool iso_date(const char *s) {
+    for (int i = 0; i < 10; i++)
+        if (i == 4 || i == 7 ? s[i] != '-' : (unsigned)(s[i] - '0') >= 10u) return false;
+    if (s[10]) return false;
+    int y = atoi(s), m = atoi(s + 5), d = atoi(s + 8);
+    static const int DAYS[] = {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    bool leap = (y % 4 == 0 && y % 100) || y % 400 == 0;
+    return m >= 1 && m <= 12 && d >= 1 && d <= DAYS[m - 1] - (m == 2 && !leap);
+}
+
+static void gantt_id(mmd_writer w[static 1], const char *fn, const char *id) {
+    if (HAS_KW(id, GANTT_TAG, true) || (unsigned)(id[0] - '0') < 10u)
+        return fail(w, w->b.n, "%s: task id '%s' would read as a tag, date or duration", fn, id);
+    mmd_w_id(w, id);
+}
+
+void mmd_gantt_task(mmd_writer *w, const char *name, const char *id, unsigned flags, const char *start, double days) {
+    static const char *const TAG[] = {"done", "active", "crit", "milestone"};
+    if (!live(w) || !need(w, "mmd_gantt_task", "name", name)) return;
+    if (!(days >= 0) || !isfinite(days)) return fail(w, w->b.n, "mmd_gantt_task: days must be finite and >= 0");
+    if (flags >> countof(TAG)) return fail(w, w->b.n, "mmd_gantt_task: unknown flags 0x%x", flags);
+    mmd_w_line(w, 1 + w->nopen);
+    size_t at = w->b.n;
+    bool lead = HAS_KW(name, GANTT_KW, false) || (unsigned)(name[strspn(name, " \t")] - '0') < 10u; /* a date */
+    if (!put_esc(w, at, "mmd_gantt_task", name, CT, W_PCT | (lead ? W_LEAD : 0))) return;
+    mmd_w_raw(w, " :");
+    const char *sep = "";
+    for (size_t k = 0; k < countof(TAG); k++)
+        if (flags & 1u << k) mmd_w_raw(w, sep), mmd_w_raw(w, TAG[k]), sep = ", ";
+    if (id) mmd_w_raw(w, sep), gantt_id(w, "mmd_gantt_task", id), sep = ", ";
+    if (start) {
+        mmd_w_raw(w, sep);
+        if (iso_date(start)) mmd_w_raw(w, start);
+        else mmd_w_raw(w, "after "), gantt_id(w, "mmd_gantt_task", start);
+        sep = ", ";
+    }
+    mmd_w_raw(w, sep);
+    mmd_w_num(w, days);
+    mmd_w_raw(w, "d");
+    eol(w);
+}
+
+/* ---- stateDiagram-v2 ---- */
+
+static const char *const STATE_KW[] = {"state", "note", "class", "classDef", "style", "scale", "direction", "end"};
+
+static void state_id(mmd_writer w[static 1], const char *id) {
+    if (!id) return mmd_w_raw(w, "[*]");
+    if (HAS_KW(id, STATE_KW, true) || !strncasecmp(id, "stateDiagram", 12))
+        return fail(w, w->b.n, "stateDiagram: '%s' is a keyword, not a state id", id);
+    mmd_w_id(w, id);
+}
+
+static bool dir_ok(mmd_writer w[static 1], const char *fn, const char *dir, bool td) {
+    static const char *const DIRS[] = {"TB", "BT", "LR", "RL", "TD"};
+    size_t k = 0;
+    while (k < countof(DIRS) - !td && strcmp(DIRS[k], dir)) k++;
+    if (k < countof(DIRS) - !td) return true;
+    fail(w, w->b.n, "%s: direction must be TB, BT, LR or RL%s", fn, td ? " (or TD)" : "");
+    return false;
+}
+
+void mmd_state_begin(mmd_writer *w, const char *dir) {
+    if (!live(w) || (dir && !dir_ok(w, "mmd_state_begin", dir, false))) return;
+    begin(w, "stateDiagram-v2");
+    if (dir) stmt(w, "direction "), mmd_w_raw(w, dir);
+    eol(w);
+}
+
+static void state_decl(mmd_writer w[static 1], const char *id, const char *label, bool group) {
+    if (!live(w)) return;
+    if (!id) return fail(w, w->b.n, "%s: [*] cannot be declared", group ? "mmd_state_group" : "mmd_state");
+    if (!label && !group) {
+        stmt(w, "");
+        state_id(w, id);
+    } else {
+        stmt(w, "state ");
+        if (label) {
+            mmd_w_raw(w, "\"");
+            size_t at = w->b.n - 1;
+            if (!put_esc(w, at, group ? "mmd_state_group" : "mmd_state", label, CQ, MMD_W_BR | W_DIR)) return;
+            mmd_w_raw(w, "\" as ");
+        }
+        state_id(w, id);
+    }
+    if (group) mmd_w_raw(w, " {");
+    eol(w);
+    if (group) open_block(w, '}');
+}
+void mmd_state(mmd_writer *w, const char *id, const char *label) { state_decl(w, id, label, false); }
+void mmd_state_group(mmd_writer *w, const char *id, const char *label) { state_decl(w, id, label, true); }
+
+void mmd_state_transition(mmd_writer *w, const char *from, const char *to, const char *label) {
+    if (!live(w)) return;
+    stmt(w, "");
+    state_id(w, from);
+    mmd_w_raw(w, " --> ");
+    state_id(w, to);
+    if (label && *label) {
+        mmd_w_raw(w, " : ");
+        put_esc(w, w->b.n, "mmd_state_transition", label, CT, MMD_W_BR | W_DIR);
+    }
+    eol(w);
+}
+
+void mmd_state_note(mmd_writer *w, mmd_side side, const char *id, const char *text) {
+    if (!live(w) || !need(w, "mmd_state_note", "text", text)) return;
+    if (side > MMD_RIGHT_OF) return fail(w, w->b.n, "mmd_state_note: a state note is left of or right of a state");
+    if (!id) return fail(w, w->b.n, "mmd_state_note: a note needs a state, not [*]");
+    stmt(w, side == MMD_LEFT_OF ? "note left of " : "note right of ");
+    state_id(w, id);
+    mmd_w_raw(w, " : ");
+    put_esc(w, w->b.n, "mmd_state_note", text, CT, MMD_W_BR | W_DIR);
+    eol(w);
+}
+
+/* ---- sankey ---- */
+
+void mmd_sankey_begin(mmd_writer *w) {
+    if (!live(w)) return;
+    begin(w, "sankey-beta");
+    eol(w);
+}
+
+void mmd_sankey_flow(mmd_writer *w, const char *source, const char *target, double value) {
+    if (!live(w)) return;
+    if (!(value >= 0)) return fail(w, w->b.n, "mmd_sankey_flow: value must be >= 0");
+    mmd_w_line(w, 0);
+    mmd_w_csv(w, source);
+    mmd_w_raw(w, ",");
+    mmd_w_csv(w, target);
+    mmd_w_raw(w, ",");
+    mmd_w_num(w, value);
+    eol(w);
+}
+
+/* ---- mindmap, treeView: nesting by depth ---- */
+
+static bool tree_depth(mmd_writer w[static 1], const char *fn, unsigned depth, bool one_root) {
+    if ((int)depth > w->level + 1 || depth > 64)
+        return fail(w, w->b.n, "%s: depth %u under a node at depth %d", fn, depth, w->level), false;
+    if (one_root && !depth && w->level >= 0) return fail(w, w->b.n, "%s: a mindmap has one root", fn), false;
+    if (one_root && depth && w->level < 0) return fail(w, w->b.n, "%s: the first node is the root, depth 0", fn), false;
+    w->level = (int)depth;
+    return true;
+}
+
+void mmd_mindmap_begin(mmd_writer *w) {
+    if (!live(w)) return;
+    begin(w, "mindmap");
+    eol(w);
+}
+
+void mmd_mindmap_node(mmd_writer *w, unsigned depth, const char *id, const char *label, mmd_shape shape) {
+    static const char DELIM[][2][3] = {
+        [MMD_SHAPE_RECT] = {"[", "]"}, [MMD_SHAPE_ROUND] = {"(", ")"},
+        [MMD_SHAPE_CIRCLE] = {"((", "))"}, [MMD_SHAPE_HEXAGON] = {"{{", "}}"},
+    };
+    if (!live(w)) return;
+    if (shape >= countof(DELIM) || !DELIM[shape][0][0])
+        return fail(w, w->b.n, "mmd_mindmap_node: shape %u is not RECT, ROUND, CIRCLE or HEXAGON", (unsigned)shape);
+    if (!tree_depth(w, "mmd_mindmap_node", depth, true)) return;
+    mmd_w_line(w, 1 + depth);
+    mmd_w_id(w, id);
+    if (label || shape != MMD_SHAPE_RECT) {
+        mmd_w_raw(w, DELIM[shape][0]);
+        mmd_w_str(w, label ? label : id, MMD_W_BR);
+        mmd_w_raw(w, DELIM[shape][1]);
+    }
+    eol(w);
+}
+
+void mmd_tree_begin(mmd_writer *w) {
+    if (!live(w)) return;
+    begin(w, "treeView-beta");
+    eol(w);
+}
+
+static const char *const TREE_KW[] = {"title", "accTitle", "accDescr"};
+
+void mmd_tree_node(mmd_writer *w, unsigned depth, const char *name, bool dir, const char *desc) {
+    if (!live(w) || !need(w, "mmd_tree_node", "name", name)) return;
+    if (!tree_depth(w, "mmd_tree_node", depth, false)) return;
+    mmd_w_line(w, 1 + depth);
+    unsigned c0 = (unsigned char)name[strspn(name, " \t")];
+    bool lead = HAS_KW(name, TREE_KW, false) || c0 == '"' || c0 >= 0x80; /* └── ├── │ draw the tree */
+    if (!put_esc(w, w->b.n, "mmd_tree_node", name, CT, W_TREE | (lead ? W_LEAD : 0))) return;
+    if (dir) mmd_w_raw(w, "/");
+    if (desc && *desc) {
+        mmd_w_raw(w, " ## ");
+        mmd_w_text(w, desc, 0);
+    }
+    eol(w);
+}
+
+/* ---- erDiagram ---- */
+
+void mmd_er_begin(mmd_writer *w) {
+    if (!live(w)) return;
+    begin(w, "erDiagram");
+    eol(w);
+}
+
+/* entity names are always quoted: then any text is a name, keywords ("one", "to", "end") included */
+static void er_name(mmd_writer w[static 1], const char *fn, const char *name) {
+    if (!need(w, fn, "entity name", name)) return;
+    size_t at = w->b.n;
+    buf_ch(&w->b, '"');
+    if (!put_esc(w, at, fn, name, CQ, W_PCT | W_BSL | W_DIR | W_MD)) return;
+    buf_ch(&w->b, '"');
+    term(w);
+}
+
+void mmd_er_entity(mmd_writer *w, const char *name, const char *alias) {
+    if (!live(w)) return;
+    stmt(w, "");
+    er_name(w, "mmd_er_entity", name);
+    if (alias) {
+        mmd_w_raw(w, "[");
+        er_name(w, "mmd_er_entity", alias);
+        mmd_w_raw(w, "]");
+    }
+    mmd_w_raw(w, " {");
+    eol(w);
+    open_block(w, '}');
+}
+
+/* an attribute type or name: mermaid's ATTRIBUTE_WORD, and not a key */
+static void er_word(mmd_writer w[static 1], const char *what, const char *s) {
+    static const char *const KEYS[] = {"PK", "FK", "UK"};
+    size_t n = strlen(s);
+    unsigned char c0 = (unsigned char)s[0];
+    bool ok = n && !HAS_KW(s, KEYS, true) && (c0 == '*' || (is_word(c0) && (unsigned)(c0 - '0') >= 10u) || c0 >= 0x80);
+    for (size_t i = 1; ok && i < n; i++)
+        ok = is_word((unsigned char)s[i]) || strchr("-[]().,*", s[i]) || (unsigned char)s[i] >= 0x80;
+    if (!ok) return fail(w, w->b.n, "mmd_er_attr: '%s' is not an attribute %s ([A-Za-z_*] then [A-Za-z0-9_*.,()[]-])", s, what);
+    mmd_w_raw(w, s);
+}
+
+void mmd_er_attr(mmd_writer *w, const char *type, const char *name, unsigned keys, const char *comment) {
+    static const char *const KEY[] = {"PK", "FK", "UK"};
+    if (!live(w)) return;
+    if (!w->nopen || w->open[w->nopen - 1] != '}') return fail(w, w->b.n, "mmd_er_attr: outside mmd_er_entity()");
+    if (keys >> countof(KEY)) return fail(w, w->b.n, "mmd_er_attr: unknown keys 0x%x", keys);
+    stmt(w, "");
+    er_word(w, "type", type);
+    mmd_w_raw(w, " ");
+    er_word(w, "name", name);
+    const char *sep = " ";
+    for (size_t k = 0; k < countof(KEY); k++)
+        if (keys & 1u << k) mmd_w_raw(w, sep), mmd_w_raw(w, KEY[k]), sep = ", ";
+    if (comment) mmd_w_raw(w, " "), mmd_w_str(w, comment, 0);
+    eol(w);
+}
+
+void mmd_er_rel(mmd_writer *w, const char *a, mmd_card ca, const char *b, mmd_card cb, bool identifying,
+                const char *label) {
+    static const char L[][3] = {"||", "|o", "}|", "}o"}, Rt[][3] = {"||", "o|", "|{", "o{"};
+    if (!live(w)) return;
+    if (ca > MMD_CARD_ZERO_OR_MORE || cb > MMD_CARD_ZERO_OR_MORE) return fail(w, w->b.n, "mmd_er_rel: unknown cardinality");
+    stmt(w, "");
+    er_name(w, "mmd_er_rel", a);
+    mmd_w_raw(w, " ");
+    mmd_w_raw(w, L[ca]);
+    mmd_w_raw(w, identifying ? "--" : "..");
+    mmd_w_raw(w, Rt[cb]);
+    mmd_w_raw(w, " ");
+    er_name(w, "mmd_er_rel", b);
+    mmd_w_raw(w, " : \"");
+    size_t at = w->b.n - 1;
+    if (!put_esc(w, at, "mmd_er_rel", label ? label : "", CQ, W_DIR)) return;
+    mmd_w_raw(w, "\"");
+    eol(w);
+}
+
+/* ---- gitGraph ---- */
+
+static const char *const GIT_KW[] = {"commit", "branch", "merge", "checkout", "switch", "cherry-pick", "gitGraph",
+                                     "id", "msg", "tag", "type", "order", "parent", "NORMAL", "REVERSE",
+                                     "HIGHLIGHT", "LR", "TB", "BT", "title", "accTitle", "accDescr", "true", "false"};
+
+/* a REFERENCE: \w([-./\w]*[-\w])?, ASCII, not a keyword and not a number */
+static void git_ref(mmd_writer w[static 1], const char *fn, const char *name) {
+    size_t n = strlen(name);
+    bool ok = n && is_word((unsigned char)name[0]) && (is_word((unsigned char)name[n - 1]) || name[n - 1] == '-');
+    for (size_t i = 1; ok && i < n; i++) ok = is_word((unsigned char)name[i]) || strchr("-./", name[i]);
+    if (!ok) return fail(w, w->b.n, "%s: branch name '%s' must match \\w([-./\\w]*[-\\w])?", fn, name);
+    if (HAS_KW(name, GIT_KW, true) || strspn(name, "0123456789.") == n)
+        return fail(w, w->b.n, "%s: '%s' would read as a keyword or number, not a branch", fn, name);
+    mmd_w_raw(w, name);
+}
+
+void mmd_git_begin(mmd_writer *w, const char *dir) {
+    if (!live(w)) return;
+    if (dir && strcmp(dir, "LR") && strcmp(dir, "TB") && strcmp(dir, "BT"))
+        return fail(w, w->b.n, "mmd_git_begin: direction must be LR, TB or BT");
+    begin(w, "gitGraph");
+    if (dir) mmd_w_raw(w, " "), mmd_w_raw(w, dir), mmd_w_raw(w, ":");
+    eol(w);
+}
+
+static void git_attrs(mmd_writer w[static 1], const char *id, const char *tag, mmd_commit type) {
+    static const char *const TYPE[] = {"NORMAL", "REVERSE", "HIGHLIGHT"};
+    if (type >= countof(TYPE)) return fail(w, w->b.n, "gitGraph: unknown commit type %u", (unsigned)type);
+    if (id) mmd_w_raw(w, " id: "), mmd_w_str(w, id, 0);
+    if (tag) mmd_w_raw(w, " tag: "), mmd_w_str(w, tag, 0);
+    if (type) mmd_w_raw(w, " type: "), mmd_w_raw(w, TYPE[type]);
+}
+
+void mmd_git_commit(mmd_writer *w, const char *id, const char *tag, mmd_commit type) {
+    if (!live(w)) return;
+    stmt(w, "commit");
+    git_attrs(w, id, tag, type);
+    eol(w);
+}
+
+void mmd_git_branch(mmd_writer *w, const char *name) {
+    if (!live(w)) return;
+    stmt(w, "branch ");
+    git_ref(w, "mmd_git_branch", name);
+    eol(w);
+}
+
+void mmd_git_checkout(mmd_writer *w, const char *name) {
+    if (!live(w)) return;
+    stmt(w, "checkout ");
+    git_ref(w, "mmd_git_checkout", name);
+    eol(w);
+}
+
+void mmd_git_merge(mmd_writer *w, const char *name, const char *id, const char *tag, mmd_commit type) {
+    if (!live(w)) return;
+    stmt(w, "merge ");
+    git_ref(w, "mmd_git_merge", name);
+    git_attrs(w, id, tag, type);
+    eol(w);
+}
+
+void mmd_git_cherry_pick(mmd_writer *w, const char *id) {
+    if (!live(w)) return;
+    stmt(w, "cherry-pick id: ");
+    mmd_w_str(w, id, 0);
     eol(w);
 }

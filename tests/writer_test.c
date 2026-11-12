@@ -8,6 +8,8 @@
 
 #include "mmd.h"
 
+#define countof(a) (sizeof(a) / sizeof *(a))
+
 typedef enum Ctx { STR, TEXT, CSV, ID } Ctx;
 typedef struct Case {
     const char *name, *pre, *post;
@@ -247,7 +249,9 @@ static bool shows(const mmd_writer *w, size_t n, char labels[][64]) {
     mmd_buffer svg = {};
     mmd_error e;
     if (mmd_writer_render_svg(w, nullptr, &svg, &e)) {
-        printf("FAIL typed: %s\n", e.message);
+        const char *src;
+        size_t len;
+        printf("FAIL typed: %s in\n%s", e.message, mmd_writer_text(w, &src, &len, nullptr) ? "" : src);
         return false;
     }
     svg_text(svg.data, sizeof svgt, svgt);
@@ -327,6 +331,131 @@ static int typed(unsigned iters) {
     return bad;
 }
 
+/* L[k] = random label + a unique tag, so each must show up on its own */
+static const char *lab(char L[][64], size_t k, bool nl) {
+    rnd_label(L[k], nl);
+    snprintf(L[k] + strlen(L[k]), 8, "Q%zu", k);
+    return L[k];
+}
+/* ids that collide with a keyword of some diagram, or with nothing */
+static const char *const KWIDS[] = {"end", "Andrew", "loop1", "par", "optimal", "note", "Over", "x", "_9", "中文",
+                                    "box", "destroy", "off", "section", "client", "one", "to", "u"};
+
+/* the helpers of the other diagram types, same idea as typed() */
+static int typed2(unsigned iters) {
+    int bad = 0;
+    char L[32][64];
+    mmd_writer *w = mmd_writer_new();
+    for (unsigned it = 0; it < iters; it++) {
+        size_t n = 0;
+        const char *a = KWIDS[rnd(countof(KWIDS))], *b = KWIDS[rnd(countof(KWIDS))];
+        if (!strcmp(a, b)) b = "y";
+        mmd_writer_reset(w);
+        mmd_seq_begin(w, lab(L, n++, false), it & 1);
+        mmd_seq_participant(w, a, nullptr, false);
+        mmd_seq_participant(w, b, it & 2 ? lab(L, n++, true) : nullptr, it & 4);
+        mmd_seq_message(w, a, b, (mmd_arrow)rnd(8), lab(L, n++, true));
+        mmd_seq_block(w, "alt", lab(L, n++, false));
+        mmd_seq_activate(w, b, true);
+        mmd_seq_message(w, b, a, (mmd_arrow)rnd(8), lab(L, n++, true));
+        mmd_seq_activate(w, b, false);
+        mmd_seq_block(w, "else", lab(L, n++, false));
+        mmd_seq_note(w, MMD_OVER, a, b, lab(L, n++, true));
+        mmd_seq_block(w, "loop", lab(L, n++, false));
+        mmd_seq_note(w, (mmd_side)rnd(2), a, nullptr, lab(L, n++, true));
+        mmd_end(w);
+        mmd_end(w);
+        if (!(it & 2)) strcpy(L[n++], b);
+        strcpy(L[n++], a);
+        bad += !shows(w, n, L);
+
+        static const char *const GKW[] = {"section x", "title", "2026-01-01 go", "5% done", "call me", "click", "Weekday"};
+        mmd_writer_reset(w), n = 0;
+        mmd_gantt_begin(w, lab(L, n++, false));
+        mmd_gantt_section(w, lab(L, n++, false));
+        mmd_gantt_task(w, lab(L, n++, false), "t1", MMD_TASK_CRIT, "2026-02-27", 1 + rnd(5) * 0.5);
+        snprintf(L[n], 64, "%s", GKW[rnd(countof(GKW))]);
+        mmd_gantt_task(w, L[n++], "t2", MMD_TASK_DONE, "t1", 2);
+        mmd_gantt_task(w, lab(L, n++, false), nullptr, MMD_TASK_ACTIVE, nullptr, 3);
+        mmd_gantt_task(w, lab(L, n++, false), nullptr, MMD_TASK_MILESTONE, "t2", 0);
+        bad += !shows(w, n, L);
+
+        mmd_writer_reset(w), n = 0;
+        mmd_state_begin(w, it & 1 ? "LR" : nullptr);
+        mmd_state_group(w, "G", lab(L, n++, true));
+        mmd_state(w, "S1", lab(L, n++, true));
+        mmd_state_transition(w, nullptr, "S1", lab(L, n++, true));
+        mmd_end(w);
+        mmd_state(w, "S2", nullptr);
+        mmd_state_transition(w, "G", "S2", lab(L, n++, true));
+        mmd_state_transition(w, "S2", nullptr, nullptr);
+        mmd_state_note(w, (mmd_side)rnd(2), "S2", lab(L, n++, true));
+        snprintf(L[n++], 64, "direction LR, %s", it & 1 ? "a" : "b");
+        mmd_state(w, "S3", L[n - 1]);
+        bad += !shows(w, n, L);
+
+        mmd_writer_reset(w), n = 0;
+        mmd_sankey_begin(w);
+        const char *s0 = lab(L, n++, false), *s1 = lab(L, n++, false);
+        mmd_sankey_flow(w, s0, s1, 2.5);
+        mmd_sankey_flow(w, L[1], lab(L, n++, false), 1);
+        bad += !shows(w, n, L);
+
+        mmd_writer_reset(w), n = 0;
+        mmd_mindmap_begin(w);
+        mmd_mindmap_node(w, 0, "r", lab(L, n++, true), MMD_SHAPE_CIRCLE);
+        mmd_mindmap_node(w, 1, "a", lab(L, n++, true), MMD_SHAPE_RECT);
+        mmd_mindmap_node(w, 2, "b", lab(L, n++, true), MMD_SHAPE_HEXAGON);
+        mmd_mindmap_node(w, 1, "c", lab(L, n++, true), MMD_SHAPE_ROUND);
+        mmd_mindmap_node(w, 2, "plain", nullptr, MMD_SHAPE_RECT);
+        strcpy(L[n++], "plain");
+        bad += !shows(w, n, L);
+
+        static const char *const TKW[] = {"title x", "accTitle", "├── a", "\"q\"", "icon(x)", "a :::b", "d/"};
+        mmd_writer_reset(w), n = 0;
+        mmd_tree_begin(w);
+        mmd_tree_node(w, 0, lab(L, n++, false), true, nullptr);
+        const char *t0 = lab(L, n++, false), *t1 = lab(L, n++, false);
+        mmd_tree_node(w, 1, t0, false, t1);
+        snprintf(L[n], 64, "%s", TKW[rnd(countof(TKW))]);
+        mmd_tree_node(w, 1, L[n++], it & 1, nullptr);
+        mmd_tree_node(w, 2, lab(L, n++, false), false, nullptr);
+        bad += !shows(w, n, L);
+
+        mmd_writer_reset(w), n = 0;
+        mmd_er_begin(w);
+        size_t e1 = n;
+        snprintf(L[n++], 64, "%s-%s", a, b);
+        mmd_er_entity(w, L[e1], nullptr);
+        mmd_er_attr(w, "varchar(255)", "name", MMD_KEY_PK, lab(L, n++, false));
+        mmd_er_attr(w, "string[]", "tags", 0, nullptr);
+        mmd_end(w);
+        mmd_er_entity(w, "E2", lab(L, n++, false));
+        mmd_end(w);
+        mmd_er_rel(w, L[e1], (mmd_card)rnd(4), "E2", (mmd_card)rnd(4), it & 1, lab(L, n++, false));
+        strcpy(L[n++], "varchar(255)");
+        bad += !shows(w, n, L);
+
+        static const char *const BR[] = {"feature/x-1.0", "release-2", "a.b_c", "x"};
+        mmd_writer_reset(w), n = 0;
+        mmd_git_begin(w, it & 1 ? "TB" : nullptr);
+        const char *c0 = lab(L, n++, false), *c1 = lab(L, n++, false);
+        mmd_git_commit(w, c0, c1, (mmd_commit)rnd(3));
+        snprintf(L[n++], 64, "%s", BR[rnd(countof(BR))]);
+        mmd_git_branch(w, L[n - 1]);
+        mmd_git_checkout(w, L[n - 1]);
+        mmd_git_commit(w, lab(L, n++, false), nullptr, MMD_COMMIT_NORMAL);
+        mmd_git_checkout(w, "main");
+        const char *br = L[n - 2], *m = lab(L, n++, false);
+        mmd_git_merge(w, br, m, nullptr, MMD_COMMIT_NORMAL);
+        mmd_git_cherry_pick(w, L[n - 2]);
+        bad += !shows(w, n, L);
+    }
+    mmd_writer_free(w);
+    printf("writer typed helpers: %u sequence/gantt/state/sankey/mindmap/treeView/ER/gitGraph sets, %d failed\n", iters, bad);
+    return bad;
+}
+
 /* shortest round trip: reads back exactly, and no %.Ng with fewer significant digits does */
 static int numbers(unsigned iters) {
     int bad = 0;
@@ -366,7 +495,7 @@ static int numbers(unsigned iters) {
 }
 
 /* the error sticks: later calls are no-ops, line:col points at the rejected value, reset clears it */
-enum { NBAD = 18 };
+enum { NBAD = 30 };
 static void bad_call(mmd_writer *w, int k) {
     switch (k) {
     case 0: mmd_w_id(w, "a b"); break;
@@ -387,6 +516,18 @@ static void bad_call(mmd_writer *w, int k) {
     case 15: mmd_xy_bar(w, nullptr, 1, (const double[]){NAN}); break;
     case 16: mmd_xy_x_cats(w, nullptr, 0, nullptr); break; /* mermaid's [] needs an item */
     case 17: mmd_xy_line(w, "l", 0, nullptr); break;
+    case 18: mmd_end(w); break; /* nothing open */
+    case 19: mmd_seq_block(w, "else", nullptr); break; /* outside alt */
+    case 20: mmd_gantt_task(w, "t", "done", 0, nullptr, 1); break; /* id reads as a tag */
+    case 21: mmd_gantt_task(w, "t", nullptr, 0, "2026-02-29", 1); break; /* no such day: an id starting with a digit */
+    case 22: mmd_gantt_task(w, "t", nullptr, 0, nullptr, -1); break;
+    case 23: mmd_state_transition(w, "state", "B", nullptr); break;
+    case 24: mmd_git_branch(w, "feature/"); break;
+    case 25: mmd_git_branch(w, "commit"); break;
+    case 26: mmd_mindmap_node(w, 1, "a", nullptr, MMD_SHAPE_RECT); break; /* the first node is the root */
+    case 27: mmd_er_attr(w, "string", "a", 0, nullptr); break;          /* outside an entity */
+    case 28: mmd_sankey_flow(w, "a", "b", -1); break;
+    case 29: mmd_seq_note(w, MMD_LEFT_OF, "a", "b", "x"); break; /* only "over" spans two */
     }
 }
 /* the host's LC_NUMERIC must leak into neither the text nor the messages */
@@ -426,7 +567,7 @@ static int errors(void) {
         size_t n;
         mmd_error e = {};
         mmd_buffer svg = {};
-        if (mmd_writer_text(w, &s, &n, &e) != MMD_ERR_SYNTAX || s || e.line < 2 || (e.col != 3 && k != 12 && k != 15) ||
+        if (mmd_writer_text(w, &s, &n, &e) != MMD_ERR_SYNTAX || s || e.line < 2 || (e.col != 3 && k != 12 && k != 15 && k < 18) ||
             mmd_writer_render_svg(w, nullptr, &svg, nullptr) != MMD_ERR_SYNTAX) {
             printf("FAIL error case %d: %u:%u %s\n", k, e.line, e.col, e.message);
             bad++;
@@ -435,6 +576,16 @@ static int errors(void) {
         mmd_w_raw(w, "x");
         if (mmd_writer_text(w, &s, &n, nullptr) || strcmp(s, "x")) printf("FAIL reset after case %d\n", k), bad++;
     }
+    mmd_writer_reset(w);
+    /* a block left open is reported, and mmd_end() closes it */
+    mmd_seq_begin(w, nullptr, false);
+    mmd_seq_block(w, "loop", "l");
+    const char *t;
+    size_t tn;
+    if (mmd_writer_text(w, &t, &tn, nullptr) != MMD_ERR_SYNTAX) printf("FAIL open block not reported\n"), bad++;
+    mmd_seq_message(w, "a", "b", MMD_ARROW_SOLID, "m");
+    mmd_end(w);
+    if (mmd_writer_text(w, &t, &tn, nullptr)) printf("FAIL closed block still reported\n"), bad++;
     mmd_writer_free(w);
     /* a failed mmd_writer_new() is just an out-of-memory writer */
     mmd_w_str(nullptr, "x", 0);
@@ -448,6 +599,6 @@ static int errors(void) {
 
 int main(int argc, char **argv) {
     unsigned iters = argc > 1 ? (unsigned)atoi(argv[1]) : 200;
-    int bad = roundtrip(iters) + typed(iters / 4) + numbers(iters * 50) + errors();
+    int bad = roundtrip(iters) + typed(iters / 4) + typed2(iters / 4) + numbers(iters * 50) + errors();
     return bad != 0;
 }
