@@ -391,7 +391,6 @@ typedef struct HE { uint64_t k; int32_t e; } HE;
 bool dagre_rank(Arena A[restrict static 1], const DRankIn in[restrict static 1], int32_t rank[restrict], int32_t top[restrict],
                 int32_t bot[restrict], int32_t corder[restrict]) {
     size_t N = in->N, S = in->S, NR = in->nreal;
-    size_t M = NR + 1 + 2 * S;
     size_t kn = in->koff[S + 1];
     size_t ecap = in->E + 3 * (kn + S) + NR + 4;
     NB b = {.M = NR + 1, .cap = ecap, .u = ANEW(A, int32_t, ecap), .v = ANEW(A, int32_t, ecap),
@@ -414,7 +413,7 @@ bool dagre_rank(Arena A[restrict static 1], const DRankIn in[restrict static 1],
         c.weight++;
     }
     for (uint32_t k = in->koff[S]; k < in->koff[S + 1]; k++) nest_dfs(&c, in->kid[k]);
-    M = b.M;
+    size_t M = b.M;
     /* names in JS string order: reals by id, generated _root/_bt/_bb with equal-width counters */
     RG g = {.A = A, .M = M};
     int64_t *key = ANEW(A, int64_t, M + 1);

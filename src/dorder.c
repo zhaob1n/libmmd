@@ -175,12 +175,11 @@ static Res sort_subgraph(Ctx c[static 1], int32_t k) {
     for (size_t q = 0; n > 1 && q < c->cgn; q++) {
         int32_t a = c->cga[q] + (int32_t)V, b = c->cgb[q] + (int32_t)V;
         if (c->mtag[a] != gen || c->mtag[b] != gen) continue;
-        Ent *ea = &E[c->mix[a]], *eb = &E[c->mix[b]];
-        eb->indeg++, anycg = true;
+        E[c->mix[b]].indeg++, anycg = true;
         int32_t l = new_lk(c, (int32_t)c->mix[b], -1);
         if (l < 0) return out;
-        E = c->ent + base;
-        ea = &E[c->mix[a]];
+        E = c->ent + base; /* new_lk may have moved it */
+        Ent *ea = &E[c->mix[a]];
         if (ea->outt < 0) ea->outh = l; else c->lk[ea->outt].next = l;
         ea->outt = l;
     }
@@ -213,8 +212,7 @@ static Res sort_subgraph(Ctx c[static 1], int32_t k) {
             uint32_t wi = (uint32_t)c->lk[l].e;
             int32_t nl = new_lk(c, (int32_t)vi, E[wi].inh);
             if (nl < 0) return out;
-            E = c->ent + base;
-            ve = &E[vi];
+            E = c->ent + base; /* ve is stale now, and unused */
             E[wi].inh = nl;
             if (--E[wi].indeg == 0) c->src[ns++] = wi;
         }

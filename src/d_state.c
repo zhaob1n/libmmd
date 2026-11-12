@@ -524,12 +524,11 @@ static void place(Ctx c[static 1], int32_t cl, double ox, double oy, unsigned de
     translate(lg, ox, oy);
     for (size_t lv = 0; lv < lg->nn; lv++) {
         int32_t e = s->elem[lv];
-        double x = lg->nx[lv], y = lg->ny[lv], w = lg->nw[lv], h = lg->nh[lv];
+        double x = lg->nx[lv], y = lg->ny[lv];
         if (e >= 0) { c->ax[e] = x, c->ay[e] = y; continue; }
         if (el_is_note(e)) { c->ntx[e - NOTE_EL0] = x, c->nty[e - NOTE_EL0] = y; continue; }
         int32_t r = -e - 2;
-        (void)w;
-        h = c->ch[r];
+        double h = c->ch[r];
         c->cx[r] = x - c->cw[r] / 2, c->cy[r] = y - h / 2;
         const Scope *rs = &c->sc[sc_ix(r)];
         double ix = x - rs->w / 2, iy = y - h / 2 + C_TITLE + C_PAD; /* centre content horizontally */
