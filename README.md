@@ -128,6 +128,21 @@ if (mmd_writer_render_svg(w, nullptr, &svg, &err) == MMD_OK) /* ...or render it 
 mmd_writer_free(w);
 ```
 
+Typed helpers cover xychart (`mmd_xy_*`), pie, flowchart, sequence (`mmd_seq_*`), gantt, state,
+sankey, mindmap, treeView, ER and gitGraph; they also handle each type's own traps (keywords at the
+start of a statement, ER names with `-`, branch-name rules, gantt dates). Blocks they open (sequence
+`loop`/`alt`, state groups, ER entities) close with `mmd_end()`:
+
+```c
+mmd_seq_begin(w, "Login", false);
+mmd_seq_message(w, "client", "endpoint", MMD_ARROW_SOLID, "POST /login");
+mmd_seq_block(w, "alt", "ok");
+mmd_seq_message(w, "endpoint", "client", MMD_ARROW_DOTTED, "200; token");
+mmd_seq_block(w, "else", "bad password");
+mmd_seq_message(w, "endpoint", "client", MMD_ARROW_DOTTED, "401");
+mmd_end(w);
+```
+
 Errors are sticky (checked once at the end), numbers are written shortest-round-trip, and
 `mmd_w_str` / `mmd_w_text` / `mmd_w_id` / `mmd_w_csv` / `mmd_w_line` cover every other diagram type.
 Which context each diagram slot takes is in [docs/dev/writer.md](docs/dev/writer.md).
@@ -201,7 +216,7 @@ More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 |---|---|
 | Golden + sanity tests (152 cases; XML well-formedness, error positions, viewBox bounds, mermaid docs corpus) | `make test` (`UPDATE_GOLDEN=1 make test` to refresh) |
 | Locale independence: the corpus rendered under a comma-decimal locale must match the C locale byte for byte (skipped when none is installed) | `make test` |
-| Writer round trip: random labels through 92 slots of every diagram type, typed helpers, number round trip, error paths | `make test` (`build/test-writer [iterations]`) |
+| Writer round trip: random labels through 92 slots of every diagram type, every typed helper (keyword-like ids included), number round trip, error paths | `make test` (`build/test-writer [iterations]`) |
 | Mermaid docs corpus: 432 examples from mermaid's syntax docs, 396/396 that mermaid itself renders | `python3 tools/docs_audit.py [-v]` |
 | ASan + UBSan build | `make asan` → `build-asan/mmd` |
 | Fuzzing (mutational, under ASan or MSan; crashing inputs are saved under `TMPDIR` and printed) | `python3 tests/fuzz.py build-asan/mmd 1000 [seed]` |
