@@ -312,3 +312,152 @@ void mmd_w_num(mmd_writer *w, double v) {
     put_num(&w->b, v);
     term(w);
 }
+
+/* ---- typed helpers ---- */
+
+static void stmt(mmd_writer w[static 1], const char kw[static 1]) {
+    mmd_w_line(w, 1);
+    mmd_w_raw(w, kw);
+}
+static void eol(mmd_writer w[static 1]) { mmd_w_raw(w, "\n"); }
+
+void mmd_xy_begin(mmd_writer *w, const char *title, bool horizontal) {
+    if (!live(w)) return;
+    mmd_w_line(w, 0);
+    mmd_w_raw(w, horizontal ? "xychart horizontal" : "xychart");
+    if (title) {
+        stmt(w, "title ");
+        mmd_w_str(w, title, 0);
+    }
+    eol(w);
+}
+
+static void axis(mmd_writer w[static 1], const char kw[static 1], const char *title) {
+    stmt(w, kw);
+    if (title) {
+        mmd_w_raw(w, " ");
+        mmd_w_str(w, title, 0);
+    }
+}
+
+void mmd_xy_x_cats(mmd_writer *w, const char *title, size_t n, const char *const *cats) {
+    if (!live(w)) return;
+    axis(w, "x-axis", title);
+    mmd_w_raw(w, " [");
+    for (size_t i = 0; i < n; i++) {
+        if (i) mmd_w_raw(w, ", ");
+        mmd_w_str(w, cats[i], 0);
+    }
+    mmd_w_raw(w, "]");
+    eol(w);
+}
+
+static void range(mmd_writer w[static 1], const char kw[static 1], const char *title, double lo, double hi) {
+    axis(w, kw, title);
+    if (lo != hi) {
+        mmd_w_raw(w, " ");
+        mmd_w_num(w, lo);
+        mmd_w_raw(w, " --> ");
+        mmd_w_num(w, hi);
+    }
+    eol(w);
+}
+void mmd_xy_x_range(mmd_writer *w, const char *title, double lo, double hi) {
+    if (live(w)) range(w, "x-axis", title, lo, hi);
+}
+void mmd_xy_y_range(mmd_writer *w, const char *title, double lo, double hi) {
+    if (live(w)) range(w, "y-axis", title, lo, hi);
+}
+
+static void series(mmd_writer w[static 1], const char kw[static 1], const char *name, size_t n, const double *v) {
+    if (!live(w)) return;
+    axis(w, kw, name);
+    mmd_w_raw(w, " [");
+    for (size_t i = 0; i < n; i++) {
+        if (i) mmd_w_raw(w, ", ");
+        mmd_w_num(w, v[i]);
+    }
+    mmd_w_raw(w, "]");
+    eol(w);
+}
+void mmd_xy_bar(mmd_writer *w, const char *name, size_t n, const double *v) { series(w, "bar", name, n, v); }
+void mmd_xy_line(mmd_writer *w, const char *name, size_t n, const double *v) { series(w, "line", name, n, v); }
+
+void mmd_pie_begin(mmd_writer *w, const char *title, bool show_data) {
+    if (!live(w)) return;
+    mmd_w_line(w, 0);
+    mmd_w_raw(w, show_data ? "pie showData" : "pie");
+    if (title) {
+        stmt(w, "title ");
+        mmd_w_text(w, title, 0);
+    }
+    eol(w);
+}
+
+void mmd_pie_slice(mmd_writer *w, const char *label, double v) {
+    if (!live(w)) return;
+    if (v < 0) return fail(w, w->b.n, "mmd_pie_slice: negative value %g", v);
+    mmd_w_line(w, 1);
+    mmd_w_str(w, label, 0);
+    mmd_w_raw(w, " : ");
+    mmd_w_num(w, v);
+    eol(w);
+}
+
+void mmd_flow_begin(mmd_writer *w, const char *dir) {
+    if (!live(w)) return;
+    static const char *const DIRS[] = {"TB", "TD", "BT", "LR", "RL"};
+    size_t k = 0;
+    while (k < countof(DIRS) && strcmp(DIRS[k], dir)) k++;
+    if (k == countof(DIRS)) return fail(w, w->b.n, "mmd_flow_begin: direction must be TB, TD, BT, LR or RL");
+    mmd_w_line(w, 0);
+    mmd_w_raw(w, "flowchart ");
+    mmd_w_raw(w, dir);
+    eol(w);
+}
+
+/* a flowchart statement keyword can't name a node (mermaid has the same rule for "end") */
+static void flow_id(mmd_writer w[static 1], const char id[static 1]) {
+    static const char *const KW[] = {"subgraph", "end", "direction", "classDef", "class",
+                                     "style", "linkStyle", "click", "accTitle", "accDescr"};
+    for (size_t k = 0; k < countof(KW); k++)
+        if (!strcmp(KW[k], id)) return fail(w, w->b.n, "flowchart: '%s' is a keyword, not a node id", id);
+    mmd_w_id(w, id);
+}
+
+void mmd_flow_node(mmd_writer *w, const char *id, const char *label, mmd_shape shape) {
+    static const char DELIM[][2][4] = {
+        [MMD_SHAPE_RECT] = {"[", "]"},        [MMD_SHAPE_ROUND] = {"(", ")"},
+        [MMD_SHAPE_STADIUM] = {"([", "])"},   [MMD_SHAPE_SUBROUTINE] = {"[[", "]]"},
+        [MMD_SHAPE_CYLINDER] = {"[(", ")]"},  [MMD_SHAPE_CIRCLE] = {"((", "))"},
+        [MMD_SHAPE_DCIRCLE] = {"(((", ")))"}, [MMD_SHAPE_ASYM] = {">", "]"},
+        [MMD_SHAPE_RHOMBUS] = {"{", "}"},     [MMD_SHAPE_HEXAGON] = {"{{", "}}"},
+        [MMD_SHAPE_LEAN_R] = {"[/", "/]"},    [MMD_SHAPE_LEAN_L] = {"[\\", "\\]"},
+        [MMD_SHAPE_TRAP] = {"[/", "\\]"},     [MMD_SHAPE_TRAP_ALT] = {"[\\", "/]"},
+    };
+    if (!live(w)) return;
+    if (shape >= countof(DELIM)) return fail(w, w->b.n, "mmd_flow_node: unknown shape %u", (unsigned)shape);
+    mmd_w_line(w, 1);
+    flow_id(w, id);
+    if (label || shape != MMD_SHAPE_RECT) {
+        mmd_w_raw(w, DELIM[shape][0]);
+        mmd_w_str(w, label ? label : id, MMD_W_BR);
+        mmd_w_raw(w, DELIM[shape][1]);
+    }
+    eol(w);
+}
+
+void mmd_flow_edge(mmd_writer *w, const char *from, const char *to, const char *label) {
+    if (!live(w)) return;
+    mmd_w_line(w, 1);
+    flow_id(w, from);
+    mmd_w_raw(w, " -->");
+    if (label) {
+        mmd_w_raw(w, "|");
+        mmd_w_str(w, label, MMD_W_BR);
+        mmd_w_raw(w, "|");
+    }
+    mmd_w_raw(w, " ");
+    flow_id(w, to);
+    eol(w);
+}

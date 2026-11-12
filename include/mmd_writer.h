@@ -52,6 +52,41 @@ MMD_API void mmd_w_num(mmd_writer *w, double v);
 /* one sankey CSV field, quoted only when needed */
 MMD_API void mmd_w_csv(mmd_writer *w, const char *s);
 
+/* ---- typed helpers: each writes whole lines ---- */
+/* xychart; title may be nullptr */
+MMD_API void mmd_xy_begin(mmd_writer *w, const char *title, bool horizontal);
+MMD_API void mmd_xy_x_cats(mmd_writer *w, const char *title, size_t n, const char *const *cats);
+/* lo == hi leaves the range automatic */
+MMD_API void mmd_xy_x_range(mmd_writer *w, const char *title, double lo, double hi);
+MMD_API void mmd_xy_y_range(mmd_writer *w, const char *title, double lo, double hi);
+MMD_API void mmd_xy_bar(mmd_writer *w, const char *name, size_t n, const double *v);
+MMD_API void mmd_xy_line(mmd_writer *w, const char *name, size_t n, const double *v);
+
+MMD_API void mmd_pie_begin(mmd_writer *w, const char *title, bool show_data);
+MMD_API void mmd_pie_slice(mmd_writer *w, const char *label, double v);
+
+typedef enum mmd_shape : unsigned char {
+    MMD_SHAPE_RECT,        /* [ ] */
+    MMD_SHAPE_ROUND,       /* ( ) */
+    MMD_SHAPE_STADIUM,     /* ([ ]) */
+    MMD_SHAPE_SUBROUTINE,  /* [[ ]] */
+    MMD_SHAPE_CYLINDER,    /* [( )] */
+    MMD_SHAPE_CIRCLE,      /* (( )) */
+    MMD_SHAPE_DCIRCLE,     /* ((( ))) */
+    MMD_SHAPE_ASYM,        /* > ] */
+    MMD_SHAPE_RHOMBUS,     /* { } */
+    MMD_SHAPE_HEXAGON,     /* {{ }} */
+    MMD_SHAPE_LEAN_R,      /* [/ /] */
+    MMD_SHAPE_LEAN_L,      /* [\ \] */
+    MMD_SHAPE_TRAP,        /* [/ \] */
+    MMD_SHAPE_TRAP_ALT,    /* [\ /] */
+} mmd_shape;
+/* dir: TB, TD, BT, LR or RL */
+MMD_API void mmd_flow_begin(mmd_writer *w, const char *dir);
+/* label nullptr: the id is the label; '\n' breaks lines */
+MMD_API void mmd_flow_node(mmd_writer *w, const char *id, const char *label, mmd_shape shape);
+MMD_API void mmd_flow_edge(mmd_writer *w, const char *from, const char *to, const char *label);
+
 #ifdef __cplusplus
 }
 #endif
