@@ -55,7 +55,6 @@ static inline Str dg_unquote(Str s, bool apos) {
     if (s.n >= 2 && (s.p[0] == '"' || (apos && s.p[0] == '\'')) && s.p[s.n - 1] == s.p[0]) s = (Str){.p = s.p + 1, .n = s.n - 2};
     return s;
 }
-/* `direction` argument; anything but LR/RL/BT is TB */
 /* direction word, TB if unknown */
 static inline Dir dg_dir(Str d) {
     Dir r;
