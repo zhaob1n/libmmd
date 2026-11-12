@@ -92,7 +92,7 @@ above (CJK, emoji, `#quot;`, `%%`, `-->`, `fa:fa-car`, newlines...).
 | venn | set, text `[…]` (br) | | | |
 | treeView | | `## description` | node names | `/` (folder), `:::`, `icon(` are syntax in names |
 | eventmodeling | | `data` values | names | names are dotted identifiers |
-| railroad | terminals (EBNF, function form) | | | `title` is accepted but not drawn |
+| railroad | terminals (EBNF, function form) | | | `title` is accepted but not drawn, as in mermaid-cli |
 | wardley | note | component, title | | |
 
 ## Not representable (refused or documented)

@@ -112,5 +112,5 @@ asan:
 	$(MAKE) BUILD=build-asan OPT="-O1 -fsanitize=address,undefined -fno-omit-frame-pointer" LDLIBS="-lm -fsanitize=address,undefined"
 
 clean:
-	rm -rf build build-gcc build-asan build-pgo build-pgo-gen build-pgo-prof
+	rm -rf build build-gcc build-asan build-msan build-pgo build-pgo-gen build-pgo-prof
 .PHONY: all test both asan clean install pgo
