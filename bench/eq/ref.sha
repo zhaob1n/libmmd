@@ -433,7 +433,7 @@ c9d684788f746e24 bench/mmdr_fixtures/flowchart_weave.mmd
 c4a028d8cbe586f2 bench/inputs/medium.mmd
 4ae2dd5a2e67289b bench/inputs/small.mmd
 80b4ddd715359954 bench/inputs/xlarge.mmd
-eff801488740ff41 tests/cases/agentflow.mmd
+61cf8fec6974677e tests/cases/agentflow.mmd
 90d22300dee7ce45 tests/cases/agentflow_classic.mmd
 7d2d06a9117ce59f tests/cases/architecture_full.mmd
 82d5d592ed315e67 tests/cases/architecture_groups.mmd
@@ -569,9 +569,9 @@ a52073d38ed7205f tests/cases/treeview_annot.mmd
 ffc1e30144073275 tests/cases/treeview_box.mmd
 dd81f9158ac2a5ba tests/cases/treeview_cfg.mmd
 43af58d0153da63e tests/cases/treeview_icons.mmd
-b3ce1138a85c86e1 tests/cases/usecase.mmd
-fd2741f63073b78e tests/cases/usecase_classic.mmd
-869841938e6292fe tests/cases/usecase_order.mmd
+a42f9ca180c3247b tests/cases/usecase.mmd
+4e69f233bc963e3a tests/cases/usecase_classic.mmd
+4c35c2835f91236d tests/cases/usecase_order.mmd
 4c651dda832dd6cd tests/cases/venn_edge.mmd
 b601d6a85e59422d tests/cases/venn_styled.mmd
 008512d134e5187a tests/cases/venn_text.mmd

@@ -418,8 +418,8 @@ void dg_neo_defs(Buf b[static 1]) {
         {"neo-point-start", "0 0 11.5 14", "refX=\"0\" refY=\"7\"", "10.5\" markerHeight=\"14", "<path d=\"M11.5,0L0,7L11.5,14z\" class=\"mk\"/>"},
         {"neo-circle-end", "0 0 10 10", "refX=\"10\" refY=\"5\"", "11\" markerHeight=\"11", "<circle cx=\"5\" cy=\"5\" r=\"5\" class=\"mk\"/>"},
         {"neo-circle-start", "0 0 10 10", "refX=\"0\" refY=\"5\"", "11\" markerHeight=\"11", "<circle cx=\"5\" cy=\"5\" r=\"5\" class=\"mk\"/>"},
-        {"neo-cross-end", "0 0 11 11", "refX=\"9\" refY=\"5.5\"", "11\" markerHeight=\"11", "<path d=\"M1,1L10,10M10,1L1,10\" class=\"mkx\"/>"},
-        {"neo-cross-start", "0 0 11 11", "refX=\"2\" refY=\"5.5\"", "11\" markerHeight=\"11", "<path d=\"M1,1L10,10M10,1L1,10\" class=\"mkx\"/>"},
+        {"neo-cross-end", "0 0 11 11", "refX=\"12\" refY=\"5.5\"", "11\" markerHeight=\"11", "<path d=\"M1,1L10,10M10,1L1,10\" class=\"mkx\"/>"},
+        {"neo-cross-start", "0 0 11 11", "refX=\"-1\" refY=\"5.5\"", "11\" markerHeight=\"11", "<path d=\"M1,1L10,10M10,1L1,10\" class=\"mkx\"/>"},
         {"neo-ext-end", "0 0 20 16", "refX=\"19\" refY=\"8\"", "20\" markerHeight=\"16", "<path d=\"M1,1L19,8L1,15z\" class=\"mke\"/>"},
     };
     for (size_t i = 0; i < countof(M); i++) {
