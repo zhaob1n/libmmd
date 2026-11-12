@@ -117,6 +117,16 @@ void flow_style_attr(Buf b[restrict static 1], const Graph g[restrict static 1],
     buf_ch(b, '"');
 }
 
+bool flow_text_style_open(Buf b[restrict static 1], const Graph g[restrict static 1], Str classes, Str style) {
+    size_t mark = b->n;
+    buf_lit(b, "<g");
+    size_t body = b->n;
+    flow_style_attr(b, g, classes, style, true, true);
+    if (b->n == body) { b->n = mark; return false; }
+    buf_ch(b, '>');
+    return true;
+}
+
 static void text_lines(Buf b[restrict static 1], Str lab, double fs, double cx, double cy, const char *restrict cls) {
     unsigned k = 0;
     size_t pos = 0;

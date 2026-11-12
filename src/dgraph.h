@@ -67,6 +67,10 @@ NeoColor dg_redux(size_t i);
 /* <defs>: drop shadow `neo-shadow` and markers dg_neo_marker() names (classes mk, mkx, mke) */
 void dg_neo_defs(Buf b[static 1]);
 const char *dg_neo_marker(Arrow a, bool end);
+/* CSS for those marker classes and the grey edge-label plate (class elbl) */
+#define DG_NEO_CSS                                                                                             \
+    "#mermaid .mk{fill:#000000;stroke:#000000;stroke-width:1;}#mermaid .mkx{fill:none;stroke:#000000;stroke-width:2;}" \
+    "#mermaid .mke{fill:#ffffff;stroke:#000000;stroke-width:1;}#mermaid .elbl{fill:#cccccc;}"
 /* per edge end (2e: from, 2e+1: to), an offset that spreads the ends sharing a node face; nullptr on OOM */
 double *dg_ports(const Graph g[static 1]);
 /* path data of edge e routed orthogonally between the facing sides of its ends (moved by dg_ports'

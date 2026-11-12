@@ -160,10 +160,7 @@ static constexpr char CSS[] =
     "#mermaid .title{fill:#000000;}"
     "#mermaid .link{fill:none;stroke:#000000;stroke-width:2px;}#mermaid .link.dotted{stroke-dasharray:2;}"
     "#mermaid .link.thick{stroke-width:3.5px;}"
-    "#mermaid .mk{fill:#000000;stroke:#000000;stroke-width:1;}#mermaid .mkx{fill:none;stroke:#000000;stroke-width:2;}"
-    "#mermaid .mke{fill:#ffffff;stroke:#000000;stroke-width:1;}"
-    "#mermaid .elbl{fill:#cccccc;}"
-    "#mermaid .sep{fill:none;stroke:#b3b3b3;stroke-dasharray:3,3;}#mermaid .dot{fill:#b3b3b3;}";
+    "#mermaid .sep{fill:none;stroke:#b3b3b3;stroke-dasharray:3,3;}#mermaid .dot{fill:#b3b3b3;}" DG_NEO_CSS;
 
 static void colors(Buf b[static 1], NeoColor c) {
     buf_lit(b, " fill=\""); buf_cstr(b, c.fill); buf_lit(b, "\" stroke=\""); buf_cstr(b, c.stroke); buf_ch(b, '"');
@@ -270,12 +267,7 @@ mmd_status af_svg(const Graph *g, const AfInfo *inf, Buf *b) {
         }
         shape(b, g, v, dg_redux(kind(g, v)));
         double cy = g->nshape[v] == SH_DOC ? y - g->nh[v] / 12 : y;
-        size_t mark = b->n; /* a `color` from classDef/style: the label in a group carrying it */
-        buf_lit(b, "<g");
-        size_t body = b->n;
-        flow_style_attr(b, g, g->nclass[v], g->nstyle[v], true, true);
-        bool wrap = b->n > body;
-        if (wrap) buf_ch(b, '>'); else b->n = mark;
+        bool wrap = flow_text_style_open(b, g, g->nclass[v], g->nstyle[v]);
         dg_text(b, g->nlabel[v], AF_FS, x, cy, "middle", nullptr);
         if (wrap) buf_lit(b, "</g>");
     }

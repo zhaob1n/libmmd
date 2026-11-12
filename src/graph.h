@@ -112,6 +112,9 @@ mmd_status flow_svg(const Graph g[restrict static 1], Buf out[restrict static 1]
 /* ` style="…"` from classDef default (node), the classes, then style; text = the `color` declarations
  * only, as fill; nothing when all are empty */
 void flow_style_attr(Buf b[restrict static 1], const Graph g[restrict static 1], Str classes, Str style, bool text, bool node);
+/* `<g style="fill:…">` carrying a `color` from classDef default/classes/style, for a label drawn
+ * outside flow_svg; false (nothing written) when there is none, else the caller closes the </g> */
+bool flow_text_style_open(Buf b[restrict static 1], const Graph g[restrict static 1], Str classes, Str style);
 /* path data of a lin-doc (SH_DOC) box w x h centred at cx,cy: outline, then the inner line */
 void flow_doc_d(Buf b[static 1], double cx, double cy, double w, double h);
 /* mermaid flowchart.curve name -> CURVE_* (unknown => basis) */
