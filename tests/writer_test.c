@@ -354,8 +354,8 @@ static int numbers(unsigned iters) {
         while (nd && dig[nd - 1] == '0') nd--;
         int sig = (int)nd; /* significant digits written */
         char t[40];
-        snprintf(t, sizeof t, "%.*g", sig - 1, v);
-        if (v != 0 && sig > 1 && strtod(t, nullptr) == v) {
+        int k = snprintf(t, sizeof t, "%.*g", sig - 1, v);
+        if (v != 0 && sig > 1 && k < (int)sizeof t && strtod(t, nullptr) == v) {
             printf("FAIL number %.17g -> %s is not the shortest (%s)\n", v, s, t);
             bad++;
         }

@@ -92,8 +92,9 @@ static constexpr uint8_t ESC[128] = {
 };
 
 static inline bool u8_cont(unsigned char c) { return (c & 0xC0u) == 0x80u; }
-/* length of the valid UTF-8 sequence at s[0] (NUL-terminated), 0 if invalid */
-static size_t utf8_len(const unsigned char s[static 2]) {
+/* length of the valid UTF-8 sequence at s[0], 0 if invalid; s is NUL-terminated, and each byte is
+ * checked before the next is read, so this never reads past the terminator */
+static size_t utf8_len(const unsigned char *s) {
     unsigned c = s[0];
     if (c >= 0xC2 && c <= 0xDF) return u8_cont(s[1]) ? 2 : 0;
     if (c >= 0xE0 && c <= 0xEF) {
