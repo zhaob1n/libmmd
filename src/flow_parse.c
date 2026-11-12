@@ -52,101 +52,6 @@ static Str rest_of_line(P p[static 1]) {
     return str_trim((Str){.p = p->s + st, .n = p->i - st});
 }
 
-/* ---- hashing / interning ---- */
-static inline uint64_t hash_str(Str s) {
-    uint64_t h = 0x9E3779B97F4A7C15ull ^ s.n;
-    size_t i = 0;
-    for (; i + 8 <= s.n; i += 8) {
-        uint64_t w;
-        memcpy(&w, s.p + i, 8);
-        h = (h ^ w) * 0xff51afd7ed558ccdull;
-        h ^= h >> 32;
-    }
-    uint64_t t = 0;
-    for (size_t k = 0; i < s.n; i++, k++) t |= (uint64_t)(unsigned char)s.p[i] << (k * 8);
-    h = (h ^ t) * 0xc4ceb9fe1a85ec53ull;
-    return h ^ (h >> 29);
-}
-
-#define GROW(A, arr, oldc, newc)                                                              \
-    do {                                                                                      \
-        typeof(arr) na_ = arena_alloc_array((A), (newc), sizeof *(arr), alignof(typeof(*(arr)))); \
-        if (!na_) return false;                                                               \
-        if ((oldc)) memcpy(na_, (arr), (oldc) * sizeof *(arr));                               \
-        (arr) = na_;                                                                          \
-    } while (0)
-
-[[nodiscard]] static bool node_grow(Graph g[static 1]) {
-    size_t oc = g->ncap, nc = oc ? oc * 2 : 64;
-    Arena *A = g->arena;
-    GROW(A, g->nid, oc, nc); GROW(A, g->nlabel, oc, nc); GROW(A, g->nclass, oc, nc);
-    GROW(A, g->nstyle, oc, nc); GROW(A, g->nshape, oc, nc); GROW(A, g->nparent, oc, nc);
-    GROW(A, g->nflags, oc, nc);
-    g->ncap = nc;
-    return true;
-}
-[[nodiscard]] static bool edge_grow(Graph g[static 1]) {
-    size_t oc = g->ecap, nc = oc ? oc * 2 : 64;
-    Arena *A = g->arena;
-    GROW(A, g->efrom, oc, nc); GROW(A, g->eto, oc, nc); GROW(A, g->elabel, oc, nc);
-    GROW(A, g->estroke, oc, nc); GROW(A, g->estart, oc, nc); GROW(A, g->eend, oc, nc);
-    GROW(A, g->elen, oc, nc); GROW(A, g->eid, oc, nc); GROW(A, g->eflags, oc, nc);
-    g->ecap = nc;
-    return true;
-}
-[[nodiscard]] static bool sg_grow(Graph g[static 1]) {
-    size_t oc = g->scap, nc = oc ? oc * 2 : 16;
-    Arena *A = g->arena;
-    GROW(A, g->sid, oc, nc); GROW(A, g->stitle, oc, nc); GROW(A, g->sclass, oc, nc);
-    GROW(A, g->sstyle, oc, nc); GROW(A, g->sparent, oc, nc); GROW(A, g->sdir, oc, nc);
-    GROW(A, g->sflags, oc, nc);
-    g->scap = nc;
-    return true;
-}
-
-[[nodiscard]] static bool htab_rehash(Graph g[static 1]) {
-    size_t nc = g->hcap ? g->hcap * 2 : 128;
-    uint32_t *t = ANEW(g->arena, uint32_t, nc);
-    if (!t) return false;
-    memset(t, 0, nc * sizeof *t);
-    for (size_t v = 0; v < g->nn; v++) {
-        size_t h = hash_str(g->nid[v]) & (nc - 1);
-        while (t[h]) h = (h + 1) & (nc - 1);
-        t[h] = (uint32_t)v + 1;
-    }
-    g->htab = t;
-    g->hcap = nc;
-    return true;
-}
-
-/* returns index or NONE on OOM */
-static int32_t intern(Graph g[static 1], Str id) {
-    if (g->hcap) {
-        size_t h = hash_str(id) & (g->hcap - 1);
-        for (;;) {
-            uint32_t e = g->htab[h];
-            if (!e) break;
-            if (str_eq(g->nid[e - 1], id)) return (int32_t)e - 1;
-            h = (h + 1) & (g->hcap - 1);
-        }
-    }
-    if (g->nn >= INT32_MAX - 1) return NONE;
-    if (g->nn == g->ncap && !node_grow(g)) return NONE;
-    if ((g->nn + 1) * 2 > g->hcap && !htab_rehash(g)) return NONE;
-    size_t v = g->nn++;
-    g->nid[v] = id;
-    g->nlabel[v] = id;
-    g->nclass[v] = (Str){};
-    g->nstyle[v] = (Str){};
-    g->nshape[v] = SH_RECT;
-    g->nparent[v] = NONE;
-    g->nflags[v] = 0;
-    size_t h = hash_str(id) & (g->hcap - 1);
-    while (g->htab[h]) h = (h + 1) & (g->hcap - 1);
-    g->htab[h] = (uint32_t)v + 1;
-    return (int32_t)v;
-}
-
 static int32_t find_sg(const Graph g[static 1], Str id) {
     for (size_t i = 0; i < g->ns; i++)
         if (str_eq(g->sid[i], id)) return (int32_t)i;
@@ -292,7 +197,7 @@ static mmd_status parse_node(P p[static 1], int32_t out[static 1]) {
     Graph *g = p->g;
     Str id = read_word(p);
     if (!id.n) return fail(p, "expected node identifier");
-    int32_t v = intern(g, id);
+    int32_t v = graph_intern(g, id, nullptr);
     if (v == NONE) return MMD_ERR_NOMEM;
     if (p->sgd && g->nparent[v] == NONE) g->nparent[v] = p->sg[p->sgd - 1];
     mmd_status st = MMD_OK;
@@ -426,7 +331,7 @@ static mmd_status parse_link(P p[static 1], Link l[static 1]) {
 }
 
 [[nodiscard]] static bool add_edge(Graph g[static 1], int32_t a, int32_t b, const Link l[static 1]) {
-    if (g->ne == g->ecap && !edge_grow(g)) return false;
+    if (!graph_edge_room(g)) return false;
     size_t e = g->ne++;
     g->efrom[e] = a;
     g->eto[e] = b;
@@ -565,7 +470,7 @@ static mmd_status parse_subgraph(P p[static 1]) {
         }
     }
     if (p->sgd >= countof(p->sg)) return fail(p, "subgraphs nested too deeply");
-    if (g->ns == g->scap && !sg_grow(g)) return MMD_ERR_NOMEM;
+    if (!graph_sg_room(g)) return MMD_ERR_NOMEM;
     size_t s = g->ns++;
     g->sid[s] = id;
     g->stitle[s] = title;
@@ -612,7 +517,7 @@ static mmd_status parse_stmt(P p[static 1], Str w) {
         while (list_next(&ids, &item)) {
             int32_t s = find_sg(g, item);
             if (s != NONE) { if (!append_class(g->arena, &g->sclass[s], cls)) return MMD_ERR_NOMEM; continue; }
-            int32_t v = intern(g, item);
+            int32_t v = graph_intern(g, item, nullptr);
             if (v == NONE) return MMD_ERR_NOMEM;
             if (!append_class(g->arena, &g->nclass[v], cls)) return MMD_ERR_NOMEM;
         }
@@ -625,7 +530,7 @@ static mmd_status parse_stmt(P p[static 1], Str w) {
         Str css = rest_of_line(p);
         int32_t s = find_sg(g, id);
         if (s != NONE) return append_css(g->arena, &g->sstyle[s], css) ? MMD_OK : MMD_ERR_NOMEM;
-        int32_t v = intern(g, id);
+        int32_t v = graph_intern(g, id, nullptr);
         if (v == NONE) return MMD_ERR_NOMEM;
         return append_css(g->arena, &g->nstyle[v], css) ? MMD_OK : MMD_ERR_NOMEM;
     }

@@ -11,96 +11,16 @@ void dg_init(Graph g[static 1], Arena A[static 1], Dir dir, double fs) {
     *g = (Graph){.arena = A, .dir = dir, .node_sep = 50, .rank_sep = 50, .font_size = fs};
 }
 
-static inline uint64_t hstr(Str s) {
-    uint64_t h = 0xcbf29ce484222325ull;
-    for (size_t i = 0; i < s.n; i++) h = (h ^ (unsigned char)s.p[i]) * 0x100000001b3ull;
-    return h ^ (h >> 31);
-}
-
-#define GROW(A, arr, oldc, newc)                                                                  \
-    do {                                                                                          \
-        typeof(arr) na_ = arena_alloc_array((A), (newc), sizeof *(arr), alignof(typeof(*(arr)))); \
-        if (!na_) return false;                                                                   \
-        if ((oldc)) memcpy(na_, (arr), (oldc) * sizeof *(arr));                                   \
-        (arr) = na_;                                                                              \
-    } while (0)
-
-[[nodiscard]] static bool node_grow(Graph g[static 1]) {
-    size_t oc = g->ncap, nc = oc ? oc * 2 : 32;
-    Arena *A = g->arena;
-    GROW(A, g->nid, oc, nc); GROW(A, g->nlabel, oc, nc); GROW(A, g->nclass, oc, nc);
-    GROW(A, g->nstyle, oc, nc); GROW(A, g->nshape, oc, nc); GROW(A, g->nparent, oc, nc);
-    GROW(A, g->nflags, oc, nc); GROW(A, g->nw, oc, nc); GROW(A, g->nh, oc, nc);
-    g->ncap = nc;
-    return true;
-}
-[[nodiscard]] static bool edge_grow(Graph g[static 1]) {
-    size_t oc = g->ecap, nc = oc ? oc * 2 : 32;
-    Arena *A = g->arena;
-    GROW(A, g->efrom, oc, nc); GROW(A, g->eto, oc, nc); GROW(A, g->elabel, oc, nc);
-    GROW(A, g->estroke, oc, nc); GROW(A, g->estart, oc, nc); GROW(A, g->eend, oc, nc);
-    GROW(A, g->elen, oc, nc); GROW(A, g->eid, oc, nc); GROW(A, g->eflags, oc, nc);
-    g->ecap = nc;
-    return true;
-}
-[[nodiscard]] static bool sg_grow(Graph g[static 1]) {
-    size_t oc = g->scap, nc = oc ? oc * 2 : 16;
-    Arena *A = g->arena;
-    GROW(A, g->sid, oc, nc); GROW(A, g->stitle, oc, nc); GROW(A, g->sclass, oc, nc);
-    GROW(A, g->sstyle, oc, nc); GROW(A, g->sparent, oc, nc); GROW(A, g->sdir, oc, nc);
-    GROW(A, g->sflags, oc, nc);
-    g->scap = nc;
-    return true;
-}
-[[nodiscard]] static bool rehash(Graph g[static 1]) {
-    size_t nc = g->hcap ? g->hcap * 2 : 64;
-    uint32_t *t = ANEW(g->arena, uint32_t, nc);
-    if (!t) return false;
-    memset(t, 0, nc * sizeof *t);
-    for (size_t v = 0; v < g->nn; v++) {
-        size_t h = hstr(g->nid[v]) & (nc - 1);
-        while (t[h]) h = (h + 1) & (nc - 1);
-        t[h] = (uint32_t)v + 1;
-    }
-    g->htab = t;
-    g->hcap = nc;
-    return true;
-}
-
-int32_t dg_find(const Graph g[static 1], Str id) {
-    if (!g->hcap) return NONE;
-    for (size_t h = hstr(id) & (g->hcap - 1);; h = (h + 1) & (g->hcap - 1)) {
-        uint32_t e = g->htab[h];
-        if (!e) return NONE;
-        if (str_eq(g->nid[e - 1], id)) return (int32_t)e - 1;
-    }
-}
-
 int32_t dg_node(Graph g[static 1], Str id, bool *fresh) {
-    if (fresh) *fresh = false;
-    int32_t f = dg_find(g, id);
-    if (f != NONE) return f;
-    if (g->nn >= INT32_MAX / 2) return NONE;
-    if (g->nn == g->ncap && !node_grow(g)) return NONE;
-    if ((g->nn + 1) * 2 > g->hcap && !rehash(g)) return NONE;
-    size_t v = g->nn++;
-    g->nid[v] = id;
-    g->nlabel[v] = id;
-    g->nclass[v] = g->nstyle[v] = (Str){};
-    g->nshape[v] = SH_RECT;
-    g->nparent[v] = NONE;
-    g->nflags[v] = NF_DEFINED;
-    g->nw[v] = g->nh[v] = 0;
-    size_t h = hstr(id) & (g->hcap - 1);
-    while (g->htab[h]) h = (h + 1) & (g->hcap - 1);
-    g->htab[h] = (uint32_t)v + 1;
-    if (fresh) *fresh = true;
-    return (int32_t)v;
+    bool f;
+    int32_t v = graph_intern(g, id, &f);
+    if (f) g->nflags[v] = NF_DEFINED;
+    if (fresh) *fresh = f;
+    return v;
 }
 
 int32_t dg_edge(Graph g[static 1], int32_t a, int32_t b, Str label) {
-    if (g->ne >= INT32_MAX / 2) return NONE;
-    if (g->ne == g->ecap && !edge_grow(g)) return NONE;
+    if (!graph_edge_room(g)) return NONE;
     size_t e = g->ne++;
     g->efrom[e] = a, g->eto[e] = b;
     g->elabel[e] = label;
@@ -114,8 +34,7 @@ int32_t dg_edge(Graph g[static 1], int32_t a, int32_t b, Str label) {
 }
 
 int32_t dg_cluster(Graph g[static 1], Str id, Str title, int32_t parent) {
-    if (g->ns >= 1u << 20) return NONE;
-    if (g->ns == g->scap && !sg_grow(g)) return NONE;
+    if (!graph_sg_room(g)) return NONE;
     size_t s = g->ns++;
     g->sid[s] = id, g->stitle[s] = title;
     g->sclass[s] = g->sstyle[s] = (Str){};

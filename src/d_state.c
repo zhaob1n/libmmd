@@ -455,7 +455,7 @@ static mmd_status layout_scope(Ctx c[static 1], int32_t cl) {
         if (!el_is_note(s->elem[lv])) continue;
         size_t i = (size_t)(s->elem[lv] - NOTE_EL0);
         int32_t v = p->notes.v[i].v, r = p->ccl.v[v];
-        int32_t sv = dg_find(lg, r == NONE ? g->nid[v] : g->sid[r]);
+        int32_t sv = graph_find(lg, r == NONE ? g->nid[v] : g->sid[r]);
         if (sv == NONE) continue;
         { /* mermaid wraps each note in its own (invisible) noteGroup cluster */
             int32_t gc = dg_cluster(lg, STR_CAT(p->A, lg->nid[lv], S("----parent")), (Str){}, NONE);
@@ -470,7 +470,7 @@ static mmd_status layout_scope(Ctx c[static 1], int32_t cl) {
         const EdgeLoc *L = &c->eloc[e];
         if (L->scope != cl || L->ra == INT32_MIN) continue;
         Str ia = L->ra >= 0 ? g->nid[L->ra] : g->sid[-L->ra - 2], ib = L->rb >= 0 ? g->nid[L->rb] : g->sid[-L->rb - 2];
-        int32_t la = dg_find(lg, ia), lb = dg_find(lg, ib);
+        int32_t la = graph_find(lg, ia), lb = graph_find(lg, ib);
         if (la == NONE || lb == NONE) continue;
         if (dg_edge(lg, la, lb, g->elabel[e]) == NONE) return MMD_ERR_NOMEM;
     }

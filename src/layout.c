@@ -1037,7 +1037,6 @@ static mmd_status layout_core(Graph g[static 1]) {
     Arena *A = g->arena;
     size_t N = g->nn, E = g->ne, S = g->ns;
     bool horiz = g->dir == DIR_LR || g->dir == DIR_RL;
-    if (!g->nw) { g->nw = ANEW(A, double, N); g->nh = ANEW(A, double, N); }
     g->nx = ANEW(A, double, N); g->ny = ANEW(A, double, N);
     g->eptoff = ANEW(A, uint32_t, E); g->eptn = ANEW(A, uint32_t, E);
     g->elx = ANEW(A, double, E); g->ely = ANEW(A, double, E);
@@ -1809,22 +1808,11 @@ static inline double iso_pad_rank(const Graph g[static 1]) { return (g->rank_sep
 static inline double iso_pad_cross(const Graph g[static 1]) { return (g->node_sep + 20) / 2; }
 
 [[nodiscard]] static bool gsub_alloc(Graph d[static 1], const Graph g[static 1], Dir dir, size_t nn, size_t ne, size_t ns) {
-    Arena *A = g->arena;
     *d = (Graph){.arena = g->arena, .dir = dir, .theme = g->theme, .flags = g->flags, .acyclicer = g->acyclicer, .order_mode = g->order_mode, .iso_toggle = g->iso_toggle, .node_sep = g->node_sep,
-                 .rank_sep = g->rank_sep, .font_size = g->font_size, .nn = nn, .ne = ne, .ns = ns,
-                 .ncap = nn, .ecap = ne, .scap = ns};
-    d->nid = ANEW(A, Str, nn + 1); d->nlabel = ANEW(A, Str, nn + 1); d->nclass = ANEW(A, Str, nn + 1);
-    d->nstyle = ANEW(A, Str, nn + 1); d->nshape = ANEW(A, Shape, nn + 1); d->nparent = ANEW(A, int32_t, nn + 1);
-    d->nflags = ANEW(A, uint8_t, nn + 1); d->nw = ANEW(A, double, nn + 1); d->nh = ANEW(A, double, nn + 1);
-    d->efrom = ANEW(A, int32_t, ne + 1); d->eto = ANEW(A, int32_t, ne + 1); d->elabel = ANEW(A, Str, ne + 1);
-    d->estroke = ANEW(A, Stroke, ne + 1); d->estart = ANEW(A, Arrow, ne + 1); d->eend = ANEW(A, Arrow, ne + 1);
-    d->elen = ANEW(A, uint16_t, ne + 1); d->eid = ANEW(A, Str, ne + 1); d->eflags = ANEW(A, uint8_t, ne + 1);
-    d->sid = ANEW(A, Str, ns + 1); d->stitle = ANEW(A, Str, ns + 1); d->sclass = ANEW(A, Str, ns + 1);
-    d->sstyle = ANEW(A, Str, ns + 1); d->sparent = ANEW(A, int32_t, ns + 1); d->sdir = ANEW(A, Dir, ns + 1);
-    d->sflags = ANEW(A, uint8_t, ns + 1);
-    return d->nid && d->nlabel && d->nclass && d->nstyle && d->nshape && d->nparent && d->nflags && d->nw &&
-           d->nh && d->efrom && d->eto && d->elabel && d->estroke && d->estart && d->eend && d->elen && d->eid &&
-           d->eflags && d->sid && d->stitle && d->sclass && d->sstyle && d->sparent && d->sdir && d->sflags;
+                 .rank_sep = g->rank_sep, .font_size = g->font_size};
+    if (!graph_reserve(d, nn + 1, ne + 1, ns + 1)) return false;
+    d->nn = nn, d->ne = ne, d->ns = ns;
+    return true;
 }
 
 [[nodiscard]] static bool alloc_outputs(Graph g[static 1]) {

@@ -32,13 +32,15 @@ typedef struct Graph {
     bool iso_toggle;   /* mermaid unified renderer (er/class/state): clusters with no external links lay out in the other direction */
     double node_sep, rank_sep, font_size;
 
-    /* nodes (SoA) */
+    /* nodes, edges, subgraphs are SoA: graph.c grows every array above the layout-output comments
+     * together (ncap/ecap/scap), and layout.c loops_expand copies the node and edge ones */
     size_t nn, ncap;
     Str *nid, *nlabel, *nclass, *nstyle;
     Shape *nshape;
     int32_t *nparent; /* subgraph index or NONE */
     uint8_t *nflags;  /* NF_* */
-    double *nw, *nh, *nx, *ny;
+    double *nw, *nh; /* node size: set by the diagram or measured in the layout */
+    double *nx, *ny; /* layout output: position */
 
     /* edges (SoA) */
     size_t ne, ecap;
@@ -60,6 +62,7 @@ typedef struct Graph {
     int32_t *sparent;
     Dir *sdir;
     uint8_t *sflags; /* SF_* */
+    /* layout output */
     double *sx, *sy, *sw, *sh;
     double *stx; /* cluster title centre x (avoids edges crossing the title) */
 
@@ -75,6 +78,17 @@ typedef struct Graph {
 enum { NF_DEFINED = 1u, NF_HIDDEN = 2u, NF_SUBREF = 4u, NF_FIXED = 8u /* size preset (cluster proxy) */, NF_PROXY = 16u /* stands in for an isolated cluster */ };
 enum { SF_DIRSET = 1u };
 enum { EF_ANIM = 1u, EF_ANIM_SLOW = 2u, EF_LOOPPTS = 4u /* self-loop routed as a polyline (mermaid helpers) */ };
+
+/* ---- tables (graph.c) ---- */
+/* make room for one more edge / subgraph; false on OOM or overflow */
+[[nodiscard]] bool graph_edge_room(Graph g[static 1]);
+/* capacity for exactly nn nodes, ne edges, ns subgraphs in an empty graph (counts are the caller's) */
+[[nodiscard]] bool graph_reserve(Graph g[static 1], size_t nn, size_t ne, size_t ns);
+[[nodiscard]] bool graph_sg_room(Graph g[static 1]);
+/* node index of id, or NONE */
+int32_t graph_find(const Graph g[static 1], Str id);
+/* node index of id, added (rect, label = id, no parent, sizes 0) if new: *fresh says so; NONE on OOM */
+int32_t graph_intern(Graph g[static 1], Str id, bool *fresh);
 
 /* parse flowchart body starting at offset `off` within src */
 mmd_status flow_parse(Graph g[static 1], size_t n, const char src[static n], size_t off,

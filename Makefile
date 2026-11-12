@@ -50,7 +50,7 @@ CFLAGS += -std=gnu2y -fms-extensions -fPIC -fvisibility=hidden $(WARN) -Iinclude
 LDLIBS = -lm
 BUILD ?= build
 DIAG_SRCS := $(wildcard src/d_*.c)
-SRCS := src/base.c src/text.c src/flow_parse.c src/layout.c src/nsimplex.c src/dorder.c src/drank.c src/flow_svg.c src/seq.c src/rich.c src/dgraph.c $(DIAG_SRCS) src/mmd.c src/writer.c
+SRCS := src/base.c src/text.c src/flow_parse.c src/layout.c src/nsimplex.c src/dorder.c src/drank.c src/flow_svg.c src/seq.c src/rich.c src/dgraph.c src/graph.c $(DIAG_SRCS) src/mmd.c src/writer.c
 OBJS := $(SRCS:src/%.c=$(BUILD)/%.o)
 
 SONAME := libmmd.so.$(SOMAJOR)

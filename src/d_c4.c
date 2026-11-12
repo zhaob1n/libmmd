@@ -455,9 +455,9 @@ DIAG_FN(c4_render) {
     if (!nst || !rst) return MMD_ERR_NOMEM;
     for (size_t v = 0; v < g.nn; v++) nst[v] = nullptr;
     for (size_t e = 0; e <= g.ne; e++) rst[e] = nullptr;
-    for (size_t i = 0; i < es.n; i++) { int32_t v = dg_find(&g, es.v[i].alias); if (v != NONE) nst[v] = &es.v[i]; }
+    for (size_t i = 0; i < es.n; i++) { int32_t v = graph_find(&g, es.v[i].alias); if (v != NONE) nst[v] = &es.v[i]; }
     for (size_t i = 0; i < rs.n; i++) {
-        int32_t f = dg_find(&g, rs.v[i].from), t = dg_find(&g, rs.v[i].to);
+        int32_t f = graph_find(&g, rs.v[i].from), t = graph_find(&g, rs.v[i].to);
         for (size_t e = 0; e < g.ne; e++)
             if (f != NONE && ((g.efrom[e] == f && g.eto[e] == t) || (g.efrom[e] == t && g.eto[e] == f))) rst[e] = &rs.v[i];
         }

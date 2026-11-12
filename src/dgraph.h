@@ -8,8 +8,6 @@
 void dg_init(Graph g[static 1], Arena A[static 1], Dir dir, double fs);
 /* intern node by id; NONE on OOM. *fresh set when created now (may be nullptr). */
 [[nodiscard]] int32_t dg_node(Graph g[static 1], Str id, bool *fresh);
-/* lookup only */
-int32_t dg_find(const Graph g[static 1], Str id);
 static inline void dg_size(Graph g[static 1], int32_t v, double w, double h) {
     g->nw[v] = w;
     g->nh[v] = h;
