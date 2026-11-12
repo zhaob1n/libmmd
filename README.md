@@ -7,7 +7,7 @@ It needs no browser, no Node.js, no JavaScript engine and no dependencies beyond
 - About **0.6–1.6 ms per diagram from the CLI**. mermaid-cli takes about 0.9–1.6 s for the same diagrams (see [Benchmarks](#benchmarks)).
 - Library renders take about **15 µs** for a small flowchart and about **0.5 ms** for a 4 KB one.
 - Flowchart layout follows dagre's algorithm, so node positions match mermaid's closely (mean node-centre error 1.6 px on the fixture set).
-- All 396 syntax examples from mermaid's documentation that mermaid itself can render also render here.
+- All 432 syntax examples from mermaid's documentation render here (mermaid itself renders each of them).
 
 > **Status:** this is a young project. Output is meant to look like mermaid-cli 11.17, not to match it pixel for pixel. See [Status and limitations](#status-and-limitations).
 
@@ -46,6 +46,8 @@ It needs no browser, no Node.js, no JavaScript engine and no dependencies beyond
 | Event modeling | `eventmodeling` |
 | Railroad | `railroad-beta`, `railroad-ebnf-beta`, `railroad-abnf-beta`, `railroad-peg-beta` |
 | Wardley map | `wardley-beta` |
+| Agent flow | `agentflow-beta` (mermaid 12's neo look; `look: classic` with a classic theme draws a flowchart) |
+| Use case | `usecase-beta` (actors, system boundaries and packages, include/extend/generalization, notes, JSON tables) |
 
 Every type also supports:
 - the `default`, `dark`, `forest` and `neutral` themes;
@@ -207,7 +209,8 @@ Each image puts libmmd on the left and mermaid-cli 11.17 on the right, rendered 
 | C4 ![](docs/gallery/c4_full.png) | Sankey ![](docs/gallery/sankey_full.png) |
 | Pie ![](docs/gallery/pie_full.png) | Timeline ![](docs/gallery/timeline_full.png) |
 | XY chart ![](docs/gallery/xychart_full.png) | Quadrant ![](docs/gallery/quadrant_full.png) |
-| Journey ![](docs/gallery/journey_full.png) | |
+| Journey ![](docs/gallery/journey_full.png) | Agent flow ![](docs/gallery/agentflow.png) |
+| Use case ![](docs/gallery/usecase.png) | |
 
 More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 
@@ -215,11 +218,11 @@ More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 
 | what | how |
 |---|---|
-| Golden + sanity tests (152 cases; XML well-formedness, error positions, viewBox bounds, mermaid docs corpus) | `make test` (`UPDATE_GOLDEN=1 make test` to refresh) |
+| Golden + sanity tests (156 cases; XML well-formedness, error positions, viewBox bounds, mermaid docs corpus) | `make test` (`UPDATE_GOLDEN=1 make test` to refresh) |
 | Locale independence: the corpus rendered under a comma-decimal locale must match the C locale byte for byte (skipped when none is installed) | `make test` |
-| Writer round trip: random labels through 92 slots of every diagram type, every typed helper (keyword-like ids included), number round trip, error paths | `make test` (`build/test-writer [iterations]`) |
+| Writer round trip: random labels through 102 slots of every diagram type, every typed helper (keyword-like ids included), number round trip, error paths | `make test` (`build/test-writer [iterations]`) |
 | Writer vs mermaid.js: the writer test's corpus (~400 diagrams per seed) must parse in mermaid and show every label (skips without mermaid-cli) | `python3 tools/writer_mmdc_check.py [-v] [--seeds=N]` |
-| Mermaid docs corpus: 432 examples from mermaid's syntax docs, 396/396 that mermaid itself renders | `python3 tools/docs_audit.py [-v]` |
+| Mermaid docs corpus: 432 examples from mermaid's syntax docs, 432/432 (all of them render in mermaid too) | `python3 tools/docs_audit.py [-v]` |
 | ASan + UBSan build | `make asan` → `build-asan/mmd` |
 | Fuzzing (mutational, under ASan or MSan; crashing inputs are saved under `TMPDIR` and printed) | `python3 tests/fuzz.py build-asan/mmd 1000 [seed]` |
 | Uninitialised arena reads (malloc poisoned with two fill bytes, output compared; needs `make` and `make asan` first) | `sh tests/poison.sh` |
