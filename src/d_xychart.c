@@ -318,10 +318,8 @@ DIAG_FN(xychart_render) {
     }
     /* gutter between the plot and the legend, so an outside label past a full bar is not covered */
     double gutter = 0;
-    if (dl_out && horiz && nbar) {
-        for (size_t i = 0; i < ndl; i++) gutter = fmax(gutter, dl_box(&dl[i]).x1 - (ox + pw));
-        gutter += 8;
-    }
+    for (size_t i = 0; i < ndl && dl_out && horiz; i++) gutter = fmax(gutter, dl_box(&dl[i]).x1 - (ox + pw));
+    if (gutter > 0) gutter += 8;
     char dlfill[64];
     memcpy(dlfill, "#131300", 8);
     if (show_dl) {
