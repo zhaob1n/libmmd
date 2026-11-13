@@ -2,6 +2,7 @@
 #include "dcfg.h"
 #include "dgraph.h"
 #include "mmd.h"
+#include "mtheme.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -178,6 +179,14 @@ bool dcfg_is_acc(Str t, bool block[static 1]) {
 
 static thread_local int cur_theme; /* MMD_THEME_* chosen by CLI option or init/frontmatter */
 static thread_local int api_theme; /* MMD_THEME_* the caller asked for, AUTO when the source decides */
+static thread_local MThemeId eng_id, own_id; /* own_id: what a dcfg_theme_own() renderer draws */
+static thread_local bool own_theme, derive, eng_tried, eng_user, user_vars; /* eng_user: eng holds the overrides */
+static thread_local const MTheme *eng, *eng_base;
+
+static MThemeId mt_of(int theme) {
+    return theme == MMD_THEME_DARK ? MT_DARK : theme == MMD_THEME_FOREST ? MT_FOREST
+         : theme == MMD_THEME_NEUTRAL ? MT_NEUTRAL : MT_DEFAULT;
+}
 
 /* a value mermaid's readAppearance takes: a theme in its registry (or 'null'), a look it knows */
 static bool appearance_ok(Str key, Str v) {
@@ -244,7 +253,13 @@ void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t of
         }
         i = nxt > i ? nxt : i + 1;
     }
-    cur_theme = api ? api : theme_named(appearance(S("theme")));
+    Str tname = appearance(S("theme"));
+    cur_theme = api ? api : theme_named(tname);
+    eng_id = !api && str_eq(tname, S("base")) ? MT_BASE : mt_of(cur_theme);
+    /* mermaid derives from the themeVariables only when the source names a theme or the theme
+     * differs from the site's (updateCurrentConfig); else they land, as given, on the site theme's */
+    bool named = dcfg_get_str(S("theme")).n;
+    derive = api ? named : !str_eq(tname, S("null")) && (named || (tname.n && !str_eq(tname, S("default"))));
     /* body: acc lines (one memmem pass first: most diagrams have none) */
     if (n <= off || !memmem(src + off, n - off, "acc", 3)) return;
     i = off;
@@ -274,6 +289,7 @@ void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t of
 void dcfg_end(void) {
     cur_theme = api_theme = 0;
     cur = (DCfg){}, cur_a = nullptr, cur_cap = 0, cur_sect = cur_init = (Str){};
+    own_theme = derive = eng_tried = eng_user = user_vars = false, eng = eng_base = nullptr;
 }
 const DCfg *dcfg_cur(void) { return &cur; }
 
@@ -342,32 +358,70 @@ static Str css_safe(Str v) {
 
 Str dcfg_css(const char key[static 1]) { return css_safe(dcfg_get(key)); }
 
-typedef struct ThemeKV { const char *k, *v; } ThemeKV;
-#include "d_themes.h"
+/* mermaid's theme engine (src/mtheme.c) for the named theme with the source's themeVariables when
+ * mermaid derives from them, and for what the renderer draws on its own: the default theme, or for
+ * a renderer that draws named themes itself (dcfg_theme_own) that theme. dcfg_tv reports the
+ * variables where the two differ. Built on first use; nothing to build when there is nothing to
+ * derive and the themes agree. */
+static bool engine(void) {
+    if (eng_tried) return eng;
+    eng_tried = true;
+    size_t nov = 0;
+    for (size_t i = 0; i < cur.n; i++) nov += str_starts(cur.kv[i].k, S("themeVariables."));
+    user_vars = nov > 0;
+    if (!derive) nov = 0;
+    MThemeId base_id = own_theme ? own_id : MT_DEFAULT;
+    if (!nov && eng_id == base_id) return false;
+    if (nov) {
+        Str *ks = ANEW(cur_a, Str, nov), *vs = ANEW(cur_a, Str, nov);
+        if (!ks || !vs) return false;
+        for (size_t i = 0, j = 0; i < cur.n; i++)
+            if (str_starts(cur.kv[i].k, S("themeVariables.")))
+                ks[j] = (Str){.p = cur.kv[i].k.p + 15, .n = cur.kv[i].k.n - 15}, vs[j++] = cur.kv[i].v;
+        eng = mtheme_new(cur_a, eng_id, nov, ks, vs);
+        eng_user = eng != nullptr;
+    }
+    /* where khroma cannot read an override mermaid fails the render; draw the theme instead, with the
+     * overrides as given */
+    if (!eng && !cur_a->oom) eng = mtheme_preset(eng_id);
+    eng_base = mtheme_preset(base_id);
+    if (!eng || !eng_base) cur_a->oom = true, eng = nullptr; /* render() reports it */
+    return eng;
+}
 
-void dcfg_set_theme(int theme) { cur_theme = theme; }
+/* anything for dcfg_tv to report */
+static bool themed(void) { return engine() || user_vars; }
+
+void dcfg_theme_own(void) { own_theme = true, own_id = mt_of(cur_theme), cur_theme = 0; }
 int dcfg_theme(void) { return cur_theme; }
 
-/* user themeVariables.<var> first, then the named theme's preset (mermaid's own values) */
-Str dcfg_tv(const char var[static 1]) {
+/* themeVariables.<var> as the source gives it, or empty */
+static Str user_tv(Str var) {
     char key[96];
-    int kn = snprintf(key, sizeof key, "themeVariables.%s", var);
-    if (kn > 0 && (size_t)kn < sizeof key) { /* a truncated key would look up a different variable */
-        Str v = css_safe(dcfg_get_str((Str){.p = key, .n = (size_t)kn}));
-        if (v.n) return v;
-    }
-    const ThemeKV *t = nullptr;
-    size_t n = 0;
-    switch (cur_theme) {
-    case MMD_THEME_DARK: t = TH_DARK, n = countof(TH_DARK); break;
-    case MMD_THEME_FOREST: t = TH_FOREST, n = countof(TH_FOREST); break;
-    case MMD_THEME_NEUTRAL: t = TH_NEUTRAL, n = countof(TH_NEUTRAL); break;
-    default: break;
-    }
-    for (size_t i = 0; i < n; i++)
-        if (!strcmp(t[i].k, var)) return (Str){.p = t[i].v, .n = strlen(t[i].v)};
-    return (Str){};
+    int kn = snprintf(key, sizeof key, "themeVariables.%.*s", (int)var.n, var.p);
+    return kn > 0 && (size_t)kn < sizeof key ? dcfg_get_str((Str){.p = key, .n = (size_t)kn}) : (Str){};
 }
+
+/* the named theme's variable, derived from the source's themeVariables where mermaid derives, when
+ * it differs from what the renderer draws anyway (or the source sets it); empty otherwise */
+Str dcfg_tv(const char var[static 1]) {
+    Str k = {.p = var, .n = strlen(var)}, user = user_tv(k);
+    bool on = engine();
+    if (user.n && !eng_user) return css_safe(user); /* not derived from: as given */
+    if (!on) return (Str){};
+    Str v = css_safe(mtheme_get(eng, k));
+    return v.n && (user.n || !str_eq(v, mtheme_get(eng_base, k))) ? v : (Str){};
+}
+
+Str dcfg_theme_var(const char var[static 1]) {
+    Str k = {.p = var, .n = strlen(var)}, user = user_tv(k);
+    const MTheme *t = engine() ? eng : mtheme_preset(eng_id);
+    if (user.n && !eng_user) return css_safe(user);
+    if (!t) cur_a->oom = true;
+    return t ? css_safe(mtheme_get(t, k)) : (Str){};
+}
+
+bool dcfg_dark(void) { return str_eq(dcfg_theme_var("darkMode"), S("true")); }
 
 /* NUL-terminated copy of v that outlives the call (eight live at once), or def when v is empty or long */
 static const char *ring_str(Str v, const char def[static 1]) {
@@ -381,14 +435,14 @@ static const char *ring_str(Str v, const char def[static 1]) {
 }
 
 const char *dcfg_pal(const char prefix[static 1], size_t i, const char def[static 1]) {
-    if (!cur.n && cur_theme <= MMD_THEME_DEFAULT) return def;
+    if (!themed()) return def;
     char var[48];
     snprintf(var, sizeof var, "%s%zu", prefix, i);
     return ring_str(dcfg_tv(var), def);
 }
 
 const char *dcfg_list(const char var[static 1], size_t i, const char def[static 1]) {
-    if (!cur.n && cur_theme <= MMD_THEME_DEFAULT) return def;
+    if (!themed()) return def;
     Str v = dcfg_tv(var);
     size_t cnt = v.n ? 1 : 0;
     for (size_t k = 0; k < v.n; k++) cnt += v.p[k] == ',';
@@ -405,11 +459,6 @@ bool dcfg_neo(void) {
     if (api_theme) return false; /* mmd_theme names only classic themes, never redux* */
     Str theme = appearance(S("theme"));
     return !theme.n || str_starts(theme, S("redux"));
-}
-
-Str dcfg_background(void) {
-    Str v = dcfg_tv("background");
-    return (cur_theme > MMD_THEME_DEFAULT && v.n == 5 && !memcmp(v.p, "white", 5)) ? (Str){} : v;
 }
 
 /* themeVariable -> CSS template ('$' = value); kind "*" applies to every diagram */
@@ -470,7 +519,6 @@ static const TV TVS[] = {
     {"block", "primaryColor", "#mermaid .bn{fill:$;}"},
     {"block", "primaryBorderColor", "#mermaid .bn{stroke:$;}"},
     {"block", "lineColor", "#mermaid .be{stroke:$;}"},
-    {"kanban", "primaryBorderColor", "#mermaid .kc{stroke:$;}"},
     {"gantt", "taskBkgColor", "#mermaid .task{fill:$;}"},
     {"gantt", "taskBorderColor", "#mermaid .task{stroke:$;}"},
     {"gantt", "activeTaskBkgColor", "#mermaid .active{fill:$;}"},
@@ -580,7 +628,7 @@ static const TV TVS[] = {
     {"block", "lineColor", "#mermaid marker path{fill:$;stroke:$;}"},
     {"block", "textColor", "#mermaid text{fill:$;}"},
     {"kanban", "background", "#mermaid .ki{fill:$;}"},
-    {"kanban", "nodeBorder", "#mermaid .kc,#mermaid .ki{stroke:$;}"},
+    {"kanban", "nodeBorder", "#mermaid .ki{stroke:$;}"},
     {"kanban", "textColor", "#mermaid .kt,#mermaid .kl{fill:$;}"},
     {"gantt", "taskTextColor", "#mermaid .tin{fill:$;}"},
     {"gantt", "taskTextOutsideColor", "#mermaid .tout{fill:$;}"},
@@ -632,7 +680,7 @@ static const TV TVS[] = {
 };
 
 void dcfg_theme_css(Buf b[static 1], const char kind[static 1]) {
-    if (!cur.n && cur_theme <= MMD_THEME_DEFAULT) return;
+    if (!themed()) return;
     for (size_t i = 0; i < countof(TVS); i++) {
         if (strcmp(TVS[i].kind, "*") && strcmp(TVS[i].kind, kind)) continue;
         Str v = dcfg_tv(TVS[i].var);

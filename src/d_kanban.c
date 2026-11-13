@@ -6,16 +6,16 @@
 
 #include "dgraph.h"
 #include "dcfg.h"
+#include "mcolor.h"
 #include "diagrams.h"
 #include "text.h"
 
 typedef struct KItem { Str label, assigned, ticket, priority; uint32_t col; double h; } KItem;
 
 static constexpr char CSS[] =
-    "#mermaid .kc{stroke:#9370DB;stroke-width:1px;}#mermaid .kt{font-size:16px;fill:#333;}"
+    "#mermaid .kc{stroke-width:1px;}#mermaid .kt{font-size:16px;fill:#333;}"
     "#mermaid .ki{fill:#fff;stroke:#9370DB;stroke-width:1px;}#mermaid .kl{font-size:16px;fill:#333;}"
     "#mermaid .km{font-size:12px;fill:#666;}#mermaid .kp{stroke-width:4px;}";
-static constexpr char COLF[][8] = {"#ECECFF", "#ffffde", "#e8f4ea", "#fde8e8", "#e8f0fd", "#f8e8fd"};
 
 /* `id[label]`, `[label]`, `id(label)` or text; returns label, strips/parses @{..} into *meta */
 static Str node_label(Str s, Str meta[static 1]) {
@@ -102,12 +102,17 @@ DIAG_FN(kanban_render) {
     if (!cy) return MMD_ERR_NOMEM;
     for (size_t c = 0; c < cols.n; c++) {
         double x = (double)c * (CW + GAP);
-        /* mermaid: .section-N fill = cScale[N+1] lightened (darkened in dark mode) by 10; columns are N = c+1 */
+        /* mermaid: .section-N rect fill and stroke = cScale[N+1] lightened (darkened in dark mode)
+         * by 10, in every theme; columns are N = c+1 */
         size_t ci = c % 10 + 2;
-        char key[40];
-        snprintf(key, sizeof key, "themeVariables.cScale%zu", ci);
-        const char *fill = dcfg_get(key).n ? dcfg_pal("cScale", ci, COLF[c % countof(COLF)]) : dcfg_pal("kanbanFill", ci, COLF[c % countof(COLF)]);
-        dg_rect_fill(out, x, top, CW, ch[c] + 5, 5, "kc", fill); /* mermaid sizes each column to its cards */
+        char key[16];
+        snprintf(key, sizeof key, "cScale%zu", ci);
+        Str sc = dcfg_theme_var(key), fill = S("#ECECFF"), f;
+        if (sc.n && (dcfg_dark() ? mc_darken : mc_lighten)(a, sc, 10, &f) && f.n) fill = f;
+        /* mermaid sizes each column to its cards */
+        buf_lit(out, "<rect class=\"kc\" x=\""); buf_num(out, x); buf_lit(out, "\" y=\""); buf_num(out, top);
+        buf_lit(out, "\" width=\""); buf_num(out, CW); buf_lit(out, "\" height=\""); buf_num(out, ch[c] + 5);
+        buf_lit(out, "\" rx=\"5\" fill=\""); buf_str(out, fill); buf_lit(out, "\" stroke=\""); buf_str(out, fill); buf_lit(out, "\"/>");
         Str t = dg_wrap(a, cols.v[c], 16, CW - 20);
         const char *lc = dcfg_pal("cScaleLabel", ci, "");
         if (*lc) { buf_lit(out, "<g font-size=\"16px\" fill=\""); buf_cstr(out, lc); buf_lit(out, "\">"); }

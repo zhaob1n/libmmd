@@ -50,8 +50,10 @@ It needs no browser, no Node.js, no JavaScript engine and no dependencies beyond
 | Use case | `usecase-beta` (actors, system boundaries and packages, include/extend/generalization, notes, JSON tables; mermaid 12's neo look, or `look: classic` with a classic theme) |
 
 Every type also supports:
-- the `default`, `dark`, `forest` and `neutral` themes;
-- `%%{init}%%` and YAML front-matter config, with `themeVariables` values whitelisted;
+- the `default`, `base`, `dark`, `forest` and `neutral` themes;
+- `%%{init}%%` and YAML front-matter config, with `themeVariables` derived as mermaid derives them
+  when the source names a theme (`theme: base` with a `primaryColor` recolours everything computed from it),
+  and their values whitelisted;
 - `accTitle`/`accDescr`, which become `<title>`/`<desc>` plus ARIA attributes.
 
 Per-type feature notes are in [docs/dev/INTERNALS.md](docs/dev/INTERNALS.md).
