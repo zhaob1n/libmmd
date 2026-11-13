@@ -156,9 +156,11 @@ bool dcfg_is_acc(Str t, bool block[static 1]) {
     return false;
 }
 
-void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t off) {
+static thread_local int cur_theme; /* MMD_THEME_* chosen by CLI option or init/frontmatter */
+static thread_local int api_theme; /* MMD_THEME_* the caller asked for, AUTO when the source decides */
+void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t off, int api) {
     cur = (DCfg){};
-    cur_a = a, cur_cap = 0;
+    cur_a = a, cur_cap = 0, api_theme = api;
     size_t i = 0;
     /* preamble: frontmatter + directives */
     while (i < off) {
@@ -215,8 +217,7 @@ void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t of
     }
 }
 
-static thread_local int cur_theme; /* MMD_THEME_* chosen by CLI option or init/frontmatter */
-void dcfg_end(void) { cur_theme = 0; cur = (DCfg){}; cur_a = nullptr; cur_cap = 0; }
+void dcfg_end(void) { cur_theme = api_theme = 0; cur = (DCfg){}; cur_a = nullptr; cur_cap = 0; }
 const DCfg *dcfg_cur(void) { return &cur; }
 
 Str dcfg_get_str(Str key) {
@@ -327,8 +328,10 @@ const char *dcfg_list(const char var[static 1], size_t i, const char def[static 
 }
 
 bool dcfg_neo(void) {
+    if (!str_eq(dcfg_get("look"), S("classic"))) return true;
+    if (api_theme) return false; /* mmd_theme names only classic themes, never redux* */
     Str theme = dcfg_get("theme");
-    return !str_eq(dcfg_get("look"), S("classic")) || !theme.n || str_starts(theme, S("redux"));
+    return !theme.n || str_starts(theme, S("redux"));
 }
 
 Str dcfg_background(void) {

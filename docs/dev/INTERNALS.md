@@ -82,7 +82,8 @@ mermaid itself fails to render `block_full` and `radar_full` (partial named curv
 mermaid 12's config schema gives flowchart, swimlane, sequence, class, state, ER, requirement,
 usecase, venn and agentflow `look: neo` and `theme: redux-color`, and the global `layout` is `elk`
 (bundled, so flowcharts are laid out by ELK unless `layout: dagre`). `look: classic` alone keeps the
-redux palette; the classic look needs a classic theme too (`dcfg_neo()`). Side by side, the neo
+redux palette; the classic look needs a classic theme too (`dcfg_neo()`), named in the source or by
+the caller: `mmdc -t default` and `mmd -t default` are classic, no theme at all is neo. Side by side, the neo
 flowchart (120px minimum label boxes, 171px diamonds for one-word labels, a monospace-looking font)
 is roomier without being clearer, so flowcharts stay classic and dagre. agentflow and usecase only
 exist in mermaid 12 and follow its neo default; `look: classic` with a classic theme switches them.

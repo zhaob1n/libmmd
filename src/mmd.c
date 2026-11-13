@@ -170,7 +170,8 @@ static mmd_status render_c(Arena ap[static 1], Buf bp[static 1], size_t n, const
     size_t eoff = 0;
     mmd_status st = MMD_OK;
     PMARK("");
-    dcfg_begin(&arena, n, src, off); /* %%{init}%% / frontmatter keys + accTitle/accDescr, all diagram kinds */
+    /* %%{init}%% / frontmatter keys + accTitle/accDescr, all diagram kinds */
+    dcfg_begin(&arena, n, src, off, opt ? opt->theme : MMD_THEME_AUTO);
     dcfg_set_theme(opt && opt->theme ? opt->theme : cfg.theme);
     bool af = str_eq(kw, S("agentflow-beta"));
     if (str_eq(kw, S("graph")) || str_eq(kw, S("flowchart")) || str_eq(kw, S("flowchart-elk")) || str_eq(kw, S("swimlane-beta")) || af) {
