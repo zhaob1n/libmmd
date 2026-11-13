@@ -21,6 +21,11 @@ mermaid.js is the reference: where libmmd and mermaid disagree on what a text me
   `mmd_w_num`, `mmd_w_csv`, `mmd_w_line` (nesting by indentation), `mmd_w_raw`. Typed helpers
   cover xychart, pie, flowchart, sequence, gantt, state, sankey, mindmap, treeView, ER and gitGraph:
   they know what the contexts can't, a diagram's keywords and id rules.
+- **Config before the diagram.** `mmd_w_config(w, "xyChart.showDataLabel", "true")` writes one
+  `%%{init: {"xyChart":{"showDataLabel":"true"}}}%%` line. The key is dotted; the value is a scalar
+  (quotes, backslashes and controls are refused — the config parser does not unescape). Several
+  calls merge as separate directives, and a call after the diagram has started is an error.
+  `mmd_w_raw` can still write front matter by hand; this is the helper that knows the shape.
 - **One header.** The writer is the second half of `include/mmd.h`, not a header of its own.
 - **Blocks and depth live in the writer.** Helpers that open a block (sequence `loop`/`alt`/`par`/...,
   `mmd_state_group`, `mmd_er_entity`) push it; `mmd_end()` writes `end` or `}`; `else`/`and`/`option`
