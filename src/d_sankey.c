@@ -1,7 +1,8 @@
 /* sankey(-beta): CSV rows `source,target,value` (RFC 4180 quoting, "" escapes, blank lines ok).
  * Layout is a port of d3-sankey 0.12 as configured by mermaid 12 (sankey.nodeAlignment, nodeWidth,
  * nodePadding (+15 with showValues), 6 relaxation iterations with collision resolution); links are
- * cubic bands coloured by their source. Labels show the value (showValues). */
+ * cubic bands coloured by their source. Labels show the value (showValues, between prefix and suffix),
+ * outlined by labelStyle. */
 #include <math.h>
 #include <stdio.h>
 
@@ -10,7 +11,7 @@
 #include "diagrams.h"
 #include "text.h"
 
-typedef struct SNode { Str name; double in, out, v, x, y, h; uint32_t col, dep, hgt; } SNode;
+typedef struct SNode { Str name, val; double in, out, v, x, y, h; uint32_t col, dep, hgt; bool r; } SNode;
 typedef struct SLink { uint32_t s, t; double v, y0, y1; } SLink;
 
 static constexpr char CSS[] =
@@ -18,11 +19,13 @@ static constexpr char CSS[] =
 static constexpr char PAL[][8] = {"#4e79a7", "#f28e2c", "#e15759", "#76b7b2", "#59a14f", "#edc949",
                                   "#af7aa1", "#ff9da7", "#9c755f", "#bab0ab"};
 
-/* the value after a node's name, as mermaid writes it: String(Math.round(v * 100) / 100) */
-static Str val_text(bool show, double v, char nb[static 40]) {
-    if (!show) return (Str){};
-    nb[0] = ' ';
-    return (Str){.p = nb, .n = 1 + fmt_js(round(v * 100) / 100, nb + 1)};
+/* name and value: starting at x0 right of the node, else ending at x1 */
+static void label(Buf b[static 1], const SNode q[static 1], double x0, double x1, double y) {
+    if (q->r) dg_text_open(b, x0, y, "start", "st");
+    else dg_text_open(b, x1, y, "end", "st");
+    buf_xml(b, q->name);
+    buf_xml(b, q->val);
+    buf_lit(b, "</text>");
 }
 
 /* one CSV field from s (advances); quoted fields unescape "" into arena memory */
@@ -235,11 +238,23 @@ DIAG_FN(sankey_render) {
     #undef SORT_LINKS
     #undef LW
     #undef Y1
+    /* mermaid writes "name\nprefix value suffix", the '\n' showing as a space. The label sits right of
+     * its node in the left half (legacy), or right of it from the layer of the biggest node on (outlined). */
+    Str pre = dcfg_get_str(S("sankey.prefix")), suf = dcfg_get_str(S("sankey.suffix"));
+    const bool OUTL = str_eq(dcfg_get_str(S("sankey.labelStyle")), S("outlined"));
+    uint32_t central = 0;
+    double vmax = 0;
+    for (size_t i = 0; i < nn; i++) if (N[i].v > vmax) vmax = N[i].v, central = N[i].col;
     double lw = 0, rw = 0;
-    char nb[40];
     for (size_t i = 0; i < nn; i++) {
-        double w = text_width(N[i].name, 14) + text_width(val_text(SHOWV, N[i].v, nb), 14) + 8;
-        if (N[i].x < W / 2) rw = fmax(rw, N[i].x + NW + w - W); else lw = fmax(lw, w - N[i].x);
+        if (SHOWV) {
+            char nb[40];
+            N[i].val = STR_CAT(a, S(" "), pre, ((Str){.p = nb, .n = fmt_js(round(N[i].v * 100) / 100, nb)}), suf);
+            if (!N[i].val.p) return MMD_ERR_NOMEM;
+        }
+        N[i].r = OUTL ? N[i].col >= central : N[i].x < W / 2;
+        double w = text_width(N[i].name, 14) + text_width(N[i].val, 14) + 8;
+        if (N[i].r) rw = fmax(rw, N[i].x + NW + w - W); else lw = fmax(lw, w - N[i].x);
     }
     /* label collision avoidance: boxes overlapping horizontally are pushed apart vertically */
     double *lx0 = ANEW(a, double, nn), *lx1 = ANEW(a, double, nn), *ly = ANEW(a, double, nn);
@@ -247,9 +262,8 @@ DIAG_FN(sankey_render) {
     if (!lx0 || !lx1 || !ly || !lbo) return MMD_ERR_NOMEM;
     constexpr double LH = 17;
     for (size_t i = 0; i < nn; i++) {
-        bool right = N[i].x < W / 2;
-        double w = text_width(N[i].name, 14) + text_width(val_text(SHOWV, N[i].v, nb), 14);
-        lx0[i] = right ? N[i].x + NW + 6 : N[i].x - 6 - w;
+        double w = text_width(N[i].name, 14) + text_width(N[i].val, 14);
+        lx0[i] = N[i].r ? N[i].x + NW + 6 : N[i].x - 6 - w;
         lx1[i] = lx0[i] + w, ly[i] = N[i].y + N[i].h / 2, lbo[i] = (uint32_t)i;
     }
     for (size_t i = 1; i < nn; i++) {
@@ -293,12 +307,16 @@ DIAG_FN(sankey_render) {
     }
     for (size_t i = 0; i < nn; i++) {
         dg_rect_fill(out, N[i].x, N[i].y, NW, N[i].h, 0, "sn", PAL[i % countof(PAL)]);
-        Str val = val_text(SHOWV, N[i].v, nb);
-        if (N[i].x < W / 2) dg_text_open(out, lx0[i], ly[i], "start", "st");
-        else dg_text_open(out, lx1[i], ly[i], "end", "st");
-        buf_xml(out, N[i].name);
-        buf_xml(out, val);
-        buf_lit(out, "</text>");
+        if (!OUTL) label(out, &N[i], lx0[i], lx1[i], ly[i]);
+    }
+    if (OUTL) { /* every label over a halo of the node background, then all of them again on top */
+        Str bg = dcfg_theme_var("mainBkg");
+        if (!bg.n) bg = dcfg_theme_var("background");
+        buf_lit(out, "<g stroke=\""); if (bg.n) buf_str(out, bg); else buf_lit(out, "#fff");
+        buf_lit(out, "\" stroke-width=\"4\" stroke-linejoin=\"round\" paint-order=\"stroke\">");
+        for (size_t i = 0; i < nn; i++) label(out, &N[i], lx0[i], lx1[i], ly[i]);
+        buf_lit(out, "</g>");
+        for (size_t i = 0; i < nn; i++) label(out, &N[i], lx0[i], lx1[i], ly[i]);
     }
     if (title.n) dg_text(out, title, 18, W / 2, -top / 2 - 5, "middle", "st");
     buf_lit(out, "</svg>\n");

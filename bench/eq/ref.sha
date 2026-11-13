@@ -532,6 +532,7 @@ c21af082073aabb4 tests/cases/sankey_align_center.mmd
 78551f94487376f8 tests/cases/sankey_big_padding.mmd
 c7ba56c027960eda tests/cases/sankey_full.mmd
 375f235494b666a8 tests/cases/sankey_label_edge.mmd
+fc1b11a9d8881ba9 tests/cases/sankey_outlined.mmd
 0847e02477adc791 tests/cases/seq_act_interleave.mmd
 345674ce1cac7130 tests/cases/seq_basic.mmd
 d6a0b254775dc986 tests/cases/seq_central.mmd
