@@ -9,7 +9,8 @@
  *   Outside labels are 12px: mermaid shrinks them with the inside-fit heuristic, which makes
  *   end labels on a tall horizontal chart unreadably small. A bar below zero is labelled at its
  *   own end (mermaid draws every bar up from the axis), and an automatic range gains a step
- *   when the outside label would reach the axis labels.
+ *   when the outside label would reach the axis labels; under an explicit range the label
+ *   moves inside the bar instead.
  *   barOverlap — libmmd only. Bar series share the full band instead of sitting side by side,
  *   and a 0 draws neither a bar nor a label, so one series per group (0 elsewhere) colours
  *   bars by group. mermaid.js ignores the key and draws grouped bars; the text still parses. */
@@ -31,6 +32,8 @@ static constexpr char PAL[][8] = {"#ECECFF", "#8493A6", "#FFC3A0", "#DCDDE1", "#
                                   "#D1A36F", "#C3CDE6", "#FFB6C1", "#496078", "#F8F3E3"};
 static constexpr char LINEPAL[][8] = {"#8493A6", "#FF7F50", "#3c9a3c", "#7b52ab", "#c0392b"};
 static constexpr double DL_FS = 12; /* outside data labels; inside size is fitted per series */
+/* room an outside label needs past its bar's end: 10px gap and 4px to spare */
+static double out_need(bool horiz, Str lab) { return 14 + (horiz ? text_width(lab, DL_FS) : DL_FS); }
 
 /* optional leading quoted or bare title, then rest */
 static Str take_title(Str s[static 1]) {
@@ -236,7 +239,7 @@ DIAG_FN(xychart_render) {
                 for (uint32_t k = 0; !ser.v[s].line && k < ser.v[s].nv && k < nc; k++) {
                     double v = vals.v[ser.v[s].v0 + k];
                     if (v >= 0) continue;
-                    double need = 14 + (horiz ? text_width((Str){.p = nb, .n = fmt_js(v, nb)}, DL_FS) : DL_FS);
+                    double need = out_need(horiz, (Str){.p = nb, .n = fmt_js(v, nb)});
                     if ((v - ymin) / (ymax - ymin) * (horiz ? PW : PH) < need) { ymin -= step, grow = true; break; }
                 }
         }
@@ -316,6 +319,12 @@ DIAG_FN(xychart_render) {
                 /* the label sits at the bar's far end, which is left of / below the baseline for a
                  * negative value: past it outside, short of it inside */
                 bool up = horiz ? p > base : p < base, fwd = dl_out == up; /* text right of / above the end */
+                /* below zero, an explicit range can end right past the bar, leaving the label no room
+                 * before the axis labels (an automatic one grew for it): put it inside instead */
+                if (dl_out && !up) {
+                    double need = out_need(horiz, dl_str(d));
+                    if ((horiz ? r.x - ox : oy + ph - r.y - r.h) < need && (horiz ? r.w : r.h) >= need) fwd = true;
+                }
                 if (horiz) {
                     double end = up ? r.x + r.w : r.x;
                     d->x = fwd ? end + 10 : end - 10, d->y = r.y + r.h / 2;
