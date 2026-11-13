@@ -947,7 +947,9 @@ static mmd_status dagre_rank_graph(Arena A[static 1], const Graph g[static 1], s
         return MMD_ERR_NOMEM;
     for (size_t v = 0; v < N; v++) ikey[v] = js_ikey(g->nid[v]), ins[v] = (uint32_t)(S + v);
     for (size_t c = 0; c < S; c++) ikey[N + c] = js_ikey(g->sid[c]);
-    { /* clusters are inserted in reverse closing (post-order) order */
+    if (g->clusters_last) /* vertices, then clusters by index */
+        for (size_t x = 0; x < N + S; x++) ins[x] = (uint32_t)x;
+    else { /* clusters are inserted in reverse closing (post-order) order */
         size_t np = 0, nq = 0;
         memset(done, 0, S + 1);
         uint32_t *post = real;
@@ -964,8 +966,6 @@ static mmd_status dagre_rank_graph(Arena A[static 1], const Graph g[static 1], s
             }
         }
         for (size_t i = np; i-- > 0;) ins[N + post[i]] = (uint32_t)nq++;
-        if (g->clusters_last)
-            for (size_t x = 0; x < N + S; x++) ins[x] = (uint32_t)x;
     }
     /* items ordered by g.nodes(): integer keys ascending first, then insertion */
     size_t NI = N + S, ni = 0;
