@@ -49,7 +49,8 @@ typedef struct mmd_options {
     double node_spacing; /* 0 => default (50) */
     double rank_spacing; /* 0 => default (50) */
     double font_size;    /* 0 => default (16) */
-    mmd_theme theme;     /* 0 => from source / default */
+    mmd_theme theme;     /* 0 => from source / default; else wins over the source's theme
+                          * (mermaid-cli's -t does not) */
     uint32_t flags;      /* MMD_F_* */
 } mmd_options;
 

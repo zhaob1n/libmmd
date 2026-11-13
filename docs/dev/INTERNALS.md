@@ -77,7 +77,7 @@ Known remaining differences:
 - C4: arbitrary bgColor strings are rejected.
 mermaid itself fails to render `block_full` and `radar_full` (partial named curve).
 
-### mermaid 12 defaults (checked against mermaid-cli 12.2 / mermaid 12.3)
+### mermaid 12 defaults (checked against mermaid-cli 12.0.0)
 
 mermaid 12's config schema gives flowchart, swimlane, sequence, class, state, ER, requirement,
 usecase, venn and agentflow `look: neo` and `theme: redux-color`, and the global `layout` is `elk`

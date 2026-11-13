@@ -9,7 +9,7 @@ It needs no browser, no Node.js, no JavaScript engine and no dependencies beyond
 - Flowchart layout follows dagre's algorithm, so node positions match mermaid's closely (mean node-centre error 1.6 px on the fixture set).
 - All 432 syntax examples from mermaid's documentation render here (mermaid itself renders each of them).
 
-> **Status:** this is a young project. Output is meant to look like mermaid-cli 11.17's classic look (agentflow and use case, new in mermaid 12, like mermaid-cli 12.2), not to match it pixel for pixel. See [Status and limitations](#status-and-limitations).
+> **Status:** this is a young project. Output is meant to look like mermaid-cli 11.17's classic look (agentflow and use case, new in mermaid 12, like mermaid-cli 12.0.0), not to match it pixel for pixel. See [Status and limitations](#status-and-limitations).
 
 ## Supported diagram types
 
@@ -75,7 +75,7 @@ The build has zero warnings under `-Wall -Wextra` with both gcc and clang.
 
 ```sh
 build/mmd in.mmd -o out.svg
-build/mmd -i in.mmd -o out.svg -t dark      # themes: default | dark | forest | neutral
+build/mmd -i in.mmd -o out.svg -t dark      # themes: default | dark | forest | neutral (wins over the file's)
 cat in.mmd | build/mmd > out.svg            # stdin -> stdout
 build/mmd in.mmd -o out.svg --no-avoid      # flowchart: skip obstacle re-routing (fastest)
 ```
@@ -108,7 +108,7 @@ int main(void) {
 cc -std=gnu23 -Iinclude example.c build/libmmd.a -lm      # or: $(pkg-config --cflags --libs mmd)
 ```
 
-- `mmd_options` (which may be `nullptr`) sets node and rank spacing, font size, theme, and the `MMD_F_*` layout flags.
+- `mmd_options` (which may be `nullptr`) sets node and rank spacing, font size, theme, and the `MMD_F_*` layout flags. A theme set there (or with `mmd -t`) wins over the one the diagram names; mermaid-cli's `-t` is only a default that the file's `theme` overrides.
 - For batch rendering, `mmd_context_new()` / `mmd_context_render_svg()` / `mmd_context_free()` reuse the arena and output buffer between calls. Use one context per thread.
 - Errors come back as `mmd_status` together with `mmd_error` (code, 1-based line and column, message).
 - The shared library exports only `mmd_*` symbols.
@@ -205,7 +205,7 @@ mermaid-cli spends most of its time starting Chrome. Its per-diagram cost is low
 
 ## Gallery: libmmd vs mermaid-cli
 
-Each image puts libmmd on the left and mermaid-cli on the right (11.17; 12.2 for agent flow and use case, which 11.17 lacks), rendered from the same source in `tests/cases/`. To regenerate them, run `python3 tools/gallery.py tests/cases/<name>.mmd`.
+Each image puts libmmd on the left and mermaid-cli on the right (11.17; 12.0.0 for agent flow and use case, which 11.17 lacks), rendered from the same source in `tests/cases/`. To regenerate them, run `python3 tools/gallery.py tests/cases/<name>.mmd`.
 
 | | |
 |---|---|

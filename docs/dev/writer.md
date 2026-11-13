@@ -154,16 +154,19 @@ above (CJK, emoji, `#quot;`, `%%`, `-->`, `fa:fa-car`, newlines...).
   architecture print entities literally, as does the zenuml plugin; wardley components,
   usecase ids, eventmodeling names and gitGraph branches take a narrow character set; a literal `<br>` or
   `fa:fa-x` is drawn as markup whatever its spelling; mermaid hyphenates long unspaced sequence
-  block labels, sometimes inside an escape; sankey, gitGraph and xychart show `<` `>` as `&lt;`
-  `&gt;`; xychart omits some series names; a decoded `\` before punctuation in markdown text (class
-  notes, mindmap, ER, state) escapes it.
+  block labels, sometimes inside an escape, and a block label (`loop`, `alt` ...) holding an
+  escaped `<br>` and then a tab makes its sequence renderer throw ("svg element not in render
+  tree"; a literal `<br>`, or a message or note with the same text, renders); sankey, gitGraph and
+  xychart show `<` `>` as `&lt;` `&gt;`; xychart omits some series names; a decoded `\` before
+  punctuation in markdown text (class notes, mindmap, ER, state) escapes it.
 
 ## Cross-check against mermaid.js
 
 `tools/writer_mmdc_check.py [-v] [--seeds=N]` runs `build/test-writer --dump DIR [SEED]` (the round
 trip and typed-helper corpus, ~400 diagrams), renders them with `env.mermaid_render()` (the mermaid,
-zenuml plugin and page mermaid-cli ships, in one browser: ~12 s per corpus instead of ~10 s per file
+zenuml plugin and page mermaid-cli ships, in one browser: ~5 s per corpus instead of ~1 s per file
 through `mmdc`; `docs_audit.py --mmdc` uses it too) and checks that each parses and its SVG text holds
 every label. mermaid-cli comes from `MMDC`, `MMDC_PUPPETEER` is the puppeteer config
-(`{"args": ["--no-sandbox"]}` as root); without it the check prints a skip and exits 0. Last run:
-mermaid 12.3.0, 25 seeds clean.
+(`{"args": ["--no-sandbox"]}` as root), the browser from `CHROME`; without mermaid-cli the check
+prints a skip and exits 0. Last run: mermaid-cli 12.0.0, 25 seeds (10430 diagrams): one failure,
+the escaped `<br>` and tab in a sequence block label above.
