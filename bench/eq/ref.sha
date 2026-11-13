@@ -484,7 +484,7 @@ af7e6f9cbf935c8d tests/cases/eventmodeling_06.mmd
 9a9ab2cb2a653126 tests/cases/eventmodeling_09.mmd
 47ec8b95f6e3496c tests/cases/eventmodeling_12.mmd
 b4cfb9f2d1076698 tests/cases/eventmodeling_edge.mmd
-a518915789349703 tests/cases/flow_config_acc.mmd
+a4aa5eb32229eb5d tests/cases/flow_config_acc.mmd
 b86cfe9ab2e03b76 tests/cases/flow_config_curve.mmd
 da12ad4c1e8e2285 tests/cases/flow_config_linear.mmd
 67a37ba1cce8e570 tests/cases/flow_config_section.mmd
@@ -504,7 +504,7 @@ c2a3004a31919108 tests/cases/gantt_compact.mmd
 98b90cf74a78d553 tests/cases/gitgraph_full.mmd
 7fe7d9882802d9c2 tests/cases/ishikawa_basic.mmd
 10e104322c79129b tests/cases/journey_full.mmd
-44dc50106728c8a6 tests/cases/kanban_full.mmd
+130f96f477058f72 tests/cases/kanban_full.mmd
 bc31d149bb5b4002 tests/cases/mindmap_full.mmd
 81cceeadf6489d09 tests/cases/packet_full.mmd
 4b4d251a6c7b3d96 tests/cases/parallel_edges.mmd
@@ -547,7 +547,7 @@ aa2c1a8b439e5c16 tests/cases/theme_dark.mmd
 896f78b847df18a6 tests/cases/theme_dark_er.mmd
 04047b5fe41f2155 tests/cases/theme_dark_gantt.mmd
 fbd2f0182f209389 tests/cases/theme_dark_journey.mmd
-f6cf249a32e61eb9 tests/cases/theme_dark_kanban.mmd
+7aeff9a7f789566e tests/cases/theme_dark_kanban.mmd
 8857370ff855d06d tests/cases/theme_dark_mindmap.mmd
 890a1ca4b53d3ec5 tests/cases/theme_dark_pie.mmd
 6986f80d9c0a3fdf tests/cases/theme_dark_seq.mmd
@@ -558,13 +558,15 @@ aa9b3b45327094f3 tests/cases/theme_forest.mmd
 10e2404fbe8f13fa tests/cases/theme_forest_class.mmd
 8f28617b13249996 tests/cases/theme_forest_gantt.mmd
 b8cfd072d1516985 tests/cases/theme_forest_gitgraph.mmd
-5df5a23bbe3fc490 tests/cases/theme_forest_state.mmd
+ca80477328106f4b tests/cases/theme_forest_state.mmd
 7867504613dc622e tests/cases/theme_forest_treemap.mmd
 35f3a459562c7d42 tests/cases/theme_neutral.mmd
 d99769959bb831c2 tests/cases/theme_neutral_er.mmd
 fa782bafe7d87dcc tests/cases/theme_neutral_req.mmd
 01be922636efbaf8 tests/cases/theme_neutral_seq.mmd
 624afa047ee8f70e tests/cases/theme_neutral_xychart.mmd
+492a9345b229032d tests/cases/theme_vars_derived.mmd
+5f55d292f813520c tests/cases/theme_vars_given.mmd
 143d68c0070b6433 tests/cases/timeline_full.mmd
 68b8d7cd9f179832 tests/cases/timeline_td.mmd
 deb288d54a3ed85c tests/cases/timeline_td_nosec.mmd

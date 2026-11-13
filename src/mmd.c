@@ -119,7 +119,7 @@ static mmd_status render_c(Arena ap[static 1], Buf bp[static 1], size_t n, const
     bool af = str_eq(kw, S("agentflow-beta"));
     if (str_eq(kw, S("graph")) || str_eq(kw, S("flowchart")) || str_eq(kw, S("flowchart-elk")) || str_eq(kw, S("swimlane-beta")) || af) {
         int theme = dcfg_theme();
-        dcfg_set_theme(0); /* flowchart applies named themes itself (Graph.theme) */
+        dcfg_theme_own(); /* flowchart applies named themes itself (Graph.theme) */
         /* config: nodeSpacing / rankSpacing (init or frontmatter; API options win), cycleRemoval */
         const char *sect = af ? "agentflow" : "flowchart";
         Graph g = {.arena = &arena, .title = title, .theme = (uint8_t)(theme ? theme : MMD_THEME_DEFAULT),

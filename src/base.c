@@ -324,6 +324,11 @@ size_t fmt_js(double v, char out[static 32]) {
     if (v < 0) *o++ = '-', v = -v;
     if (isinf(v)) { memcpy(o, "Infinity", 9); return (size_t)(o - out) + 8; }
     if (v == 0) { memcpy(out, "0", 2); return 1; } /* -0 too: v < 0 is false for it */
+    if (v < 0x1p53 && v == (double)(uint64_t)v) { /* the common integer, exactly */
+        o += u64_to_str((uint64_t)v, o);
+        *o = 0;
+        return (size_t)(o - out);
+    }
     char d[17];
     int e;
     size_t k = num_shortest(v, d, &e);

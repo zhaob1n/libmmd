@@ -754,7 +754,7 @@ DIAG_FN(seq_render) {
     buf_lit(out, SEQ_DEFS);
     buf_lit(out, "<rect x=\""); buf_num(out, vx); buf_lit(out, "\" y=\""); buf_num(out, vy);
     buf_lit(out, "\" width=\""); buf_num(out, vw); buf_lit(out, "\" height=\""); buf_num(out, vh); buf_lit(out, "\" fill=\"");
-    { Str bg = dcfg_background(); if (bg.n) buf_str(out, bg); else buf_lit(out, "white"); }
+    { Str bg = dcfg_tv("background"); if (bg.n) buf_str(out, bg); else buf_lit(out, "white"); }
     buf_lit(out, "\"/>");
     if (p.title.n) text_(out, p.title, 18, (minx + maxx) / 2, 15, "middle", "title");
     buf_put(out, boxes.n, boxes.p ? boxes.p : "");

@@ -19,8 +19,16 @@ typedef struct DCfg {
 void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t off, Str sect, Str init, int api);
 void dcfg_end(void);
 int dcfg_theme(void);           /* MMD_THEME_* in effect: the caller's, else the source's, else AUTO */
-void dcfg_set_theme(int theme); /* MMD_THEME_* */
-Str dcfg_tv(const char var[static 1]);          /* themeVariables.<var> or the named theme's preset */
+/* the renderer draws the named theme itself (flowchart): dcfg_tv then reports only what the
+ * themeVariables change, and dcfg_theme() becomes AUTO */
+void dcfg_theme_own(void);
+/* a theme variable as mermaid derives it from the named theme and the themeVariables, when that
+ * differs from what the renderer draws without them (or the source sets it); empty otherwise.
+ * CSS-safe values only. */
+Str dcfg_tv(const char var[static 1]);
+/* a variable of the theme in effect, whatever the renderer draws on its own (CSS-safe, else empty) */
+Str dcfg_theme_var(const char var[static 1]);
+bool dcfg_dark(void); /* the theme in effect's darkMode */
 /* palette entry <prefix><i> (pie1.., cScale0.., git0..) from themeVariables / named theme, else def */
 const char *dcfg_pal(const char prefix[static 1], size_t i, const char def[static 1]);
 /* i-th (mod count) item of a comma-separated colour list, e.g. xyChart.plotColorPalette, else def */
@@ -40,5 +48,4 @@ bool dcfg_neo(void);
 Str dcfg_css(const char key[static 1]);         /* value only if safe inside CSS / an attribute */
 bool dcfg_is_acc(Str line, bool block[static 1]); /* accTitle:/accDescr: line; *block if "accDescr {" */
 void dcfg_theme_css(Buf b[static 1], const char kind[static 1]); /* CSS overrides from themeVariables */
-Str dcfg_background(void);                      /* safe themeVariables.background or empty */
 void dcfg_svg_aria(Buf b[static 1]);            /* call before the '>' of <svg ...: aria attrs, '>', title/desc */

@@ -311,7 +311,7 @@ mmd_status flow_svg(const Graph g[restrict static 1], Buf b[restrict static 1]) 
     buf_lit(b, "<rect x=\""); buf_num(b, vx); buf_lit(b, "\" y=\""); buf_num(b, vy);
     buf_lit(b, "\" width=\""); buf_num(b, vw); buf_lit(b, "\" height=\""); buf_num(b, vh);
     buf_lit(b, "\" fill=\"");
-    Str bgv = dcfg_background();
+    Str bgv = dcfg_tv("background");
     if (bgv.n) buf_str(b, bgv); else buf_cstr(b, th->bg);
     buf_lit(b, "\"/>");
     if (g->title.n) text_lines(b, g->title, 18, (bb.x0 + bb.x1) / 2, bb.y0 - title_h / 2, "title");
