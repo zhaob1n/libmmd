@@ -1,5 +1,7 @@
 /* xychart(-beta) [horizontal]: title, x-axis ["title"] [a, b, ..] | [title] min --> max,
  * y-axis ["title"] [min --> max], bar [..], line [..] (optional series title before the list).
+ * Bars grow from zero (mermaid: from the bottom of the plot); an automatic range takes zero in, and
+ * an explicit range without it starts the bars at its edge nearest zero.
  *
  * Config (%%{init}%% / front matter, dotted as xyChart.*):
  *   showDataLabel, showDataLabelOutsideBar — mermaid 11. Labels use each bar's own value
@@ -199,7 +201,8 @@ DIAG_FN(xychart_render) {
     if (!yr) {
         ymin = 1e300, ymax = -1e300;
         for (size_t i = 0; i < vals.n; i++) { if (vals.v[i] < ymin) ymin = vals.v[i]; if (vals.v[i] > ymax) ymax = vals.v[i]; }
-        if (ymin > 0) ymin = 0;
+        if (ymin > 0) ymin = 0; /* bars start at zero, so an automatic range takes it in */
+        if (ymax < 0) ymax = 0;
     }
     if (!(ymax > ymin)) ymax = ymin + 1;
     double step = nice((ymax - ymin) / 5);
@@ -213,7 +216,7 @@ DIAG_FN(xychart_render) {
     const double PW = fmin(fmax(dcfg_num("xyChart.width", 700), 100), 4000);
     const double PH = fmin(fmax(dcfg_num("xyChart.height", 500), 100), 4000) - 100;
     /* an outside label past a bar below zero needs room before the axis: widen an automatic range */
-    if (dl_out && !yr && ymin < 0 && ymax > 0) {
+    if (dl_out && !yr && ymin < 0) {
         bool grow = true;
         for (int g = 0; g < 8 && grow; g++) {
             grow = false;
@@ -237,8 +240,8 @@ DIAG_FN(xychart_render) {
     for (size_t i = 0; i < cats.n; i++) { double w = text_width(cats.v[i], 14); if (w > catw) catw = w; }
     double leftw = horiz ? (cats.n ? catw : tl) : tl;
     double ox = 20 + (horiz ? (xt.n ? 26 : 0) : (yt.n ? 26 : 0)) + leftw + 10, oy = title.n ? 50 : 15;
-    /* outside labels sit above the bar top: drop the plot so they clear the title */
-    if (dl_out && !horiz) oy += 24;
+    /* outside labels sit above a rising bar's top: drop the plot so they clear the title */
+    if (dl_out && !horiz && ymax > 0) oy += 24;
     double pw = PW, ph = horiz ? PH + 50 : PH;
     double vlen = horiz ? pw : ph, clen = horiz ? ph : pw, band = clen / (double)nc;
 #define VPOS(v) (horiz ? ox + ((v) - ymin) / (ymax - ymin) * vlen : oy + ph - ((v) - ymin) / (ymax - ymin) * vlen)
@@ -274,7 +277,7 @@ DIAG_FN(xychart_render) {
     }
     size_t nbar = 0;
     for (size_t s = 0; s < ser.n; s++) nbar += !ser.v[s].line;
-    double base = VPOS(ymin < 0 && ymax > 0 ? 0.0 : ymin);
+    double base = VPOS(fmin(fmax(0.0, ymin), ymax)); /* zero, or the range edge nearest it */
     /* data labels at each drawn bar's end, past it or inside it; inside labels share one fitted size
      * per series, and a series whose labels do not fit draws none */
     DLab *dl = nullptr;
