@@ -70,13 +70,12 @@ Mermaid faults libmmd does not copy:
   every slice;
 - usecase: mermaid's parser wipes the front-matter title; libmmd draws it (see below);
 - `themeVariables` khroma cannot read make mermaid fail the render; libmmd draws the theme with them as given;
+- a nested `themeVariables` override (`xyChart.titleColor`) makes mermaid's `calculate()` replace the
+  theme's whole `xyChart` object, and its xychart then fills the gaps from the default theme: a dark
+  chart turns light. libmmd sets that one field (`src/mtheme.c`, `copy_overrides`);
 - mermaid fails to render `block_full` and `radar_full` (partial named curve); libmmd draws them.
 
 Still copied, to undo:
-- `themeVariables`: when the theme is derived, a nested override (`xyChart.titleColor`) replaces the
-  theme's whole `xyChart` object, as mermaid's `calculate()` does; under `theme: dark` the rest of the
-  chart then falls back to light-theme text on the dark background (mermaid's xychart merges the
-  default theme's object instead, and draws the whole chart light);
 - quadrant: the derived `hsl(..., NaN%)` still lands in a `.qp` rule that no element carries.
 
 Side-by-side renders (left: libmmd, right: mermaid 11.17) live in `samples/sbs/*.png`.

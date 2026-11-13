@@ -555,6 +555,7 @@ fbd2f0182f209389 tests/cases/theme_dark_journey.mmd
 6be46bb5eaf1243d tests/cases/theme_dark_state.mmd
 584afa932077a37c tests/cases/theme_dark_timeline.mmd
 6c0a167e64828b17 tests/cases/theme_dark_xychart.mmd
+9b8a6d235db25a29 tests/cases/theme_dark_xychart_field.mmd
 aa9b3b45327094f3 tests/cases/theme_forest.mmd
 10e2404fbe8f13fa tests/cases/theme_forest_class.mmd
 8f28617b13249996 tests/cases/theme_forest_gantt.mmd

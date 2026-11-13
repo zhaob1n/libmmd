@@ -1,8 +1,8 @@
 /* mermaid's theme engine: the five classic themes' constructors, updateColors() and calculate(),
  * generated from mermaid's own sources into src/mtheme_gen.h (tools/gen_mtheme.mjs), over the
  * khroma colour maths they call (src/mcolor.c). mtheme_get() answers with the value mermaid's
- * themes[id].getThemeVariables(overrides) holds; tests/mtheme_test.c checks every variable of
- * ~1000 override sets against mermaid itself. */
+ * themes[id].getThemeVariables(overrides) holds, but for nested overrides (below);
+ * tests/mtheme_test.c checks every variable of ~1000 override sets against mermaid itself. */
 #pragma once
 #include "base.h"
 
@@ -12,8 +12,9 @@ typedef struct MTheme MTheme;
 /* overrides: n keys and values (nullable when n is 0), the themeVariables object: keys flat ("primaryColor") or dotted for a nested object's
  * field ("xyChart.titleColor"), values the strings YAML/JSON gives. As mermaid's config reads YAML,
  * "true"/"false" are booleans and JavaScript numerals ("16", "0.5", "0x10") numbers; anything else
- * is a string. As calculate() assigns each top-level key, a nested override replaces the theme's
- * whole object (xyChart.titleColor alone leaves xyChart with that one field).
+ * is a string. A nested override sets its field and leaves the object's others as the theme derives
+ * them; mermaid's calculate() replaces the whole object (xyChart.titleColor alone leaves xyChart
+ * with that one field), which libmmd does not copy.
  * nullptr when the arena runs out (a->oom says so), where getThemeVariables throws (an override
  * that a derivation reaches but khroma cannot read, e.g. primaryColor: bogus, or a non-string
  * where a colour belongs, e.g. primaryColor: true), and past 512 variables. */
