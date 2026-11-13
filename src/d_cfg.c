@@ -544,7 +544,6 @@ static const TV TVS[] = {
     {"quadrantChart", "quadrant3Fill", "#mermaid .q3{fill:$;}"},
     {"quadrantChart", "quadrant4Fill", "#mermaid .q4{fill:$;}"},
     {"quadrantChart", "quadrant1TextFill", "#mermaid .q1t{fill:$;}"},
-    {"quadrantChart", "quadrantPointFill", "#mermaid .qp{fill:$;}"},
     {"quadrantChart", "quadrantInternalBorderStrokeFill", "#mermaid .qib{stroke:$;}"},
     {"quadrantChart", "quadrantExternalBorderStrokeFill", "#mermaid .qeb{stroke:$;}"},
     {"xychart", "xyChart.backgroundColor", "#mermaid .bg{fill:$;}"},

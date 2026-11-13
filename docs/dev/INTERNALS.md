@@ -64,7 +64,9 @@ Exact ports (khroma, d3-format, dagre's order step) exist to agree on values and
 real library, not to reproduce its accidents.
 
 Mermaid faults libmmd does not copy:
-- quadrant: mermaid's point fill is khroma's `lighten()` with no amount, `hsl(..., NaN%)`; points stay blue;
+- quadrant: mermaid derives the point colour with khroma's `lighten()` and no amount, `hsl(..., NaN%)`,
+  which no viewer draws; libmmd draws such points `#0000eb` (a `quadrantPointFill` the source sets is
+  used, as in mermaid);
 - pie: mermaid (11.14 on) leaves out slices under 1% and closes the pie over the rest, so the angles
   stop matching the shares (82 and twenty slices of 0.9 draw a full disc labelled 82%); libmmd draws
   every slice;
@@ -74,9 +76,6 @@ Mermaid faults libmmd does not copy:
   theme's whole `xyChart` object, and its xychart then fills the gaps from the default theme: a dark
   chart turns light. libmmd sets that one field (`src/mtheme.c`, `copy_overrides`);
 - mermaid fails to render `block_full` and `radar_full` (partial named curve); libmmd draws them.
-
-Still copied, to undo:
-- quadrant: the derived `hsl(..., NaN%)` still lands in a `.qp` rule that no element carries.
 
 Side-by-side renders (left: libmmd, right: mermaid 11.17) live in `samples/sbs/*.png`.
 Already fixed:
@@ -98,7 +97,6 @@ Known remaining differences:
 - state: concurrent regions are not drawn as grey boxes;
 - class: wide single-row layout, same as mermaid's;
 - journey: legend order;
-- quadrant: points ignore a user's `quadrantPointFill`, which mermaid draws them in;
 - C4: arbitrary bgColor strings are rejected.
 
 ### mermaid 12 defaults (checked against mermaid-cli 12.0.0)

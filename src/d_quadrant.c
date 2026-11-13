@@ -35,6 +35,8 @@ static void parse_style(Str s, QStyle st[static 1]) {
         else if (str_eq(key, S("stroke-color"))) st->stroke = val;
     }
 }
+/* a value safe in an attribute that can be a colour; mermaid's derived quadrantPointFill is khroma's
+ * lighten() without an amount, hsl(..., NaN%), which no viewer draws */
 static bool safe_color(Str c) {
     for (size_t i = 0; i < c.n; i++) {
         char ch = c.p[i];
@@ -42,7 +44,7 @@ static bool safe_color(Str c) {
               ch == '(' || ch == ')' || ch == ',' || ch == '.' || ch == ' ' || ch == '%'))
             return false;
     }
-    return c.n > 0;
+    return c.n > 0 && !memmem(c.p, c.n, "NaN", 3);
 }
 /* split "a --> b"; either side may be a "string" (with "-->" inside), as in mermaid */
 static void axis_pair(Str s, Str lo[static 1], Str hi[static 1]) {
@@ -178,15 +180,18 @@ DIAG_FN(quadrant_render) {
         }
     }
     const size_t nl0 = no; /* boxes from here on are labels: text-on-text costs more */
+    /* mermaid: fill point.color ?? quadrantPointFill, stroke point.strokeColor ?? quadrantPointFill */
+    Str pfill = dcfg_theme_var("quadrantPointFill");
+    if (!safe_color(pfill)) pfill = S("#0000eb");
     for (size_t i = 0; i < pts.n; i++) {
         const QPt *p = &pts.v[i];
         double cx = ox + p->x * SW, cy = oy + (1 - p->y) * SH;
         buf_lit(out, "<circle cx=\""); buf_num(out, cx); buf_lit(out, "\" cy=\""); buf_num(out, cy);
         buf_lit(out, "\" r=\""); buf_num(out, p->st.r); buf_lit(out, "\" fill=\"");
-        if (safe_color(p->st.fill)) buf_str(out, p->st.fill); else buf_lit(out, "#0000eb");
+        buf_str(out, safe_color(p->st.fill) ? p->st.fill : pfill);
         if (p->st.sw > 0) {
             buf_lit(out, "\" stroke=\"");
-            if (safe_color(p->st.stroke)) buf_str(out, p->st.stroke); else buf_lit(out, "#000");
+            buf_str(out, safe_color(p->st.stroke) ? p->st.stroke : pfill);
             buf_lit(out, "\" stroke-width=\""); buf_num(out, p->st.sw);
         }
         buf_lit(out, "\"/>");

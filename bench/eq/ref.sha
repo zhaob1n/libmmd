@@ -515,6 +515,7 @@ b53d2037cdd03d06 tests/cases/pie_tiny_slices.mmd
 d66bcba1c0c7ab1c tests/cases/quadrant_crowded.mmd
 a255a819ea6cfa90 tests/cases/quadrant_dense_labels.mmd
 578abe0ad86c9f8d tests/cases/quadrant_full.mmd
+8480277b3dc1dfbf tests/cases/quadrant_point_fill.mmd
 512c39564070a1c9 tests/cases/quadrant_ring_fallback.mmd
 5d529551c71e664c tests/cases/radar_full.mmd
 46a85b2e6172aede tests/cases/railroad_abnf.mmd
