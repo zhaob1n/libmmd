@@ -53,6 +53,31 @@ Numbers here are historical; see bench/results_v*.txt.
 
 ## Fidelity vs mermaid-cli 11.17
 
+Mermaid defines what a diagram's text means, not what its bugs draw. libmmd follows mermaid where
+an author sees the result and builds on it: syntax, which settings take effect and where, defaults,
+palettes, layout conventions. A diagram tuned in mermaid should read the same here, odd rules
+included (`themeVariables` derive the rest of the theme only when the source names one). It does
+not copy output that is broken or misleading in mermaid itself (invalid CSS values, data left out
+or misdrawn, failed renders, a setting that undoes an unrelated one); there it draws what the source
+evidently asks for, and the difference is listed here. Byte- or pixel-identical SVG is not a goal.
+Exact ports (khroma, d3-format, dagre's order step) exist to agree on values and to test against the
+real library, not to reproduce its accidents.
+
+Mermaid faults libmmd does not copy:
+- quadrant: mermaid's point fill is khroma's `lighten()` with no amount, `hsl(..., NaN%)`; points stay blue;
+- usecase: mermaid's parser wipes the front-matter title; libmmd draws it (see below);
+- `themeVariables` khroma cannot read make mermaid fail the render; libmmd draws the theme with them as given;
+- mermaid fails to render `block_full` and `radar_full` (partial named curve); libmmd draws them.
+
+Still copied, to undo:
+- pie (9e6bd35): slices under 1% are left out and the pie closes over the rest, so the drawn angles
+  no longer match the labelled shares; 82 and twenty slices of 0.9 draw a full disc labelled 82%;
+- `themeVariables`: when the theme is derived, a nested override (`xyChart.titleColor`) replaces the
+  theme's whole `xyChart` object, as mermaid's `calculate()` does; under `theme: dark` the rest of the
+  chart then falls back to light-theme text on the dark background (mermaid's xychart merges the
+  default theme's object instead, and draws the whole chart light);
+- quadrant: the derived `hsl(..., NaN%)` still lands in a `.qp` rule that no element carries.
+
 Side-by-side renders (left: libmmd, right: mermaid 11.17) live in `samples/sbs/*.png`.
 Already fixed:
 - C4: grid layout, person shape, centred boundary titles, relation labels placed to avoid boxes and other labels;
@@ -73,9 +98,8 @@ Known remaining differences:
 - state: concurrent regions are not drawn as grey boxes;
 - class: wide single-row layout, same as mermaid's;
 - journey: legend order;
-- quadrant: mermaid 11.17 renders points with a broken `hsl(NaN)` fill, so libmmd keeps blue;
+- quadrant: points ignore a user's `quadrantPointFill`, which mermaid draws them in;
 - C4: arbitrary bgColor strings are rejected.
-mermaid itself fails to render `block_full` and `radar_full` (partial named curve).
 
 ### mermaid 12 defaults (checked against mermaid-cli 12.0.0)
 
