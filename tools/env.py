@@ -2,7 +2,8 @@
 and find external tools without assuming one machine's layout.
   MMDC            mermaid-cli (default: mmdc on PATH, else node_modules/.bin/mmdc in the repo or $HOME)
   MMDC_PUPPETEER  puppeteer config passed as `mmdc -p` when set (e.g. {"args": ["--no-sandbox"]} as root)
-  CHROME          headless Chrome (default: google-chrome, chromium or chromium-browser on PATH)
+  CHROME          headless Chrome (default: google-chrome, chromium or chromium-browser on PATH; mermaid_render
+                  falls back to puppeteer's own when none is found)
 Scratch files go under tempfile.gettempdir(), so TMPDIR moves them."""
 import json, os, shutil, subprocess, sys, tempfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -24,21 +25,24 @@ def mmdc():
     pp = os.environ.get('MMDC_PUPPETEER')
     return [exe, '-p', pp] if pp else [exe]
 
-# mmdc starts a browser per file (~10 s each); this renders a list in one page with the mermaid
-# mermaid-cli ships, beside it in node_modules
+# mmdc starts a browser per file (~1 s each); this renders a list in one page with the mermaid,
+# zenuml plugin and puppeteer mermaid-cli resolves: beside it in a project's node_modules, or nested
+# in its own (a global install)
 _BATCH = r'''
 import fs from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
 import { createRequire } from 'node:module';
-const { nm, opts, files } = JSON.parse(fs.readFileSync(0, 'utf8'));
-const puppeteer = createRequire(path.join(nm, 'x.js'))('puppeteer');
-const browser = await puppeteer.launch({ headless: true, ...opts });
+const { cli, exe, opts, files } = JSON.parse(fs.readFileSync(0, 'utf8'));
+const req = createRequire(path.join(cli, 'package.json'));
+const dir = (pkg) => { try { return path.dirname(req.resolve(pkg + '/package.json')); } catch { return null; } };
+const puppeteer = req('puppeteer');
+const browser = await puppeteer.launch({ headless: true, ...(exe ? { executablePath: exe } : {}), ...opts });
 const page = await browser.newPage();
-await page.goto(url.pathToFileURL(path.join(nm, '@mermaid-js/mermaid-cli/dist/index.html')).href); // mmdc's page
-await page.addScriptTag({ path: path.join(nm, 'mermaid/dist/mermaid.min.js') });
-const zen = path.join(nm, '@mermaid-js/mermaid-zenuml/dist/mermaid-zenuml.min.js'); // as mmdc registers it
-if (fs.existsSync(zen)) await page.addScriptTag({ path: zen });
+await page.goto(url.pathToFileURL(path.join(cli, 'dist/index.html')).href); // mmdc's page
+await page.addScriptTag({ path: path.join(dir('mermaid'), 'dist/mermaid.min.js') });
+const zen = dir('@mermaid-js/mermaid-zenuml'); // as mmdc registers it
+if (zen) await page.addScriptTag({ path: path.join(zen, 'dist/mermaid-zenuml.min.js') });
 await page.evaluate(async () => {
   if (globalThis['mermaid-zenuml']) await mermaid.registerExternalDiagrams([globalThis['mermaid-zenuml']]);
   mermaid.initialize({ startOnLoad: false });
@@ -61,11 +65,12 @@ await browser.close();
 
 def mermaid_render(files):
     """render each file with mermaid.js: {file: {'ok', 'svg' or 'error'}}"""
-    nm = os.path.realpath(mmdc()[0])
-    while os.path.basename(nm) != 'node_modules' and nm != '/': nm = os.path.dirname(nm)
-    if nm == '/': sys.exit(f'no node_modules above {mmdc()[0]} (mermaid and puppeteer live there)')
+    cli = os.path.realpath(mmdc()[0])
+    while not os.path.exists(os.path.join(cli, 'dist/index.html')) and cli != '/': cli = os.path.dirname(cli)
+    if cli == '/': sys.exit(f'no mermaid-cli package above {mmdc()[0]}')
     pp = os.environ.get('MMDC_PUPPETEER')
-    job = json.dumps({'nm': nm, 'opts': json.load(open(pp)) if pp else {}, 'files': list(files)})
+    exe = os.environ.get('CHROME') or next(filter(None, map(shutil.which, ['google-chrome', 'chromium', 'chromium-browser'])), None)
+    job = json.dumps({'cli': cli, 'exe': exe, 'opts': json.load(open(pp)) if pp else {}, 'files': list(files)})
     r = subprocess.run(['node', '--input-type=module', '-e', _BATCH], input=job, capture_output=True, text=True)
     if r.returncode: sys.exit('mermaid render failed: ' + r.stderr[-2000:])
     return {o['file']: o for o in map(json.loads, r.stdout.splitlines())}
