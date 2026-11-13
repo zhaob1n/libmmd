@@ -459,6 +459,7 @@ d09aec9d014d7227 tests/cases/class_card_fan.mmd
 78b64e09f441c0ef tests/cases/class_ns_iso.mmd
 8ba60f7ef7e10a37 tests/cases/class_parallel_labels.mmd
 d983e2c70c47e09c tests/cases/class_state_spacing.mmd
+351b6f7a66989e7d tests/cases/config_directive_class.mmd
 eeadabde68c69c9d tests/cases/config_keys.mmd
 b2a9983ee0faecb0 tests/cases/config_pie.mmd
 3f90ebf94953c684 tests/cases/config_quadrant.mmd

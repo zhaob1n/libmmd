@@ -15,20 +15,15 @@ static thread_local size_t cur_cap;
 
 static constexpr size_t MAX_KV = 512;
 static thread_local Str cur_sect; /* the diagram's section of mermaid's config: flowchart, xyChart ... */
-static thread_local Str cur_init; /* where mermaid's detectInit files a directive's `config` */
 static thread_local Str cfg_to;   /* what a leading "config." becomes: nothing in the front matter,
-                                   * cur_init in a directive */
-static thread_local bool cfg_drop; /* a directive's `config` is dropped: there are several directives */
+                                   * cur_sect in a directive */
 
 static Str join(Str pre, Str k);
 static void kv_put(Str k, Str v) {
     static const Str PRE[] = {S("init."), S("initialize.")};
     for (size_t i = 0; i < countof(PRE); i++)
         if (str_starts(k, PRE[i])) { k.p += PRE[i].n; k.n -= PRE[i].n; break; }
-    if (str_starts(k, S("config."))) {
-        if (cfg_drop) return;
-        k = join(cfg_to, (Str){.p = k.p + 7, .n = k.n - 7});
-    }
+    if (str_starts(k, S("config."))) k = join(cfg_to, (Str){.p = k.p + 7, .n = k.n - 7});
     if (!k.n || cur.n >= MAX_KV) return;
     if (cur.n == cur_cap) {
         size_t nc = cur_cap ? cur_cap * 2 : 32;
@@ -155,16 +150,18 @@ static bool init_directive(Str body, const char *c[static 1]) {
     return str_eq(name, S("init")) || str_eq(name, S("initialize"));
 }
 
-/* mermaid's detectInit moves a directive's `config` object to the detected diagram's key, or,
- * when there are several directives, drops it with every other key it does not know */
-static void directive(Str body, bool several) {
+/* a directive's `config` object lands in the diagram's section. mermaid's detectInit files it under
+ * the detector id, which no renderer reads for class, state, xychart, flowchart-elk and the railroad
+ * dialects, and loses it when there are several directives (sanitizeDirective drops the key):
+ * settings the author wrote that silently do nothing, which libmmd does not copy */
+static void directive(Str body) {
     const char *c;
     if (!init_directive(body, &c)) return;
     JP p = {.s = c + 1, .n = (size_t)(body.p + body.n - c - 1)};
     jp_ws(&p);
-    cfg_to = cur_init, cfg_drop = several;
+    cfg_to = cur_sect;
     if (p.i < p.n && p.s[p.i] == '{') jp_obj(&p, (Str){}, 1);
-    cfg_to = (Str){}, cfg_drop = false;
+    cfg_to = (Str){};
 }
 
 bool dcfg_is_acc(Str t, bool block[static 1]) {
@@ -218,13 +215,10 @@ static int theme_named(Str w) {
     return MMD_THEME_AUTO;
 }
 
-void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t off, Str sect, Str init, int api) {
+void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t off, Str sect, int api) {
     cur = (DCfg){};
-    cur_a = a, cur_cap = 0, cur_sect = sect, cur_init = init, api_theme = api;
+    cur_a = a, cur_cap = 0, cur_sect = sect, api_theme = api;
     size_t i = off >= 3 && !memcmp(src, "\xEF\xBB\xBF", 3) ? 3 : 0; /* a BOM, as preamble() skips it */
-    unsigned ninit = 0;
-    for (const char *q = src + i, *c; (q = memmem(q, off - (size_t)(q - src), "%%{", 3)); q += 3)
-        ninit += init_directive((Str){.p = q + 3, .n = off - (size_t)(q + 3 - src)}, &c);
     /* preamble: frontmatter + directives */
     while (i < off) {
         const char *nl = memchr(src + i, '\n', off - i);
@@ -247,7 +241,7 @@ void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t of
             for (const char *q = s0; q + 2 < src + off; q++)
                 if (q[0] == '}' && q[1] == '%' && q[2] == '%') { end = q; break; }
             if (end) {
-                directive((Str){.p = s0, .n = (size_t)(end - s0)}, ninit > 1);
+                directive((Str){.p = s0, .n = (size_t)(end - s0)});
                 nxt = (size_t)(end - src) + 3; /* another directive may follow on the line */
             }
         }
@@ -288,7 +282,7 @@ void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t of
 
 void dcfg_end(void) {
     cur_theme = api_theme = 0;
-    cur = (DCfg){}, cur_a = nullptr, cur_cap = 0, cur_sect = cur_init = (Str){};
+    cur = (DCfg){}, cur_a = nullptr, cur_cap = 0, cur_sect = (Str){};
     own_theme = derive = eng_tried = eng_user = user_vars = false, eng = eng_base = nullptr;
 }
 const DCfg *dcfg_cur(void) { return &cur; }
