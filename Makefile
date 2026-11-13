@@ -50,7 +50,7 @@ CFLAGS += -std=gnu2y -fms-extensions -fPIC -fvisibility=hidden $(WARN) -Iinclude
 LDLIBS = -lm
 BUILD ?= build
 DIAG_SRCS := $(wildcard src/d_*.c)
-SRCS := src/base.c src/text.c src/flow_parse.c src/layout.c src/nsimplex.c src/dorder.c src/drank.c src/flow_svg.c src/seq.c src/rich.c src/dgraph.c src/graph.c $(DIAG_SRCS) src/mmd.c src/writer.c
+SRCS := src/base.c src/text.c src/flow_parse.c src/layout.c src/nsimplex.c src/dorder.c src/drank.c src/flow_svg.c src/seq.c src/rich.c src/dgraph.c src/graph.c src/d3fmt.c $(DIAG_SRCS) src/mmd.c src/writer.c
 OBJS := $(SRCS:src/%.c=$(BUILD)/%.o)
 
 SONAME := libmmd.so.$(SOMAJOR)
@@ -102,11 +102,12 @@ pgo:
 	if $(CC) --version | grep -qi clang; then $$($(CC) -print-prog-name=llvm-profdata) merge -o $(PGO_DIR)/default.profdata $(PGO_DIR)/*.profraw; fi
 	$(MAKE) BUILD=build-pgo PGO_USE=$(PGO_DIR) LTO=$(LTO) MARCH=$(MARCH)
 
-test: all $(BUILD)/test-shared $(BUILD)/test-locale $(BUILD)/test-writer $(BUILD)/test-oom
+test: all $(BUILD)/test-shared $(BUILD)/test-locale $(BUILD)/test-writer $(BUILD)/test-oom $(BUILD)/test-d3fmt
 	./tests/run_tests.sh $(BUILD)/mmd
 	$(BUILD)/test-shared
 	$(BUILD)/test-locale tests/cases/*.mmd tests/docs/*/*.mmd
 	$(BUILD)/test-writer
+	$(BUILD)/test-d3fmt tests/d3fmt_cases.tsv
 	$(BUILD)/test-oom tests/cases/*.mmd tests/docs/*/*.mmd
 	python3 tools/docs_audit.py -q -v $(BUILD)/mmd
 

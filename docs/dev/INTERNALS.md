@@ -33,7 +33,7 @@ Numbers here are historical; see bench/results_v*.txt.
 | architecture(-beta) | `src/d_architecture.c` | groups (nested), services, junctions, port-constraint grid, orthogonal edges, non-overlapping groups, built-in icons + embedded `logos:`/`fa:` subset (src/icons_data.h via tools/genicons.js: simple-icons CC0, FA Free CC-BY-4.0) |
 | packet(-beta) | `src/d_packet.c` | bit ranges, `+N`, row splitting, bit numbers, title below (as mermaid) |
 | radar(-beta) | `src/d_radar.c` | axes, positional/named curves, max/min/ticks, polygon graticule, legend |
-| treemap(-beta) | `src/d_treemap.c` | squarified layout, sections, classDef/`:::` |
+| treemap(-beta) | `src/d_treemap.c` | squarified layout, sections, classDef/`:::`; values through `treemap.valueFormat` (default `,`) and mermaid's `$` shorthands, by `src/d3fmt.c`: d3-format 3.1 in the en-US locale, checked against the real d3 on 5216 spec/value pairs (`tests/d3fmt_cases.tsv`, regenerate with `node tools/d3fmt_cases.mjs`) |
 | kanban | `src/d_kanban.c` | columns, cards, `@{assigned, ticket, priority}`; named themes colour columns like mermaid (cScale[n+2] lightened/darkened 10%, cScaleLabel titles) |
 | ishikawa | `src/d_ishikawa.c` | fishbone port of mermaid's renderer: alternating up/down causes, nested sub-causes along bones, wrapped head |
 | cynefin | `src/d_cynefin.c` | five domains, items (confusion capped at 3 + overflow badge), transitions; seeded wavy boundaries match mermaid-cli byte-for-byte |

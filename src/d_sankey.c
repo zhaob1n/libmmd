@@ -18,6 +18,13 @@ static constexpr char CSS[] =
 static constexpr char PAL[][8] = {"#4e79a7", "#f28e2c", "#e15759", "#76b7b2", "#59a14f", "#edc949",
                                   "#af7aa1", "#ff9da7", "#9c755f", "#bab0ab"};
 
+/* the value after a node's name, as mermaid writes it: String(Math.round(v * 100) / 100) */
+static Str val_text(bool show, double v, char nb[static 40]) {
+    if (!show) return (Str){};
+    nb[0] = ' ';
+    return (Str){.p = nb, .n = 1 + fmt_js(round(v * 100) / 100, nb + 1)};
+}
+
 /* one CSV field from s (advances); quoted fields unescape "" into arena memory */
 [[nodiscard]] static bool field(Arena a[static 1], Str s[static 1], Str f[static 1], bool oom[static 1]) {
     *s = (Str){.p = s->p, .n = s->n};
@@ -214,10 +221,9 @@ DIAG_FN(sankey_render) {
     #undef LW
     #undef Y1
     double lw = 0, rw = 0;
-    char nb[48];
+    char nb[40];
     for (size_t i = 0; i < nn; i++) {
-        (SHOWV ? snprintf(nb, sizeof nb, " %g", round(N[i].v * 100) / 100) : (nb[0] = 0));
-        double w = text_width(N[i].name, 14) + text_width((Str){.p = nb, .n = strlen(nb)}, 14) + 8;
+        double w = text_width(N[i].name, 14) + text_width(val_text(SHOWV, N[i].v, nb), 14) + 8;
         if (N[i].x < W / 2) rw = fmax(rw, N[i].x + NW + w - W); else lw = fmax(lw, w - N[i].x);
     }
     /* label collision avoidance: boxes overlapping horizontally are pushed apart vertically */
@@ -227,8 +233,7 @@ DIAG_FN(sankey_render) {
     constexpr double LH = 17;
     for (size_t i = 0; i < nn; i++) {
         bool right = N[i].x < W / 2;
-        (SHOWV ? snprintf(nb, sizeof nb, " %g", round(N[i].v * 100) / 100) : (nb[0] = 0));
-        double w = text_width(N[i].name, 14) + text_width((Str){.p = nb, .n = strlen(nb)}, 14);
+        double w = text_width(N[i].name, 14) + text_width(val_text(SHOWV, N[i].v, nb), 14);
         lx0[i] = right ? N[i].x + NW + 6 : N[i].x - 6 - w;
         lx1[i] = lx0[i] + w, ly[i] = N[i].y + N[i].h / 2, lbo[i] = (uint32_t)i;
     }
@@ -273,11 +278,11 @@ DIAG_FN(sankey_render) {
     }
     for (size_t i = 0; i < nn; i++) {
         dg_rect_fill(out, N[i].x, N[i].y, NW, N[i].h, 0, "sn", PAL[i % countof(PAL)]);
-        int k = (SHOWV ? snprintf(nb, sizeof nb, " %g", round(N[i].v * 100) / 100) : (nb[0] = 0));
+        Str val = val_text(SHOWV, N[i].v, nb);
         if (N[i].x < W / 2) dg_text_open(out, lx0[i], ly[i], "start", "st");
         else dg_text_open(out, lx1[i], ly[i], "end", "st");
         buf_xml(out, N[i].name);
-        buf_xml(out, (Str){.p = nb, .n = (size_t)k});
+        buf_xml(out, val);
         buf_lit(out, "</text>");
     }
     if (title.n) dg_text(out, title, 18, W / 2, -top / 2 - 5, "middle", "st");

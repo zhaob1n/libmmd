@@ -272,95 +272,24 @@ void mmd_w_csv(mmd_writer *w, const char *s) {
 
 /* ---- numbers ---- */
 
-/* u (< 2^63) with a '.' before its last d digits, zero-padded to one digit before the point */
-static void put_fixed(Buf b[static 1], bool neg, uint64_t u, unsigned d) {
-    if (neg) buf_ch(b, '-');
-    size_t n0 = b->n;
-    buf_int(b, (int64_t)u);
-    if (!d || !buf_reserve(b, d + 2)) return;
-    char *p = b->p + n0;
-    size_t k = b->n - n0, lead = k <= d ? d + 1 - k : 0, t = k + lead;
-    memmove(p + lead, p, k);
-    memset(p, '0', lead);
-    memmove(p + t - d + 1, p + t - d, d);
-    p[t - d] = '.';
-    b->n = n0 + t + 1;
-}
-
-/* Shortest digits g·10^q that read back as a, for 1e-4 <= a < 2^53 (bench and test data), by exact
- * integer arithmetic: a = m·2^-s; scaled by 10^k to 17 or 18 digits, the decimals that round to a
- * form the integer interval [lo, hi] (ends included when m is even: round-half-even). The multiple
- * of the largest power of ten inside it, nearest a, is the answer. */
-static bool shortest(double a, uint64_t g[static 1], int q[static 1]) {
-    static constexpr uint64_t P10[] = {1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000,
-                                       1000000000, 10000000000, 100000000000, 1000000000000};
-    if (!(a >= 1e-4 && a < 0x1p53)) return false;
-    uint64_t bits;
-    memcpy(&bits, &a, sizeof bits);
-    int ex = (int)(bits >> 52);
-    uint64_t m = (bits & ((1ull << 52) - 1)) | 1ull << 52;
-    unsigned sh = (unsigned)(1076 - ex);
-    int e10 = ((ex - 1023) * 78913) >> 18; /* floor(log10 a) or one less */
-    unsigned k = (unsigned)(16 - e10);       /* 1..21: products stay below 2^126 */
-    unsigned __int128 P = (unsigned __int128)P10[k > 12 ? 12 : k] * P10[k > 12 ? k - 12 : 0];
-    unsigned __int128 xl = (2 * m - 1) * P, xm = 2 * m * P, xh = (2 * m + 1) * P; /* ×2^-sh */
-    if (m == 1ull << 52 && ex > 1) /* the gap below a power of two is half as wide */
-        xl = (4 * m - 1) * P, xm *= 2, xh *= 2, sh++;
-    bool incl = !(m & 1);
-    unsigned __int128 lo = xl >> sh, hi = xh >> sh;
-    if (lo << sh != xl || !incl) lo++;
-    if (hi << sh == xh && !incl) hi--;
-    uint64_t L = (uint64_t)lo, H = (uint64_t)hi, p10 = 1;
-    unsigned t = 0;
-    while ((L + 9) / 10 <= H / 10) L = (L + 9) / 10, H /= 10, p10 *= 10, t++;
-    uint64_t x = (uint64_t)(xm >> sh), c = x / p10 + (x % p10 * 2 >= p10); /* nearest multiple */
-    *g = c < L ? L : c > H ? H : c;
-    *q = (int)t - (int)k;
-    return true;
-}
-
 /* shortest round-trip decimal, positional notation: mermaid's number tokens have no exponent */
 static void put_num(Buf b[static 1], double v) {
     if (v == 0) { buf_ch(b, '0'); return; } /* -0 too */
-    double a = fabs(v);
-    uint64_t g;
-    int q;
-    if (shortest(a, &g, &q)) {
-        if (q < 0) return put_fixed(b, v < 0, g, (unsigned)-q);
-        if (v < 0) buf_ch(b, '-');
-        buf_int(b, (int64_t)g);
-        while (q--) buf_ch(b, '0');
-        return;
-    }
-    /* elsewhere: the shortest %.*e that reads back (round-tripping is monotonic in the precision),
-     * expanded to positional digits */
-    char t[40];
-    int lo = 0, hi = 16;
-    locale_t host = c_locale_enter();
-    while (lo < hi) {
-        int m = (lo + hi) / 2;
-        snprintf(t, sizeof t, "%.*e", m, a);
-        if (strtod(t, nullptr) == a) hi = m; else lo = m + 1;
-    }
-    snprintf(t, sizeof t, "%.*e", lo, a);
-    uselocale(host);
-    char dig[20];
-    size_t nd = 0;
-    char *e = strchr(t, 'e');
-    for (char *q = t; q < e; q++) if (*q != '.') dig[nd++] = *q;
-    long ex = strtol(e + 1, nullptr, 10); /* value = 0.dig × 10^(ex + 1) */
+    char d[17];
+    int e;
+    size_t k = num_shortest(fabs(v), d, &e); /* v = ±0.d × 10^e */
     if (v < 0) buf_ch(b, '-');
-    if (ex < 0) {
+    if (e <= 0) {
         buf_lit(b, "0.");
-        for (long z = -1; z > ex; z--) buf_ch(b, '0');
-        buf_put(b, nd, dig);
-    } else if ((size_t)ex + 1 >= nd) {
-        buf_put(b, nd, dig);
-        for (size_t z = nd; z < (size_t)ex + 1; z++) buf_ch(b, '0');
+        for (int z = e; z < 0; z++) buf_ch(b, '0');
+        buf_put(b, k, d);
+    } else if ((size_t)e >= k) {
+        buf_put(b, k, d);
+        for (size_t z = k; z < (size_t)e; z++) buf_ch(b, '0');
     } else {
-        buf_put(b, (size_t)ex + 1, dig);
+        buf_put(b, (size_t)e, d);
         buf_ch(b, '.');
-        buf_put(b, nd - (size_t)ex - 1, dig + ex + 1);
+        buf_put(b, k - (size_t)e, d + e);
     }
 }
 

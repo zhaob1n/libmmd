@@ -5,11 +5,12 @@
  *
  * Config (%%{init}%% / front matter, dotted as xyChart.*):
  *   showDataLabel, showDataLabelOutsideBar — mermaid 11. Labels use each bar's own value
- *   (mermaid labels every bar from plots[0]) and the axis formatter, not Number.toString().
+ *   (mermaid labels every bar from plots[0]), written as mermaid writes it (String(v)).
  *   Outside labels are 12px: mermaid shrinks them with the inside-fit heuristic, which makes
  *   end labels on a tall horizontal chart unreadably small. A bar below zero is labelled at its
  *   own end (mermaid draws every bar up from the axis), and an automatic range gains a step
- *   when the outside label would reach the axis labels.
+ *   when the outside label would reach the axis labels; under an explicit range the label
+ *   moves inside the bar instead.
  *   barOverlap — libmmd only. Bar series share the full band instead of sitting side by side,
  *   and a 0 draws neither a bar nor a label, so one series per group (0 elsewhere) colours
  *   bars by group. mermaid.js ignores the key and draws grouped bars; the text still parses. */
@@ -31,6 +32,8 @@ static constexpr char PAL[][8] = {"#ECECFF", "#8493A6", "#FFC3A0", "#DCDDE1", "#
                                   "#D1A36F", "#C3CDE6", "#FFB6C1", "#496078", "#F8F3E3"};
 static constexpr char LINEPAL[][8] = {"#8493A6", "#FF7F50", "#3c9a3c", "#7b52ab", "#c0392b"};
 static constexpr double DL_FS = 12; /* outside data labels; inside size is fitted per series */
+/* room an outside label needs past its bar's end: 10px gap and 4px to spare */
+static double out_need(bool horiz, Str lab) { return 14 + (horiz ? text_width(lab, DL_FS) : DL_FS); }
 
 /* optional leading quoted or bare title, then rest */
 static Str take_title(Str s[static 1]) {
@@ -91,9 +94,21 @@ static double nice(double x) {
     double e = pow(10, floor(log10(x))), f = x / e;
     return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * e;
 }
-static size_t fmt_num(double v, size_t cap, char b[static cap]) {
-    int r = snprintf(b, cap, "%.6g", fabs(v) < 1e-9 ? 0.0 : v);
-    return r < 0 ? 0 : (size_t)r < cap ? (size_t)r : cap - 1;
+/* the tick i·step, divided as d3 does below 1 so that 3·0.1 prints as 0.3 */
+static double tick_at(double i, double step) { return step < 1 ? i / round(1 / step) : i * step; }
+/* point i of nc spread over x-axis min --> max, rounded to the spacing's leading digit and three
+ * more: steps of 1/3 read 0.3333, and float noise drops */
+static double xr_at(double xmin, double xmax, size_t nc, size_t i) {
+    if (nc < 2) return xmin;
+    double sp = fabs(xmax - xmin) / (double)(nc - 1), v = xmin + (xmax - xmin) * (double)i / (double)(nc - 1);
+    if (!(sp > 0)) return v;
+    double p = pow(10, fmax(3 - floor(log10(sp)), 0));
+    if (!(fabs(v) * p < 0x1p53)) return v; /* no digit left to round away (and p may be infinite) */
+    return round(v * p) / p;
+}
+/* x-axis label i without categories: the point's value on a min --> max range, else i + 1 */
+static Str x_num(bool xr, double xmin, double xmax, size_t nc, size_t i, char nb[static 32]) {
+    return (Str){.p = nb, .n = fmt_js(xr ? xr_at(xmin, xmax, nc, i) : (double)(i + 1), nb)};
 }
 
 typedef struct R2 { double x, y, w, h; } R2;
@@ -121,7 +136,7 @@ static double fit_inside(bool horiz, double bw, double bh, Str lab) {
     }
     return 0;
 }
-typedef struct DLab { double x, y, fs; const char *anchor; TBase tb; size_t n; char t[24]; } DLab;
+typedef struct DLab { double x, y, fs; const char *anchor; TBase tb; size_t n; char t[32]; } DLab;
 static Str dl_str(const DLab d[static 1]) { return (Str){.p = d->t, .n = d->n}; }
 static BBox dl_box(const DLab d[static 1]) { return dg_tbox(dl_str(d), d->fs, d->fs, d->x, d->y, false, d->anchor, d->tb); }
 static void data_label(Buf out[static 1], const DLab d[static 1], const char fill[static 1]) {
@@ -209,7 +224,7 @@ DIAG_FN(xychart_render) {
     if (!yr) { ymin = floor(ymin / step) * step; ymax = ceil(ymax / step) * step; }
     /* categories: explicit, numeric range or 1..n */
     size_t nc = cats.n ? cats.n : np;
-    char nb[48];
+    char nb[32];
     const bool show_dl = dcfg_bool("xyChart.showDataLabel", false);
     const bool dl_out = show_dl && dcfg_bool("xyChart.showDataLabelOutsideBar", false);
     const bool overlap = dcfg_bool("xyChart.barOverlap", false);
@@ -224,21 +239,27 @@ DIAG_FN(xychart_render) {
                 for (uint32_t k = 0; !ser.v[s].line && k < ser.v[s].nv && k < nc; k++) {
                     double v = vals.v[ser.v[s].v0 + k];
                     if (v >= 0) continue;
-                    double need = 14 + (horiz ? text_width((Str){.p = nb, .n = fmt_num(v, sizeof nb, nb)}, DL_FS) : DL_FS);
+                    double need = out_need(horiz, (Str){.p = nb, .n = fmt_js(v, nb)});
                     if ((v - ymin) / (ymax - ymin) * (horiz ? PW : PH) < need) { ymin -= step, grow = true; break; }
                 }
         }
     }
+    if (!(ymax - ymin > 0) || !isfinite(ymax - ymin) || (xr && !isfinite(xmax - xmin)))
+        return diag_fail(err_off, msg, off, "axis range too large for a double");
+    /* value ticks: the multiples of step inside the range, at most 1001 (counted with an int: past
+     * 2^53 steps from zero, adding 1 to a double tick index changes nothing); the 1e-6 slack
+     * keeps an end tick lost to float noise, not one that lies outside the range */
+    double t0 = ceil(ymin / step - 1e-6), t1 = floor(ymax / step + 1e-6);
+    if (tick_at(t0, step) < ymin - step * 1e-9) t0++;
+    if (tick_at(t1, step) > ymax + step * 1e-9) t1--;
+    const int nt = (int)fmin(t1 - t0, 1000);
     double tl = 0;
-    for (double v = ymin; v <= ymax + step * 1e-6; v += step) {
-        double w = text_width((Str){.p = nb, .n = fmt_num(v, sizeof nb, nb)}, 14);
-        if (w > tl) tl = w;
-        if ((ymax - ymin) / step > 1000) break;
-    }
-    /* vertical: value axis on the left; horizontal: categories on the left */
+    for (int k = 0; k <= nt; k++) tl = fmax(tl, text_width((Str){.p = nb, .n = fmt_js(tick_at(t0 + k, step), nb)}, 14));
+    /* vertical: value axis on the left; horizontal: the x labels on the left */
     double catw = 0;
-    for (size_t i = 0; i < cats.n; i++) { double w = text_width(cats.v[i], 14); if (w > catw) catw = w; }
-    double leftw = horiz ? (cats.n ? catw : tl) : tl;
+    for (size_t i = 0; horiz && i < nc; i++)
+        catw = fmax(catw, text_width(cats.n ? cats.v[i] : x_num(xr, xmin, xmax, nc, i, nb), 14));
+    double leftw = horiz ? catw : tl;
     double ox = 20 + (horiz ? (xt.n ? 26 : 0) : (yt.n ? 26 : 0)) + leftw + 10, oy = title.n ? 50 : 15;
     /* outside labels sit above a rising bar's top: drop the plot so they clear the title */
     if (dl_out && !horiz && ymax > 0) oy += 24;
@@ -295,11 +316,17 @@ DIAG_FN(xychart_render) {
                 R2 r = bar_geom(horiz, overlap, nbar, bi, band, base, p, CPOS(k));
                 if (!(r.w > 0) || !(r.h > 0)) continue;
                 DLab *d = &dl[ndl++];
-                d->n = fmt_num(v, sizeof d->t, d->t);
+                d->n = fmt_js(v, d->t);
                 if (!dl_out) fs = fmin(fs, fit_inside(horiz, r.w, r.h, dl_str(d)));
                 /* the label sits at the bar's far end, which is left of / below the baseline for a
                  * negative value: past it outside, short of it inside */
                 bool up = horiz ? p > base : p < base, fwd = dl_out == up; /* text right of / above the end */
+                /* below zero, an explicit range can end right past the bar, leaving the label no room
+                 * before the axis labels (an automatic one grew for it): put it inside instead */
+                if (dl_out && !up) {
+                    double need = out_need(horiz, dl_str(d));
+                    if ((horiz ? r.x - ox : oy + ph - r.y - r.h) < need && (horiz ? r.w : r.h) >= need) fwd = true;
+                }
                 if (horiz) {
                     double end = up ? r.x + r.w : r.x;
                     d->x = fwd ? end + 10 : end - 10, d->y = r.y + r.h / 2;
@@ -375,19 +402,14 @@ DIAG_FN(xychart_render) {
     /* axes */
     dg_line(out, ox, oy, ox, oy + ph, "ax");
     dg_line(out, ox, oy + ph, ox + pw, oy + ph, "ax");
-    for (int k = 0; k <= 1000; k++) {
-        double v = ymin + step * k;
-        if (v > ymax + step * 1e-6) break;
-        Str t = {.p = nb, .n = fmt_num(v, sizeof nb, nb)};
-        double p = VPOS(v);
+    for (int k = 0; k <= nt; k++) {
+        double v = tick_at(t0 + k, step), p = VPOS(v);
+        Str t = {.p = nb, .n = fmt_js(v, nb)};
         if (horiz) { dg_line(out, p, oy + ph, p, oy + ph + 5, "tk"); dg_text(out, t, 14, p, oy + ph + 16, "middle", "tl"); }
         else { dg_line(out, ox - 5, p, ox, p, "tk"); dg_text(out, t, 14, ox - 8, p, "end", "tl"); }
     }
     for (size_t i = 0; i < nc; i++) {
-        Str t;
-        if (cats.n) t = clab ? clab[i] : cats.v[i];
-        else if (xr) t = (Str){.p = nb, .n = fmt_num(xmin + (nc > 1 ? (xmax - xmin) * (double)i / (double)(nc - 1) : 0), sizeof nb, nb)};
-        else t = (Str){.p = nb, .n = fmt_num((double)(i + 1), sizeof nb, nb)};
+        Str t = !cats.n ? x_num(xr, xmin, xmax, nc, i, nb) : clab ? clab[i] : cats.v[i];
         double p = CPOS(i);
         if (horiz) { dg_line(out, ox - 5, p, ox, p, "tk"); dg_text(out, t, 14, ox - 8, p, "end", "tl"); }
         else {
