@@ -467,6 +467,7 @@ db4796157d723418 tests/cases/config_sankey.mmd
 9d68a2cb5325389d tests/cases/config_seq.mmd
 e44399d51d02f30e tests/cases/config_state.mmd
 723444a4efee77e6 tests/cases/config_timeline.mmd
+f3133154ff51823d tests/cases/cynefin_badcolor.mmd
 5b3a0c38009d651c tests/cases/cynefin_full.mmd
 85608fea9717e622 tests/cases/cynefin_overflow.mmd
 a163e308f3db855a tests/cases/dir_subgraphs.mmd

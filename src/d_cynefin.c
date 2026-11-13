@@ -9,6 +9,7 @@
 #include "dgraph.h"
 #include "dcfg.h"
 #include "diagrams.h"
+#include "mcolor.h"
 #include "text.h"
 
 enum { CX, CD, CH, CL, CF, ND }; /* complex complicated chaotic clear confusion (draw order) */
@@ -123,7 +124,8 @@ DIAG_FN(cynefin_render) {
     for (int d = 0; d < ND; d++) {
         Str v = dcfg_get(BGKEY[d]);
         bg[d] = BG[d];
-        if (v.n && v.n < 40 && v.p[0] == '#') {
+        bool dark;
+        if (v.n && mc_is_dark(v, &dark)) {
             char *c = arena_alloc(a, v.n + 1, 1);
             if (!c) return MMD_ERR_NOMEM;
             memcpy(c, v.p, v.n), c[v.n] = 0, bg[d] = c;
