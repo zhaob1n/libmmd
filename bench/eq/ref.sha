@@ -486,6 +486,7 @@ af7e6f9cbf935c8d tests/cases/eventmodeling_06.mmd
 9a9ab2cb2a653126 tests/cases/eventmodeling_09.mmd
 47ec8b95f6e3496c tests/cases/eventmodeling_12.mmd
 b4cfb9f2d1076698 tests/cases/eventmodeling_edge.mmd
+b5e6da6b828a8240 tests/cases/eventmodeling_longdata.mmd
 0569153300fc169e tests/cases/flow_config_acc.mmd
 b86cfe9ab2e03b76 tests/cases/flow_config_curve.mmd
 da12ad4c1e8e2285 tests/cases/flow_config_linear.mmd
