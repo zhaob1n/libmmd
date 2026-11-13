@@ -23,7 +23,7 @@ typedef struct RStyle { Str from, to, text, line; double ox, oy; } RStyle;
 typedef struct Item { int32_t idx; bool box; } Item;
 
 static constexpr char CSS[] =
-    "#mermaid .ct{fill:#fff;}#mermaid .ct.ext{fill:#fff;}#mermaid .cn{font-weight:bold;font-size:14px;}#mermaid .cs{font-size:10.5px;}"
+    "#mermaid .cn{font-weight:bold;font-size:14px;}#mermaid .cs{font-size:10.5px;}"
     "#mermaid .cd{font-size:11.48px;}#mermaid .cb{fill:none;stroke:#444;stroke-width:1px;stroke-dasharray:7,7;}"
     "#mermaid .cbt{font-weight:bold;font-size:14px;fill:#444;}#mermaid .cbs{font-size:12px;fill:#444;}"
     "#mermaid .cr{fill:none;stroke:#444;stroke-width:1px;}#mermaid .crh{fill:#444;}#mermaid .crl{font-size:13px;fill:#444;}"

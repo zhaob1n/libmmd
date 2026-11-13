@@ -163,7 +163,8 @@ void dg_head(Buf b[restrict static 1], BBox bb, double m, const char kind[restri
     dcfg_theme_css(b, kind);
     buf_lit(b, "</style><rect x=\""); buf_num(b, x); buf_lit(b, "\" y=\""); buf_num(b, y);
     buf_lit(b, "\" width=\""); buf_num(b, w); buf_lit(b, "\" height=\""); buf_num(b, h); buf_lit(b, "\" fill=\"");
-    Str bg = dcfg_tv("background");
+    /* mermaid's xychart paints its own background, xyChart.backgroundColor (the theme's by default) */
+    Str bg = dcfg_tv(strcmp(kind, "xychart") ? "background" : "xyChart.backgroundColor");
     if (bg.n) buf_str(b, bg); else buf_lit(b, "white");
     buf_lit(b, "\"/>");
 }
