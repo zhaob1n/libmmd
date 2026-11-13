@@ -1,6 +1,6 @@
 /* sankey(-beta): CSV rows `source,target,value` (RFC 4180 quoting, "" escapes, blank lines ok).
- * Layout is a port of d3-sankey 0.12 as configured by mermaid 11 (justify alignment, node width 10,
- * padding 12 (+15 with showValues), 6 relaxation iterations with collision resolution); links are
+ * Layout is a port of d3-sankey 0.12 as configured by mermaid 12 (sankey.nodeAlignment, nodeWidth,
+ * nodePadding (+15 with showValues), 6 relaxation iterations with collision resolution); links are
  * cubic bands coloured by their source. Labels show the value (showValues). */
 #include <math.h>
 #include <stdio.h>
@@ -10,7 +10,7 @@
 #include "diagrams.h"
 #include "text.h"
 
-typedef struct SNode { Str name; double in, out, v, x, y, h; uint32_t col; } SNode;
+typedef struct SNode { Str name; double in, out, v, x, y, h; uint32_t col, dep, hgt; } SNode;
 typedef struct SLink { uint32_t s, t; double v, y0, y1; } SLink;
 
 static constexpr char CSS[] =
@@ -89,18 +89,20 @@ DIAG_FN(sankey_render) {
     SLink *L = lv.v;
     size_t nn = nv.n, nl = lv.n;
     for (size_t i = 0; i < nl; i++) N[L[i].s].out += L[i].v, N[L[i].t].in += L[i].v;
-    /* depth = longest path (Bellman-Ford style relaxation, bounded => cycles rejected) */
+    /* d3-sankey's depth and height: longest path from a source / to a sink (bounded => cycles rejected) */
     uint32_t maxc = 0;
     for (size_t round = 0;; round++) {
         bool ch = false;
-        for (size_t i = 0; i < nl; i++)
-            if (N[L[i].t].col < N[L[i].s].col + 1) N[L[i].t].col = N[L[i].s].col + 1, ch = true;
+        for (size_t i = 0; i < nl; i++) {
+            SNode *s = &N[L[i].s], *t = &N[L[i].t];
+            if (t->dep < s->dep + 1) t->dep = s->dep + 1, ch = true;
+            if (s->hgt < t->hgt + 1) s->hgt = t->hgt + 1, ch = true;
+        }
         if (!ch) break;
         if (round > nn) return diag_fail(err_off, msg, off, "sankey links form a cycle");
     }
-    for (size_t i = 0; i < nn; i++) if (N[i].col > maxc) maxc = N[i].col;
-    /* --- port of d3-sankey 0.12 (mermaid 11: justify, nodeWidth 10, nodePadding 12 (+15 with
-       showValues), extent [[0,0],[width,height]], 6 iterations) --- */
+    for (size_t i = 0; i < nn; i++) if (N[i].dep > maxc) maxc = N[i].dep;
+    /* --- port of d3-sankey 0.12 (mermaid 12: extent [[0,0],[width,height]], 6 iterations) --- */
     const bool SHOWV = dcfg_bool("sankey.showValues", true);
     uint32_t *soff = ANEW(a, uint32_t, nn + 1), *toff = ANEW(a, uint32_t, nn + 1);
     uint32_t *sl = ANEW(a, uint32_t, nl), *tl = ANEW(a, uint32_t, nl), *fill = ANEW(a, uint32_t, nn);
@@ -112,13 +114,24 @@ DIAG_FN(sankey_render) {
     for (size_t l = 0; l < nl; l++) sl[fill[L[l].s]++] = (uint32_t)l;
     for (size_t i = 0; i < nn; i++) fill[i] = toff[i];
     for (size_t l = 0; l < nl; l++) tl[fill[L[l].t]++] = (uint32_t)l;
-    for (size_t i = 0; i < nn; i++) { /* justify: nodes without outgoing links to the last column */
-        N[i].v = fmax(N[i].in, N[i].out);
-        if (soff[i + 1] == soff[i]) N[i].col = maxc;
+    /* the column: d3-sankey's align function mermaid picks by sankey.nodeAlignment (justify unless known) */
+    Str al = dcfg_get_str(S("sankey.nodeAlignment"));
+    for (size_t i = 0; i < nn; i++) {
+        SNode *q = &N[i];
+        bool src = soff[i + 1] > soff[i], tgt = toff[i + 1] > toff[i];
+        q->v = fmax(q->in, q->out), q->col = q->dep;
+        if (str_eq(al, S("left"))) continue;
+        if (str_eq(al, S("right"))) q->col = maxc - q->hgt;
+        else if (str_eq(al, S("center"))) {
+            if (tgt) continue;
+            q->col = maxc;
+            for (uint32_t k = soff[i]; k < soff[i + 1]; k++) if (N[L[sl[k]].t].dep - 1 < q->col) q->col = N[L[sl[k]].t].dep - 1;
+        } else if (!src) q->col = maxc;
     }
     const double W = fmin(fmax(dcfg_num("sankey.width", 600), 100), 4000);
     const double H = fmin(fmax(dcfg_num("sankey.height", 400), 100), 4000);
-    constexpr double NW = 10;
+    /* nodeWidth is capped where columns would start to overlap */
+    const double NW = fmin(fmax(dcfg_num("sankey.nodeWidth", 10), 1), W / (maxc + 1.0));
     uint32_t *colcnt = ANEW(a, uint32_t, maxc + 2), *coff = ANEW(a, uint32_t, maxc + 2), *cn = ANEW(a, uint32_t, nn);
     if (!colcnt || !coff || !cn) return MMD_ERR_NOMEM;
     for (uint32_t c = 0; c <= maxc + 1; c++) colcnt[c] = coff[c] = 0;
@@ -127,7 +140,9 @@ DIAG_FN(sankey_render) {
     for (uint32_t c = 0; c <= maxc; c++) coff[c + 1] = coff[c] + colcnt[c], maxcnt = colcnt[c] > maxcnt ? colcnt[c] : maxcnt;
     for (uint32_t c = 0; c <= maxc; c++) colcnt[c] = 0;
     for (size_t i = 0; i < nn; i++) cn[coff[N[i].col] + colcnt[N[i].col]++] = (uint32_t)i; /* input order */
-    const double py = fmin(12.0 + (SHOWV ? 15 : 0), maxcnt > 1 ? H / (maxcnt - 1.0) : INFINITY);
+    /* d3 caps the padding at H / (n - 1) for the fullest column, which leaves its nodes no height
+       (ky = 0); keep a tenth of H for them so a large nodePadding cannot flatten the diagram */
+    const double py = fmin(fmax(dcfg_num("sankey.nodePadding", 12), 0) + (SHOWV ? 15 : 0), maxcnt > 1 ? 0.9 * H / (maxcnt - 1.0) : INFINITY);
     double ky = INFINITY;
     for (uint32_t c = 0; c <= maxc; c++) {
         double sum = 0;

@@ -527,6 +527,9 @@ ab2b73b5e2416d17 tests/cases/railroad_fn.mmd
 d17df4c25acb8c5f tests/cases/railroad_peg.mmd
 52b8efd48048039b tests/cases/requirement_full.mmd
 aeb4a72799994932 tests/cases/rich_text.mmd
+c21af082073aabb4 tests/cases/sankey_align_center.mmd
+60c7c30ab07cd5e4 tests/cases/sankey_align_right.mmd
+78551f94487376f8 tests/cases/sankey_big_padding.mmd
 c7ba56c027960eda tests/cases/sankey_full.mmd
 375f235494b666a8 tests/cases/sankey_label_edge.mmd
 0847e02477adc791 tests/cases/seq_act_interleave.mmd
