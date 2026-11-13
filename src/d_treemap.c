@@ -10,6 +10,7 @@
 #include "dcfg.h"
 #include "diagrams.h"
 #include "text.h"
+#include "d3fmt.h"
 
 typedef struct TNode {
     Str label, cls;
@@ -127,9 +128,32 @@ static void put_c(Buf out[static 1], const char pfx[static 1], size_t i) {
     const char *c = dcfg_pal(pfx, i, def);
     buf_cstr(out, c);
 }
-static void fmt_val(double v, size_t cap, char b[static cap], size_t len[static 1]) {
-    int k = fabs(v - round(v)) < 1e-9 ? snprintf(b, cap, "%.0f", v) : snprintf(b, cap, "%.2f", v);
-    *len = k < 0 ? 0 : (size_t)k < cap ? (size_t)k : cap - 1;
+/* mermaid's value formatter: d3's format(treemap.valueFormat || ","), its "$" shorthands, and ","
+ * where d3 rejects the specifier (mermaid falls back there, or fails the render after a "$") */
+typedef struct VFmt { D3Fmt f; bool dollar; } VFmt;
+static VFmt value_format(Str s) {
+    VFmt r = {};
+    char spec[40] = ",";
+    if (!s.n) s = S(",");
+    if (str_eq(s, S("$0,0"))) r.dollar = true, s = S(",");
+    else if (s.p[0] == '$' && memchr(s.p, ',', s.n)) { /* "," and the first ".<digits>", type dropped */
+        size_t n = 1;
+        for (size_t i = 0; i + 1 < s.n; i++) {
+            if (s.p[i] != '.' || (unsigned)(s.p[i + 1] - '0') >= 10u) continue;
+            spec[n++] = '.';
+            for (i++; i < s.n && (unsigned)(s.p[i] - '0') < 10u && n < sizeof spec; i++) spec[n++] = s.p[i];
+            break;
+        }
+        r.dollar = true, s = (Str){.p = spec, .n = n};
+    } else if (s.p[0] == '$') r.dollar = true, s = (Str){.p = s.p + 1, .n = s.n - 1};
+    if (!d3fmt_parse(s, &r.f) && !d3fmt_parse(S(","), &r.f)) unreachable();
+    return r;
+}
+static Str value_text(Buf b[static 1], const VFmt f[static 1], double v) {
+    b->n = 0;
+    if (f->dollar) buf_ch(b, '$');
+    d3fmt(b, &f->f, v);
+    return (Str){.p = b->p, .n = b->n};
 }
 
 DIAG_FN(treemap_render) {
@@ -250,8 +274,9 @@ DIAG_FN(treemap_render) {
     if (!buf_reserve(out, 2048 + v.n * 600)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, dcfg_num("treemap.diagramPadding", 8), "treemap", CSS);
     bool showv = !str_eq(dcfg_get_str(S("treemap.showValues")), S("false"));
-    char nb_[40];
-    size_t nl;
+    const VFmt vf = value_format(dcfg_get_str(S("treemap.valueFormat")));
+    AUTO_BUF Buf vb = {};
+    Str vs = {};
     for (size_t k = 1; k < nb; k++) { /* sections */
         const TNode *t = &V[bfs[k]];
         if (t->first == UINT32_MAX) continue;
@@ -270,8 +295,8 @@ DIAG_FN(treemap_render) {
         double room = fmax(15, showv && t->v != 0 ? t->w - 10 - 30 - 10 - 6 : t->w - 12);
         bool sv = showv && t->v != 0; /* narrow header: the value keeps what's left after real room for the label */
         if (sv) {
-            fmt_val(t->v, sizeof nb_, nb_, &nl);
-            double vw = text_width((Str){.p = nb_, .n = nl}, 10);
+            vs = value_text(&vb, &vf, t->v);
+            double vw = text_width(vs, 10);
             if (vw + 16 > t->w) sv = false;
             else room = fmin(room, t->w - 6 - 10 - vw - 6);
         }
@@ -292,9 +317,7 @@ DIAG_FN(treemap_render) {
         }
         buf_lit(out, "<g fill=\""); put_c(out, "cScaleLabel", li); buf_lit(out, "\">");
         if (lab.n) dg_text(out, lab, 12, t->x + 6, t->y + HDR / 2, "start", "sh");
-        if (sv) {
-            dg_text(out, (Str){.p = nb_, .n = nl}, 10, t->x + t->w - 10, t->y + HDR / 2, "end", "sv");
-        }
+        if (sv) dg_text(out, vs, 10, t->x + t->w - 10, t->y + HDR / 2, "end", "sv");
         buf_lit(out, "</g>");
     }
     bool cx = nlv > 20;
@@ -330,8 +353,7 @@ DIAG_FN(treemap_render) {
         snprintf(cl, sizeof cl, "ln\" font-size=\"%.0f", f);
         dg_text(out, t->label, f, t->x + t->w / 2, t->y + t->h / 2, "middle", cl);
         if (showv && t->v != 0) {
-            fmt_val(t->v, sizeof nb_, nb_, &nl);
-            Str vs = {.p = nb_, .n = nl};
+            vs = value_text(&vb, &vf, t->v);
             double vt = t->h / 2 + f / 2 + sp; /* dominant-baseline: hanging */
             if (!(text_width(vs, pv) > aw || vt + pv > t->h - 4)) {
                 snprintf(cl, sizeof cl, "lv\" font-size=\"%.0f", pv);
@@ -340,6 +362,7 @@ DIAG_FN(treemap_render) {
         }
         buf_lit(out, "</g>");
     }
+    if (vb.oom) return MMD_ERR_NOMEM;
     if (title.n) dg_text(out, title, 16, W / 2, 15, "middle", "ttl");
     buf_lit(out, "</svg>\n");
     return out->oom ? MMD_ERR_NOMEM : MMD_OK;
