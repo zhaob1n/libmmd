@@ -147,19 +147,19 @@ DIAG_FN(radar_render) {
         const char *anc = fabs(c) < 0.1 ? "middle" : c > 0 ? "start" : "end";
         dg_text(out, ax.v[k].label, 12, CX + R * 1.05 * c + (fabs(c) < 0.1 ? 0 : c > 0 ? 4 : -4), cy + R * 1.05 * s + s * 6, anc, "al");
     }
+    double *P = ANEW(a, double, 2 * na);
+    if (!P) return MMD_ERR_NOMEM;
     for (size_t c = 0; c < cv.n; c++) {
         const char *col = dcfg_pal("cScale", c % countof(COL), COL[c % countof(COL)]);
-        double P[2 * 64];
-        size_t m = na < 64 ? na : 64;
-        for (size_t k = 0; k < m; k++) {
+        for (size_t k = 0; k < na; k++) {
             double v = vals.v[cv.v[c].v0 + k], r = R * fmin(fmax((v - vmin) / (vmax - vmin), 0), 1);
             P[2 * k] = CX + r * cos(axis_angle(k, na)), P[2 * k + 1] = cy + r * sin(axis_angle(k, na));
         }
         buf_lit(out, "<path class=\"cv\" fill=\""); buf_cstr(out, col); buf_lit(out, "\" stroke=\"");
         buf_cstr(out, col); buf_lit(out, "\" d=\"M");
         buf_pt(out, P[0], P[1]);
-        for (size_t k = 0; k < m; k++) { /* closed cardinal spline, tension 0.17 */
-            size_t i0 = (k + m - 1) % m, i1 = k, i2 = (k + 1) % m, i3 = (k + 2) % m;
+        for (size_t k = 0; k < na; k++) { /* closed cardinal spline, tension 0.17 */
+            size_t i0 = (k + na - 1) % na, i1 = k, i2 = (k + 1) % na, i3 = (k + 2) % na;
             constexpr double T = (1 - 0.17) / 6; /* d3 curveCardinalClosed.tension(0.17) */
             buf_ch(out, 'C');
             buf_pt(out, P[2 * i1] + (P[2 * i2] - P[2 * i0]) * T, P[2 * i1 + 1] + (P[2 * i2 + 1] - P[2 * i0 + 1]) * T); buf_ch(out, ' ');

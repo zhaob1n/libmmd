@@ -524,6 +524,7 @@ b1ddaa83f912e6f9 tests/cases/quadrant_full.mmd
 e3421c02168b518c tests/cases/quadrant_point_fill.mmd
 fdca08e3b4e52100 tests/cases/quadrant_ring_fallback.mmd
 5d529551c71e664c tests/cases/radar_full.mmd
+0a96ba0db473f370 tests/cases/radar_many_axes.mmd
 46a85b2e6172aede tests/cases/railroad_abnf.mmd
 61d448727e53c5c6 tests/cases/railroad_ebnf.mmd
 f147e4c67453da7e tests/cases/railroad_edge.mmd
