@@ -11,9 +11,14 @@ typedef struct DCfg {
 } DCfg;
 
 /* parse preamble src[0..off) and scan the body for acc lines; state lives until dcfg_end().
- * api is the MMD_THEME_* the caller asked for (mmd_options.theme), AUTO when the source decides. */
-void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t off, int api);
+ * sect is the diagram's section of mermaid's config (diag_lookup): its theme and look win over
+ * the top-level ones. init is where a directive's `config` lands, the key mermaid's detectInit
+ * files it under (usually sect). api is the MMD_THEME_* the caller asked for
+ * (mmd_options.theme): it wins over the source's theme (mermaid-cli lets the file win over -t),
+ * AUTO lets the source decide. */
+void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t off, Str sect, Str init, int api);
 void dcfg_end(void);
+int dcfg_theme(void);           /* MMD_THEME_* in effect: the caller's, else the source's, else AUTO */
 void dcfg_set_theme(int theme); /* MMD_THEME_* */
 Str dcfg_tv(const char var[static 1]);          /* themeVariables.<var> or the named theme's preset */
 /* palette entry <prefix><i> (pie1.., cScale0.., git0..) from themeVariables / named theme, else def */

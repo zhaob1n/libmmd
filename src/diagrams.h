@@ -50,8 +50,12 @@ mmd_status af_prepare(struct Graph *g, AfInfo *out[static 1]);
 bool af_neo(const AfInfo *inf);
 mmd_status af_svg(const struct Graph *g, const AfInfo *inf, Buf *b);
 
-/* keyword -> renderer, nullptr when not a diagram type handled here */
-DiagFn diag_lookup(Str kw);
+/* keyword -> renderer (nullptr: drawn in mmd.c, or no diagram type), the section of mermaid's
+ * config that holds its settings (getDiagramConfigKey), and the key mermaid's detectInit files a
+ * directive's `config` under: the detector id, which no renderer reads for class, state, xychart,
+ * flowchart-elk and the railroad dialects. Both are empty for an unknown keyword. */
+typedef struct Diag { DiagFn fn; Str sect, init; } Diag;
+Diag diag_lookup(Str kw);
 
 /* shared error helper */
 mmd_status diag_fail(size_t err_off[static 1], char msg[static 160], size_t off, const char m[static 1]);

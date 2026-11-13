@@ -26,58 +26,6 @@ void mmd_buffer_free(mmd_buffer *buf) {
     *buf = (mmd_buffer){};
 }
 
-typedef struct Config {
-    Str title;
-    double node_sep, rank_sep;
-    mmd_theme theme;
-} Config;
-
-static double parse_num_after(Str s, Str key) {
-    for (size_t i = 0; i + key.n <= s.n; i++) {
-        if (memcmp(s.p + i, key.p, key.n) != 0) continue;
-        size_t j = i + key.n;
-        while (j < s.n && (s.p[j] == '"' || s.p[j] == '\'' || s.p[j] == ':' || is_sp(s.p[j]))) j++;
-        double v = 0;
-        bool any = false;
-        while (j < s.n && (unsigned)(s.p[j] - '0') < 10u) { v = v * 10 + (s.p[j] - '0'); j++; any = true; }
-        if (j < s.n && s.p[j] == '.') {
-            double f = 0.1;
-            for (j++; j < s.n && (unsigned)(s.p[j] - '0') < 10u; j++, f /= 10) v += (s.p[j] - '0') * f;
-        }
-        if (any) return v;
-    }
-    return 0;
-}
-
-static mmd_theme parse_theme_after(Str s) {
-    static const Str KEY = S("theme");
-    for (size_t i = 0; i + KEY.n <= s.n; i++) {
-        if (memcmp(s.p + i, KEY.p, KEY.n) != 0) continue;
-        size_t ls = i; /* skip YAML `# comment` lines */
-        while (ls && s.p[ls - 1] != '\n') ls--;
-        while (ls < i && is_sp(s.p[ls])) ls++;
-        if (s.p[ls] == '#') continue;
-        size_t j = i + KEY.n;
-        if (j < s.n && s.p[j] != '"' && s.p[j] != '\'' && s.p[j] != ':' && !is_sp(s.p[j])) continue;
-        while (j < s.n && (s.p[j] == '"' || s.p[j] == '\'' || s.p[j] == ':' || is_sp(s.p[j]))) j++;
-        Str w = {.p = s.p + j, .n = 0};
-        while (j < s.n && (unsigned)((s.p[j] | 32) - 'a') < 26u) j++, w.n++;
-        if (str_eq(w, S("dark"))) return MMD_THEME_DARK;
-        if (str_eq(w, S("forest"))) return MMD_THEME_FOREST;
-        if (str_eq(w, S("neutral"))) return MMD_THEME_NEUTRAL;
-        if (str_eq(w, S("default")) || str_eq(w, S("base"))) return MMD_THEME_DEFAULT;
-    }
-    return MMD_THEME_AUTO;
-}
-
-static void apply_cfg_text(Config c[static 1], Str s) {
-    double v;
-    mmd_theme t = parse_theme_after(s);
-    if (t != MMD_THEME_AUTO) c->theme = t;
-    if ((v = parse_num_after(s, S("nodeSpacing"))) > 0) c->node_sep = v;
-    if ((v = parse_num_after(s, S("rankSpacing"))) > 0) c->rank_sep = v;
-}
-
 [[nodiscard]] static bool next_line(Str src, size_t i[static 1], Str line[static 1]) {
     if (*i >= src.n) return false;
     const char *nl = memchr(src.p + *i, '\n', src.n - *i);
@@ -87,8 +35,9 @@ static void apply_cfg_text(Config c[static 1], Str s) {
     return true;
 }
 
-/* skip frontmatter, directives, blank lines and comments; return offset of diagram keyword */
-static size_t preamble(Str src, Config c[static 1]) {
+/* skip frontmatter, directives, blank lines and comments; return offset of diagram keyword.
+ * Config keys in them are dcfg_begin()'s. */
+static size_t preamble(Str src, Str title[static 1]) {
     size_t i = 0;
     if (src.n >= 3 && memcmp(src.p, "\xEF\xBB\xBF", 3) == 0) i = 3;
     size_t save = i;
@@ -96,7 +45,6 @@ static size_t preamble(Str src, Config c[static 1]) {
     /* frontmatter */
     while (next_line(src, &i, &line) && str_trim(line).n == 0) {}
     if (str_eq(str_trim(line), S("---"))) {
-        size_t fm0 = i;
         bool closed = false;
         while (next_line(src, &i, &line)) {
             Str t = str_trim(line);
@@ -104,11 +52,10 @@ static size_t preamble(Str src, Config c[static 1]) {
             if (line.n && !is_sp(line.p[0]) && str_starts(t, S("title:"))) {
                 Str v = str_trim((Str){.p = t.p + 6, .n = t.n - 6});
                 if (v.n >= 2 && (v.p[0] == '"' || v.p[0] == '\'') && v.p[v.n - 1] == v.p[0]) v.p++, v.n -= 2;
-                c->title = v;
+                *title = v;
             }
         }
-        if (closed) apply_cfg_text(c, (Str){.p = src.p + fm0, .n = i - fm0});
-        else i = save;
+        if (!closed) i = save;
     } else i = save;
     for (;;) {
         size_t ls = i;
@@ -122,7 +69,6 @@ static size_t preamble(Str src, Config c[static 1]) {
             for (size_t k = j; k + 3 <= src.n; k++)
                 if (src.p[k] == '}' && src.p[k + 1] == '%' && src.p[k + 2] == '%') { end = src.p + k; break; }
             if (!end) return ls;
-            apply_cfg_text(c, (Str){.p = src.p + j, .n = (size_t)(end - (src.p + j))});
             i = (size_t)(end - src.p) + 3;
             continue;
         }
@@ -149,11 +95,8 @@ static void set_err(mmd_error *err, mmd_status st, size_t n, const char *src, si
 static mmd_status render_c(Arena ap[static 1], Buf bp[static 1], size_t n, const char *src, const mmd_options *opt,
                            mmd_error *err) {
     if (n > (size_t)1 << 30) { set_err(err, MMD_ERR_LIMIT, n, src, 0, nullptr); return MMD_ERR_LIMIT; }
-    Config cfg = {.node_sep = 50, .rank_sep = 50};
-    Str s = {.p = src, .n = n};
-    size_t off = preamble(s, &cfg);
-    if (opt && opt->node_spacing > 0) cfg.node_sep = opt->node_spacing;
-    if (opt && opt->rank_spacing > 0) cfg.rank_sep = opt->rank_spacing;
+    Str title = {};
+    size_t off = preamble((Str){.p = src, .n = n}, &title);
     double fs = opt && opt->font_size > 0 ? opt->font_size : 16;
     if (off >= n) { set_err(err, MMD_ERR_EMPTY, n, src, 0, nullptr); return MMD_ERR_EMPTY; }
     size_t k = off;
@@ -171,18 +114,19 @@ static mmd_status render_c(Arena ap[static 1], Buf bp[static 1], size_t n, const
     mmd_status st = MMD_OK;
     PMARK("");
     /* %%{init}%% / frontmatter keys + accTitle/accDescr, all diagram kinds */
-    dcfg_begin(&arena, n, src, off, opt ? opt->theme : MMD_THEME_AUTO);
-    dcfg_set_theme(opt && opt->theme ? opt->theme : cfg.theme);
+    const Diag dg = diag_lookup(kw);
+    dcfg_begin(&arena, n, src, off, dg.sect, dg.init, opt ? opt->theme : MMD_THEME_AUTO);
     bool af = str_eq(kw, S("agentflow-beta"));
     if (str_eq(kw, S("graph")) || str_eq(kw, S("flowchart")) || str_eq(kw, S("flowchart-elk")) || str_eq(kw, S("swimlane-beta")) || af) {
+        int theme = dcfg_theme();
         dcfg_set_theme(0); /* flowchart applies named themes itself (Graph.theme) */
-        Graph g = {.arena = &arena, .title = cfg.title,
-                   .theme = (uint8_t)(opt && opt->theme ? opt->theme : cfg.theme ? cfg.theme : MMD_THEME_DEFAULT),
-                   .flags = opt ? opt->flags : 0, .node_sep = cfg.node_sep,
-                   .rank_sep = cfg.rank_sep, .font_size = fs};
         /* config: flowchart.nodeSpacing / rankSpacing (init or frontmatter; API options win), cycleRemoval */
-        if (!(opt && opt->node_spacing > 0)) g.node_sep = dcfg_num(af ? "agentflow.nodeSpacing" : "flowchart.nodeSpacing", g.node_sep);
-        if (!(opt && opt->rank_spacing > 0)) g.rank_sep = dcfg_num(af ? "agentflow.rankSpacing" : "flowchart.rankSpacing", g.rank_sep);
+        Graph g = {.arena = &arena, .title = title, .theme = (uint8_t)(theme ? theme : MMD_THEME_DEFAULT),
+                   .flags = opt ? opt->flags : 0, .font_size = fs,
+                   .node_sep = opt && opt->node_spacing > 0 ? opt->node_spacing
+                                                            : dcfg_num(af ? "agentflow.nodeSpacing" : "flowchart.nodeSpacing", 50),
+                   .rank_sep = opt && opt->rank_spacing > 0 ? opt->rank_spacing
+                                                            : dcfg_num(af ? "agentflow.rankSpacing" : "flowchart.rankSpacing", 50)};
         Str cr = dcfg_get_str(S("flowchart.cycleRemoval"));
         g.acyclicer = str_eq(cr, S("dfs")) ? MMD_ACYC_DFS : str_eq(cr, S("greedy")) ? MMD_ACYC_GREEDY : MMD_ACYC_AUTO;
         if (g.flags & MMD_F_FAS_DFS) g.acyclicer = MMD_ACYC_DFS;
@@ -210,16 +154,16 @@ static mmd_status render_c(Arena ap[static 1], Buf bp[static 1], size_t n, const
         if (lanes && (st = swim_titles(&g, lanes, &b))) goto fail;
         PMARK("svg");
     } else if (str_eq(kw, S("sequenceDiagram"))) {
-        if ((st = seq_render(&arena, n, src, off, cfg.title, fs, &b, &eoff, msg))) goto fail;
+        if ((st = seq_render(&arena, n, src, off, title, fs, &b, &eoff, msg))) goto fail;
     } else {
-        DiagFn fn = diag_lookup(kw);
+        DiagFn fn = dg.fn;
         if (!fn) {
             st = MMD_ERR_UNSUPPORTED;
             snprintf(msg, sizeof msg, "unsupported diagram type '%.*s'", (int)(kw.n > 40 ? 40 : kw.n), kw.p);
             eoff = off;
             goto fail;
         }
-        if ((st = fn(&arena, n, src, off, cfg.title, fs, &b, &eoff, msg))) goto fail;
+        if ((st = fn(&arena, n, src, off, title, fs, &b, &eoff, msg))) goto fail;
     }
     if (b.oom || !buf_reserve(&b, 0)) { st = MMD_ERR_NOMEM; goto fail; } /* empty output has no buffer yet */
     b.p[b.n] = 0;

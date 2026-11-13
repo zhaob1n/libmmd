@@ -13,11 +13,21 @@ static thread_local Arena *cur_a;
 static thread_local size_t cur_cap;
 
 static constexpr size_t MAX_KV = 512;
+static thread_local Str cur_sect; /* the diagram's section of mermaid's config: flowchart, xyChart ... */
+static thread_local Str cur_init; /* where mermaid's detectInit files a directive's `config` */
+static thread_local Str cfg_to;   /* what a leading "config." becomes: nothing in the front matter,
+                                   * cur_init in a directive */
+static thread_local bool cfg_drop; /* a directive's `config` is dropped: there are several directives */
 
+static Str join(Str pre, Str k);
 static void kv_put(Str k, Str v) {
-    static const Str PRE[] = {S("init."), S("initialize."), S("config.")};
+    static const Str PRE[] = {S("init."), S("initialize.")};
     for (size_t i = 0; i < countof(PRE); i++)
         if (str_starts(k, PRE[i])) { k.p += PRE[i].n; k.n -= PRE[i].n; break; }
+    if (str_starts(k, S("config."))) {
+        if (cfg_drop) return;
+        k = join(cfg_to, (Str){.p = k.p + 7, .n = k.n - 7});
+    }
     if (!k.n || cur.n >= MAX_KV) return;
     if (cur.n == cur_cap) {
         size_t nc = cur_cap ? cur_cap * 2 : 32;
@@ -135,15 +145,25 @@ static void yaml(Str s) {
     }
 }
 
-static void directive(Str body) { /* text after "%%{" up to "}%%" */
+/* %%{init: ...}%% or %%{initialize: ...}%%: body is the text after "%%{" */
+static bool init_directive(Str body, const char *c[static 1]) {
     body = str_trim(body);
-    const char *c = memchr(body.p, ':', body.n);
-    if (!c) return;
-    Str name = dg_unquote((Str){.p = body.p, .n = (size_t)(c - body.p)}, true);
-    if (!str_eq(name, S("init")) && !str_eq(name, S("initialize"))) return;
-    JP p = {.s = c + 1, .n = body.n - (size_t)(c + 1 - body.p)};
+    *c = memchr(body.p, ':', body.n);
+    if (!*c) return false;
+    Str name = dg_unquote((Str){.p = body.p, .n = (size_t)(*c - body.p)}, true);
+    return str_eq(name, S("init")) || str_eq(name, S("initialize"));
+}
+
+/* mermaid's detectInit moves a directive's `config` object to the detected diagram's key, or,
+ * when there are several directives, drops it with every other key it does not know */
+static void directive(Str body, bool several) {
+    const char *c;
+    if (!init_directive(body, &c)) return;
+    JP p = {.s = c + 1, .n = (size_t)(body.p + body.n - c - 1)};
     jp_ws(&p);
+    cfg_to = cur_init, cfg_drop = several;
     if (p.i < p.n && p.s[p.i] == '{') jp_obj(&p, (Str){}, 1);
+    cfg_to = (Str){}, cfg_drop = false;
 }
 
 bool dcfg_is_acc(Str t, bool block[static 1]) {
@@ -158,10 +178,44 @@ bool dcfg_is_acc(Str t, bool block[static 1]) {
 
 static thread_local int cur_theme; /* MMD_THEME_* chosen by CLI option or init/frontmatter */
 static thread_local int api_theme; /* MMD_THEME_* the caller asked for, AUTO when the source decides */
-void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t off, int api) {
+
+/* a value mermaid's readAppearance takes: a theme in its registry (or 'null'), a look it knows */
+static bool appearance_ok(Str key, Str v) {
+    static const Str THEMES[] = {S("base"), S("dark"), S("default"), S("forest"), S("neutral"), S("neo"), S("neo-dark"),
+                                 S("redux"), S("redux-dark"), S("redux-color"), S("redux-dark-color"), S("null")};
+    static const Str LOOKS[] = {S("classic"), S("handDrawn"), S("neo")};
+    bool theme = str_eq(key, S("theme"));
+    const Str *ok = theme ? THEMES : LOOKS;
+    for (size_t i = 0, n = theme ? countof(THEMES) : countof(LOOKS); i < n; i++)
+        if (str_eq(v, ok[i])) return true;
+    return false;
+}
+
+/* theme or look as mermaid resolves it: the diagram's section first, then the top level */
+static Str appearance(Str key) {
+    char k[48];
+    int kn = snprintf(k, sizeof k, "%.*s.%.*s", (int)cur_sect.n, cur_sect.p, (int)key.n, key.p);
+    Str v = cur_sect.n && kn > 0 && (size_t)kn < sizeof k ? dcfg_get_str((Str){.p = k, .n = (size_t)kn}) : (Str){};
+    if (appearance_ok(key, v)) return v;
+    v = dcfg_get_str(key);
+    return appearance_ok(key, v) ? v : (Str){};
+}
+
+static int theme_named(Str w) {
+    if (str_eq(w, S("dark"))) return MMD_THEME_DARK;
+    if (str_eq(w, S("forest"))) return MMD_THEME_FOREST;
+    if (str_eq(w, S("neutral"))) return MMD_THEME_NEUTRAL;
+    if (str_eq(w, S("default")) || str_eq(w, S("base"))) return MMD_THEME_DEFAULT;
+    return MMD_THEME_AUTO;
+}
+
+void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t off, Str sect, Str init, int api) {
     cur = (DCfg){};
-    cur_a = a, cur_cap = 0, api_theme = api;
-    size_t i = 0;
+    cur_a = a, cur_cap = 0, cur_sect = sect, cur_init = init, api_theme = api;
+    size_t i = off >= 3 && !memcmp(src, "\xEF\xBB\xBF", 3) ? 3 : 0; /* a BOM, as preamble() skips it */
+    unsigned ninit = 0;
+    for (const char *q = src + i, *c; (q = memmem(q, off - (size_t)(q - src), "%%{", 3)); q += 3)
+        ninit += init_directive((Str){.p = q + 3, .n = off - (size_t)(q + 3 - src)}, &c);
     /* preamble: frontmatter + directives */
     while (i < off) {
         const char *nl = memchr(src + i, '\n', off - i);
@@ -184,13 +238,13 @@ void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t of
             for (const char *q = s0; q + 2 < src + off; q++)
                 if (q[0] == '}' && q[1] == '%' && q[2] == '%') { end = q; break; }
             if (end) {
-                directive((Str){.p = s0, .n = (size_t)(end - s0)});
-                const char *n3 = memchr(end, '\n', (size_t)(src + off - end));
-                nxt = n3 ? (size_t)(n3 - src) + 1 : off;
+                directive((Str){.p = s0, .n = (size_t)(end - s0)}, ninit > 1);
+                nxt = (size_t)(end - src) + 3; /* another directive may follow on the line */
             }
         }
         i = nxt > i ? nxt : i + 1;
     }
+    cur_theme = api ? api : theme_named(appearance(S("theme")));
     /* body: acc lines (one memmem pass first: most diagrams have none) */
     if (n <= off || !memmem(src + off, n - off, "acc", 3)) return;
     i = off;
@@ -217,7 +271,10 @@ void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t of
     }
 }
 
-void dcfg_end(void) { cur_theme = api_theme = 0; cur = (DCfg){}; cur_a = nullptr; cur_cap = 0; }
+void dcfg_end(void) {
+    cur_theme = api_theme = 0;
+    cur = (DCfg){}, cur_a = nullptr, cur_cap = 0, cur_sect = cur_init = (Str){};
+}
 const DCfg *dcfg_cur(void) { return &cur; }
 
 Str dcfg_get_str(Str key) {
@@ -274,6 +331,7 @@ typedef struct ThemeKV { const char *k, *v; } ThemeKV;
 #include "d_themes.h"
 
 void dcfg_set_theme(int theme) { cur_theme = theme; }
+int dcfg_theme(void) { return cur_theme; }
 
 /* user themeVariables.<var> first, then the named theme's preset (mermaid's own values) */
 Str dcfg_tv(const char var[static 1]) {
@@ -328,9 +386,9 @@ const char *dcfg_list(const char var[static 1], size_t i, const char def[static 
 }
 
 bool dcfg_neo(void) {
-    if (!str_eq(dcfg_get("look"), S("classic"))) return true;
+    if (!str_eq(appearance(S("look")), S("classic"))) return true;
     if (api_theme) return false; /* mmd_theme names only classic themes, never redux* */
-    Str theme = dcfg_get("theme");
+    Str theme = appearance(S("theme"));
     return !theme.n || str_starts(theme, S("redux"));
 }
 
