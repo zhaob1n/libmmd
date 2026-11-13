@@ -1,5 +1,6 @@
 #include "base.h"
 
+#include <math.h>
 #include <stdatomic.h>
 #include <stdckdint.h>
 #include <stdlib.h>
@@ -315,6 +316,36 @@ size_t num_shortest(double a, char dig[static 17], int e[static 1]) {
     for (const char *p = t; p < x; p++) if (*p != '.') dig[k++] = *p;
     *e = (int)strtol(x + 1, nullptr, 10) + 1;
     return k;
+}
+
+size_t fmt_js(double v, char out[static 32]) {
+    char *o = out;
+    if (isnan(v)) { memcpy(out, "NaN", 4); return 3; }
+    if (v < 0) *o++ = '-', v = -v;
+    if (isinf(v)) { memcpy(o, "Infinity", 9); return (size_t)(o - out) + 8; }
+    if (v == 0) { memcpy(out, "0", 2); return 1; } /* -0 too: v < 0 is false for it */
+    char d[17];
+    int e;
+    size_t k = num_shortest(v, d, &e);
+    if (e > 21 || e <= -6) {
+        *o++ = d[0];
+        if (k > 1) *o++ = '.', memcpy(o, d + 1, k - 1), o += k - 1;
+        *o++ = 'e', *o++ = e > 0 ? '+' : '-';
+        o += u64_to_str((uint64_t)(e > 0 ? e - 1 : 1 - e), o);
+    } else if (e <= 0) {
+        *o++ = '0', *o++ = '.';
+        memset(o, '0', (size_t)-e), o += -e;
+        memcpy(o, d, k), o += k;
+    } else if ((size_t)e >= k) {
+        memcpy(o, d, k), o += k;
+        memset(o, '0', (size_t)e - k), o += (size_t)e - k;
+    } else {
+        memcpy(o, d, (size_t)e), o += e;
+        *o++ = '.';
+        memcpy(o, d + e, k - (size_t)e), o += k - (size_t)e;
+    }
+    *o = 0;
+    return (size_t)(o - out);
 }
 
 typedef struct { char n[8]; uint32_t c; } Ent;
