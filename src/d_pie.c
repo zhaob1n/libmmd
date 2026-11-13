@@ -24,6 +24,10 @@ static Str shown_value(double v, char out[static 40]) {
     return (Str){.p = out, .n = n};
 }
 
+/* mermaid (11.14 on) leaves out a slice under 1% of the whole, slice and label, and closes the pie
+ * over the others: angles are shares of what is drawn, percentages still shares of the whole */
+static bool shown(double v, double total) { return v / total * 100 >= 1; }
+
 DIAG_FN(pie_render) {
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
@@ -64,6 +68,8 @@ DIAG_FN(pie_render) {
         total += v;
     }
     if (!sl.n) return diag_fail(err_off, msg, off, "pie has no slices");
+    double drawn = 0;
+    for (size_t i = 0; i < sl.n; i++) drawn += shown(sl.v[i].v, total) ? sl.v[i].v : 0;
     constexpr double R = 185;
     const double TPOS = fmin(fmax(dcfg_num("pie.textPosition", 0.75), 0), 1);
     constexpr double CX = 225;
@@ -84,12 +90,11 @@ DIAG_FN(pie_render) {
     {
         double ang0 = 0;
         for (size_t i = 0; i < sl.n; i++) {
-            double frac = total > 0 ? sl.v[i].v / total : 0, mid = ang0 + frac * M_PI;
+            double frac = shown(sl.v[i].v, total) ? sl.v[i].v / drawn : 0, mid = ang0 + frac * M_PI;
             ang0 += frac * 2 * M_PI;
             LM[i] = mid, LO[i] = 0, LW[i] = 0;
-            double pc = round(frac * 100); /* mermaid's toFixed(0); it draws no "0%" label */
-            if (pc < 1) continue;
-            int len = snprintf(pct, sizeof pct, "%.0f%%", pc);
+            if (!(frac > 0)) continue;
+            int len = snprintf(pct, sizeof pct, "%.0f%%", round(sl.v[i].v / total * 100)); /* toFixed(0) */
             LW[i] = text_width((Str){.p = pct, .n = (size_t)len}, 17);
             LX[i] = CX + TPOS * R * sin(mid), LY[i] = CY - TPOS * R * cos(mid);
             bool fits = frac >= 0.5 || 2 * TPOS * R * sin(frac * M_PI) >= fmin(LW[i], 20) + 6;
@@ -127,15 +132,11 @@ DIAG_FN(pie_render) {
     if (!buf_reserve(out, 2048 + sl.n * 600)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 8, "pie", CSS);
     if (title.n) dg_text(out, title, 25, CX, ty, "middle", "ttl");
-    /* mermaid 11 keeps declaration order, clockwise from 12 o'clock */
-    uint32_t *ord = ANEW(a, uint32_t, sl.n);
-    if (!ord) return MMD_ERR_NOMEM;
-    for (size_t i = 0; i < sl.n; i++) ord[i] = (uint32_t)i;
+    /* declaration order, clockwise from 12 o'clock */
     double ang = 0;
     char fill[64];
-    for (size_t j = 0; j < sl.n; j++) {
-        size_t i = ord[j];
-        double frac = total > 0 ? sl.v[i].v / total : 0, a1 = ang + frac * 2 * M_PI;
+    for (size_t i = 0; i < sl.n; i++) {
+        double frac = shown(sl.v[i].v, total) ? sl.v[i].v / drawn : 0, a1 = ang + frac * 2 * M_PI;
         const char *col = dcfg_pal("pie", i % countof(COLORS) + 1, COLORS[i % countof(COLORS)]);
         if (frac >= 1 - 1e-12) {
             buf_lit(out, "<circle class=\"slice\" cx=\""); buf_num(out, CX); buf_lit(out, "\" cy=\""); buf_num(out, CY);
@@ -150,9 +151,9 @@ DIAG_FN(pie_render) {
         ang = a1;
     }
     for (size_t i = 0; i < sl.n; i++) {
-        double frac = total > 0 ? sl.v[i].v / total : 0, mid = LM[i], pc = round(frac * 100);
-        if (pc < 1) continue;
-        int len = snprintf(fill, sizeof fill, "%.0f%%", pc);
+        double mid = LM[i];
+        if (!shown(sl.v[i].v, total)) continue;
+        int len = snprintf(fill, sizeof fill, "%.0f%%", round(sl.v[i].v / total * 100));
         if (!LO[i]) { dg_text(out, (Str){.p = fill, .n = (size_t)len}, 17, LX[i], LY[i], "middle", "pct"); continue; }
         buf_lit(out, "<path class=\"leader\" fill=\"none\" stroke=\"#666\" stroke-width=\"1\" d=\"M");
         buf_pt(out, CX + (R - 4) * sin(mid), CY - (R - 4) * cos(mid)); buf_ch(out, 'L');
