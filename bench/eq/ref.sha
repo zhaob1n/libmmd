@@ -509,8 +509,9 @@ bc31d149bb5b4002 tests/cases/mindmap_full.mmd
 81cceeadf6489d09 tests/cases/packet_full.mmd
 4b4d251a6c7b3d96 tests/cases/parallel_edges.mmd
 310584fd7fb93fed tests/cases/pie_full.mmd
-e5c7f0ac3fcc8f4e tests/cases/pie_tall_legend.mmd
-8411e8b42e8f080a tests/cases/pie_tiny_slices.mmd
+019ba026f596694d tests/cases/pie_many_tiny.mmd
+88f96d39539e6832 tests/cases/pie_tall_legend.mmd
+b53d2037cdd03d06 tests/cases/pie_tiny_slices.mmd
 d66bcba1c0c7ab1c tests/cases/quadrant_crowded.mmd
 a255a819ea6cfa90 tests/cases/quadrant_dense_labels.mmd
 578abe0ad86c9f8d tests/cases/quadrant_full.mmd

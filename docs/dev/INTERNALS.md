@@ -18,7 +18,7 @@ Numbers here are historical; see bench/results_v*.txt.
 | stateDiagram(-v2) | `src/d_state.c` | composites (recursive per-scope layout), `--` regions, `[*]`, fork/join/choice, notes, classDef |
 | classDiagram | `src/d_class.c` | members, `~generics~`, visibility/`$`/`*`, annotations, all relations + lollipop, cardinality, namespaces, notes |
 | erDiagram | `src/d_er.c` | attribute tables (type/name/keys/comment), aliases, all crow's-foot cardinalities (symbolic + word forms), `:::cls` / classDef / class / style, `subgraph` clusters (relations may target a subgraph id) |
-| pie | `src/d_pie.c` | slices, showData, title, legend |
+| pie | `src/d_pie.c` | slices, showData, title, legend; a percentage that does not fit its slice goes outside on a leader line (runs of them spaced along the label circle) |
 | gantt | `src/d_gantt.c` | dayjs-style dateFormat (incl. Z/ZZ offsets), todayMarker (MMD_TODAY override), weekday/weekend friday, strftime axisFormat, tickInterval, excludes (weekends/dates), after/until deps, done/active/crit/milestone/vert, invalid tickInterval ignored, `gantt.useWidth` |
 | journey | `src/d_journey.c` | sections, scored tasks with faces, actor legend/dots |
 | mindmap | `src/d_mindmap.c` | indentation tree, all node shapes, radial layout (tidy-tree opt-in), `::icon(fa ...)` drawn as real Font Awesome paths (badge fallback), `:::class`, section colours |
@@ -65,13 +65,14 @@ real library, not to reproduce its accidents.
 
 Mermaid faults libmmd does not copy:
 - quadrant: mermaid's point fill is khroma's `lighten()` with no amount, `hsl(..., NaN%)`; points stay blue;
+- pie: mermaid (11.14 on) leaves out slices under 1% and closes the pie over the rest, so the angles
+  stop matching the shares (82 and twenty slices of 0.9 draw a full disc labelled 82%); libmmd draws
+  every slice;
 - usecase: mermaid's parser wipes the front-matter title; libmmd draws it (see below);
 - `themeVariables` khroma cannot read make mermaid fail the render; libmmd draws the theme with them as given;
 - mermaid fails to render `block_full` and `radar_full` (partial named curve); libmmd draws them.
 
 Still copied, to undo:
-- pie (9e6bd35): slices under 1% are left out and the pie closes over the rest, so the drawn angles
-  no longer match the labelled shares; 82 and twenty slices of 0.9 draw a full disc labelled 82%;
 - `themeVariables`: when the theme is derived, a nested override (`xyChart.titleColor`) replaces the
   theme's whole `xyChart` object, as mermaid's `calculate()` does; under `theme: dark` the rest of the
   chart then falls back to light-theme text on the dark background (mermaid's xychart merges the

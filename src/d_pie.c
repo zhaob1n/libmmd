@@ -24,10 +24,6 @@ static Str shown_value(double v, char out[static 40]) {
     return (Str){.p = out, .n = n};
 }
 
-/* mermaid (11.14 on) leaves out a slice under 1% of the whole, slice and label, and closes the pie
- * over the others: angles are shares of what is drawn, percentages still shares of the whole */
-static bool shown(double v, double total) { return v / total * 100 >= 1; }
-
 DIAG_FN(pie_render) {
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
@@ -68,8 +64,6 @@ DIAG_FN(pie_render) {
         total += v;
     }
     if (!sl.n) return diag_fail(err_off, msg, off, "pie has no slices");
-    double drawn = 0;
-    for (size_t i = 0; i < sl.n; i++) drawn += shown(sl.v[i].v, total) ? sl.v[i].v : 0;
     constexpr double R = 185;
     const double TPOS = fmin(fmax(dcfg_num("pie.textPosition", 0.75), 0), 1);
     constexpr double CX = 225;
@@ -90,11 +84,11 @@ DIAG_FN(pie_render) {
     {
         double ang0 = 0;
         for (size_t i = 0; i < sl.n; i++) {
-            double frac = shown(sl.v[i].v, total) ? sl.v[i].v / drawn : 0, mid = ang0 + frac * M_PI;
+            double frac = total > 0 ? sl.v[i].v / total : 0, mid = ang0 + frac * M_PI, pc = round(frac * 100);
             ang0 += frac * 2 * M_PI;
             LM[i] = mid, LO[i] = 0, LW[i] = 0;
-            if (!(frac > 0)) continue;
-            int len = snprintf(pct, sizeof pct, "%.0f%%", round(sl.v[i].v / total * 100)); /* toFixed(0) */
+            if (pc < 1) continue; /* a "0%" says nothing the slice and the legend do not */
+            int len = snprintf(pct, sizeof pct, "%.0f%%", pc); /* toFixed(0) */
             LW[i] = text_width((Str){.p = pct, .n = (size_t)len}, 17);
             LX[i] = CX + TPOS * R * sin(mid), LY[i] = CY - TPOS * R * cos(mid);
             bool fits = frac >= 0.5 || 2 * TPOS * R * sin(frac * M_PI) >= fmin(LW[i], 20) + 6;
@@ -104,16 +98,41 @@ DIAG_FN(pie_render) {
             LO[i] = sin(mid) >= 0 ? 1 : -1;
             LX[i] = CX + (R + 30) * sin(mid), LY[i] = CY - (R + 30) * cos(mid);
         }
-        /* outside labels: keep 19px apart vertically on each side, in angle order */
+        /* outside labels, each side top-down in angle order: 19px apart and as near their slices as
+         * that allows (runs of touching labels centred on the heights they want), then back on the
+         * label circle at their new height, so a run never slides into the pie; a side whose labels
+         * reach past the circle's height lines them all up beside it instead, where no leader crosses
+         * another label */
+        typedef struct { double s; size_t n, first; } Run; /* s: the sum of want - 19 * position */
+        Run *run = ANEW(a, Run, sl.n);
+        size_t *ord = ANEW(a, size_t, sl.n);
+        if (!run || !ord) return MMD_ERR_NOMEM;
         for (int side = -1; side <= 1; side += 2) {
-            double last = -INFINITY;
+            size_t nr = 0, m = 0;
             for (size_t k = 0; k < sl.n; k++) {
-                size_t i = side > 0 ? k : sl.n - 1 - k; /* right side runs top-down clockwise, left side bottom-up: walk both top-down */
+                size_t i = side > 0 ? k : sl.n - 1 - k; /* right side runs top-down clockwise, left side bottom-up */
                 if (LO[i] != side) continue;
-                if (LY[i] < last + 19) LY[i] = last + 19;
-                last = LY[i];
+                run[nr++] = (Run){.s = LY[i], .n = 1, .first = m};
+                ord[m++] = i;
+                while (nr > 1) { /* a run overlapping the one above joins it */
+                    Run *p = &run[nr - 2], *c = &run[nr - 1];
+                    if (p->s / (double)p->n + 19.0 * (double)p->n <= c->s / (double)c->n) break;
+                    p->s += c->s - 19.0 * (double)p->n * (double)c->n, p->n += c->n, nr--;
+                }
             }
-            (void)last;
+            const double rr = R + 30;
+            bool column = false;
+            for (size_t r = 0; r < nr; r++)
+                for (size_t k = 0; k < run[r].n; k++) {
+                    size_t i = ord[run[r].first + k];
+                    LY[i] = run[r].s / (double)run[r].n + 19.0 * (double)k;
+                    column |= fabs(LY[i] - CY) >= rr;
+                }
+            for (size_t k = 0; k < m; k++) {
+                size_t i = ord[k];
+                double dy = LY[i] - CY;
+                LX[i] = CX + side * (column ? rr : sqrt(rr * rr - dy * dy));
+            }
         }
         for (size_t i = 0; i < sl.n; i++) {
             if (!LO[i]) continue;
@@ -125,8 +144,13 @@ DIAG_FN(pie_render) {
     BBox bb = {0, 0, LEGX + 22 + lw, 450};
     if (ext_l > CX - R) bb.x0 = (CX - R) - ext_l - 4;
     for (size_t i = 0; i < sl.n; i++) if (LO[i]) bb.y0 = fmin(bb.y0, LY[i] - 12), bb.y1 = fmax(bb.y1, LY[i] + 12);
-    double ty = -14; /* title baseline: above any outside label near 12 o'clock */
-    for (size_t i = 0; i < sl.n; i++) if (LO[i] && fabs(LX[i] - CX) < 120) ty = fmin(ty, LY[i] - 22);
+    /* title baseline: above every outside label whose text or leader shares the title's columns */
+    double ty = -14, thw = title.n ? text_width(title, 25) / 2 + 4 : 0;
+    for (size_t i = 0; i < sl.n; i++) {
+        if (!LO[i] || LY[i] >= CY) continue;
+        double rim = CX + (R + 18) * sin(LM[i]), tip = LX[i] + LO[i] * (4 + LW[i]);
+        if (fmin(rim, tip) < CX + thw && fmax(rim, tip) > CX - thw) ty = fmin(ty, LY[i] - 22);
+    }
     if (title.n) bb.y0 = fmin(bb.y0, ty - 26);
     bb.y0 = fmin(bb.y0, CY - (double)(sl.n * 22) / 2.0 - 4), bb.y1 = fmax(bb.y1, CY + (double)(sl.n * 22) / 2.0 + 4); /* tall legends */
     if (!buf_reserve(out, 2048 + sl.n * 600)) return MMD_ERR_NOMEM;
@@ -136,7 +160,7 @@ DIAG_FN(pie_render) {
     double ang = 0;
     char fill[64];
     for (size_t i = 0; i < sl.n; i++) {
-        double frac = shown(sl.v[i].v, total) ? sl.v[i].v / drawn : 0, a1 = ang + frac * 2 * M_PI;
+        double frac = total > 0 ? sl.v[i].v / total : 0, a1 = ang + frac * 2 * M_PI;
         const char *col = dcfg_pal("pie", i % countof(COLORS) + 1, COLORS[i % countof(COLORS)]);
         if (frac >= 1 - 1e-12) {
             buf_lit(out, "<circle class=\"slice\" cx=\""); buf_num(out, CX); buf_lit(out, "\" cy=\""); buf_num(out, CY);
@@ -152,7 +176,7 @@ DIAG_FN(pie_render) {
     }
     for (size_t i = 0; i < sl.n; i++) {
         double mid = LM[i];
-        if (!shown(sl.v[i].v, total)) continue;
+        if (!(LW[i] > 0)) continue;
         int len = snprintf(fill, sizeof fill, "%.0f%%", round(sl.v[i].v / total * 100));
         if (!LO[i]) { dg_text(out, (Str){.p = fill, .n = (size_t)len}, 17, LX[i], LY[i], "middle", "pct"); continue; }
         buf_lit(out, "<path class=\"leader\" fill=\"none\" stroke=\"#666\" stroke-width=\"1\" d=\"M");
