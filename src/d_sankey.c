@@ -1,8 +1,8 @@
 /* sankey(-beta): CSV rows `source,target,value` (RFC 4180 quoting, "" escapes, blank lines ok).
  * Layout is a port of d3-sankey 0.12 as configured by mermaid 12 (sankey.nodeAlignment, nodeWidth,
  * nodePadding (+15 with showValues), 6 relaxation iterations with collision resolution); links are
- * cubic bands coloured by their source. Labels show the value (showValues, between prefix and suffix),
- * outlined by labelStyle. */
+ * cubic bands coloured by linkColor (by default a gradient from source to target colour). Labels show
+ * the value (showValues, between prefix and suffix), outlined by labelStyle. */
 #include <math.h>
 #include <stdio.h>
 
@@ -294,13 +294,25 @@ DIAG_FN(sankey_render) {
         ymin = fmin(ymin, fmin(N[i].y, fmin(cy, ly[i]) - 8)), ymax = fmax(ymax, fmax(N[i].y + N[i].h, fmax(cy, ly[i]) + 8)); /* pushed labels too */
     }
     BBox bb = {-fmax(lw, 0), ymin - top, W + fmax(rw, 0), ymax};
-    if (!buf_reserve(out, 1024 + nl * 300 + nn * 300)) return MMD_ERR_NOMEM;
+    if (!buf_reserve(out, 1024 + nl * 500 + nn * 300)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 0, "sankey", CSS);
+    /* sankey.linkColor: source, target, a colour, or (mermaid's default) a gradient from source to target */
+    Str lc = dcfg_css("sankey.linkColor");
+    const bool GRAD = !lc.n || str_eq(lc, S("gradient")), BY_S = str_eq(lc, S("source")), BY_T = str_eq(lc, S("target"));
     for (size_t i = 0; i < nl; i++) {
         const SLink *l = &L[i];
         double x0 = N[l->s].x + NW, x1 = N[l->t].x, xm = (x0 + x1) / 2;
-        const char *col = PAL[l->s % countof(PAL)];
-        buf_lit(out, "<path class=\"sl\" stroke=\""); buf_cstr(out, col);
+        if (GRAD) {
+            buf_lit(out, "<linearGradient id=\"sankey-lg"); buf_int(out, (int64_t)i);
+            buf_lit(out, "\" gradientUnits=\"userSpaceOnUse\" x1=\""); buf_num(out, x0); buf_lit(out, "\" x2=\""); buf_num(out, x1);
+            buf_lit(out, "\"><stop offset=\"0%\" stop-color=\""); buf_cstr(out, PAL[l->s % countof(PAL)]);
+            buf_lit(out, "\"/><stop offset=\"100%\" stop-color=\""); buf_cstr(out, PAL[l->t % countof(PAL)]);
+            buf_lit(out, "\"/></linearGradient>");
+        }
+        buf_lit(out, "<path class=\"sl\" stroke=\"");
+        if (GRAD) { buf_lit(out, "url(#sankey-lg"); buf_int(out, (int64_t)i); buf_ch(out, ')'); }
+        else if (BY_S || BY_T) buf_cstr(out, PAL[(BY_T ? l->t : l->s) % countof(PAL)]);
+        else buf_str(out, lc);
         buf_lit(out, "\" stroke-width=\""); buf_num(out, fmax(1, l->v * ky)); buf_lit(out, "\" d=\"M");
         buf_pt(out, x0, l->y0); buf_ch(out, 'C'); buf_pt(out, xm, l->y0); buf_ch(out, ' '); buf_pt(out, xm, l->y1);
         buf_ch(out, ' '); buf_pt(out, x1, l->y1); buf_lit(out, "\"/>");
