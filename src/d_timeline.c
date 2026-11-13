@@ -10,13 +10,13 @@
 typedef struct Period { Str name; uint32_t sec, e0, ne; } Period;
 
 static constexpr char CSS[] =
-    "#mermaid .box{stroke:#666;stroke-width:1px;}#mermaid .ev{fill:#fff;stroke:#999;stroke-width:1px;}"
-    "#mermaid .ln{stroke:#666;stroke-width:2px;stroke-dasharray:5 5;}#mermaid .axis{stroke:#333;stroke-width:4px;}"
-    "#mermaid .ttl{font-size:20px;font-weight:bold;}#mermaid .tx{font-size:14px;}"
-    "#mermaid .tl4{font-size:4ex;font-weight:bold;}#mermaid .t16{font-size:16px;}#mermaid .nl{stroke:none;}"
-    "#mermaid .dl{stroke:#000;stroke-width:2px;stroke-dasharray:5 5;}#mermaid .ax4{stroke:#000;stroke-width:4px;}";
+    "#mermaid .tl4{font-size:4ex;font-weight:bold;}#mermaid .t16{font-size:16px;}"
+    "#mermaid .dl{stroke-width:2px;stroke-dasharray:5 5;}#mermaid .ax4{stroke-width:4px;}";
+/* the default theme's cScale, cScaleInv; its cScaleLabel is white on slots 0 and 3, black elsewhere */
 static constexpr char COL[][8] = {"#8686ff", "#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2",
-                                  "#ff8686", "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"}; /* mermaid cScale */
+                                  "#ff8686", "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"};
+static constexpr char INV[][8] = {"#ffffb9", "#ababff", "#d0b9ff", "#dcffb9", "#b9ffb9", "#b9ffdc",
+                                  "#b9ffff", "#b9dcff", "#dcb9ff", "#ffb9dc", "#ffb9b9", "#ffdcb9"};
 
 typedef VEC(Str) StrVec;
 
@@ -40,20 +40,27 @@ static double tl_vh(Str w, double pad) {
     if (!nl) nl = 1;
     return 17 + (nl - 1) * 17.6 + 8.8 + pad;
 }
-/* drawNode + defaultBkg: rounded-top path, bottom line, text block from padding/2 + 1em */
+/* drawNode + defaultBkg: rounded-top path, bottom line, text block from padding/2 + 1em; mermaid's genSections
+ * colours slot ci's path cScale<ci>, line cScaleInv<ci>, text cScaleLabel<ci> */
 static void tl_node(Buf out[static 1], double x, double y, double w, double h, Str t, size_t ci, double pad) {
-    const char *fill = dcfg_pal("cScale", ci, COL[ci]);
     buf_lit(out, "<g transform=\"translate("); buf_num(out, x); buf_lit(out, ","); buf_num(out, y); buf_lit(out, ")\">");
-    buf_lit(out, "<path class=\"box\" fill=\""); buf_str(out, (Str){.p = fill, .n = strlen(fill)});
+    buf_lit(out, "<path fill=\""); buf_cstr(out, dcfg_pal("cScale", ci, COL[ci]));
     buf_lit(out, "\" d=\"M0 "); buf_num(out, h - 5); buf_lit(out, " v"); buf_num(out, -h + 10);
     buf_lit(out, " q0,-5,5,-5 h"); buf_num(out, w - 10); buf_lit(out, " q5,0,5,5 v"); buf_num(out, h - 5); buf_lit(out, " H0 Z\"/>");
-    if (ci % countof(COL) == 0) buf_lit(out, "<g fill=\"#fff\">"); else buf_lit(out, "<g fill=\"#000\">");
+    buf_lit(out, "<line stroke-width=\"3\" stroke=\""); buf_cstr(out, dcfg_pal("cScaleInv", ci, INV[ci]));
+    buf_lit(out, "\" x1=\"0\" y1=\""); buf_num(out, h); buf_lit(out, "\" x2=\""); buf_num(out, w);
+    buf_lit(out, "\" y2=\""); buf_num(out, h); buf_lit(out, "\"/><g fill=\"");
+    buf_cstr(out, dcfg_pal("cScaleLabel", ci, ci == 0 || ci == 3 ? "#fff" : "#000")); buf_lit(out, "\">");
     double tw;
     unsigned nl;
     label_measure(t, 16, &tw, &nl);
     if (!nl) nl = 1;
     dg_text_lh(out, t, 17.6, w / 2, pad / 2 + 16 + (nl - 1) * 17.6 / 2, "middle", "t16");
     buf_lit(out, "</g></g>");
+}
+/* ` stroke="colour"` for the `.lineWrapper line`s (axis, event lines): the last cScaleLabel genSections writes */
+static void tl_linecol(Buf out[static 1]) {
+    buf_lit(out, " stroke=\""); buf_cstr(out, dcfg_pal("cScaleLabel", countof(COL) - 1, "#000")); buf_ch(out, '"');
 }
 
 DIAG_FN(timeline_render) {
@@ -91,6 +98,8 @@ DIAG_FN(timeline_render) {
         if (!VEC_PUSH(a, &per, p)) return MMD_ERR_NOMEM;
     }
     if (!per.n) return diag_fail(err_off, msg, off, "timeline has no periods");
+    /* mermaid's drawTasks: only a timeline without sections colours its periods one by one, and
+     * disableMulticolor keeps those in one colour; sections always take a colour each */
     const bool MULTI = !dcfg_bool("timeline.disableMulticolor", false);
     /* ---- mermaid timelineRenderer (LR) ---- */
     Str *wev = ANEW(a, Str, ev.n + 1);
@@ -130,27 +139,27 @@ DIAG_FN(timeline_render) {
                 if (!buf_reserve(out, 4096 + (per.n + ev.n + secs.n) * 600)) return MMD_ERR_NOMEM;
                 DG_HEAD(out, bb, 50, "timeline", CSS);
                 /* the vertical renderer references url(#arrowhead), which is never defined: no arrowheads */
-                buf_lit(out, "<line class=\"ax4\" x1=\""); buf_num(out, TX);
+                buf_lit(out, "<line class=\"ax4\""); tl_linecol(out); buf_lit(out, " x1=\""); buf_num(out, TX);
                 buf_lit(out, "\" y1=\"18\" x2=\""); buf_num(out, TX); buf_lit(out, "\" y2=\""); buf_num(out, bot + 28); buf_lit(out, "\"/>");
             }
             double my = 50;
             for (size_t k = 0; k < (secs.n ? secs.n : 1); k++) {
                 double ty = my;
                 if (secs.n) {
-                    if (pass) tl_node(out, TX - (NW + 2 * P + 20), my, SW + 2 * P, mSH, ws[k], MULTI ? k % countof(COL) : 0, P);
+                    if (pass) tl_node(out, TX - (NW + 2 * P + 20), my, SW + 2 * P, mSH, ws[k], k % countof(COL), P);
                     ty = my + mSH + 20;
                 }
                 size_t c = 0;
                 for (size_t i = 0; i < per.n; i++) {
                     if (secs.n && per.v[i].sec != k) continue;
-                    size_t ci = (secs.n ? (MULTI ? k : 0) : (MULTI ? i : 0)) % countof(COL);
+                    size_t ci = (secs.n ? k : MULTI ? i : 0) % countof(COL);
                     if (pass) tl_node(out, TX - 20 - (NW + 2 * P), ty, NW + 2 * P, fmax(hp[i], mTH), wp[i], ci, P);
                     bot = fmax(bot, ty + fmax(hp[i], mTH));
                     double ey = ty;
                     for (uint32_t m = 0; m < per.v[i].ne; m++) {
                         size_t e = per.v[i].e0 + m;
                         if (pass) {
-                            buf_lit(out, "<line class=\"dl\" x1=\""); buf_num(out, TX);
+                            buf_lit(out, "<line class=\"dl\""); tl_linecol(out); buf_lit(out, " x1=\""); buf_num(out, TX);
                             buf_lit(out, "\" y1=\""); buf_num(out, ey + eh[e] / 2); buf_lit(out, "\" x2=\""); buf_num(out, TX + 50);
                             buf_lit(out, "\" y2=\""); buf_num(out, ey + eh[e] / 2); buf_lit(out, "\"/>");
                             tl_node(out, TX + 50, ey, EWv + 2 * P, eh[e], wev[e], ci, P);
@@ -229,16 +238,13 @@ DIAG_FN(timeline_render) {
     double x = X0;
     for (size_t k = 0; k < (hs ? secs.n : 1); k++) {
         size_t c = hs ? cnt[k] : per.n;
-        if (hs) {
-            size_t ci = MULTI ? k % countof(COL) : 0;
-            tl_node(out, x, 50, 200 * (double)(c ? c : 1) - 10, fmax(sh[k], maxSH), wsec[k], ci, 20);
-        }
+        if (hs) tl_node(out, x, 50, 200 * (double)(c ? c : 1) - 10, fmax(sh[k], maxSH), wsec[k], k % countof(COL), 20);
         size_t idx = 0;
         for (size_t i = 0; i < per.n; i++) {
             if (hs && per.v[i].sec != k) continue;
             double px = x + 200 * (double)idx++;
-            size_t ci = (hs ? (MULTI ? k : 0) : (MULTI ? i : 0)) % countof(COL);
-            buf_lit(out, "<line class=\"dl\" marker-end=\"url(#tarrow)\" x1=\""); buf_num(out, px + 95);
+            size_t ci = (hs ? k : MULTI ? i : 0) % countof(COL);
+            buf_lit(out, "<line class=\"dl\" marker-end=\"url(#tarrow)\""); tl_linecol(out); buf_lit(out, " x1=\""); buf_num(out, px + 95);
             buf_lit(out, "\" y1=\""); buf_num(out, ty + maxTH); buf_lit(out, "\" x2=\""); buf_num(out, px + 95);
             buf_lit(out, "\" y2=\""); buf_num(out, ty + maxTH + 200 + maxELL); buf_lit(out, "\"/>");
             tl_node(out, px, ty, 190, fmax(ph[i], maxTH), wper[i], ci, 20);
@@ -256,7 +262,7 @@ DIAG_FN(timeline_render) {
         buf_lit(out, "<text class=\"tl4\" x=\""); buf_num(out, tx); buf_lit(out, "\" y=\"20\">");
         buf_xml(out, title); buf_lit(out, "</text>");
     }
-    buf_lit(out, "<line class=\"ax4\" marker-end=\"url(#tarrow)\" x1=\""); buf_num(out, LM);
+    buf_lit(out, "<line class=\"ax4\" marker-end=\"url(#tarrow)\""); tl_linecol(out); buf_lit(out, " x1=\""); buf_num(out, LM);
     buf_lit(out, "\" y1=\""); buf_num(out, depthY); buf_lit(out, "\" x2=\""); buf_num(out, ax2);
     buf_lit(out, "\" y2=\""); buf_num(out, depthY); buf_lit(out, "\"/>");
     buf_lit(out, "</svg>\n");

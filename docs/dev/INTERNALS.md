@@ -90,7 +90,7 @@ Already fixed:
 - kanban: mermaid column/card widths;
 - mindmap: compacted with a spring relaxation;
 - pie: declaration order and palette;
-- timeline: cScale section colours;
+- timeline: section fills, bottom lines and labels (cScale, cScaleInv, cScaleLabel) and the axis and event lines take the theme in effect;
 - sequence: participant `@{type}` shapes;
 - packet: title position;
 - requirement: label plates.

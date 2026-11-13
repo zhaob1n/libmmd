@@ -466,7 +466,7 @@ cccd9dd4dcf5051b tests/cases/config_quadrant.mmd
 db4796157d723418 tests/cases/config_sankey.mmd
 9d68a2cb5325389d tests/cases/config_seq.mmd
 f1fa3f6b8b78ecfd tests/cases/config_state.mmd
-723444a4efee77e6 tests/cases/config_timeline.mmd
+9f650fe0ecf8ae9e tests/cases/config_timeline.mmd
 f3133154ff51823d tests/cases/cynefin_badcolor.mmd
 ab20c3892be7592b tests/cases/cynefin_dark.mmd
 5b3a0c38009d651c tests/cases/cynefin_full.mmd
@@ -567,7 +567,7 @@ fbd2f0182f209389 tests/cases/theme_dark_journey.mmd
 2d125869f3f8275b tests/cases/theme_dark_quadrant.mmd
 b07b00847928b341 tests/cases/theme_dark_seq.mmd
 ab6077a54157c1bb tests/cases/theme_dark_state.mmd
-375ed7f0a5371dbf tests/cases/theme_dark_timeline.mmd
+0ed212e1b11f2d02 tests/cases/theme_dark_timeline.mmd
 9df4c036847ccd94 tests/cases/theme_dark_xychart.mmd
 afa12367c0904ff5 tests/cases/theme_dark_xychart_field.mmd
 aa9b3b45327094f3 tests/cases/theme_forest.mmd
@@ -583,9 +583,9 @@ ad8c63433a3f1c25 tests/cases/theme_neutral_er.mmd
 3462f41f4d320ca8 tests/cases/theme_neutral_xychart.mmd
 492a9345b229032d tests/cases/theme_vars_derived.mmd
 5f55d292f813520c tests/cases/theme_vars_given.mmd
-143d68c0070b6433 tests/cases/timeline_full.mmd
-68b8d7cd9f179832 tests/cases/timeline_td.mmd
-deb288d54a3ed85c tests/cases/timeline_td_nosec.mmd
+cd8b44d8f06fe555 tests/cases/timeline_full.mmd
+7a46799cf9898d56 tests/cases/timeline_td.mmd
+8c5c2df1e1e0396f tests/cases/timeline_td_nosec.mmd
 7504c59cf68f7cdc tests/cases/treemap_full.mmd
 a7a4a7724bc41a36 tests/cases/treemap_narrow_header.mmd
 a52073d38ed7205f tests/cases/treeview_annot.mmd
