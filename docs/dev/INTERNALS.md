@@ -87,6 +87,11 @@ the caller: `mmdc -t default` and `mmd -t default` are classic, no theme at all 
 flowchart (120px minimum label boxes, 171px diamonds for one-word labels, a monospace-looking font)
 is roomier without being clearer, so flowcharts stay classic and dagre. agentflow and usecase only
 exist in mermaid 12 and follow its neo default; `look: classic` with a classic theme switches them.
+usecase draws the front-matter `title`. mermaid 12's renderer means to (`insertTitle` with
+`usecaseDiagramTitleText`), but its parser calls `db.clear()` first and wipes the title the front matter
+set, so mermaid-cli 12.0.0 shows none. The classic look takes every colour mermaid's usecase styles read
+(`primaryTextColor`, `actorTextColor`, `titleColor`, `note*Color`, `actorBkg`/`actorBorder`, the
+`usecase*` overrides) from the theme; checked role by role against mermaid-cli 12.0.0 in all four themes.
 Compare libmmd's flowcharts with mermaid 12 under `look: classic`, `theme: default`, `layout: dagre`:
 on the nested-cluster cases checked, ranks and ordering then agree and libmmd's cluster padding is the tighter of the two.
 

@@ -589,18 +589,20 @@ static constexpr char NEO_CSS[] =
     "#mermaid{font-family:\"Recursive Variable\",arial,sans-serif;fill:#28253D;}"
     "#mermaid .gl{stroke-width:2px;}#mermaid .uc{stroke-width:2px;filter:url(#neo-shadow);}"
     "#mermaid .bd{stroke-width:1px;}#mermaid .bt{font-size:14px;fill:#000000;}"
-    "#mermaid .tl{font-size:14px;}#mermaid .el{font-size:10px;}"
+    "#mermaid .tl,#mermaid .nl{font-size:14px;}#mermaid .el{font-size:10px;}"
     "#mermaid .nt{fill:#fff5ad;stroke:#FACC15;stroke-width:1.3px;}"
     "#mermaid .js{fill:#ffffff;stroke:#28253D;stroke-width:1px;}"
     "#mermaid .rel{fill:none;stroke:#000000;stroke-width:2px;}#mermaid .rel.d{stroke-dasharray:3;}"
     "#mermaid .rel.inc{stroke:#38BDF8;}#mermaid .rel.ext{stroke:#FB923C;}" UC_TAIL DG_NEO_CSS;
-/* `look: classic` on a classic theme: the theme's node, cluster and line colours (themeVariables via
- * dcfg_theme_css), thin curved edges */
+/* `look: classic` on a classic theme: the default theme's colours here, the others' (and any
+ * themeVariables) from dcfg_theme_css; thin curved edges. Text: .al actor, .ul use case, .el edge,
+ * .tl JSON table, .nl note, .bt boundary title. */
 static constexpr char CLASSIC_CSS[] =
     "#mermaid{font-family:\"trebuchet ms\",verdana,arial,sans-serif;fill:#333;}"
     "#mermaid .gl,#mermaid .uc,#mermaid .bm{fill:#ECECFF;stroke:#9370DB;stroke-width:2px;}"
     "#mermaid .bd{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}#mermaid .bt{font-size:14px;fill:#333;}"
-    "#mermaid .tl{font-size:14px;}#mermaid .el{font-size:10px;}#mermaid .ul,#mermaid .el{fill:#131300;}"
+    "#mermaid .tl,#mermaid .nl{font-size:14px;}#mermaid .el{font-size:10px;}"
+    "#mermaid .ul,#mermaid .el,#mermaid .tl{fill:#131300;}#mermaid .al,#mermaid .nl{fill:black;}"
     "#mermaid .nt{fill:#fff5ad;stroke:#aaaa33;stroke-width:1px;}"
     "#mermaid .js{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .rel{fill:none;stroke:#333333;stroke-width:1px;}#mermaid .rel.d{stroke-dasharray:3;}" UC_TAIL
@@ -852,7 +854,7 @@ DIAG_FN(usecase_render) {
             continue;
         }
         double fs = e->kind == K_ELLIPSE || e->kind == K_RECT ? f.uc : 14;
-        const char *tcls = e->kind <= K_RECT ? "ul" : "tl";
+        const char *tcls = e->kind <= K_RECT ? "ul" : "nl";
         if (e->kind == K_ELLIPSE) {
             buf_lit(out, "<ellipse class=\"uc\" cx=\""); buf_num(out, x); buf_lit(out, "\" cy=\""); buf_num(out, y);
             buf_lit(out, "\" rx=\""); buf_num(out, w / 2); buf_lit(out, "\" ry=\""); buf_num(out, h / 2); buf_ch(out, '"');
