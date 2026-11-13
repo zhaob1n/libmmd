@@ -24,14 +24,15 @@ typedef struct MNode {
     double w, h, x, y, sub; /* sub: subtree height */
 } MNode;
 
-static constexpr char CSS[] = "#mermaid .mt{font-size:16px;}#mermaid .me{fill:none;}"
-                              "#mermaid .ic{fill:#fff;stroke:#333;stroke-width:1px;}#mermaid .ict{font-size:11px;font-weight:bold;fill:#333;}";
-/* mermaid 11 default cScale (section k uses cScale[k+1]; root is the darker primary), darker strokes for borders */
+static constexpr char CSS[] = "#mermaid .mt{font-size:16px;}#mermaid .me{fill:none;}";
+/* mermaid's default cScale and cScaleInv from slot 1 (section k uses slot k%11+1; root is the darker git0),
+ * darker strokes for borders; its cScaleLabel is white on slot 3, black elsewhere */
 static constexpr char SEC[][8] = {"#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2", "#ff8686",
                                   "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"};
+static constexpr char SECI[][8] = {"#ababff", "#d0b9ff", "#dcffb9", "#b9ffb9", "#b9ffdc", "#b9ffff",
+                                   "#b9dcff", "#dcb9ff", "#ffb9dc", "#ffb9b9", "#ffdcb9"};
 static constexpr char SECS[][8] = {"#cccc33", "#99cc33", "#7f33cc", "#cc33cc", "#cc3380", "#cc3333",
                                    "#cc8033", "#80cc33", "#33cc80", "#33cccc", "#337fcc"};
-static constexpr bool SECW[] = {false, false, true, false, false, false, false, false, false, false, false}; /* white text */
 
 static void parse_node(Str s, Str label[static 1], uint8_t shape[static 1]) {
     typedef struct { char o[3], c[3]; uint8_t sh; } Delim;
@@ -388,10 +389,11 @@ DIAG_FN(mindmap_render) {
         buf_pt(out, x0, y0); buf_ch(out, 'C'); buf_pt(out, (x0 + x1) / 2, y0); buf_ch(out, ' ');
         buf_pt(out, (x0 + x1) / 2, y1); buf_ch(out, ' '); buf_pt(out, x1, y1); buf_lit(out, "\"/>");
     }
-    for (size_t i = 0; i < v.n; i++) {
+    for (size_t i = 0; i < v.n; i++) { /* mermaid genSections: .section-<sec> takes slot sec+1, the root git0 */
         const MNode *m = &V[i];
-        const char *fill = i ? dcfg_pal("cScale", m->sec % countof(SEC) + 1, SEC[m->sec % countof(SEC)]) : dcfg_pal("git", 0, "#0000ec"), *st = i ? dcfg_pal("cScalePeer", m->sec % countof(SECS) + 1, SECS[m->sec % countof(SECS)]) : dcfg_pal("cScalePeer", 0, "#0000a0");
-        const char *tcls = !i || SECW[m->sec % countof(SECW)] ? "mt\" fill=\"#fff" : "mt";
+        size_t s = m->sec % countof(SEC);
+        const char *fill = i ? dcfg_pal("cScale", s + 1, SEC[s]) : dcfg_pal("git", 0, "#0000ec");
+        const char *st = i ? dcfg_pal("cScalePeer", s + 1, SECS[s]) : dcfg_pal("cScalePeer", 0, "#0000a0");
         double x = m->x - m->w / 2, y = m->y - m->h / 2, w = m->w, h = m->h;
         buf_lit(out, "<g class=\"mindmap-node section-");
         char sn[16];
@@ -402,7 +404,9 @@ DIAG_FN(mindmap_render) {
         switch (m->shape) {
         case M_DEF:
             dg_rect_fill(out, x, y, w, h, 5, nullptr, nullptr);
-            buf_lit(out, "<line stroke-width=\"3\" x1=\""); buf_num(out, x); buf_lit(out, "\" y1=\""); buf_num(out, y + h);
+            buf_lit(out, "<line stroke-width=\"3\" stroke=\"");
+            buf_cstr(out, i ? dcfg_pal("cScaleInv", s + 1, SECI[s]) : dcfg_pal("cScaleInv", 0, "#ffffb9"));
+            buf_lit(out, "\" x1=\""); buf_num(out, x); buf_lit(out, "\" y1=\""); buf_num(out, y + h);
             buf_lit(out, "\" x2=\""); buf_num(out, x + w); buf_lit(out, "\" y2=\""); buf_num(out, y + h); buf_lit(out, "\"/>");
             break;
         case M_SQ: dg_rect_fill(out, x, y, w, h, 0, nullptr, nullptr); break;
@@ -418,9 +422,11 @@ DIAG_FN(mindmap_render) {
             break;
         case M_BANG: case M_CLOUD: scallop(out, nullptr, m); break;
         }
+        buf_lit(out, "</g><g fill=\"");
+        buf_cstr(out, i ? dcfg_pal("cScaleLabel", s + 1, s == 2 ? "#fff" : "#000") : dcfg_pal("gitBranchLabel", 0, "#fff"));
+        buf_lit(out, "\">");
+        dg_text(out, m->label, 16, m->x, m->y, "middle", "mt");
         buf_lit(out, "</g>");
-        double tx = m->x;
-        dg_text(out, m->label, 16, tx, m->y, "middle", tcls);
     }
     buf_lit(out, "</svg>\n");
     return out->oom ? MMD_ERR_NOMEM : MMD_OK;

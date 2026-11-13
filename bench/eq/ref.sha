@@ -510,7 +510,7 @@ e83bb0ce6d5d9903 tests/cases/gantt_cfg_comments.mmd
 7fe7d9882802d9c2 tests/cases/ishikawa_basic.mmd
 10e104322c79129b tests/cases/journey_full.mmd
 130f96f477058f72 tests/cases/kanban_full.mmd
-bc31d149bb5b4002 tests/cases/mindmap_full.mmd
+54bda4102289b814 tests/cases/mindmap_full.mmd
 81cceeadf6489d09 tests/cases/packet_full.mmd
 4b4d251a6c7b3d96 tests/cases/parallel_edges.mmd
 310584fd7fb93fed tests/cases/pie_full.mmd
@@ -562,7 +562,7 @@ aa2c1a8b439e5c16 tests/cases/theme_dark.mmd
 db46ab001d386d4f tests/cases/theme_dark_gantt.mmd
 fbd2f0182f209389 tests/cases/theme_dark_journey.mmd
 7aeff9a7f789566e tests/cases/theme_dark_kanban.mmd
-1f0cebb35405085d tests/cases/theme_dark_mindmap.mmd
+7d2e0ae91861817f tests/cases/theme_dark_mindmap.mmd
 3b194c570303d690 tests/cases/theme_dark_pie.mmd
 2d125869f3f8275b tests/cases/theme_dark_quadrant.mmd
 b07b00847928b341 tests/cases/theme_dark_seq.mmd

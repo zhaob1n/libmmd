@@ -88,7 +88,7 @@ Already fixed:
 - treemap and radar: cScale palettes;
 - gantt: excluded days/weekends shaded, light grid;
 - kanban: mermaid column/card widths;
-- mindmap: compacted with a spring relaxation;
+- mindmap: compacted with a spring relaxation; section fills, bottom lines and labels (cScale, cScaleInv, cScaleLabel; root git0, gitBranchLabel0) take the theme in effect;
 - pie: declaration order and palette;
 - timeline: section fills, bottom lines and labels (cScale, cScaleInv, cScaleLabel) and the axis and event lines take the theme in effect;
 - sequence: participant `@{type}` shapes;
@@ -96,7 +96,7 @@ Already fixed:
 - requirement: label plates.
 
 Known remaining differences:
-- mindmap: section colours, and the layout is still not cose-bilkent;
+- mindmap: nodes keep a cScalePeer border mermaid does not draw, and the layout is still not cose-bilkent;
 - gantt: mermaid draws denser ticks;
 - class: wide single-row layout, same as mermaid's;
 - journey: legend order;
