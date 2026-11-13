@@ -122,7 +122,8 @@ MMD_API void mmd_w_num(mmd_writer *w, double v);
 /* one sankey CSV field, quoted only when needed; mermaid's sankey takes printable ASCII only */
 MMD_API void mmd_w_csv(mmd_writer *w, const char *s);
 /* %%{init}%% before the diagram. key is dotted (xyChart.showDataLabel); value is a scalar
- * without quotes, backslashes or control bytes. Several calls are fine. */
+ * without quotes, backslashes or control bytes; true, false and JSON numbers are written bare.
+ * Several calls are fine. */
 MMD_API void mmd_w_config(mmd_writer *w, const char *key, const char *value);
 
 

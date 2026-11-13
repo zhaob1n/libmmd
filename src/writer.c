@@ -370,7 +370,7 @@ void mmd_w_num(mmd_writer *w, double v) {
     put_num(&w->b, v);
     term(w);
 }
-/* dotted key -> nested JSON object keys; value is a JSON string (the config parser strips the quotes) */
+/* dotted key -> nested JSON object keys */
 static bool cfg_key_ok(const char *key) {
     if (!key || !key[0] || key[0] == '.') return false;
     for (const char *p = key; *p; p++) {
@@ -395,6 +395,25 @@ static bool cfg_preamble(const mmd_writer *w) {
     }
     return true;
 }
+static const char *digits(const char *p) {
+    while (*p >= '0' && *p <= '9') p++;
+    return p;
+}
+/* true, false and JSON numbers go bare: mermaid.js reads the string "false" as true */
+static bool cfg_bare(const char *v) {
+    if (!strcmp(v, "true") || !strcmp(v, "false")) return true;
+    const char *p = v + (*v == '-'), *q = digits(p);
+    if (q == p || (*p == '0' && q - p > 1)) return false;
+    if (*q == '.') {
+        p = q + 1, q = digits(p);
+        if (q == p) return false;
+    }
+    if (*q == 'e' || *q == 'E') {
+        p = q + 1 + (q[1] == '+' || q[1] == '-'), q = digits(p);
+        if (q == p) return false;
+    }
+    return !*q;
+}
 void mmd_w_config(mmd_writer *w, const char *key, const char *value) {
     if (!live(w)) return;
     if (!key || !value) return fail(w, w->b.n, "mmd_w_config: key and value are required");
@@ -416,9 +435,10 @@ void mmd_w_config(mmd_writer *w, const char *key, const char *value) {
         depth++;
         p = dot + 1;
     }
-    buf_ch(&w->b, '"');
+    bool bare = cfg_bare(value);
+    if (!bare) buf_ch(&w->b, '"');
     buf_cstr(&w->b, value);
-    buf_ch(&w->b, '"');
+    if (!bare) buf_ch(&w->b, '"');
     while (depth--) buf_ch(&w->b, '}');
     buf_lit(&w->b, "}}%%\n");
     term(w);

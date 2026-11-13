@@ -676,7 +676,7 @@ static int config_round(void) {
     const char *s;
     size_t n;
     mmd_error e = {};
-    if (mmd_writer_text(w, &s, &n, &e) || !strstr(s, "%%{init: {\"xyChart\":{\"showDataLabel\":\"true\"}}}%%") ||
+    if (mmd_writer_text(w, &s, &n, &e) || !strstr(s, "%%{init: {\"xyChart\":{\"showDataLabel\":true}}}%%") ||
         !strstr(s, "barOverlap")) {
         printf("FAIL config text: %s\n", s ? s : e.message);
         bad++;
@@ -703,6 +703,18 @@ static int config_round(void) {
     mmd_writer_reset(w);
     mmd_w_config(w, "xyChart.showDataLabel", "a\"b");
     if (mmd_writer_text(w, &s, &n, &e) != MMD_ERR_SYNTAX) printf("FAIL config quote not refused\n"), bad++;
+    /* mermaid.js reads the string "false" as true: booleans and JSON numbers go bare, the rest quoted */
+    static const struct { const char *v, *want; } SC[] = {
+        {"false", ":false}"}, {"700", ":700}"}, {"-1.5e+3", ":-1.5e+3}"}, {"0", ":0}"},
+        {"007", ":\"007\"}"}, {"1.", ":\"1.\"}"}, {"1e", ":\"1e\"}"}, {"-", ":\"-\"}"},
+        {"300px", ":\"300px\"}"}, {"True", ":\"True\"}"}, {"", ":\"\"}"},
+    };
+    for (size_t i = 0; i < countof(SC); i++) {
+        mmd_writer_reset(w);
+        mmd_w_config(w, "k", SC[i].v);
+        if (mmd_writer_text(w, &s, &n, &e) || !strstr(s, SC[i].want))
+            printf("FAIL config scalar '%s': %s\n", SC[i].v, s ? s : e.message), bad++;
+    }
     mmd_writer_free(w);
     printf("writer config: %d failed\n", bad);
     return bad;
