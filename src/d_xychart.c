@@ -103,6 +103,10 @@ static double xr_at(double xmin, double xmax, size_t nc, size_t i) {
     if (!(fabs(v) * p < 0x1p53)) return v; /* no digit left to round away (and p may be infinite) */
     return round(v * p) / p;
 }
+/* x-axis label i without categories: the point's value on a min --> max range, else i + 1 */
+static Str x_num(bool xr, double xmin, double xmax, size_t nc, size_t i, char nb[static 32]) {
+    return (Str){.p = nb, .n = fmt_js(xr ? xr_at(xmin, xmax, nc, i) : (double)(i + 1), nb)};
+}
 
 typedef struct R2 { double x, y, w, h; } R2;
 /* overlap: every bar series uses the full band, centred on the tick */
@@ -246,10 +250,11 @@ DIAG_FN(xychart_render) {
     const int nt = (int)fmin(t1 - t0, 1000);
     double tl = 0;
     for (int k = 0; k <= nt; k++) tl = fmax(tl, text_width((Str){.p = nb, .n = fmt_js(tick_at(t0 + k, step), nb)}, 14));
-    /* vertical: value axis on the left; horizontal: categories on the left */
+    /* vertical: value axis on the left; horizontal: the x labels on the left */
     double catw = 0;
-    for (size_t i = 0; i < cats.n; i++) { double w = text_width(cats.v[i], 14); if (w > catw) catw = w; }
-    double leftw = horiz ? (cats.n ? catw : tl) : tl;
+    for (size_t i = 0; horiz && i < nc; i++)
+        catw = fmax(catw, text_width(cats.n ? cats.v[i] : x_num(xr, xmin, xmax, nc, i, nb), 14));
+    double leftw = horiz ? catw : tl;
     double ox = 20 + (horiz ? (xt.n ? 26 : 0) : (yt.n ? 26 : 0)) + leftw + 10, oy = title.n ? 50 : 15;
     /* outside labels sit above a rising bar's top: drop the plot so they clear the title */
     if (dl_out && !horiz && ymax > 0) oy += 24;
@@ -393,9 +398,7 @@ DIAG_FN(xychart_render) {
         else { dg_line(out, ox - 5, p, ox, p, "tk"); dg_text(out, t, 14, ox - 8, p, "end", "tl"); }
     }
     for (size_t i = 0; i < nc; i++) {
-        Str t;
-        if (cats.n) t = clab ? clab[i] : cats.v[i];
-        else t = (Str){.p = nb, .n = fmt_js(xr ? xr_at(xmin, xmax, nc, i) : (double)(i + 1), nb)};
+        Str t = !cats.n ? x_num(xr, xmin, xmax, nc, i, nb) : clab ? clab[i] : cats.v[i];
         double p = CPOS(i);
         if (horiz) { dg_line(out, ox - 5, p, ox, p, "tk"); dg_text(out, t, 14, ox - 8, p, "end", "tl"); }
         else {
