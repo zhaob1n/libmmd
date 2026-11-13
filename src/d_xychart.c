@@ -5,7 +5,9 @@
  *   showDataLabel, showDataLabelOutsideBar — mermaid 11. Labels use each bar's own value
  *   (mermaid labels every bar from plots[0]) and the axis formatter, not Number.toString().
  *   Outside labels are 12px: mermaid shrinks them with the inside-fit heuristic, which makes
- *   end labels on a tall horizontal chart unreadably small.
+ *   end labels on a tall horizontal chart unreadably small. A bar below zero is labelled at its
+ *   own end (mermaid draws every bar up from the axis), and an automatic range gains a step
+ *   when the outside label would reach the axis labels.
  *   barOverlap — libmmd only. Bar series share the full band instead of sitting side by side,
  *   and a 0 draws neither a bar nor a label, so one series per group (0 elsewhere) colours
  *   bars by group. mermaid.js ignores the key and draws grouped bars; the text still parses. */
@@ -210,6 +212,20 @@ DIAG_FN(xychart_render) {
     const bool overlap = dcfg_bool("xyChart.barOverlap", false);
     const double PW = fmin(fmax(dcfg_num("xyChart.width", 700), 100), 4000);
     const double PH = fmin(fmax(dcfg_num("xyChart.height", 500), 100), 4000) - 100;
+    /* an outside label past a bar below zero needs room before the axis: widen an automatic range */
+    if (dl_out && !yr && ymin < 0 && ymax > 0) {
+        bool grow = true;
+        for (int g = 0; g < 8 && grow; g++) {
+            grow = false;
+            for (size_t s = 0; s < ser.n && !grow; s++)
+                for (uint32_t k = 0; !ser.v[s].line && k < ser.v[s].nv && k < nc; k++) {
+                    double v = vals.v[ser.v[s].v0 + k];
+                    if (v >= 0) continue;
+                    double need = 14 + (horiz ? text_width((Str){.p = nb, .n = fmt_num(v, sizeof nb, nb)}, DL_FS) : DL_FS);
+                    if ((v - ymin) / (ymax - ymin) * (horiz ? PW : PH) < need) { ymin -= step, grow = true; break; }
+                }
+        }
+    }
     double tl = 0;
     for (double v = ymin; v <= ymax + step * 1e-6; v += step) {
         double w = text_width((Str){.p = nb, .n = fmt_num(v, sizeof nb, nb)}, 14);
@@ -271,19 +287,24 @@ DIAG_FN(xychart_render) {
             size_t s0 = ndl;
             double fs = dl_out ? DL_FS : INFINITY;
             for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
-                double v = vals.v[ser.v[s].v0 + k];
+                double v = vals.v[ser.v[s].v0 + k], p = VPOS(v);
                 if (overlap && v == 0) continue;
-                R2 r = bar_geom(horiz, overlap, nbar, bi, band, base, VPOS(v), CPOS(k));
+                R2 r = bar_geom(horiz, overlap, nbar, bi, band, base, p, CPOS(k));
                 if (!(r.w > 0) || !(r.h > 0)) continue;
                 DLab *d = &dl[ndl++];
                 d->n = fmt_num(v, sizeof d->t, d->t);
                 if (!dl_out) fs = fmin(fs, fit_inside(horiz, r.w, r.h, dl_str(d)));
+                /* the label sits at the bar's far end, which is left of / below the baseline for a
+                 * negative value: past it outside, short of it inside */
+                bool up = horiz ? p > base : p < base, fwd = dl_out == up; /* text right of / above the end */
                 if (horiz) {
-                    d->x = dl_out ? r.x + r.w + 10 : r.x + r.w - 10, d->y = r.y + r.h / 2;
-                    d->anchor = dl_out ? "start" : "end", d->tb = TB_MIDDLE;
+                    double end = up ? r.x + r.w : r.x;
+                    d->x = fwd ? end + 10 : end - 10, d->y = r.y + r.h / 2;
+                    d->anchor = fwd ? "start" : "end", d->tb = TB_MIDDLE;
                 } else {
-                    d->x = r.x + r.w / 2, d->y = dl_out ? r.y - 10 : r.y + 10;
-                    d->anchor = "middle", d->tb = dl_out ? TB_ALPHA : TB_HANG;
+                    double end = up ? r.y : r.y + r.h;
+                    d->x = r.x + r.w / 2, d->y = fwd ? end - 10 : end + 10;
+                    d->anchor = "middle", d->tb = fwd ? TB_ALPHA : TB_HANG;
                 }
             }
             if (fs >= 1 && isfinite(fs))
