@@ -1,6 +1,7 @@
 /* packet(-beta): `start-end: "label"`, `start: "label"` or `+bits: "label"` fields packed into
- * 32-bit rows (mermaid defaults: bitWidth 32, rowHeight 32, paddingX 5, paddingY 5). Fields that
- * straddle a row boundary are split; bit numbers are printed above each field's ends. */
+ * rows of packet.bitsPerRow bits, laid out as mermaid's renderer does: each bit bitWidth wide, rows
+ * rowHeight tall, paddingX cut off each block's right end, paddingY between rows (plus 10 for the
+ * bit numbers when showBits). Fields that straddle a row boundary are split. */
 #include <math.h>
 #include <stdio.h>
 
@@ -26,10 +27,11 @@ static constexpr char CSS[] =
 
 DIAG_FN(packet_render) {
     const uint32_t BPR = (uint32_t)fmin(fmax(dcfg_num("packet.bitsPerRow", 32), 1), 256);
-    constexpr double BW = 32;
-    constexpr double RH = 32;
-    constexpr double PX = 5;
-    constexpr double PY = 5;
+    const double BW = fmin(fmax(dcfg_num("packet.bitWidth", 32), 1), 500);
+    const double RH = fmin(fmax(dcfg_num("packet.rowHeight", 32), 1), 500);
+    const double PX = fmin(fmax(dcfg_num("packet.paddingX", 5), 0), BW - 1); /* a one-bit block keeps some width */
+    const bool BITS = dcfg_bool("packet.showBits", true);
+    const double PY = fmin(fmax(dcfg_num("packet.paddingY", 5), 0), 500) + (BITS ? 10 : 0);
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;
@@ -64,7 +66,7 @@ DIAG_FN(packet_render) {
     }
     if (!fv.n) return diag_fail(err_off, msg, off, "packet has no fields");
     uint32_t rows = (next + BPR - 1) / BPR;
-    double top = 0, W = BPR * BW + 2 * PX, H = rows * (RH + PY + 14) + PY + (title.n ? 30 : 0); /* mermaid puts the title below */
+    double W = BPR * BW + 2, H = rows * (RH + PY) + PY + (title.n ? RH : 0); /* mermaid puts the title below */
     BBox bb = {0, 0, W, H};
     if (!buf_reserve(out, 1024 + fv.n * 400)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 4, "packet", CSS);
@@ -73,16 +75,18 @@ DIAG_FN(packet_render) {
         const Field *f = &fv.v[i];
         for (uint32_t s = f->s; s <= f->e;) { /* one block per row the field touches */
             uint32_t row = s / BPR, e = f->e < (row + 1) * BPR - 1 ? f->e : (row + 1) * BPR - 1;
-            double x = PX + (s % BPR) * BW, w = (e - s + 1) * BW, y = top + row * (RH + PY + 14) + 14;
-            dg_rect(out, x, y, w - 1, RH, 0, "pb");
+            double x = 1 + (s % BPR) * BW, w = (e - s + 1) * BW - PX, y = row * (RH + PY) + PY;
+            dg_rect(out, x, y, w, RH, 0, "pb");
             dg_text(out, f->label, 12, x + w / 2, y + RH / 2, "middle", "pl");
-            dg_text(out, (Str){.p = nb, .n = (size_t)snprintf(nb, sizeof nb, "%u", s)}, 10, x + 2, y - 6,
-                    "start", "pn");
-            if (e != s) dg_text(out, (Str){.p = nb, .n = (size_t)snprintf(nb, sizeof nb, "%u", e)}, 10, x + w - 3, y - 6, "end", "pn");
+            if (BITS) {
+                dg_text(out, (Str){.p = nb, .n = (size_t)snprintf(nb, sizeof nb, "%u", s)}, 10, e == s ? x + w / 2 : x,
+                        y - 6, e == s ? "middle" : "start", "pn");
+                if (e != s) dg_text(out, (Str){.p = nb, .n = (size_t)snprintf(nb, sizeof nb, "%u", e)}, 10, x + w, y - 6, "end", "pn");
+            }
             s = e + 1;
         }
     }
-    if (title.n) dg_text(out, title, 14, W / 2, H - 16, "middle", "ttl");
+    if (title.n) dg_text(out, title, 14, W / 2, H - (RH + PY) / 2, "middle", "ttl");
     buf_lit(out, "</svg>\n");
     return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }
