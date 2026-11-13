@@ -351,7 +351,7 @@ DIAG_FN(er_render) {
         dg_size(g, (int32_t)v, tw, hh + e->an * rh);
     }
     g->iso_toggle = true;
-    g->node_sep = dcfg_num("er.nodeSpacing", 140), g->rank_sep = dcfg_num("er.rankSpacing", 80); /* mermaid erRenderer */
+    g->node_sep = dcfg_spacing("er", false, 140), g->rank_sep = dcfg_spacing("er", true, 80); /* mermaid erRenderer */
     if ((st = flow_layout(g))) return st;
     BBox bb = dg_bbox(g);
     if (title.n) bb.y0 -= 30;

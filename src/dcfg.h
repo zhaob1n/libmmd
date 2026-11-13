@@ -29,6 +29,10 @@ const DCfg *dcfg_cur(void);
 Str dcfg_get(const char key[static 1]);         /* last match, or empty; "themeVariables.x" etc. */
 Str dcfg_get_str(Str key);                      /* same, for a key whose length is known: dcfg_get_str(S("x")) */
 double dcfg_num(const char key[static 1], double def); /* bounded number, optional "px" suffix */
+/* nodeSpacing (rank: rankSpacing) as mermaid's dagre layout takes it: a top-level one, else the
+ * one in config section sect (which is "state" for class and requirement diagrams too), else def;
+ * 0 and negative values count as unset */
+double dcfg_spacing(const char sect[static 1], bool rank, double def);
 bool dcfg_bool(const char key[static 1], bool def);
 /* mermaid 12's neo default (agentflow, usecase): the classic look needs `look: classic` and a
  * classic theme, named by the caller or by the source (not redux*) */

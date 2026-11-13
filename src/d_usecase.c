@@ -693,8 +693,8 @@ DIAG_FN(usecase_render) {
         }
     }
     if (u.bnd != NONE) return diag_fail(err_off, msg, n, "unterminated systemBoundary (missing 'end')");
-    g.node_sep = dcfg_num("usecase.nodeSpacing", 50);
-    g.rank_sep = dcfg_num("usecase.rankSpacing", 50);
+    g.node_sep = dcfg_spacing("usecase", false, 50);
+    g.rank_sep = dcfg_spacing("usecase", true, 50);
     Fonts f = {dcfg_num("usecase.actorFontSize", 14), dcfg_num("usecase.usecaseFontSize", 12)};
     bool rotate = str_eq(dcfg_get("usecase.colorScheme"), S("rotate")), neo = dcfg_neo();
 

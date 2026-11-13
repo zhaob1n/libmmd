@@ -5,6 +5,7 @@
 
 #include <math.h>
 
+#include "dcfg.h"
 #include "dgraph.h"
 #include "diagrams.h"
 #include "text.h"
@@ -426,6 +427,7 @@ static mmd_status layout_scope(Ctx c[static 1], int32_t cl) {
     }
     Graph *lg = &s->lg;
     dg_init(lg, p->A, cl == NONE ? g->dir : g->sdir[cl], c->fs);
+    lg->node_sep = dcfg_spacing("state", false, 50), lg->rank_sep = dcfg_spacing("state", true, 50);
     size_t cap = 16;
     s->elem = ANEW(p->A, int32_t, cap);
     if (!s->elem) return MMD_ERR_NOMEM;

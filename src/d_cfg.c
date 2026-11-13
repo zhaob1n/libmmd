@@ -297,6 +297,21 @@ double dcfg_num(const char key[static 1], double def) {
     return d;
 }
 
+/* positive only: mermaid's `a || b` takes 0 as unset, and a negative spacing only folds the
+ * layout onto itself */
+static double pos_num(const char key[static 1]) {
+    double d = dcfg_num(key, 0);
+    return d > 0 ? d : 0;
+}
+
+double dcfg_spacing(const char sect[static 1], bool rank, double def) {
+    const char *k = rank ? "rankSpacing" : "nodeSpacing";
+    char sk[48];
+    double v = pos_num(k);
+    if (!v && snprintf(sk, sizeof sk, "%s.%s", sect, k) < (int)sizeof sk) v = pos_num(sk);
+    return v ? v : def;
+}
+
 bool dcfg_bool(const char key[static 1], bool def) {
     Str v = dcfg_get(key);
     if (str_eq(v, S("true"))) return true;

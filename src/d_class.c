@@ -529,6 +529,7 @@ DIAG_FN(class_render) {
         dg_size(g, (int32_t)v, w + 2 * CPAD, h);
     }
     g->iso_toggle = true;
+    g->node_sep = dcfg_spacing("state", false, 50), g->rank_sep = dcfg_spacing("state", true, 50); /* mermaid's classRenderer reads `state` */
     /* LR/RL: the label sits in a rank of its own width, leaving only ranksep/2 per side for
      * the relation markers (diamond, triangle) and cardinalities; widen so they don't touch */
     if (g->dir == DIR_LR || g->dir == DIR_RL)

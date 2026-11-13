@@ -120,13 +120,12 @@ static mmd_status render_c(Arena ap[static 1], Buf bp[static 1], size_t n, const
     if (str_eq(kw, S("graph")) || str_eq(kw, S("flowchart")) || str_eq(kw, S("flowchart-elk")) || str_eq(kw, S("swimlane-beta")) || af) {
         int theme = dcfg_theme();
         dcfg_set_theme(0); /* flowchart applies named themes itself (Graph.theme) */
-        /* config: flowchart.nodeSpacing / rankSpacing (init or frontmatter; API options win), cycleRemoval */
+        /* config: nodeSpacing / rankSpacing (init or frontmatter; API options win), cycleRemoval */
+        const char *sect = af ? "agentflow" : "flowchart";
         Graph g = {.arena = &arena, .title = title, .theme = (uint8_t)(theme ? theme : MMD_THEME_DEFAULT),
                    .flags = opt ? opt->flags : 0, .font_size = fs,
-                   .node_sep = opt && opt->node_spacing > 0 ? opt->node_spacing
-                                                            : dcfg_num(af ? "agentflow.nodeSpacing" : "flowchart.nodeSpacing", 50),
-                   .rank_sep = opt && opt->rank_spacing > 0 ? opt->rank_spacing
-                                                            : dcfg_num(af ? "agentflow.rankSpacing" : "flowchart.rankSpacing", 50)};
+                   .node_sep = opt && opt->node_spacing > 0 ? opt->node_spacing : dcfg_spacing(sect, false, 50),
+                   .rank_sep = opt && opt->rank_spacing > 0 ? opt->rank_spacing : dcfg_spacing(sect, true, 50)};
         Str cr = dcfg_get_str(S("flowchart.cycleRemoval"));
         g.acyclicer = str_eq(cr, S("dfs")) ? MMD_ACYC_DFS : str_eq(cr, S("greedy")) ? MMD_ACYC_GREEDY : MMD_ACYC_AUTO;
         if (g.flags & MMD_F_FAS_DFS) g.acyclicer = MMD_ACYC_DFS;

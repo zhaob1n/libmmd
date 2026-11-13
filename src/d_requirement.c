@@ -4,6 +4,7 @@
  * (contains, copies, derives, satisfies, verifies, refines, traces). Layered layout via flow_layout. */
 #include <math.h>
 
+#include "dcfg.h"
 #include "dgraph.h"
 #include "diagrams.h"
 #include "text.h"
@@ -126,6 +127,7 @@ DIAG_FN(requirement_render) {
         }
         dg_size(&g, (int32_t)v, fmax(w + 30, 140), 2 * lh + fs * 0.5 + 16 + rows * lh + (rows ? 10 : 0));
     }
+    g.node_sep = dcfg_spacing("state", false, 50), g.rank_sep = dcfg_spacing("state", true, 50); /* as mermaid's requirementRenderer */
     mmd_status st = flow_layout(&g);
     if (st) return st;
     BBox bb = dg_bbox(&g);
