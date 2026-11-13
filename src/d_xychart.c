@@ -244,6 +244,8 @@ DIAG_FN(xychart_render) {
                 }
         }
     }
+    if (!(ymax - ymin > 0) || !isfinite(ymax - ymin) || (xr && !isfinite(xmax - xmin)))
+        return diag_fail(err_off, msg, off, "axis range too large for a double");
     /* value ticks: the multiples of step inside the range, at most 1001 (counted with an int: past
      * 2^53 steps from zero, adding 1 to a double tick index changes nothing); the 1e-6 slack
      * keeps an end tick lost to float noise, not one that lies outside the range */
