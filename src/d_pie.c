@@ -16,6 +16,14 @@ static constexpr char CSS[] =
 /* mermaid default theme pie1..pie12 (hsl adjustments of primary/secondary/tertiary) */
 static constexpr char COLORS[][8] = {"#ececff", "#ffffde", "#b5ff20", "#b9b9ff", "#ffff45", "#d7ff86", "#ff86ff", "#20ffff", "#ff2020", "#ff20ff", "#20ff8f", "#ff5353"};
 
+/* showData's " [v]" after a legend label, v as mermaid writes it (String(v)) */
+static Str shown_value(double v, char out[static 40]) {
+    memcpy(out, " [", 2);
+    size_t n = 2 + fmt_js(v, out + 2);
+    out[n++] = ']';
+    return (Str){.p = out, .n = n};
+}
+
 DIAG_FN(pie_render) {
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
@@ -61,10 +69,9 @@ DIAG_FN(pie_render) {
     constexpr double CX = 225;
     constexpr double CY = 225;
     double lw = 0;
-    for (size_t i = 0; i < sl.n; i++) {
-        double w = text_width(sl.v[i].label, fs) + (show ? text_width(S(" [000000]"), fs) : 0);
-        if (w > lw) lw = w;
-    }
+    char val[40];
+    for (size_t i = 0; i < sl.n; i++)
+        lw = fmax(lw, text_width(sl.v[i].label, fs) + (show ? text_width(shown_value(sl.v[i].v, val), fs) : 0));
     /* percentage labels: mermaid puts them at TPOS * R. One that doesn't fit its slice there, or would sit
      * on an earlier label, goes outside the pie with a leader line (deviation from mermaid: tiny slices
      * otherwise stack unreadable "1%" labels on top of each other) */
@@ -80,8 +87,9 @@ DIAG_FN(pie_render) {
             double frac = total > 0 ? sl.v[i].v / total : 0, mid = ang0 + frac * M_PI;
             ang0 += frac * 2 * M_PI;
             LM[i] = mid, LO[i] = 0, LW[i] = 0;
-            if (frac <= 0) continue;
-            int len = snprintf(pct, sizeof pct, "%.0f%%", frac * 100);
+            double pc = round(frac * 100); /* mermaid's toFixed(0); it draws no "0%" label */
+            if (pc < 1) continue;
+            int len = snprintf(pct, sizeof pct, "%.0f%%", pc);
             LW[i] = text_width((Str){.p = pct, .n = (size_t)len}, 17);
             LX[i] = CX + TPOS * R * sin(mid), LY[i] = CY - TPOS * R * cos(mid);
             bool fits = frac >= 0.5 || 2 * TPOS * R * sin(frac * M_PI) >= fmin(LW[i], 20) + 6;
@@ -142,9 +150,9 @@ DIAG_FN(pie_render) {
         ang = a1;
     }
     for (size_t i = 0; i < sl.n; i++) {
-        double frac = total > 0 ? sl.v[i].v / total : 0, mid = LM[i];
-        if (frac <= 0) continue;
-        int len = snprintf(fill, sizeof fill, "%.0f%%", frac * 100);
+        double frac = total > 0 ? sl.v[i].v / total : 0, mid = LM[i], pc = round(frac * 100);
+        if (pc < 1) continue;
+        int len = snprintf(fill, sizeof fill, "%.0f%%", pc);
         if (!LO[i]) { dg_text(out, (Str){.p = fill, .n = (size_t)len}, 17, LX[i], LY[i], "middle", "pct"); continue; }
         buf_lit(out, "<path class=\"leader\" fill=\"none\" stroke=\"#666\" stroke-width=\"1\" d=\"M");
         buf_pt(out, CX + (R - 4) * sin(mid), CY - (R - 4) * cos(mid)); buf_ch(out, 'L');
@@ -161,12 +169,12 @@ DIAG_FN(pie_render) {
         buf_num(out, ly); buf_lit(out, "\" fill=\""); buf_cstr(out, col); buf_lit(out, "\" stroke=\"#000\"/>");
         Str lab = sl.v[i].label;
         if (show) {
-            int len = snprintf(fill, sizeof fill, " [%g]", sl.v[i].v);
-            char *t = arena_alloc(a, lab.n + (size_t)len, 1);
+            Str v = shown_value(sl.v[i].v, val);
+            char *t = arena_alloc(a, lab.n + v.n, 1);
             if (!t) return MMD_ERR_NOMEM;
             memcpy(t, lab.p, lab.n);
-            memcpy(t + lab.n, fill, (size_t)len);
-            lab = (Str){.p = t, .n = lab.n + (size_t)len};
+            memcpy(t + lab.n, v.p, v.n);
+            lab = (Str){.p = t, .n = lab.n + v.n};
         }
         dg_text(out, lab, fs, LEGX + 22, ly + 9, "start", nullptr);
     }
