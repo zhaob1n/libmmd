@@ -98,7 +98,6 @@ Already fixed:
 Known remaining differences:
 - mindmap: section colours, and the layout is still not cose-bilkent;
 - gantt: mermaid draws denser ticks;
-- state: concurrent regions are not drawn as grey boxes;
 - class: wide single-row layout, same as mermaid's;
 - journey: legend order;
 - C4: arbitrary bgColor strings are rejected.

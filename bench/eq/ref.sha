@@ -465,7 +465,7 @@ b2a9983ee0faecb0 tests/cases/config_pie.mmd
 cccd9dd4dcf5051b tests/cases/config_quadrant.mmd
 db4796157d723418 tests/cases/config_sankey.mmd
 9d68a2cb5325389d tests/cases/config_seq.mmd
-8378919ef2dcd229 tests/cases/config_state.mmd
+e44399d51d02f30e tests/cases/config_state.mmd
 723444a4efee77e6 tests/cases/config_timeline.mmd
 5b3a0c38009d651c tests/cases/cynefin_full.mmd
 85608fea9717e622 tests/cases/cynefin_overflow.mmd
@@ -541,8 +541,9 @@ d6a0b254775dc986 tests/cases/seq_central.mmd
 af64380ec0563af0 tests/cases/seq_full.mmd
 c30d794f7e2c5580 tests/cases/seq_types.mmd
 047f87ad8e9ce83c tests/cases/shapes.mmd
-47529cc466bac9a8 tests/cases/state_full.mmd
-a669aae409a7277c tests/cases/state_stress_looplabels.mmd
+7faba0fbc11db835 tests/cases/state_full.mmd
+0bdf0aedf79c5e36 tests/cases/state_regions_dark.mmd
+3201f4ea19a3443d tests/cases/state_stress_looplabels.mmd
 715f5012f0d8902c tests/cases/styles.mmd
 d5e4e73584499e6d tests/cases/subgraph_claim.mmd
 cd68ad5b79474019 tests/cases/subgraphs.mmd
@@ -562,7 +563,7 @@ fbd2f0182f209389 tests/cases/theme_dark_journey.mmd
 3b194c570303d690 tests/cases/theme_dark_pie.mmd
 2d125869f3f8275b tests/cases/theme_dark_quadrant.mmd
 b07b00847928b341 tests/cases/theme_dark_seq.mmd
-988c0bb1a340ca11 tests/cases/theme_dark_state.mmd
+b0d964b77ccc9644 tests/cases/theme_dark_state.mmd
 375ed7f0a5371dbf tests/cases/theme_dark_timeline.mmd
 9df4c036847ccd94 tests/cases/theme_dark_xychart.mmd
 afa12367c0904ff5 tests/cases/theme_dark_xychart_field.mmd
@@ -570,7 +571,7 @@ aa9b3b45327094f3 tests/cases/theme_forest.mmd
 557220e952c0fd7b tests/cases/theme_forest_class.mmd
 065b65eed93b6e96 tests/cases/theme_forest_gantt.mmd
 2bfb3ee04ba423cf tests/cases/theme_forest_gitgraph.mmd
-f7bd0800fc569267 tests/cases/theme_forest_state.mmd
+aeac98e7ad939c62 tests/cases/theme_forest_state.mmd
 7867504613dc622e tests/cases/theme_forest_treemap.mmd
 35f3a459562c7d42 tests/cases/theme_neutral.mmd
 ad8c63433a3f1c25 tests/cases/theme_neutral_er.mmd

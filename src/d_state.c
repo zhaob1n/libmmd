@@ -295,7 +295,7 @@ static constexpr char CSS[] =
     "#mermaid .choice{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .comp{fill:#fff;stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .comp-t{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
-    "#mermaid .region{fill:none;stroke:#888;stroke-width:1px;stroke-dasharray:5,4;}"
+    "#mermaid .region{fill:#f0f0f0;stroke:#9370DB;stroke-width:1px;stroke-dasharray:10,10;}"
     "#mermaid .div{stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .tr{fill:none;stroke:#333;stroke-width:1.3px;}"
     "#mermaid .lbl{fill:#e8e8e8;opacity:0.85;}"
@@ -411,10 +411,12 @@ static mmd_status layout_scope(Ctx c[static 1], int32_t cl) {
         for (size_t r = 0; r < g->ns; r++) any |= g->sparent[r] == cl && g->sclass[r].n;
         if (any) { /* concurrent regions side by side */
             s->regions = true;
-            double x = 0, h = 0;
+            /* mermaid lays the regions out as one rank of its composite: nodeSpacing apart */
+            double x = 0, h = 0, gap = dcfg_spacing("state", false, 50);
             for (size_t r = 0; r < g->ns; r++) {
                 if (g->sparent[r] != cl || !g->sclass[r].n) continue;
                 const Scope *rs = &c->sc[sc_ix((int32_t)r)];
+                if (x > 0) x += gap;
                 c->relx[r] = x;
                 x += rs->w + 2 * R_PAD;
                 if (rs->h + 2 * R_PAD > h) h = rs->h + 2 * R_PAD;
@@ -653,12 +655,24 @@ DIAG_FN(state_render) {
     buf_lit(out, "<defs><marker id=\"st-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"8\" "
                  "markerHeight=\"8\" orient=\"auto\"><path d=\"M0,0 L10,5 L0,10 z\" fill=\"#333\"/></marker></defs>");
     if (title.n) dg_text(out, title, 18, (bb.x0 + bb.x1) / 2, bb.y0 + 12, "middle", "title");
+    /* concurrent regions are mermaid's .divider: altBackground inside a dashed stateBorder line */
+    Str rfill = dcfg_tv("altBackground"), rline = dcfg_tv("stateBorder");
+    if (!rline.n) rline = dcfg_tv("nodeBorder");
     for (int32_t d = 1; d <= maxd; d++) /* outer clusters first */
         for (size_t r = 0; r < S; r++) {
             if (sdep[r] != d || c.cw[r] <= 0) continue;
             double x = c.cx[r], y = c.cy[r], w = c.cw[r], h = c.ch[r];
             if (g->sclass[r].n) {
-                dg_rect(out, x + 2, y + 2, w - 4, h - 4, 0, "region"); /* concurrent region: dashed box */
+                buf_lit(out, "<rect class=\"region\"");
+                if (rfill.n || rline.n) {
+                    buf_lit(out, " style=\"");
+                    if (rfill.n) { buf_lit(out, "fill:"); buf_str(out, rfill); buf_ch(out, ';'); }
+                    if (rline.n) { buf_lit(out, "stroke:"); buf_str(out, rline); }
+                    buf_ch(out, '"');
+                }
+                buf_lit(out, " x=\""); buf_num(out, x); buf_lit(out, "\" y=\""); buf_num(out, y);
+                buf_lit(out, "\" width=\""); buf_num(out, w); buf_lit(out, "\" height=\""); buf_num(out, h);
+                buf_lit(out, "\"/>");
                 continue;
             }
             dg_rect(out, x, y, w, h, 5, "comp");
