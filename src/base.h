@@ -246,6 +246,9 @@ static inline void buf_ch(Buf b[static 1], char c) {
 void buf_num(Buf b[static 1], double v); /* fast fixed 2-decimal, trimmed */
 void buf_pt(Buf b[static 1], double x, double y); /* "x,y" with buf_num formatting, one reserve */
 void buf_int(Buf b[static 1], int64_t v);
+/* shortest decimal digits that read back as a (finite, > 0): a = 0.dig × 10^*e, no trailing zero;
+ * returns the digit count (1..17) */
+size_t num_shortest(double a, char dig[static 17], int e[static 1]);
 void buf_xml(Buf b[restrict static 1], Str s); /* XML-escape text, handles mermaid #entity; */
 
 #ifdef MMD_PROFILE

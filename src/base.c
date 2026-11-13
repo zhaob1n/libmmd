@@ -252,6 +252,71 @@ void buf_pt(Buf b[static 1], double x, double y) {
     b->n += k;
 }
 
+/* Shortest digits g·10^q that read back as a, for 1e-4 <= a < 2^53 (chart and bench data), by exact
+ * integer arithmetic: a = m·2^-s; scaled by 10^k to 17 or 18 digits, the decimals that round to a
+ * form the integer interval [lo, hi] (ends included when m is even: round-half-even). The multiple
+ * of the largest power of ten inside it, nearest a, is the answer: no trailing zero, at most 17 digits
+ * (the interval at 18 digits is over 10 wide, so it always holds a multiple of ten). */
+static bool shortest_fast(double a, uint64_t g[static 1], int q[static 1]) {
+    static constexpr uint64_t P10[] = {1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000,
+                                       1000000000, 10000000000, 100000000000, 1000000000000};
+    if (!(a >= 1e-4 && a < 0x1p53)) return false;
+    uint64_t bits;
+    memcpy(&bits, &a, sizeof bits);
+    int ex = (int)(bits >> 52);
+    uint64_t m = (bits & ((1ull << 52) - 1)) | 1ull << 52;
+    unsigned sh = (unsigned)(1076 - ex);
+    int e10 = ((ex - 1023) * 78913) >> 18; /* floor(log10 a) or one less */
+    unsigned k = (unsigned)(16 - e10);       /* 1..21: products stay below 2^126 */
+    unsigned __int128 P = (unsigned __int128)P10[k > 12 ? 12 : k] * P10[k > 12 ? k - 12 : 0];
+    unsigned __int128 xl = (2 * m - 1) * P, xm = 2 * m * P, xh = (2 * m + 1) * P; /* ×2^-sh */
+    if (m == 1ull << 52 && ex > 1) /* the gap below a power of two is half as wide */
+        xl = (4 * m - 1) * P, xm *= 2, xh *= 2, sh++;
+    bool incl = !(m & 1);
+    unsigned __int128 lo = xl >> sh, hi = xh >> sh;
+    if (lo << sh != xl || !incl) lo++;
+    if (hi << sh == xh && !incl) hi--;
+    uint64_t L = (uint64_t)lo, H = (uint64_t)hi, p10 = 1;
+    unsigned t = 0;
+    while ((L + 9) / 10 <= H / 10) L = (L + 9) / 10, H /= 10, p10 *= 10, t++;
+    /* the multiple of p10 nearest the exact a·10^k = x + rem·2^-sh, ties to even (as JavaScript and
+     * Python's repr() choose) */
+    uint64_t x = (uint64_t)(xm >> sh), r2 = x % p10 * 2, c = x / p10;
+    unsigned __int128 rem2 = (xm - ((unsigned __int128)x << sh)) << 1, one = (unsigned __int128)1 << sh;
+    int cmp = r2 > p10 ? 1 : r2 + 1 < p10 ? -1 : r2 == p10 ? rem2 != 0 : (rem2 > one) - (rem2 < one);
+    c += cmp > 0 || (cmp == 0 && (c & 1));
+    *g = c < L ? L : c > H ? H : c;
+    *q = (int)t - (int)k;
+    return true;
+}
+
+size_t num_shortest(double a, char dig[static 17], int e[static 1]) {
+    uint64_t g;
+    int q;
+    char t[40];
+    if (shortest_fast(a, &g, &q)) {
+        size_t k = u64_to_str(g, t);
+        memcpy(dig, t, k);
+        *e = q + (int)k;
+        return k;
+    }
+    /* elsewhere: the shortest %.*e that reads back (round-tripping is monotonic in the precision) */
+    int lo = 0, hi = 16;
+    locale_t host = c_locale_enter();
+    while (lo < hi) {
+        int m = (lo + hi) / 2;
+        snprintf(t, sizeof t, "%.*e", m, a);
+        if (strtod(t, nullptr) == a) hi = m; else lo = m + 1;
+    }
+    snprintf(t, sizeof t, "%.*e", lo, a);
+    uselocale(host);
+    size_t k = 0;
+    const char *x = strchr(t, 'e');
+    for (const char *p = t; p < x; p++) if (*p != '.') dig[k++] = *p;
+    *e = (int)strtol(x + 1, nullptr, 10) + 1;
+    return k;
+}
+
 typedef struct { char n[8]; uint32_t c; } Ent;
 static constexpr Ent ENTS[] = {
     {"AElig", 198},

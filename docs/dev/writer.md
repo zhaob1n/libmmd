@@ -41,9 +41,11 @@ mermaid.js is the reference: where libmmd and mermaid disagree on what a text me
   branch names, gantt task ids) the value is refused.
 - **Numbers**: `buf_num()` is fixed 2-decimal and clamps |v| > 1e15 to 0: fine for SVG
   coordinates, lossy for data (0.0012 s → 0). `mmd_w_num` writes the shortest decimal that reads
-  back exactly, never with an exponent (mermaid's number tokens have none). 1e-4 ≤ |v| < 2^53 uses
-  exact 128-bit interval arithmetic (~50 ns); other magnitudes a `%.*e` search (rare, ~1 µs).
-  `tests/writer_test.c` checks round trip and minimality on 10⁴ values of every magnitude.
+  back exactly, never with an exponent (mermaid's number tokens have none). The digits come from
+  `num_shortest()` in base.c, which the charts' `fmt_js()` shares: 1e-4 ≤ |v| < 2^53 uses exact
+  128-bit interval arithmetic (~50 ns); other magnitudes a `%.*e` search (rare, ~1 µs).
+  `tests/writer_test.c` checks round trip, minimality and nearest digits on 10⁴ values of every
+  magnitude.
 
 ## Escapes
 

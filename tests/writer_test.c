@@ -520,7 +520,8 @@ static int typed2(unsigned iters) {
     return bad;
 }
 
-/* shortest round trip: reads back exactly, and no %.Ng with fewer significant digits does */
+/* shortest round trip: reads back exactly, no %.Ng with fewer significant digits does, and the
+ * digits are the nearest ones (glibc's %e rounds exactly), as JavaScript's String(v) writes them */
 static int numbers(unsigned iters) {
     int bad = 0;
     mmd_writer *w = mmd_writer_new();
@@ -550,6 +551,16 @@ static int numbers(unsigned iters) {
         int k = snprintf(t, sizeof t, "%.*g", sig - 1, v);
         if (v != 0 && sig > 1 && k < (int)sizeof t && strtod(t, nullptr) == v) {
             printf("FAIL number %.17g -> %s is not the shortest (%s)\n", v, s, t);
+            bad++;
+            continue;
+        }
+        if (v == 0) continue;
+        snprintf(t, sizeof t, "%.*e", sig - 1, fabs(v));
+        size_t tn = 0;
+        for (const char *d = t; *d && *d != 'e'; d++) if (*d != '.') t[tn++] = *d;
+        while (tn > 1 && t[tn - 1] == '0') tn--;
+        if (tn != nd || memcmp(t, dig, nd)) {
+            printf("FAIL number %.17g -> %s is not the nearest (%.*s)\n", v, s, (int)tn, t);
             bad++;
         }
     }
