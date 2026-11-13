@@ -100,25 +100,33 @@ static R2 bar_geom(bool horiz, bool overlap, size_t nbar, size_t bi, double band
     if (horiz) return (R2){fmin(base, p), c0, fabs(p - base), bwid};
     return (R2){c0, fmin(base, p), bwid, fabs(p - base)};
 }
-/* mermaid 11: shrink until the text sits in the bar. Fit uses real advances, not its 0.7em guess. */
+/* mermaid 11: shrink 1px at a time from its 0.7em guess until the text sits in the bar, with real
+ * advances. Width is linear in the size up to a 1/64px snap, so skip to one step above the linear
+ * bound and walk only the snap from there. */
 static double fit_inside(bool horiz, double bw, double bh, Str lab) {
     if (!(bw > 0) || !(bh > 0) || !lab.n) return 0;
     double fs = horiz ? bh * 0.7 : bw / ((double)lab.n * 0.7);
-    while (fs >= 1) {
+    double em = text_width(lab, 2048) / 2048; /* exact advance per px of size */
+    if (em > 0) {
+        double cap = horiz ? (bw - 10) / em : fmin(bw / em, bh - 10);
+        if (fs > cap + 1) fs -= ceil(fs - cap) - 1;
+    }
+    for (; fs >= 1; fs -= 1) {
         double tw = text_width(lab, fs);
         if (horiz ? tw <= bw - 10 : tw <= bw && 10 + fs <= bh) return floor(fs);
-        fs -= 1;
     }
     return 0;
 }
-static void data_label(Buf out[static 1], Str lab, double fs, double x, double y, const char anchor[static 1], TBase base,
-                       const char fill[static 1]) {
+typedef struct DLab { double x, y, fs; const char *anchor; TBase tb; size_t n; char t[24]; } DLab;
+static Str dl_str(const DLab d[static 1]) { return (Str){.p = d->t, .n = d->n}; }
+static BBox dl_box(const DLab d[static 1]) { return dg_tbox(dl_str(d), d->fs, d->fs, d->x, d->y, false, d->anchor, d->tb); }
+static void data_label(Buf out[static 1], const DLab d[static 1], const char fill[static 1]) {
     buf_lit(out, "<g class=\"dl\" font-size=\"");
-    buf_num(out, fs);
+    buf_num(out, d->fs);
     buf_lit(out, "\" fill=\"");
     buf_cstr(out, fill);
     buf_lit(out, "\">");
-    dg_tspans(out, nullptr, lab, fs, fs, x, y, false, anchor, base, nullptr);
+    dg_tspans(out, nullptr, dl_str(d), d->fs, d->fs, d->x, d->y, false, d->anchor, d->tb, nullptr);
     buf_lit(out, "</g>");
 }
 
@@ -251,25 +259,44 @@ DIAG_FN(xychart_render) {
     size_t nbar = 0;
     for (size_t s = 0; s < ser.n; s++) nbar += !ser.v[s].line;
     double base = VPOS(ymin < 0 && ymax > 0 ? 0.0 : ymin);
-    /* gutter between the plot and the legend, so an outside label past a full bar is not covered */
-    double gutter = 0;
-    if (dl_out && horiz && nbar) {
+    /* data labels at each drawn bar's end, past it or inside it; inside labels share one fitted size
+     * per series, and a series whose labels do not fit draws none */
+    DLab *dl = nullptr;
+    size_t ndl = 0;
+    if (show_dl && nbar) {
+        if (!(dl = ANEW(a, DLab, vals.n))) return MMD_ERR_NOMEM;
         size_t bi = 0;
         for (size_t s = 0; s < ser.n; s++) {
             if (ser.v[s].line) continue;
+            size_t s0 = ndl;
+            double fs = dl_out ? DL_FS : INFINITY;
             for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
                 double v = vals.v[ser.v[s].v0 + k];
                 if (overlap && v == 0) continue;
-                R2 r = bar_geom(true, overlap, nbar, bi, band, base, VPOS(v), CPOS(k));
+                R2 r = bar_geom(horiz, overlap, nbar, bi, band, base, VPOS(v), CPOS(k));
                 if (!(r.w > 0) || !(r.h > 0)) continue;
-                char b[48];
-                double tw = text_width((Str){.p = b, .n = fmt_num(v, sizeof b, b)}, DL_FS);
-                gutter = fmax(gutter, r.x + r.w + 10 + tw - (ox + pw));
+                DLab *d = &dl[ndl++];
+                d->n = fmt_num(v, sizeof d->t, d->t);
+                if (!dl_out) fs = fmin(fs, fit_inside(horiz, r.w, r.h, dl_str(d)));
+                if (horiz) {
+                    d->x = dl_out ? r.x + r.w + 10 : r.x + r.w - 10, d->y = r.y + r.h / 2;
+                    d->anchor = dl_out ? "start" : "end", d->tb = TB_MIDDLE;
+                } else {
+                    d->x = r.x + r.w / 2, d->y = dl_out ? r.y - 10 : r.y + 10;
+                    d->anchor = "middle", d->tb = dl_out ? TB_ALPHA : TB_HANG;
+                }
             }
+            if (fs >= 1 && isfinite(fs))
+                for (size_t i = s0; i < ndl; i++) dl[i].fs = fs;
+            else ndl = s0;
             bi++;
         }
-        if (gutter < 0) gutter = 0;
-        else gutter += 8;
+    }
+    /* gutter between the plot and the legend, so an outside label past a full bar is not covered */
+    double gutter = 0;
+    if (dl_out && horiz && nbar) {
+        for (size_t i = 0; i < ndl; i++) gutter = fmax(gutter, dl_box(&dl[i]).x1 - (ox + pw));
+        gutter += 8;
     }
     char dlfill[64];
     memcpy(dlfill, "#131300", 8);
@@ -281,51 +308,9 @@ DIAG_FN(xychart_render) {
     double legw = 0;
     for (size_t s = 0; s < ser.n; s++) if (ser.v[s].name.n) legw = fmax(legw, text_width(ser.v[s].name, 14) + 40);
     BBox bb = {0, 0, ox + pw + 20 + gutter + legw, oy + ph + 60 + cat_extra};
-    if (show_dl && nbar) {
-        size_t bi = 0;
-        for (size_t s = 0; s < ser.n; s++) {
-            if (ser.v[s].line) continue;
-            double fs = dl_out ? DL_FS : 0;
-            if (!dl_out) {
-                fs = 1e300;
-                for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
-                    double v = vals.v[ser.v[s].v0 + k];
-                    if (overlap && v == 0) continue;
-                    R2 r = bar_geom(horiz, overlap, nbar, bi, band, base, VPOS(v), CPOS(k));
-                    if (!(r.w > 0) || !(r.h > 0)) continue;
-                    char b[48];
-                    Str lab = {.p = b, .n = fmt_num(v, sizeof b, b)};
-                    fs = fmin(fs, fit_inside(horiz, r.w, r.h, lab));
-                }
-                if (!(fs < 1e300) || fs < 1) fs = 0;
-            }
-            if (fs >= 1)
-                for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
-                    double v = vals.v[ser.v[s].v0 + k];
-                    if (overlap && v == 0) continue;
-                    R2 r = bar_geom(horiz, overlap, nbar, bi, band, base, VPOS(v), CPOS(k));
-                    if (!(r.w > 0) || !(r.h > 0)) continue;
-                    char b[48];
-                    Str lab = {.p = b, .n = fmt_num(v, sizeof b, b)};
-                    double x, y;
-                    const char *anchor;
-                    TBase tb;
-                    if (horiz) {
-                        y = r.y + r.h / 2;
-                        x = dl_out ? r.x + r.w + 10 : r.x + r.w - 10;
-                        anchor = dl_out ? "start" : "end";
-                        tb = TB_MIDDLE;
-                    } else {
-                        x = r.x + r.w / 2;
-                        y = dl_out ? r.y - 10 : r.y + 10;
-                        anchor = "middle";
-                        tb = dl_out ? TB_ALPHA : TB_HANG;
-                    }
-                    BBox t = dg_tbox(lab, fs, fs, x, y, false, anchor, tb);
-                    bb_add(&bb, t.x0, t.y0, t.x1, t.y1);
-                }
-            bi++;
-        }
+    for (size_t i = 0; i < ndl; i++) {
+        BBox t = dl_box(&dl[i]);
+        bb_add(&bb, t.x0, t.y0, t.x1, t.y1);
     }
     if (!buf_reserve(out, 4096 + vals.n * 200 + nc * 200)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 4, "xychart", CSS);
@@ -343,36 +328,7 @@ DIAG_FN(xychart_render) {
         }
         bi++;
     }
-    if (show_dl && nbar) {
-        bi = 0;
-        for (size_t s = 0; s < ser.n; s++) {
-            if (ser.v[s].line) continue;
-            double fs = dl_out ? DL_FS : 1e300;
-            if (!dl_out)
-                for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
-                    double v = vals.v[ser.v[s].v0 + k];
-                    if (overlap && v == 0) continue;
-                    R2 r = bar_geom(horiz, overlap, nbar, bi, band, base, VPOS(v), CPOS(k));
-                    if (!(r.w > 0) || !(r.h > 0)) continue;
-                    char b[48];
-                    fs = fmin(fs, fit_inside(horiz, r.w, r.h, (Str){.p = b, .n = fmt_num(v, sizeof b, b)}));
-                }
-            if (fs >= 1 && fs < 1e300)
-                for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
-                    double v = vals.v[ser.v[s].v0 + k];
-                    if (overlap && v == 0) continue;
-                    R2 r = bar_geom(horiz, overlap, nbar, bi, band, base, VPOS(v), CPOS(k));
-                    if (!(r.w > 0) || !(r.h > 0)) continue;
-                    char b[48];
-                    Str lab = {.p = b, .n = fmt_num(v, sizeof b, b)};
-                    if (horiz) data_label(out, lab, fs, dl_out ? r.x + r.w + 10 : r.x + r.w - 10, r.y + r.h / 2,
-                                          dl_out ? "start" : "end", TB_MIDDLE, dlfill);
-                    else data_label(out, lab, fs, r.x + r.w / 2, dl_out ? r.y - 10 : r.y + 10, "middle",
-                                    dl_out ? TB_ALPHA : TB_HANG, dlfill);
-                }
-            bi++;
-        }
-    }
+    for (size_t i = 0; i < ndl; i++) data_label(out, &dl[i], dlfill);
     for (size_t s = 0; s < ser.n; s++) {
         if (!ser.v[s].line) continue;
         const char *col = ser.v[s].col = dcfg_list("xyChart.plotColorPalette", s, LINEPAL[li++ % countof(LINEPAL)]);
