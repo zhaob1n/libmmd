@@ -91,6 +91,8 @@ Already fixed:
 - mindmap: compacted with a spring relaxation; section fills, bottom lines and labels (cScale, cScaleInv, cScaleLabel; root git0, gitBranchLabel0) take the theme in effect;
 - pie: declaration order and palette;
 - timeline: section fills, bottom lines and labels (cScale, cScaleInv, cScaleLabel) and the axis and event lines take the theme in effect;
+- ishikawa and venn: bones, boxes and labels take the theme in effect (`lineColor`, `mainBkg`, the venn text colours, set labels lightened on a dark background);
+- zenuml: drawn on white in its own colours under every theme, as mermaid's ZenUML plugin does;
 - sequence: participant `@{type}` shapes;
 - packet: title position;
 - requirement: label plates.
