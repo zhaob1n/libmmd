@@ -549,10 +549,11 @@ d6a0b254775dc986 tests/cases/seq_central.mmd
 af64380ec0563af0 tests/cases/seq_full.mmd
 c30d794f7e2c5580 tests/cases/seq_types.mmd
 047f87ad8e9ce83c tests/cases/shapes.mmd
-a29b2ee016493945 tests/cases/state_full.mmd
-d33abaab00b8530f tests/cases/state_nested_direction.mmd
-3580f49bf8d353a5 tests/cases/state_region_direction.mmd
+33833f39f95586bd tests/cases/state_full.mmd
+3b13d108f925492d tests/cases/state_nested_direction.mmd
+455e2c3cb99fef10 tests/cases/state_region_direction.mmd
 77ade1b41f0df0ad tests/cases/state_regions_dark.mmd
+f5998d1faec6cb6d tests/cases/state_reopen_regions.mmd
 af8d51fa5eca23bb tests/cases/state_stress_looplabels.mmd
 715f5012f0d8902c tests/cases/styles.mmd
 d5e4e73584499e6d tests/cases/subgraph_claim.mmd
