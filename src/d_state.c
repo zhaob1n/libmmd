@@ -314,7 +314,7 @@ static constexpr char CSS[] =
     "#mermaid .tr{fill:none;stroke:#333;stroke-width:1.3px;}"
     "#mermaid .lbl{fill:#e8e8e8;opacity:0.85;}"
     "#mermaid .note{fill:#fff5ad;stroke:#aaaa33;stroke-width:1px;}"
-    "#mermaid .note-l{stroke:#aaaa33;stroke-width:1px;stroke-dasharray:3,3;}";
+    "#mermaid .note-l{stroke:#333;stroke-width:1px;stroke-dasharray:5;}"; /* mermaid: .transition.note-edge */
 
 static void css_attr(Buf b[static 1], const StP p[static 1], Str cls) {
     for (size_t i = 0; i < p->cdefs.n; i++) {
