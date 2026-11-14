@@ -549,11 +549,11 @@ d6a0b254775dc986 tests/cases/seq_central.mmd
 af64380ec0563af0 tests/cases/seq_full.mmd
 c30d794f7e2c5580 tests/cases/seq_types.mmd
 047f87ad8e9ce83c tests/cases/shapes.mmd
-81c0ccc3dcabee00 tests/cases/state_full.mmd
-726253c43fa0f6cc tests/cases/state_nested_direction.mmd
-455e2c3cb99fef10 tests/cases/state_region_direction.mmd
-77ade1b41f0df0ad tests/cases/state_regions_dark.mmd
-f5998d1faec6cb6d tests/cases/state_reopen_regions.mmd
+3e9d02f93c025802 tests/cases/state_full.mmd
+832c822a25c6978a tests/cases/state_nested_direction.mmd
+bedc39477526ad88 tests/cases/state_region_direction.mmd
+4f11b847d06ae419 tests/cases/state_regions_dark.mmd
+08ca048db75d9402 tests/cases/state_reopen_regions.mmd
 af8d51fa5eca23bb tests/cases/state_stress_looplabels.mmd
 715f5012f0d8902c tests/cases/styles.mmd
 d5e4e73584499e6d tests/cases/subgraph_claim.mmd
@@ -574,7 +574,7 @@ fbd2f0182f209389 tests/cases/theme_dark_journey.mmd
 3b194c570303d690 tests/cases/theme_dark_pie.mmd
 2d125869f3f8275b tests/cases/theme_dark_quadrant.mmd
 b07b00847928b341 tests/cases/theme_dark_seq.mmd
-b40935f771984dac tests/cases/theme_dark_state.mmd
+e41a757650726e03 tests/cases/theme_dark_state.mmd
 0ed212e1b11f2d02 tests/cases/theme_dark_timeline.mmd
 9df4c036847ccd94 tests/cases/theme_dark_xychart.mmd
 afa12367c0904ff5 tests/cases/theme_dark_xychart_field.mmd

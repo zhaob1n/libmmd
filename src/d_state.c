@@ -525,7 +525,9 @@ static mmd_status add_composite(Ctx c[static 1], Scope s[static 1], int32_t r) {
     const Graph *g = &c->p->g;
     const Scope *rs = &c->sc[sc_ix(r)];
     bool region = g->sclass[r].n;
-    double pad = region ? R_PAD : C_PAD, w = rs->w + 2 * pad, h = rs->h + 2 * pad + (region ? 0 : C_TITLE);
+    /* mermaid's sub-graph margin and cluster padding put the content 37.5px below the outer top,
+     * where the 26px title sits, and 37.5px above the outer bottom, so the outer box centres it */
+    double pad = region ? R_PAD : C_PAD, w = rs->w + 2 * pad, h = rs->h + 2 * (region ? R_PAD : C_PAD + C_TITLE);
     if (!region) {
         double tw = text_width(g->stitle[r], c->fs) + 30;
         if (w < tw) w = tw;
@@ -635,7 +637,6 @@ static void translate(Graph lg[static 1], double dx, double dy) {
 
 static void place(Ctx c[static 1], int32_t cl, double ox, double oy, unsigned depth) {
     StP *p = c->p;
-    Graph *g = &p->g;
     Scope *s = &c->sc[sc_ix(cl)];
     if (depth > 200) return;
     Graph *lg = &s->lg;
@@ -655,8 +656,7 @@ static void place(Ctx c[static 1], int32_t cl, double ox, double oy, unsigned de
         double h = c->ch[r];
         c->cx[r] = x - c->cw[r] / 2, c->cy[r] = y - h / 2;
         const Scope *rs = &c->sc[sc_ix(r)];
-        double ix = x - rs->w / 2, iy = y - h / 2 + (g->sclass[r].n ? R_PAD : C_TITLE + C_PAD); /* centre content horizontally */
-        place(c, r, ix - rs->bx0, iy - rs->by0, depth + 1);
+        place(c, r, x - rs->w / 2 - rs->bx0, y - rs->h / 2 - rs->by0, depth + 1);
     }
 }
 
