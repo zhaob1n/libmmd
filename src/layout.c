@@ -2589,14 +2589,20 @@ static bool spline_hits(const SBox *SX, const SBox *SY /* nullable */, size_t n,
     for (size_t e = 0; e < g->ne; e++) {
         uint32_t np = g->eptn[e];
         if (np < 3 || np > 200 || !spline_hits(S, SY, nS, cand, sc, BW, np, g->pts.v + g->eptoff[e], g->efrom[e], g->eto[e])) continue;
+        const double *P = g->pts.v + g->eptoff[e];
+        int32_t a = g->efrom[e], b = g->eto[e];
+        uint8_t *pin = ANEW(A, uint8_t, np);
+        if (!pin) return false;
+        for (uint32_t i = 1; i + 1 < np; i++) /* only pin corners whose own span enters a node */
+            pin[i] = spline_hits(S, SY, nS, cand, sc, BW, 3, P + 2 * (i - 1), a, b);
         for (double d = 14; d >= 3.5; d /= 2) {
-            const double *P = g->pts.v + g->eptoff[e];
             double *Q = ANEW(A, double, 6 * (size_t)np);
             if (!Q) return false;
             size_t m = 0;
             Q[m++] = P[0], Q[m++] = P[1];
             for (uint32_t i = 1; i + 1 < np; i++) {
                 double x = P[2 * i], y = P[2 * i + 1];
+                if (!pin[i]) { Q[m++] = x, Q[m++] = y; continue; }
                 for (int sgn = -1; sgn <= 1; sgn += 2) {
                     uint32_t j = sgn < 0 ? i - 1 : i + 1;
                     double ox = P[2 * j] - x, oy = P[2 * j + 1] - y, l = hypot(ox, oy);
@@ -2607,8 +2613,13 @@ static bool spline_hits(const SBox *SX, const SBox *SY /* nullable */, size_t n,
             }
             Q[m++] = P[2 * np - 2], Q[m++] = P[2 * np - 1];
             uint32_t nq = (uint32_t)(m / 2);
-            bool ok = !spline_hits(S, SY, nS, cand, sc, BW, nq, Q, g->efrom[e], g->eto[e]);
-            if (!ok && d > 7) continue;
+            bool ok = !spline_hits(S, SY, nS, cand, sc, BW, nq, Q, a, b);
+            if (!ok) {
+                bool all = true;
+                for (uint32_t i = 1; i + 1 < np; i++) all &= pin[i], pin[i] = 1;
+                if (!all) { d *= 2; continue; } /* retry at this d with every corner pinned */
+                if (d > 7) continue;
+            }
             size_t base = g->pts.n;
             for (size_t i = 0; i < m; i++) if (!VEC_PUSH(A, &g->pts, Q[i])) return false;
             g->eptoff[e] = (uint32_t)base, g->eptn[e] = nq, changed = true;
@@ -2791,48 +2802,58 @@ static void labels_on_curve(Graph g[static 1]) {
         double y0 = g->sy[s] + 4, y1 = g->sy[s] + CLUSTER_TITLE + 8;
         double best = mid, bestd = INFINITY;
         /* crossing x-intervals; candidates: centred, then just beside each crossing */
-        double cand[64];
-        double iv[2 * 64];
-        int8_t sidebuf[256];
+        double cand[512];
+        double iv[2 * 256];
         size_t ni = 0, nc = 0;
-        cand[nc++] = mid;
-        for (size_t e = 0; e < E && ni < 64; e++) {
+        cand[nc++] = mid, cand[nc++] = lo, cand[nc++] = hi;
+        for (size_t e = 0; e < E && ni < 256; e++) {
             /* test the polyline and its curveBasis rendering (which cuts corners): 8 samples per span */
-            uint32_t np = g->eptn[e], ns = np > 2 ? 8 * (np - 1) + 1 : 0;
+            uint32_t np = g->eptn[e];
+            bool basis = g->curve == CURVE_BASIS && np > 2;
             /* the polyline and its spline lie inside the points' hull: skip edges clear of the band */
             if (eb[4 * e + 3] < y0 || eb[4 * e + 2] > y1 || eb[4 * e + 1] + 3 < g->sx[s] || eb[4 * e] - 3 > g->sx[s] + g->sw[s]) continue;
-            int8_t *side = nullptr; /* per span: -1 / +1 when its Bezier hull lies above / below the band */
-            if (ns && np - 1 <= countof(sidebuf)) {
+            uint32_t sp = 8;
+            if (basis) { /* long horizontal spans: 8 samples can jump right across a 28px title band */
+                double len = dmax(eb[4 * e + 1] - eb[4 * e], eb[4 * e + 3] - eb[4 * e + 2]);
+                if (len > 400) sp = (uint32_t)fmin(len / 40, 64);
+            }
+            /* dg_basis renders np-1 cubic spans (k = 0..np-2 over P[max(k-1,0)..min(k+2,np-1)]) plus
+             * straight stubs of 1/6 of the first and last segments */
+            const double *Q = g->pts.v + g->eptoff[e];
+            uint32_t nsp = basis ? np - 1 : 0, total = basis ? sp * nsp + 2 : np > 1 ? np - 1 : 0;
+            int8_t sidebuf[256], *side = nullptr;
+            if (basis && nsp <= countof(sidebuf)) {
                 side = sidebuf;
-                const double *Q = g->pts.v + g->eptoff[e];
-                for (uint32_t k = 0; k + 1 < np; k++) {
-                    double a = Q[2 * (k ? k - 1 : 0) + 1], b = Q[2 * k + 1], c = Q[2 * k + 3], d = Q[2 * (k + 2 < np ? k + 2 : np - 1) + 1];
+                for (uint32_t k = 0; k < nsp; k++) {
+                    uint32_t i0 = k ? k - 1 : 0, i3 = k + 2 < np ? k + 2 : np - 1;
+                    double a = Q[2 * i0 + 1], b = Q[2 * k + 1], c = Q[2 * (k + 1) + 1], d = Q[2 * i3 + 1];
                     double b0 = (a + 4 * b + c) / 6, b1 = (2 * b + c) / 3, b2 = (b + 2 * c) / 3, b3 = (b + 4 * c + d) / 6;
                     double lo_ = dmin(dmin(b0, b1), dmin(b2, b3)) - 1e-6, hi_ = dmax(dmax(b0, b1), dmax(b2, b3)) + 1e-6;
                     side[k] = hi_ < y0 ? -1 : lo_ > y1 ? 1 : 0;
                 }
             }
-            for (uint32_t i = 0; i + 1 < np + ns && ni < 64; i++) {
+            for (uint32_t i = 0; i < total && ni < 256; i++) {
                 double Pb[4];
                 const double *P = Pb;
-                if (i + 1 < np) P = g->pts.v + g->eptoff[e] + 2 * i;
-                else if (i == np - 1) continue;
-                else {
-                    const double *Q = g->pts.v + g->eptoff[e];
-                    if (side) { /* both ends in spans wholly on one side of the band: the y test below rejects it */
-                        uint32_t k0 = (i - np) / 8, k1 = (i - np + 1) / 8;
-                        if (k0 > np - 2) k0 = np - 2;
-                        if (k1 > np - 2) k1 = np - 2;
-                        if (side[k0] && side[k0] == side[k1]) continue;
+                if (!basis) P = Q + 2 * i;
+                else if (i >= sp * nsp) {
+                    uint32_t last = np - 1;
+                    if (i == sp * nsp) {
+                        Pb[0] = Q[0], Pb[1] = Q[1];
+                        Pb[2] = (5 * Q[0] + Q[2]) / 6, Pb[3] = (5 * Q[1] + Q[3]) / 6;
+                    } else {
+                        Pb[0] = (Q[2 * (last - 1)] + 5 * Q[2 * last]) / 6;
+                        Pb[1] = (Q[2 * (last - 1) + 1] + 5 * Q[2 * last + 1]) / 6;
+                        Pb[2] = Q[2 * last], Pb[3] = Q[2 * last + 1];
                     }
+                } else {
+                    uint32_t k = i / sp;
+                    if (side && side[k]) { i = (k + 1) * sp - 1; continue; }
+                    uint32_t i0 = k ? k - 1 : 0, i3 = k + 2 < np ? k + 2 : np - 1;
+                    const double *a = Q + 2 * i0, *b = Q + 2 * k, *c = Q + 2 * (k + 1), *d = Q + 2 * i3;
                     for (uint32_t h = 0; h < 2; h++) {
-                        double u = (double)(i - np + h) / 8; /* 0..np-1 */
-                        uint32_t k = (uint32_t)u;
-                        if (k > np - 2) k = np - 2;
-                        double t = u - k;
-                        int32_t k0 = (int32_t)k - 1, k3 = (int32_t)k + 2;
-                        const double *a = Q + 2 * (k0 < 0 ? 0 : k0), *b = Q + 2 * k, *c = Q + 2 * (k + 1), *d = Q + 2 * (k3 > (int32_t)np - 1 ? np - 1 : (uint32_t)k3);
-                        double w0 = (1 - t) * (1 - t) * (1 - t) / 6, w1 = (3 * t * t * t - 6 * t * t + 4) / 6;
+                        double t = (double)(i - k * sp + h) / sp, u = 1 - t;
+                        double w0 = u * u * u / 6, w1 = (3 * t * t * t - 6 * t * t + 4) / 6;
                         double w2 = (-3 * t * t * t + 3 * t * t + 3 * t + 1) / 6, w3 = t * t * t / 6;
                         Pb[2 * h] = w0 * a[0] + w1 * b[0] + w2 * c[0] + w3 * d[0];
                         Pb[2 * h + 1] = w0 * a[1] + w1 * b[1] + w2 * c[1] + w3 * d[1];

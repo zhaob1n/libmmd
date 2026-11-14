@@ -5,6 +5,7 @@ usage: tools/quality_scan.py [files...]   (default: tests/docs, tests/cases, ben
 env BIN=path/to/mmd"""
 import sys,subprocess,os,json,tempfile,html,re,glob
 ROOT=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0,os.path.join(ROOT,'tools')); import env
 BIN=os.environ.get('BIN',os.path.join(ROOT,'build/mmd'))
 files=[x for x in sys.argv[1:] if x!='-a'] or sorted(glob.glob(os.path.join(ROOT,'tests/docs/**/*.mmd'),recursive=True)+glob.glob(os.path.join(ROOT,'tests/cases/*.mmd'))+glob.glob(os.path.join(ROOT,'bench/mmdr_fixtures/*.mmd')))
 js=open(os.path.join(ROOT,'tools/quality_scan.js')).read()
@@ -23,7 +24,7 @@ for i in range(0,len(files),40):
     T=tempfile.mkdtemp(prefix='mmd-scan-')
     p=os.path.join(T,'p.html')
     open(p,'w').write('<html><body style="margin:0">'+''.join(parts)+'<pre id="out"></pre><script>'+js+'</script></body></html>')
-    r=subprocess.run(['google-chrome','--headless','--no-sandbox','--disable-gpu','--virtual-time-budget=5000','--dump-dom','file://'+p],capture_output=True,env=dict(os.environ,TMPDIR=T),timeout=300)
+    r=subprocess.run([env.chrome(),'--headless','--no-sandbox','--disable-gpu','--virtual-time-budget=5000','--dump-dom','file://'+p],capture_output=True,env=dict(os.environ,TMPDIR=T),timeout=300)
     m=re.search(r'<pre id="out">(.*?)</pre>',r.stdout.decode(),re.S)
     subprocess.run(['rm','-rf',T])
     if m and m.group(1): allr+=json.loads(html.unescape(m.group(1)))
