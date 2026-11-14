@@ -111,6 +111,7 @@ test: all $(BUILD)/test-shared $(BUILD)/test-locale $(BUILD)/test-writer $(BUILD
 	$(BUILD)/test-mtheme tests/mtheme_cases.tsv
 	$(BUILD)/test-oom tests/cases/*.mmd tests/docs/*/*.mmd
 	python3 tools/docs_audit.py -q -v $(BUILD)/mmd
+	python3 tools/css_audit.py $(BUILD)/mmd
 
 # both compilers must stay warning-free: make both [CLANG=clang-23] [GCC=gcc-16]
 CLANG ?= clang

@@ -230,11 +230,12 @@ More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 
 | what | how |
 |---|---|
-| Golden + sanity tests (156 cases; XML well-formedness, error positions, viewBox bounds, mermaid docs corpus) | `make test` (`UPDATE_GOLDEN=1 make test` to refresh) |
+| Golden + sanity tests (200 cases; XML well-formedness, error positions, viewBox bounds, mermaid docs corpus) | `make test` (`UPDATE_GOLDEN=1 make test` to refresh) |
 | Locale independence: the corpus rendered under a comma-decimal locale must match the C locale byte for byte (skipped when none is installed) | `make test` |
 | Writer round trip: random labels through 102 slots of every diagram type, every typed helper (keyword-like ids included), number round trip, error paths | `make test` (`build/test-writer [iterations]`) |
 | Writer vs mermaid.js: the writer test's corpus (~400 diagrams per seed) must parse in mermaid and show every label (skips without mermaid-cli) | `python3 tools/writer_mmdc_check.py [-v] [--seeds=N]` |
 | Mermaid docs corpus: 432 examples from mermaid's syntax docs, 432/432 (all of them render in mermaid too) | `python3 tools/docs_audit.py [-v]` |
+| CSS audit: every class selector a renderer's `<style>` or the `themeVariables` table can write must match an element in some output of its diagram type (a rule that matches nothing is dead weight, or a theme variable with no effect) | `make test` (`python3 tools/css_audit.py`) |
 | ASan + UBSan build | `make asan` → `build-asan/mmd` |
 | Fuzzing (mutational, under ASan or MSan; crashing inputs are saved under `TMPDIR` and printed) | `python3 tests/fuzz.py build-asan/mmd 1000 [seed]` |
 | Uninitialised arena reads (malloc poisoned with two fill bytes, output compared; needs `make` and `make asan` first) | `sh tests/poison.sh` |
