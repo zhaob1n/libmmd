@@ -19,9 +19,9 @@ def ref(src):
         subprocess.run([*env.mmdc(), '-c', cfg, '-i', src, '-o', out], capture_output=True, timeout=120)
     return out if os.path.exists(out) else None
 
-def label(e):
-    t = ' '.join(s.strip() for s in e.itertext() if s.strip())
-    return t.split(' ')[0] if t else ''
+def text(e): return ' '.join(s.strip() for s in e.itertext() if s.strip())
+
+def put(d, k, p): d[k] = None if k in d else p
 
 def mermaid_pos(path):
     d = {}
@@ -32,26 +32,33 @@ def mermaid_pos(path):
         if e.tag == NS + 'g' and 'node' in cl:
             m = re.match(r'my-svg-state-(.+)-\d+$', e.get('id', ''))
             if m and not re.search(r'_(start|end)$', m.group(1)):
-                d[('NOTE:' + ' '.join(e.itertext()).split()[0]) if 'statediagram-note' in cl else label(e) or m.group(1)] = (ox, oy)
+                if 'statediagram-note' in cl: put(d, 'NOTE:' + text(e), (ox, oy))
+                else:
+                    ps = [text(p) for p in e.findall('.//{http://www.w3.org/1999/xhtml}p') if text(p)]
+                    put(d, ps[0] if ps else text(e) or m.group(1), (ox, oy))
             return
         if e.tag == NS + 'g' and 'statediagram-cluster' in cl and 'statediagram-cluster-alt' not in cl and e.get('data-id'):
-            r = e.find(NS + 'rect')
+            r = e.find('.//' + NS + 'rect[@class="outer"]')
+            if r is None: r = e.find(NS + 'rect')
+            t = e.find(NS + 'g[@class="cluster-label"]')
             if r is not None:
-                d['C:' + e.get('data-id')] = (ox + float(r.get('x')) + float(r.get('width')) / 2, oy + float(r.get('y')) + float(r.get('height')) / 2)
+                put(d, 'C:' + (text(t) if t is not None else e.get('data-id')),
+                    (ox + float(r.get('x')) + float(r.get('width')) / 2, oy + float(r.get('y')) + float(r.get('height')) / 2))
         for c in e: walk(c, ox, oy)
     walk(ET.parse(path).getroot(), 0, 0)
-    return d
+    return {k: v for k, v in d.items() if v}
 
 def our_pos(svg):
     d, num = {}, r'([-\d.]+)'
-    for m in re.finditer(rf'<rect class="(st|note)" x="{num}" y="{num}" width="{num}" height="{num}"[^>]*/>(?:<text[^>]*>(.*?)</text>)?', svg):
+    for m in re.finditer(rf'<rect class="(st|note)" x="{num}" y="{num}" width="{num}" height="{num}"[^>]*/>((?:<text[^>]*>.*?</text>)+)', svg):
         x, y, w, h = map(float, m.group(2, 3, 4, 5))
-        t = re.sub(r'<[^>]+>', ' ', m.group(6) or '').split()
-        d[('NOTE:' if m.group(1) == 'note' else '') + (t[0] if t else '')] = (x + w / 2, y + h / 2)
+        ts = [' '.join(re.sub(r'<[^>]+>', ' ', t).split()) for t in re.findall(r'<text[^>]*>(.*?)</text>', m.group(6))]
+        t = ' '.join(s for s in ts if s) if m.group(1) == 'note' else next((s for s in ts if s), '')
+        if t: put(d, ('NOTE:' if m.group(1) == 'note' else '') + t, (x + w / 2, y + h / 2))
     for m in re.finditer(rf'<rect class="comp" x="{num}" y="{num}" width="{num}" height="{num}"[^>]*/><path class="comp-t"[^>]*/><text[^>]*>([^<]*)', svg):
         x, y, w, h = map(float, m.group(1, 2, 3, 4))
-        d['C:' + m.group(5)] = (x + w / 2, y + h / 2)
-    return d
+        put(d, 'C:' + m.group(5).strip(), (x + w / 2, y + h / 2))
+    return {k: v for k, v in d.items() if v}
 
 with cf.ThreadPoolExecutor(6) as ex: refs = list(ex.map(ref, files))
 sg = lambda a, b: (a > b + 1) - (a < b - 1)
