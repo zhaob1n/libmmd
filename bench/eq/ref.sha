@@ -586,6 +586,7 @@ ad8c63433a3f1c25 tests/cases/theme_neutral_er.mmd
 0470a36528b81524 tests/cases/theme_neutral_req.mmd
 3563464936d975d8 tests/cases/theme_neutral_seq.mmd
 3462f41f4d320ca8 tests/cases/theme_neutral_xychart.mmd
+a3f25d6cb675b417 tests/cases/theme_packet_sizes.mmd
 492a9345b229032d tests/cases/theme_vars_derived.mmd
 5f55d292f813520c tests/cases/theme_vars_given.mmd
 cd8b44d8f06fe555 tests/cases/timeline_full.mmd
