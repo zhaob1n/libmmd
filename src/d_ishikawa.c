@@ -14,10 +14,16 @@ typedef struct INode { Str text; int32_t par; uint32_t c0, nc; } INode;
 typedef struct IEnt { Str text; uint32_t depth, cc; int32_t pid; } IEnt;
 typedef struct Bone { double x0, y0, x1, y1; uint32_t cc, drawn; } Bone;
 
-static constexpr char CSS[] =
-    "#mermaid .isp{stroke:#333333;stroke-width:2;fill:none;}#mermaid .isb{stroke:#333333;stroke-width:1;fill:none;}"
-    "#mermaid .iar{fill:#333333;}#mermaid .ihd,#mermaid .ilb{fill:#ECECFF;stroke:#333333;stroke-width:2;}"
-    "#mermaid .iht{font-weight:600;font-size:14px;}";
+/* mermaid's ishikawaStyles: bones and arrowheads in lineColor, head and label boxes mainBkg */
+static void ish_css(Buf b[static 1]) {
+    Str ln = dcfg_theme_var("lineColor"), bg = dcfg_theme_var("mainBkg");
+    if (!ln.n) ln = S("#333333");
+    if (!bg.n) bg = S("#ECECFF");
+    buf_lit(b, "#mermaid .isp{stroke:"); buf_str(b, ln); buf_lit(b, ";stroke-width:2;fill:none;}#mermaid .isb{stroke:");
+    buf_str(b, ln); buf_lit(b, ";stroke-width:1;fill:none;}#mermaid .iar{fill:"); buf_str(b, ln);
+    buf_lit(b, ";}#mermaid .ihd,#mermaid .ilb{fill:"); buf_str(b, bg); buf_lit(b, ";stroke:"); buf_str(b, ln);
+    buf_lit(b, ";stroke-width:2;}#mermaid .iht{font-weight:600;font-size:14px;}");
+}
 
 static constexpr double SPINE = 250;
 static constexpr double STUB = 30;
@@ -199,5 +205,8 @@ DIAG_FN(ishikawa_render) {
     buf_num(&body, sy); buf_lit(&body, " 0 "); buf_num(&body, sy - hh / 2); buf_lit(&body, " Z\"/>");
     bb_add(&s.bb, 0, sy - hh / 2, hw * 2.4, sy + hh / 2);
     dg_tspans(&body, nullptr, hl, 14, s.lh, hw / 2 + 3, sy, true, "middle", TB_MIDDLE, "iht");
-    return DG_FINISH(out, &body, s.bb, 20, "ishikawa", CSS);
+    AUTO_BUF Buf css = {};
+    ish_css(&css);
+    if (css.oom) return MMD_ERR_NOMEM;
+    return dg_finish(out, &body, s.bb, 20, "ishikawa", css.n, css.p);
 }

@@ -9,6 +9,7 @@
 
 #include "dgraph.h"
 #include "dcfg.h"
+#include "mcolor.h"
 #include "diagrams.h"
 #include "text.h"
 
@@ -19,9 +20,14 @@ typedef struct VStyle { Str fill, fop, stroke, sw, color; } VStyle;
 typedef struct VSty { Str key; unsigned mask; VStyle s; } VSty;
 
 static constexpr char PAL[8][8] = {"#5353ff", "#ffff45", "#b5ff20", "#ff53ff", "#53ffff", "#45ff45", "#ff5353", "#45ffff"};
-static constexpr char PALT[8][8] = {"#0000b9", "#abab00", "#598600", "#b900b9", "#00b9b9", "#00ab00", "#b90000", "#00abab"};
 
-static constexpr char CSS[] = "#mermaid .vt{fill:#333;}#mermaid .vl{fill:#333;}#mermaid .vn{fill:#333;}";
+/* mermaid's venn styles: title vennTitleTextColor, intersection labels and text nodes vennSetTextColor */
+static void venn_css(Buf b[static 1]) {
+    Str tt = dcfg_theme_var("vennTitleTextColor"), st = dcfg_theme_var("vennSetTextColor");
+    if (!tt.n) tt = S("#333");
+    if (!st.n) st = S("#333");
+    buf_lit(b, "#mermaid .vt{fill:"); buf_str(b, tt); buf_lit(b, ";}#mermaid .vl,#mermaid .vn{fill:"); buf_str(b, st); buf_lit(b, ";}");
+}
 
 
 static double lens(double r1, double r2, double d) { /* area of intersection of two circles */
@@ -66,42 +72,6 @@ static bool safe_val(Str v) {
         if (!(c == '#' || c == '.' || c == ',' || c == '(' || c == ')' || c == '%' || c == ' ' || c == '-' ||
               (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) return false;
     }
-    return true;
-}
-
-/* darken a #rgb/#rrggbb colour by 30 lightness points (khroma darken), else nullptr */
-[[nodiscard]] static bool darken30(Str c, char out[static 8]) {
-    unsigned v[3];
-    if (c.n == 7 && c.p[0] == '#') {
-        for (int i = 0; i < 3; i++) {
-            char h[3] = {c.p[1 + 2 * i], c.p[2 + 2 * i], 0};
-            char *e;
-            v[i] = (unsigned)strtoul(h, &e, 16);
-            if (*e) return false;
-        }
-    } else if (c.n == 4 && c.p[0] == '#') {
-        for (int i = 0; i < 3; i++) {
-            char h[2] = {c.p[1 + i], 0};
-            char *e;
-            v[i] = (unsigned)strtoul(h, &e, 16) * 17;
-            if (*e) return false;
-        }
-    } else return false;
-    double r = v[0] / 255.0, g = v[1] / 255.0, bl = v[2] / 255.0, mx = fmax(r, fmax(g, bl)), mn = fmin(r, fmin(g, bl));
-    double l = (mx + mn) / 2, s = 0, h = 0, d = mx - mn;
-    if (d > 0) {
-        s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
-        h = mx == r ? fmod((g - bl) / d + 6, 6) : mx == g ? (bl - r) / d + 2 : (r - g) / d + 4;
-        h /= 6;
-    }
-    l = fmax(0, l - 0.3);
-    double q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q, o[3];
-    for (int i = 0; i < 3; i++) {
-        double t = h + (1 - i) / 3.0;
-        t -= floor(t);
-        o[i] = t < 1 / 6.0 ? p + (q - p) * 6 * t : t < 0.5 ? q : t < 2 / 3.0 ? p + (q - p) * (2 / 3.0 - t) * 6 : p;
-    }
-    snprintf(out, 8, "#%02x%02x%02x", (unsigned)lround(o[0] * 255), (unsigned)lround(o[1] * 255), (unsigned)lround(o[2] * 255));
     return true;
 }
 
@@ -345,7 +315,13 @@ DIAG_FN(venn_render) {
         }
         if (pass && !again) break;
     }
+    AUTO_BUF Buf css = {};
+    venn_css(&css);
+    if (css.oom) return MMD_ERR_NOMEM;
     Buf b = {};
+    /* vennRenderer: a set's label is its colour lightened 30 on a dark background, darkened 30 otherwise */
+    bool dark;
+    if (!mc_is_dark(dcfg_theme_var("background"), &dark)) dark = false;
     BBox bb = {0, 0, W, H};
     if (title.n) {
         buf_lit(&b, "<text class=\"vt\" font-size=\"32px\" text-anchor=\"middle\" dominant-baseline=\"middle\" x=\"");
@@ -362,14 +338,10 @@ DIAG_FN(venn_render) {
             for (size_t s = 0; s < st.n; s++) if (st.v[s].mask == m) cs = &st.v[s].s;
             int si = __builtin_ctz(m);
             size_t ci = single ? (size_t)si : 0;
-            char tcol[8];
             const char *pal = dcfg_pal("venn", ci % 8 + 1, PAL[ci % 8]);
             Str base = cs->fill.n ? cs->fill : (Str){.p = pal, .n = strlen(pal)};
             Str txt = cs->color;
-            if (!txt.n && single) {
-                if (!cs->fill.n && !strcmp(pal, PAL[ci % 8])) txt = (Str){.p = PALT[ci % 8], .n = 7};
-                else if (darken30(base, tcol)) txt = (Str){.p = tcol, .n = 7};
-            }
+            if (!txt.n && single && !(dark ? mc_lighten : mc_darken)(a, base, 30, &txt)) txt = (Str){};
             buf_lit(&b, "<g class=\"venn-area "); if (single) buf_lit(&b, "venn-circle\">"); else buf_lit(&b, "venn-intersection\">");
             if (single) {
                 buf_lit(&b, "<circle cx=\""); buf_num(&b, X[si]); buf_lit(&b, "\" cy=\""); buf_num(&b, Y[si]); buf_lit(&b, "\" r=\""); buf_num(&b, R[si]);
@@ -461,5 +433,5 @@ DIAG_FN(venn_render) {
         }
         buf_lit(&b, "</g>");
     }
-    return DG_FINISH(out, &b, bb, 0, "venn", CSS);
+    return dg_finish(out, &b, bb, 0, "venn", css.n, css.p);
 }
