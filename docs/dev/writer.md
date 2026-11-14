@@ -1,7 +1,7 @@
 # mmd_writer: escape contexts and the per-diagram audit
 
-`include/mmd.h` (writer section), `src/writer.c`. Tested by `tests/writer_test.c` (`make test`),
-checked against mermaid.js by `tools/writer_mmdc_check.py`; timed by `bench/writer_bench.c`
+`include/mmd.h` (writer section), `src/writer.c`. Tested by `tests/writer.c` (`make test`),
+checked against mermaid.js by `build/writer_check`; timed by `bench/writer.c`
 (`make build/bench-writer`).
 mermaid.js is the reference: where libmmd and mermaid disagree on what a text means, mermaid wins.
 
@@ -44,7 +44,7 @@ mermaid.js is the reference: where libmmd and mermaid disagree on what a text me
   back exactly, never with an exponent (mermaid's number tokens have none). The digits come from
   `num_shortest()` in base.c, which the charts' `fmt_js()` shares: 1e-4 ≤ |v| < 2^53 uses exact
   128-bit interval arithmetic (~50 ns); other magnitudes a `%.*e` search (rare, ~1 µs).
-  `tests/writer_test.c` checks round trip, minimality and nearest digits on 10⁴ values of every
+  `tests/writer.c` checks round trip, minimality and nearest digits on 10⁴ values of every
   magnitude.
 
 ## Escapes
@@ -105,7 +105,7 @@ grammar has no comments).
 
 Q = `mmd_w_str`, T = `mmd_w_text`, I = `mmd_w_id`, C = `mmd_w_csv`; **br** = draws `<br>` (in
 mermaid); **ls** = starts a statement (`MMD_W_LINESTART`).
-Every listed slot is in `tests/writer_test.c` and survives random labels built from all of the
+Every listed slot is in `tests/writer.c` and survives random labels built from all of the
 above (CJK, emoji, `#quot;`, `%%`, `-->`, `fa:fa-car`, newlines...).
 
 | type | Q | T | I | notes |
@@ -162,10 +162,10 @@ above (CJK, emoji, `#quot;`, `%%`, `-->`, `fa:fa-car`, newlines...).
 
 ## Cross-check against mermaid.js
 
-`tools/writer_mmdc_check.py [-v] [--seeds=N]` runs `build/test-writer --dump DIR [SEED]` (the round
-trip and typed-helper corpus, ~400 diagrams), renders them with `env.mermaid_render()` (the mermaid,
+`build/writer_check [-v] [--seeds=N]` runs `build/test-writer --dump DIR [SEED]` (the round
+trip and typed-helper corpus, ~400 diagrams), renders them with `qa_mermaid()` (the mermaid,
 zenuml plugin and page mermaid-cli ships, in one browser: ~5 s per corpus instead of ~1 s per file
-through `mmdc`; `docs_audit.py --mmdc` uses it too) and checks that each parses and its SVG text holds
+through `mmdc`; `build/docs status` uses it too) and checks that each parses and its SVG text holds
 every label. mermaid-cli comes from `MMDC`, `MMDC_PUPPETEER` is the puppeteer config
 (`{"args": ["--no-sandbox"]}` as root), the browser from `CHROME`; without mermaid-cli the check
 prints a skip and exits 0. Last run: mermaid-cli 12.0.0, 25 seeds (10430 diagrams): one failure,
