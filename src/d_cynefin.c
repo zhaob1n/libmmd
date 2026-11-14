@@ -18,22 +18,31 @@ static constexpr char CAP[ND][12] = {"Complex", "Complicated", "Chaotic", "Clear
 static constexpr char MODEL[ND][33] = {"Probe \u2192 Sense \u2192 Respond", "Sense \u2192 Analyse \u2192 Respond",
                                       "Act \u2192 Sense \u2192 Respond", "Sense \u2192 Categorise \u2192 Respond", ""};
 static constexpr char PRACT[ND][19] = {"Emergent Practices", "Good Practices", "Novel Practices", "Best Practices", "Disorder"};
-static constexpr char BG[ND][8] = {"#E8F5E9", "#E3F2FD", "#FBE9E7", "#FFF8E1", "#F3E5F5"};
-static constexpr char BGKEY[ND][40] = {"themeVariables.cynefin.complexBg", "themeVariables.cynefin.complicatedBg",
-                                       "themeVariables.cynefin.chaoticBg", "themeVariables.cynefin.clearBg",
-                                       "themeVariables.cynefin.confusionBg"};
+/* themeVariables cynefin.<field>: the domain fills in domain order, then the colours CSS names $5..$9 */
+enum { C_LABEL = ND, C_TEXT, C_BOUND, C_CLIFF, C_ARROW, NC };
+static constexpr char CVAR[NC][22] = {"cynefin.complexBg", "cynefin.complicatedBg", "cynefin.chaoticBg", "cynefin.clearBg",
+                                      "cynefin.confusionBg", "cynefin.labelColor", "cynefin.textColor",
+                                      "cynefin.boundaryColor", "cynefin.cliffColor", "cynefin.arrowColor"};
 
 typedef struct CItem { unsigned dom; Str label; } CItem;
 typedef struct CTr { unsigned a, b; Str label; } CTr;
 
 static constexpr char CSS[] =
-    "#mermaid .cdl{font-size:16px;font-weight:bold;fill:#131300;}#mermaid .csub{font-size:11px;fill:#333;font-style:italic;}"
-    "#mermaid .cit{fill-opacity:0.95;stroke:#333333;stroke-width:1;}#mermaid .citt{font-size:12px;fill:#333;}"
-    "#mermaid .cio{fill-opacity:0.6;stroke:#333333;stroke-width:1;stroke-dasharray:3 2;}"
-    "#mermaid .cbd{fill:none;stroke:#333333;stroke-width:2;stroke-dasharray:6 3;}#mermaid .ccl{fill:none;stroke:#8B0000;stroke-width:4;}"
-    "#mermaid .ccf{stroke:#333333;stroke-width:1.5;stroke-dasharray:4 2;}#mermaid .car{stroke:#333333;stroke-width:2;fill:none;}"
-    "#mermaid .cah{fill:#333333;stroke:none;}#mermaid .cal{font-size:11px;fill:#333;}"
-    "#mermaid .cttl{font-size:18px;font-weight:bold;fill:#131300;}";
+    "#mermaid .cdl{font-size:16px;font-weight:bold;fill:$5;}#mermaid .csub{font-size:11px;fill:$6;font-style:italic;}"
+    "#mermaid .cit{fill-opacity:0.95;stroke:$7;stroke-width:1;}#mermaid .citt{font-size:12px;fill:$6;}"
+    "#mermaid .cio{fill-opacity:0.6;stroke:$7;stroke-width:1;stroke-dasharray:3 2;}"
+    "#mermaid .cbd{fill:none;stroke:$7;stroke-width:2;stroke-dasharray:6 3;}#mermaid .ccl{fill:none;stroke:$8;stroke-width:4;}"
+    "#mermaid .ccf{stroke:$7;stroke-width:1.5;stroke-dasharray:4 2;}#mermaid .car{stroke:$9;stroke-width:2;fill:none;}"
+    "#mermaid .cah{fill:$9;stroke:none;}#mermaid .cal{font-size:11px;fill:$6;}"
+    "#mermaid .cttl{font-size:18px;font-weight:bold;fill:$5;}";
+
+/* the theme in effect's colour; that theme's own where the source's is none khroma reads */
+static Str theme_col(const char var[static 1]) {
+    Str v = dcfg_theme_var(var);
+    bool dark;
+    if (v.n && mc_is_dark(v, &dark)) return v;
+    return dcfg_preset_var(var);
+}
 
 static double rnd(int64_t seed) { /* mermaid seededRandom (mulberry32 step) */
     uint32_t t = (uint32_t)seed + 0x6d2b79f5u;
@@ -120,17 +129,8 @@ DIAG_FN(cynefin_render) {
     double amp = fmin(fmax(dcfg_num("cynefin.boundaryAmplitude", 8), 0), 200);
     double cfg_seed = dcfg_num("cynefin.seed", 0);
     int64_t seed = cfg_seed != 0 && isfinite(cfg_seed) && fabs(cfg_seed) < 1e15 ? (int64_t)cfg_seed : hash_id("my-svg");
-    const char *bg[ND];
-    for (int d = 0; d < ND; d++) {
-        Str v = dcfg_get(BGKEY[d]);
-        bg[d] = BG[d];
-        bool dark;
-        if (v.n && mc_is_dark(v, &dark)) {
-            char *c = arena_alloc(a, v.n + 1, 1);
-            if (!c) return MMD_ERR_NOMEM;
-            memcpy(c, v.p, v.n), c[v.n] = 0, bg[d] = c;
-        }
-    }
+    Str col[NC];
+    for (int c = 0; c < NC; c++) col[c] = theme_col(CVAR[c]);
     double hw = W / 2, hh = H / 2;
     const double L[ND][4] = {{hw / 2, hh / 2, 0, 0}, {hw + hw / 2, hh / 2, hw, 0}, {hw / 2, hh + hh / 2, 0, hh},
                              {hw + hw / 2, hh + hh / 2, hw, hh}, {hw, hh, 0, 0}};
@@ -141,7 +141,7 @@ DIAG_FN(cynefin_render) {
     for (int d = 0; d < CF; d++) {
         buf_lit(&b, "<rect x=\""); buf_num(&b, L[d][2]); buf_lit(&b, "\" y=\""); buf_num(&b, L[d][3]);
         buf_lit(&b, "\" width=\""); buf_num(&b, hw); buf_lit(&b, "\" height=\""); buf_num(&b, hh);
-        buf_lit(&b, "\" fill=\""); buf_cstr(&b, bg[d]); buf_lit(&b, "\" fill-opacity=\"0.4\" stroke=\"none\"/>");
+        buf_lit(&b, "\" fill=\""); buf_str(&b, col[d]); buf_lit(&b, "\" fill-opacity=\"0.4\" stroke=\"none\"/>");
     }
     wavy(&b, W, H, seed, amp, true);
     wavy(&b, W, H, seed + 100, amp, false);
@@ -154,7 +154,7 @@ DIAG_FN(cynefin_render) {
     double rx = W * 0.15, ry = H * 0.15;
     buf_lit(&b, "<path class=\"ccf\" d=\"M"); buf_pt(&b, cx - rx, hh); buf_lit(&b, " A"); buf_pt(&b, rx, ry);
     buf_lit(&b, " 0 1,1 "); buf_pt(&b, cx + rx, hh); buf_lit(&b, " A"); buf_pt(&b, rx, ry); buf_lit(&b, " 0 1,1 ");
-    buf_pt(&b, cx - rx, hh); buf_lit(&b, " Z\" fill=\""); buf_cstr(&b, bg[CF]); buf_lit(&b, "\" fill-opacity=\"0.5\"/>");
+    buf_pt(&b, cx - rx, hh); buf_lit(&b, " Z\" fill=\""); buf_str(&b, col[CF]); buf_lit(&b, "\" fill-opacity=\"0.5\"/>");
     for (int d = 0; d < CF; d++) text(&b, CAP[d], L[d][0], desc ? L[d][1] - 30 : L[d][1], "cdl", "middle");
     text(&b, CAP[CF], W / 2, desc ? H / 2 - 10 : H / 2, "cdl", "middle");
     if (desc) {
@@ -177,7 +177,7 @@ DIAG_FN(cynefin_render) {
             buf_lit(&b, "<rect class=\""); if (over) buf_lit(&b, "cio"); else buf_lit(&b, "cit");
             buf_lit(&b, "\" x=\""); buf_num(&b, x); buf_lit(&b, "\" y=\""); buf_num(&b, y);
             buf_lit(&b, "\" width=\""); buf_num(&b, bw); buf_lit(&b, "\" height=\"26\" rx=\"4\" ry=\"4\" fill=\"");
-            buf_cstr(&b, bg[d]); buf_lit(&b, "\"/>");
+            buf_str(&b, col[d]); buf_lit(&b, "\"/>");
             dg_text(&b, lab, 12, x + bw / 2, y + 13, "middle", "citt");
             shown++;
         }
@@ -199,5 +199,10 @@ DIAG_FN(cynefin_render) {
         buf_lit(&b, "\" text-anchor=\"middle\" dominant-baseline=\"middle\">"); buf_xml(&b, title); buf_lit(&b, "</text>");
     }
     buf_lit(&b, "</g>");
-    return DG_FINISH(out, &b, ((BBox){0, 0, W + 2 * P, H + 2 * P}), 0, "cynefin", CSS);
+    AUTO_BUF Buf css = {};
+    for (const char *p = CSS; *p; p++)
+        if (*p == '$') buf_str(&css, col[*++p - '0']);
+        else buf_ch(&css, *p);
+    if (css.oom) return MMD_ERR_NOMEM;
+    return dg_finish(out, &b, (BBox){0, 0, W + 2 * P, H + 2 * P}, 0, "cynefin", css.n, css.p);
 }
