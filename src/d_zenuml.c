@@ -325,8 +325,10 @@ static void stmt(ZT z[static 1], Str s, bool block) {
     else if (assign.n) msg(z, M_RET, t, src0, assign, mknum(z, num, 1), false);
 }
 
+/* mermaid's ZenUML plugin draws on white in its own colours whatever the theme: the frame is filled
+ * white and every element carries its colour, so neither the theme's background nor its text colour shows */
 static constexpr char CSS[] =
-    "#mermaid .zx{fill:none;stroke:#666;stroke-width:1px;}#mermaid .zti{font-size:13px;font-weight:bold;fill:#000;}"
+    "#mermaid .zx{fill:#fff;stroke:#666;stroke-width:1px;}#mermaid .zti{font-size:13px;font-weight:bold;fill:#000;}"
     "#mermaid .zb{fill:#fff;stroke:#555;stroke-width:1px;}#mermaid .zt{font-size:13px;fill:#000;}"
     "#mermaid .zi{fill:none;stroke:#000;stroke-width:1px;}"
     "#mermaid .zl{stroke:#888;stroke-width:1px;stroke-dasharray:5 5;}"

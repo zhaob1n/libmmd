@@ -623,6 +623,6 @@ a9b86c6f526a9d0c tests/cases/xychart_full.mmd
 984c9dfdd959412f tests/cases/xychart_neg_all.mmd
 18f2083a3876cc3a tests/cases/xychart_overlap.mmd
 32c0d46a113437e2 tests/cases/xychart_wrap.mmd
-8de4094e894e22b6 tests/cases/zenuml_basic.mmd
-78a7393ab7264e9b tests/cases/zenuml_comments.mmd
-9737d584bb593281 tests/cases/zenuml_full.mmd
+42c53a0dfd3ad7ea tests/cases/zenuml_basic.mmd
+e41b38e489c4a0af tests/cases/zenuml_comments.mmd
+94507e9bae7c4f50 tests/cases/zenuml_full.mmd
