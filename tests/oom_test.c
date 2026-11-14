@@ -40,6 +40,32 @@ static char *slurp(const char *path, size_t n[static 1]) {
     return p;
 }
 
+static bool contains(size_t n, const char s[static n], const char w[static 1]) {
+    size_t k = strlen(w);
+    for (size_t i = 0; i + k <= n; i++)
+        if (!memcmp(s + i, w, k)) return true;
+    return false;
+}
+
+/* through a fresh context with allocation fail_at failing, then through the same context with none:
+ * the first may fail, the second must give the reference */
+static bool ctx_pair(size_t n, const char src[static n], mmd_status rst, const mmd_buffer ref[static 1]) {
+    mmd_context *c = mmd_context_new();
+    if (!c) return true; /* the context itself was the failing allocation */
+    const char *svg;
+    size_t len;
+    mmd_error e;
+    mmd_status st = mmd_context_render_svg(c, n, src, nullptr, &svg, &len, &e);
+    bool ok = st == MMD_ERR_NOMEM || (st == rst && (st || (len == ref->len && !memcmp(svg, ref->data, len))));
+    size_t keep = fail_at;
+    fail_at = 0;
+    st = mmd_context_render_svg(c, n, src, nullptr, &svg, &len, &e);
+    ok = ok && st == rst && (st || (len == ref->len && !memcmp(svg, ref->data, len)));
+    fail_at = keep;
+    mmd_context_free(c);
+    return ok;
+}
+
 int main(int argc, char **argv) {
     size_t files = 0, renders = 0, bad = 0;
     for (int a = 1; a < argc; a++) {
@@ -61,6 +87,19 @@ int main(int argc, char **argv) {
                         total, mmd_status_str(st), mmd_status_str(rst));
             if (!st) mmd_buffer_free(&out);
             renders++;
+        }
+        /* a context keeps the theme it derives from themeVariables: a failure must not spoil it */
+        if (contains(n, src, "themeVariables")) {
+            calls = fail_at = 0;
+            (void)ctx_pair(n, src, rst, &ref);
+            size_t ctotal = calls;
+            for (fail_at = 1; fail_at; fail_at = next_fail(fail_at, ctotal)) {
+                calls = 0;
+                if (!ctx_pair(n, src, rst, &ref) && !wrong++)
+                    fprintf(stderr, "oom: %s: context render failing allocation %zu of %zu spoilt the next\n", argv[a],
+                            fail_at, ctotal);
+                renders++;
+            }
         }
         bad += wrong;
         fail_at = 0;

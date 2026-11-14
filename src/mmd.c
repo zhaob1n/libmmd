@@ -92,8 +92,9 @@ static void set_err(mmd_error *err, mmd_status st, size_t n, const char *src, si
     snprintf(err->message, sizeof err->message, "%s", msg && *msg ? msg : mmd_status_str(st));
 }
 
-static mmd_status render_c(Arena ap[static 1], Buf bp[static 1], size_t n, const char *src, const mmd_options *opt,
-                           mmd_error *err) {
+/* memo (nullable): the context's last derived theme, kept across its renders */
+static mmd_status render_c(Arena ap[static 1], Buf bp[static 1], DThemeMemo *memo, size_t n, const char *src,
+                           const mmd_options *opt, mmd_error *err) {
     if (n > (size_t)1 << 30) { set_err(err, MMD_ERR_LIMIT, n, src, 0, nullptr); return MMD_ERR_LIMIT; }
     Str title = {};
     size_t off = preamble((Str){.p = src, .n = n}, &title);
@@ -115,7 +116,7 @@ static mmd_status render_c(Arena ap[static 1], Buf bp[static 1], size_t n, const
     PMARK("");
     /* %%{init}%% / frontmatter keys + accTitle/accDescr, all diagram kinds */
     const Diag dg = diag_lookup(kw);
-    dcfg_begin(&arena, n, src, off, dg.sect, opt ? opt->theme : MMD_THEME_AUTO);
+    dcfg_begin(&arena, n, src, off, dg.sect, opt ? opt->theme : MMD_THEME_AUTO, memo);
     bool af = str_eq(kw, S("agentflow-beta"));
     if (str_eq(kw, S("graph")) || str_eq(kw, S("flowchart")) || str_eq(kw, S("flowchart-elk")) || str_eq(kw, S("swimlane-beta")) || af) {
         int theme = dcfg_theme();
@@ -179,10 +180,10 @@ fail:
 /* Rendering runs in the C locale on this thread only, whatever the host's setlocale(): the diagram
  * code formats with printf %g/%f and reads config numbers with strtod, and SVG wants '.' decimals.
  * One switch per render instead of a locale-free twin of each of those calls. */
-static mmd_status render(Arena ap[static 1], Buf bp[static 1], size_t n, const char *src, const mmd_options *opt,
-                         mmd_error *err) {
+static mmd_status render(Arena ap[static 1], Buf bp[static 1], DThemeMemo *memo, size_t n, const char *src,
+                         const mmd_options *opt, mmd_error *err) {
     locale_t host = c_locale_enter();
-    mmd_status st = render_c(ap, bp, n, src, opt, err);
+    mmd_status st = render_c(ap, bp, memo, n, src, opt, err);
     uselocale(host);
     return st;
 }
@@ -193,7 +194,7 @@ mmd_status mmd_render_svg(size_t n, const char *src, const mmd_options *opt, mmd
     if (!out) return MMD_ERR_EMPTY;
     AUTO_ARENA Arena a = {};
     AUTO_BUF Buf b = {};
-    mmd_status st = render(&a, &b, n, src, opt, err);
+    mmd_status st = render(&a, &b, nullptr, n, src, opt, err);
     if (st) return st;
     Buf r = buf_take(&b);
     out->data = r.p;
@@ -204,6 +205,7 @@ mmd_status mmd_render_svg(size_t n, const char *src, const mmd_options *opt, mmd
 struct mmd_context {
     Arena arena;
     Buf out;
+    DThemeMemo theme;
 };
 
 mmd_context *mmd_context_new(void) {
@@ -214,6 +216,7 @@ mmd_context *mmd_context_new(void) {
 void mmd_context_free(mmd_context *c) {
     if (!c) return;
     arena_free(&c->arena);
+    arena_free(&c->theme.a);
     free(c->out.p);
     free(c);
 }
@@ -224,7 +227,7 @@ mmd_status mmd_context_render_svg(mmd_context *c, size_t n, const char *src, con
     if (len) *len = 0;
     if (!c || !svg) return MMD_ERR_EMPTY;
     arena_reset(&c->arena);
-    mmd_status st = render(&c->arena, &c->out, n, src, opt, err);
+    mmd_status st = render(&c->arena, &c->out, &c->theme, n, src, opt, err);
     if (st) return st;
     *svg = c->out.p;
     if (len) *len = c->out.n;

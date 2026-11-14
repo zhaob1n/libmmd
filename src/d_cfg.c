@@ -179,6 +179,7 @@ static thread_local int api_theme; /* MMD_THEME_* the caller asked for, AUTO whe
 static thread_local MThemeId eng_id, own_id; /* own_id: what a dcfg_theme_own() renderer draws */
 static thread_local bool own_theme, derive, eng_tried, eng_user, user_vars; /* eng_user: eng holds the overrides */
 static thread_local const MTheme *eng, *eng_base;
+static thread_local DThemeMemo *cur_memo;
 
 static MThemeId mt_of(int theme) {
     return theme == MMD_THEME_DARK ? MT_DARK : theme == MMD_THEME_FOREST ? MT_FOREST
@@ -215,9 +216,10 @@ static int theme_named(Str w) {
     return MMD_THEME_AUTO;
 }
 
-void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t off, Str sect, int api) {
+void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t off, Str sect, int api,
+                DThemeMemo *memo) {
     cur = (DCfg){};
-    cur_a = a, cur_cap = 0, cur_sect = sect, api_theme = api;
+    cur_a = a, cur_cap = 0, cur_sect = sect, api_theme = api, cur_memo = memo;
     size_t i = off >= 3 && !memcmp(src, "\xEF\xBB\xBF", 3) ? 3 : 0; /* a BOM, as preamble() skips it */
     /* preamble: frontmatter + directives */
     while (i < off) {
@@ -282,7 +284,7 @@ void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t of
 
 void dcfg_end(void) {
     cur_theme = api_theme = 0;
-    cur = (DCfg){}, cur_a = nullptr, cur_cap = 0, cur_sect = (Str){};
+    cur = (DCfg){}, cur_a = nullptr, cur_cap = 0, cur_sect = (Str){}, cur_memo = nullptr;
     own_theme = derive = eng_tried = eng_user = user_vars = false, eng = eng_base = nullptr;
 }
 const DCfg *dcfg_cur(void) { return &cur; }
@@ -352,6 +354,30 @@ static Str css_safe(Str v) {
 
 Str dcfg_css(const char key[static 1]) { return css_safe(dcfg_get(key)); }
 
+/* mtheme_new() through the context's memo: the theme and overrides of its last derivation give
+ * that theme back; anything else replaces it, built in the memo's arena from copies of the
+ * overrides (the theme points into them, and they must outlive this render's source) */
+static const MTheme *memo_theme(DThemeMemo m[static 1], MThemeId id, size_t n, const Str ks[static n],
+                                const Str vs[static n]) {
+    if (m->t && m->id == id && m->n == n) {
+        size_t i = 0;
+        while (i < n && str_eq(m->k[i], ks[i]) && str_eq(m->v[i], vs[i])) i++;
+        if (i == n) return m->t;
+    }
+    m->t = nullptr;
+    arena_reset(&m->a);
+    m->a.oom = false;
+    Str *k = ANEW(&m->a, Str, n), *v = ANEW(&m->a, Str, n);
+    for (size_t i = 0; k && v && i < n; i++) k[i] = arena_strdup(&m->a, ks[i]), v[i] = arena_strdup(&m->a, vs[i]);
+    const MTheme *t = k && v && !m->a.oom ? mtheme_new(&m->a, id, n, k, v) : nullptr;
+    if (m->a.oom) {
+        cur_a->oom = true; /* render() reports it */
+        return nullptr;
+    }
+    if (t) m->t = t, m->id = id, m->n = n, m->k = k, m->v = v;
+    return t;
+}
+
 /* mermaid's theme engine (src/mtheme.c) for the named theme with the source's themeVariables when
  * mermaid derives from them, and for what the renderer draws on its own: the default theme, or for
  * a renderer that draws named themes itself (dcfg_theme_own) that theme. dcfg_tv reports the
@@ -372,7 +398,7 @@ static bool engine(void) {
         for (size_t i = 0, j = 0; i < cur.n; i++)
             if (str_starts(cur.kv[i].k, S("themeVariables.")))
                 ks[j] = (Str){.p = cur.kv[i].k.p + 15, .n = cur.kv[i].k.n - 15}, vs[j++] = cur.kv[i].v;
-        eng = mtheme_new(cur_a, eng_id, nov, ks, vs);
+        eng = cur_memo ? memo_theme(cur_memo, eng_id, nov, ks, vs) : mtheme_new(cur_a, eng_id, nov, ks, vs);
         eng_user = eng != nullptr;
     }
     /* where khroma cannot read an override mermaid fails the render; draw the theme instead, with the

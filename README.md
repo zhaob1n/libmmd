@@ -113,7 +113,7 @@ cc -std=gnu23 -Iinclude example.c build/libmmd.a -lm      # or: $(pkg-config --c
 ```
 
 - `mmd_options` (which may be `nullptr`) sets node and rank spacing, font size, theme, and the `MMD_F_*` layout flags. A theme set there (or with `mmd -t`) wins over the one the diagram names; mermaid-cli's `-t` is only a default that the file's `theme` overrides.
-- For batch rendering, `mmd_context_new()` / `mmd_context_render_svg()` / `mmd_context_free()` reuse the arena and output buffer between calls. Use one context per thread.
+- For batch rendering, `mmd_context_new()` / `mmd_context_render_svg()` / `mmd_context_free()` reuse the arena and output buffer between calls, and the theme last derived from a named theme plus `themeVariables`: a batch that repeats one such configuration derives it once (17–50 µs a render otherwise). Use one context per thread.
 - Errors come back as `mmd_status` together with `mmd_error` (code, 1-based line and column, message).
 - The shared library exports only `mmd_*` symbols.
 - Output does not depend on the host's `setlocale()`: each render runs in the C locale on the calling thread only (`uselocale`), then restores the host's.

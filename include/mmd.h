@@ -63,7 +63,9 @@ MMD_API mmd_status mmd_render_svg(size_t n, const char *src,
 MMD_API void mmd_buffer_free(mmd_buffer *buf);
 
 /* Reusable render context for batch rendering: keeps its arena and output
- * buffer between calls so steady-state renders do (almost) no malloc. */
+ * buffer between calls so steady-state renders do (almost) no malloc, and the
+ * theme it last derived from themeVariables, which the next render with the
+ * same theme and themeVariables reuses. */
 typedef struct mmd_context mmd_context;
 [[nodiscard]] MMD_API mmd_context *mmd_context_new(void);
 MMD_API void mmd_context_free(mmd_context *ctx);

@@ -2,6 +2,7 @@
  * (themeVariables + per-diagram keys, flattened to dotted keys) and accTitle/accDescr. */
 #pragma once
 #include "base.h"
+#include "mtheme.h"
 
 typedef struct DKV { Str k, v; } DKV;
 typedef struct DCfg {
@@ -10,12 +11,24 @@ typedef struct DCfg {
     Str acc_title, acc_descr;
 } DCfg;
 
+/* the last theme a mmd_context had the engine derive from themeVariables, kept across its renders:
+ * a batch that repeats one theme and set of overrides derives them once. Its own arena holds the
+ * theme and copies of the overrides the theme's strings point into. Zero-initialised: empty. */
+typedef struct DThemeMemo {
+    Arena a;
+    const MTheme *t; /* nullptr: none kept */
+    MThemeId id;
+    size_t n;
+    const Str *k, *v;
+} DThemeMemo;
+
 /* parse preamble src[0..off) and scan the body for acc lines; state lives until dcfg_end().
  * sect is the diagram's section of mermaid's config (diag_lookup): its theme and look win over
  * the top-level ones, and a directive's `config` object lands there. api is the MMD_THEME_* the
  * caller asked for (mmd_options.theme): it wins over the source's theme (mermaid-cli lets the file
- * win over -t), AUTO lets the source decide. */
-void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t off, Str sect, int api);
+ * win over -t), AUTO lets the source decide. memo (nullable) is the context's derived theme. */
+void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t off, Str sect, int api,
+                DThemeMemo *memo);
 void dcfg_end(void);
 int dcfg_theme(void);           /* MMD_THEME_* in effect: the caller's, else the source's, else AUTO */
 /* the renderer draws the named theme itself (flowchart): dcfg_tv then reports only what the

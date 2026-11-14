@@ -150,6 +150,11 @@ on the nested-cluster cases checked, ranks and ordering then agree and libmmd's 
 - Build: `make` (portable `-O2`), opt-in `make MARCH=native`, `make LTO=1`, `make pgo [LTO=1 MARCH=native]` (output in `build-pgo/`).
 - Shared library: `build/libmmd.so.0.3.0` (soname `libmmd.so.0`, only `mmd_*` exported) plus `build/mmd.pc`; `make install PREFIX=/usr DESTDIR=...`.
 - Batch rendering: `mmd_context_new()` / `mmd_context_render_svg()` / `mmd_context_free()` reuse the arena and output buffer between calls.
+  A context also keeps the theme it last derived (`DThemeMemo` in `src/dcfg.h`): mermaid's engine recomputes about 300
+  variables whenever a named theme meets `themeVariables`, 17–50 µs a render (`theme: default` runs `updateColors()`
+  twice), up to five times a small flowchart's own 13 µs. The key is the theme and the override list as written; the memo's arena
+  holds copies of the overrides, which the theme's strings point into. One-shot renders derive every time; sources
+  without overrides use the per-process presets (`mtheme_preset`).
 - Obstacle routing is on by default: edges that cross a non-endpoint node get a local visibility-graph (A*) detour. Use `--no-avoid` / `MMD_F_NO_AVOID` for the fastest layout. Edge labels sit on the rendered curve.
 - SVG: stroke widths and text anchoring are now CSS classes, and collinear points are dropped (about 20% smaller on medium, about 50% on large vs v1).
 - Numbers: `bench/results_v3.txt`.
