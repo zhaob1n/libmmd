@@ -460,7 +460,7 @@ d09aec9d014d7227 tests/cases/class_card_fan.mmd
 8ba60f7ef7e10a37 tests/cases/class_parallel_labels.mmd
 d983e2c70c47e09c tests/cases/class_state_spacing.mmd
 351b6f7a66989e7d tests/cases/config_directive_class.mmd
-eeadabde68c69c9d tests/cases/config_keys.mmd
+6f2075619c2ef55b tests/cases/config_keys.mmd
 b2a9983ee0faecb0 tests/cases/config_pie.mmd
 cccd9dd4dcf5051b tests/cases/config_quadrant.mmd
 5da2bc28c7ddb7ab tests/cases/config_sankey.mmd
@@ -497,12 +497,12 @@ e09f507647b1fba3 tests/cases/flow_iso_toggle.mmd
 757beab59e20b6b2 tests/cases/flowchart_label_on_node.mmd
 6b8694c2f21da8c0 tests/cases/flowchart_stress_corner.mmd
 450c25ade31c007f tests/cases/flowchart_title_crossed.mmd
-61f87be15f6f04ff tests/cases/gantt_cfg_comments.mmd
-c2a3004a31919108 tests/cases/gantt_compact.mmd
-11d5f40e47aa89f0 tests/cases/gantt_full.mmd
-012839a13c233f7f tests/cases/gantt_topaxis.mmd
-9db5b59013ff06d8 tests/cases/gantt_tz.mmd
-3176fe7a5e0cd858 tests/cases/gantt_vert.mmd
+e83bb0ce6d5d9903 tests/cases/gantt_cfg_comments.mmd
+3d104611d96a49cf tests/cases/gantt_compact.mmd
+9efed321e2eb38a0 tests/cases/gantt_full.mmd
+5270384ac81011db tests/cases/gantt_topaxis.mmd
+5070841ddb77ff3a tests/cases/gantt_tz.mmd
+353be2327a93cc4a tests/cases/gantt_vert.mmd
 98b90cf74a78d553 tests/cases/gitgraph_full.mmd
 7fe7d9882802d9c2 tests/cases/ishikawa_basic.mmd
 10e104322c79129b tests/cases/journey_full.mmd
@@ -549,7 +549,7 @@ cdf8048cd23201ca tests/cases/swimlane_edge.mmd
 aa2c1a8b439e5c16 tests/cases/theme_dark.mmd
 4fdbda2349231aae tests/cases/theme_dark_class.mmd
 5bf83ca9efd6909b tests/cases/theme_dark_er.mmd
-97e7b7fe9b6dc116 tests/cases/theme_dark_gantt.mmd
+db46ab001d386d4f tests/cases/theme_dark_gantt.mmd
 fbd2f0182f209389 tests/cases/theme_dark_journey.mmd
 7aeff9a7f789566e tests/cases/theme_dark_kanban.mmd
 1f0cebb35405085d tests/cases/theme_dark_mindmap.mmd
@@ -562,7 +562,7 @@ b07b00847928b341 tests/cases/theme_dark_seq.mmd
 afa12367c0904ff5 tests/cases/theme_dark_xychart_field.mmd
 aa9b3b45327094f3 tests/cases/theme_forest.mmd
 557220e952c0fd7b tests/cases/theme_forest_class.mmd
-8f28617b13249996 tests/cases/theme_forest_gantt.mmd
+065b65eed93b6e96 tests/cases/theme_forest_gantt.mmd
 2bfb3ee04ba423cf tests/cases/theme_forest_gitgraph.mmd
 f7bd0800fc569267 tests/cases/theme_forest_state.mmd
 7867504613dc622e tests/cases/theme_forest_treemap.mmd
