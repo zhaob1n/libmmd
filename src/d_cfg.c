@@ -491,9 +491,8 @@ bool dcfg_neo(void) {
 /* themeVariable -> CSS template ('$' = value), for the classes the renderers emit; kind "*" applies to
  * every diagram. Per kind, the variables mermaid's styles for that diagram read, so a variable the
  * source sets without naming a theme changes what it changes in mermaid; later rows win, as mermaid's
- * `a || b` fallbacks do. tools/css_audit.py fails on a selector no element carries. */
-typedef struct TV { const char *kind, *var, *tpl; } TV;
-static const TV TVS[] = {
+ * `a || b` fallbacks do. tests/corpus.c fails on a selector no element carries. */
+const DThemeRule DCFG_TVS[] = {
     {"*", "fontFamily", "#mermaid{font-family:$;}"},
     {"*", "fontSize", "#mermaid{font-size:$;}"},
     {"*", "textColor", "#mermaid{fill:$;}"},
@@ -652,6 +651,7 @@ static const TV TVS[] = {
     {"c4", "lineColor", "#mermaid .cr,#mermaid .cb{stroke:$;}#mermaid .crh{fill:$;}"},
     {"c4", "textColor", "#mermaid .cbt,#mermaid .cbs,#mermaid .crl,#mermaid .crt{fill:$;}"},
 };
+const size_t DCFG_NTVS = countof(DCFG_TVS);
 
 /* tpl with each '$' replaced by v */
 static void rule_put(Buf b[static 1], const char tpl[static 1], Str v) {
@@ -661,10 +661,10 @@ static void rule_put(Buf b[static 1], const char tpl[static 1], Str v) {
 
 void dcfg_theme_css(Buf b[static 1], const char kind[static 1]) {
     if (!themed()) return;
-    for (size_t i = 0; i < countof(TVS); i++) {
-        if (strcmp(TVS[i].kind, "*") && strcmp(TVS[i].kind, kind)) continue;
-        Str v = dcfg_tv(TVS[i].var);
-        if (v.n) rule_put(b, TVS[i].tpl, v);
+    for (size_t i = 0; i < DCFG_NTVS; i++) {
+        if (strcmp(DCFG_TVS[i].kind, "*") && strcmp(DCFG_TVS[i].kind, kind)) continue;
+        Str v = dcfg_tv(DCFG_TVS[i].var);
+        if (v.n) rule_put(b, DCFG_TVS[i].tpl, v);
     }
 }
 

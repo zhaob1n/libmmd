@@ -1,134 +1,188 @@
-# Needs a C compiler with -std=gnu2y (recent clang, gcc 15+). Unless CC is given, take the first that has it.
-gnu2y = $(shell for c in $(1); do echo 'int x;' | $$c -std=gnu2y -fsyntax-only -x c - 2>/dev/null && { echo $$c; break; }; done)
-ifeq ($(origin CC),default)
-CC := $(call gnu2y,clang gcc gcc-16 gcc-15)
-ifeq ($(CC),)
-$(error no compiler with -std=gnu2y (recent clang, gcc 15+) found: make CC=...)
-endif
-endif
-IS_CLANG := $(shell $(CC) --version 2>/dev/null | grep -qi clang && echo 1)
-WARN := -Wall -Wextra -Wno-microsoft-anon-tag
-# Opt-in tuning: make MARCH=native, make LTO=1, make pgo (two-stage profile-guided build)
-OPT ?= -O2
-MARCH ?=
-LTO ?=
-PGO_GEN ?=
-PGO_USE ?=
+# libmmd: Mermaid diagrams to SVG, in C.
+# Needs GNU make and a C compiler with -std=gnu2y: gcc 15 or later, or a recent clang.
+#
+#   make                      library, shared library and CLI into build/
+#   make CC=clang CFLAGS='-O2 -march=native' LTO=1
+#   make install [PREFIX=/usr] [DESTDIR=...]
+#   make test                 what has to pass before a merge
+#   make tools                every test, benchmark and developer program
+#   make both                 gcc and clang builds of everything, warnings as errors
+#   make asan | msan | oom    the tests under sanitizers and under allocation failure
+#   make fuzz [N=1000] [SEED=1]
+#   make pgo                  profile-guided build into build-pgo/
+
 VERSION := 0.3.0
 SOMAJOR := 0
-PREFIX ?= /usr/local
-LIBDIR ?= $(PREFIX)/lib
-INCDIR ?= $(PREFIX)/include
-BINDIR ?= $(PREFIX)/bin
-CFLAGS ?= $(OPT) -g -fno-math-errno
-ifneq ($(MARCH),)
-CFLAGS += -march=$(MARCH)
-endif
-AR := ar
+
+PREFIX     ?= /usr/local
+BINDIR     ?= $(PREFIX)/bin
+LIBDIR     ?= $(PREFIX)/lib
+INCLUDEDIR ?= $(PREFIX)/include
+INSTALL    ?= install
+
+BUILD  ?= build
+CFLAGS ?= -O2 -g
+GCC    ?= gcc
+CLANG  ?= clang
+
+.DELETE_ON_ERROR:
+.SUFFIXES:
+
+# ---- flags ----
+# What the code needs comes first: CPPFLAGS, CFLAGS, LDFLAGS and LDLIBS stay the user's, and win.
+# -ffp-contract=off: with fused multiply-adds (-march=native) some layouts come out a digit apart,
+# and the same source has to give the same SVG on every machine.
+flags := -std=gnu2y -fms-extensions -fno-math-errno -ffp-contract=off -fPIC -fvisibility=hidden \
+         -Wall -Wextra -Wno-microsoft-anon-tag -Iinclude -Isrc -Itools -MMD -MP
+clang = $(findstring clang,$(shell $(CC) --version))
+
+# Fat objects: libmmd.a keeps machine code, so any compiler and linker can still use it,
+# and plain ar can index it. clang only reads the bitcode back through lld.
 ifeq ($(LTO),1)
-CFLAGS += -flto
-LDFLAGS += -flto
-ifeq ($(IS_CLANG),1)
-LDFLAGS += -fuse-ld=lld
-AR := $(shell $(CC) -print-prog-name=llvm-ar)
-else
-AR := gcc-ar
+flags += -flto -ffat-lto-objects
+ltold := $(if $(clang),-fuse-ld=lld)
 endif
-endif
-ifneq ($(PGO_GEN),)
-CFLAGS += -fprofile-generate=$(PGO_GEN)
-LDFLAGS += -fprofile-generate=$(PGO_GEN)
-endif
-ifneq ($(PGO_USE),)
-ifeq ($(IS_CLANG),1)
-CFLAGS += -fprofile-use=$(PGO_USE)/default.profdata -Wno-backend-plugin
-else
-CFLAGS += -fprofile-use=$(PGO_USE) -fprofile-correction -Wno-missing-profile
-endif
-endif
-CFLAGS += -std=gnu2y -fms-extensions -fPIC -fvisibility=hidden $(WARN) -Iinclude -Isrc
-LDLIBS = -lm
-BUILD ?= build
-DIAG_SRCS := $(wildcard src/d_*.c)
-SRCS := src/base.c src/text.c src/flow_parse.c src/layout.c src/nsimplex.c src/dorder.c src/drank.c src/flow_svg.c src/seq.c src/rich.c src/dgraph.c src/graph.c src/d3fmt.c src/mcolor.c src/mtheme.c $(DIAG_SRCS) src/mmd.c src/writer.c
-OBJS := $(SRCS:src/%.c=$(BUILD)/%.o)
 
-SONAME := libmmd.so.$(SOMAJOR)
+# PGO=generate|use is what `make pgo` passes down; the profile lives in the build directory.
+# gcc names a profile after the object's path, so both stages have to build in the same one.
+# Only the CLI is trained: the other programs have a main() the profile does not fit.
+ifdef PGO
+flags += -fprofile-$(PGO)=$(abspath $(BUILD))/profile
+ifeq ($(PGO),use)
+flags += $(if $(clang),-Wno-backend-plugin,-fprofile-partial-training -Wno-missing-profile)
+endif
+endif
 
-all: $(BUILD)/libmmd.a $(BUILD)/libmmd.so $(BUILD)/mmd $(BUILD)/bench $(BUILD)/mmd.pc
+cflags  = $(flags) $(CPPFLAGS) $(CFLAGS)
+ldflags = $(ltold) $(LDFLAGS)
+libs    = -lm $(LDLIBS)
 
-$(BUILD)/%.o: src/%.c $(wildcard src/*.h include/*.h) | $(BUILD)
-	$(CC) $(CFLAGS) -c $< -o $@
+# ---- the library ----
+soname := libmmd.so.$(SOMAJOR)
+solib  := libmmd.so.$(VERSION)
+objs   := $(patsubst src/%.c,$(BUILD)/%.o,$(sort $(wildcard src/*.c)))
+
+all: $(BUILD)/libmmd.a $(BUILD)/libmmd.so $(BUILD)/mmd
+link = $(CC) $(cflags) $(ldflags) $(filter %.c %.a,$^) $(libs) -o $@
+
 $(BUILD):
 	mkdir -p $@
-$(BUILD)/libmmd.a: $(OBJS)
+$(BUILD)/%.o: src/%.c | $(BUILD)
+	$(CC) $(cflags) -c $< -o $@
+$(BUILD)/libmmd.a: $(objs)
 	$(AR) rcs $@ $^
-$(BUILD)/libmmd.so.$(VERSION): $(OBJS)
-	$(CC) $(CFLAGS) $(LDFLAGS) -shared -Wl,-soname,$(SONAME) $^ $(LDLIBS) -o $@
-$(BUILD)/libmmd.so: $(BUILD)/libmmd.so.$(VERSION)
-	ln -sf libmmd.so.$(VERSION) $(BUILD)/$(SONAME)
-	ln -sf libmmd.so.$(VERSION) $@
-$(BUILD)/mmd.pc: mmd.pc.in Makefile | $(BUILD)
-	sed -e 's|@PREFIX@|$(PREFIX)|' -e 's|@LIBDIR@|$(LIBDIR)|' -e 's|@INCDIR@|$(INCDIR)|' -e 's|@VERSION@|$(VERSION)|' $< > $@
+$(BUILD)/$(solib): $(objs)
+	$(CC) $(cflags) $(ldflags) -shared -Wl,-soname,$(soname) $^ $(libs) -o $@
+$(BUILD)/$(soname): $(BUILD)/$(solib)
+	ln -sf $(<F) $@
+$(BUILD)/libmmd.so: $(BUILD)/$(soname)
+	ln -sf $(<F) $@
 $(BUILD)/mmd: tools/mmd.c $(BUILD)/libmmd.a
-	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
-$(BUILD)/bench: bench/bench.c $(BUILD)/libmmd.a
-	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
-# in-process programs linked against the static library: tests/X_test.c -> test-X, bench/X_bench.c -> bench-X
-$(BUILD)/test-%: tests/%_test.c $(BUILD)/libmmd.a
-	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
-$(BUILD)/bench-%: bench/%_bench.c $(BUILD)/libmmd.a
-	$(CC) $(CFLAGS) $(LDFLAGS) $< $(BUILD)/libmmd.a $(LDLIBS) -o $@
-$(BUILD)/test-oom: LDFLAGS += -Wl,--wrap=malloc,--wrap=calloc,--wrap=realloc
-$(BUILD)/test-shared: tests/shared_test.c $(BUILD)/libmmd.so $(BUILD)/mmd.pc
-	$(CC) $(CFLAGS) $< -L$(BUILD) -lmmd -Wl,-rpath,'$$ORIGIN' -o $@
+	$(link)
 
+# ---- test, benchmark and developer programs ----
+# One source each, linked with the static library and the kit they share (tools/qa):
+#   tools/NAME.c -> NAME   tests/NAME.c -> test-NAME   bench/NAME.c -> bench-NAME
+qa    := $(patsubst tools/qa/%.c,$(BUILD)/%.o,$(sort $(wildcard tools/qa/*.c)))
+tools := $(patsubst tools/%.c,$(BUILD)/%,$(wildcard tools/*.c))
+tests := $(patsubst tests/%.c,$(BUILD)/test-%,$(wildcard tests/*.c))
+bench := $(patsubst bench/%.c,$(BUILD)/bench-%,$(wildcard bench/*.c))
+
+tools: all $(tools) $(tests) $(bench)
+
+$(BUILD)/%.o: tools/qa/%.c | $(BUILD)
+	$(CC) $(cflags) -c $< -o $@
+$(BUILD)/libqa.a: $(qa)
+	$(AR) rcs $@ $^
+$(BUILD)/%: tools/%.c $(BUILD)/libqa.a $(BUILD)/libmmd.a
+	$(link)
+$(BUILD)/test-%: tests/%.c $(BUILD)/libqa.a $(BUILD)/libmmd.a
+	$(link)
+$(BUILD)/bench-%: bench/%.c $(BUILD)/libqa.a $(BUILD)/libmmd.a
+	$(link)
+# as a user of the installed library links it
+$(BUILD)/test-shared: tests/shared.c $(BUILD)/libmmd.so
+	$(CC) $(cflags) $(ldflags) $< -L$(BUILD) -lmmd -Wl,-rpath,'$$ORIGIN' -o $@
+# tests/oom.c fails the library's allocations one at a time
+$(BUILD)/test-oom: private ldflags += -Wl,--wrap=malloc,--wrap=calloc,--wrap=realloc
+
+-include $(wildcard $(BUILD)/*.d)
+
+# for clangd: the commands above, without running them
+comma  := ,
+ccjson  = {"directory": "$(CURDIR)", "file": "$1", "command": "$(CC) $(cflags) -c $1"}
+compile_commands.json: Makefile
+	$(file >$@,[$(subst } {,}$(comma) {,$(strip $(foreach s,$(wildcard src/*.c tools/*.c tools/qa/*.c tests/*.c bench/*.c),$(call ccjson,$s))))])
+
+# ---- install ----
 install: all
-	install -d $(DESTDIR)$(LIBDIR)/pkgconfig $(DESTDIR)$(INCDIR) $(DESTDIR)$(BINDIR)
-	install -m644 include/mmd.h $(DESTDIR)$(INCDIR)/
-	install -m644 $(BUILD)/libmmd.a $(DESTDIR)$(LIBDIR)/
-	install -m755 $(BUILD)/libmmd.so.$(VERSION) $(DESTDIR)$(LIBDIR)/
-	ln -sf libmmd.so.$(VERSION) $(DESTDIR)$(LIBDIR)/$(SONAME)
-	ln -sf $(SONAME) $(DESTDIR)$(LIBDIR)/libmmd.so
-	install -m644 $(BUILD)/mmd.pc $(DESTDIR)$(LIBDIR)/pkgconfig/
-	install -m755 $(BUILD)/mmd $(DESTDIR)$(BINDIR)/
+	$(INSTALL) -d $(DESTDIR)$(BINDIR) $(DESTDIR)$(INCLUDEDIR) $(DESTDIR)$(LIBDIR)/pkgconfig
+	$(INSTALL) -m755 $(BUILD)/mmd $(DESTDIR)$(BINDIR)/
+	$(INSTALL) -m644 include/mmd.h $(DESTDIR)$(INCLUDEDIR)/
+	$(INSTALL) -m644 $(BUILD)/libmmd.a $(DESTDIR)$(LIBDIR)/
+	$(INSTALL) -m755 $(BUILD)/$(solib) $(DESTDIR)$(LIBDIR)/
+	ln -sf $(solib) $(DESTDIR)$(LIBDIR)/$(soname)
+	ln -sf $(soname) $(DESTDIR)$(LIBDIR)/libmmd.so
+	sed -e 's|@PREFIX@|$(PREFIX)|' -e 's|@LIBDIR@|$(LIBDIR)|' -e 's|@INCLUDEDIR@|$(INCLUDEDIR)|' \
+	    -e 's|@VERSION@|$(VERSION)|' mmd.pc.in > $(DESTDIR)$(LIBDIR)/pkgconfig/mmd.pc
 
-# Profile-guided build: train on bench inputs, then rebuild into build-pgo.
-PGO_DIR := $(CURDIR)/build-pgo-prof
-pgo:
-	rm -rf $(PGO_DIR) build-pgo-gen build-pgo
-	$(MAKE) BUILD=build-pgo-gen PGO_GEN=$(PGO_DIR) LTO=$(LTO) MARCH=$(MARCH) build-pgo-gen/bench
-	for f in bench/inputs/*.mmd; do ./build-pgo-gen/bench $$f 20 >/dev/null; done
-	if $(CC) --version | grep -qi clang; then $$($(CC) -print-prog-name=llvm-profdata) merge -o $(PGO_DIR)/default.profdata $(PGO_DIR)/*.profraw; fi
-	$(MAKE) BUILD=build-pgo PGO_USE=$(PGO_DIR) LTO=$(LTO) MARCH=$(MARCH)
+uninstall:
+	rm -f $(DESTDIR)$(BINDIR)/mmd $(DESTDIR)$(INCLUDEDIR)/mmd.h $(DESTDIR)$(LIBDIR)/pkgconfig/mmd.pc \
+	      $(addprefix $(DESTDIR)$(LIBDIR)/,libmmd.a libmmd.so $(soname) $(solib))
 
-test: all $(BUILD)/test-shared $(BUILD)/test-locale $(BUILD)/test-writer $(BUILD)/test-oom $(BUILD)/test-d3fmt $(BUILD)/test-mtheme
-	./tests/run_tests.sh $(BUILD)/mmd
+# ---- tests ----
+corpus := tests/cases/*.mmd tests/docs/*/*.mmd
+
+test: all $(tests)
+	$(BUILD)/test-corpus $(BUILD)/mmd
 	$(BUILD)/test-shared
-	$(BUILD)/test-locale tests/cases/*.mmd tests/docs/*/*.mmd
+	$(BUILD)/test-locale $(corpus)
 	$(BUILD)/test-writer
 	$(BUILD)/test-d3fmt tests/d3fmt_cases.tsv
 	$(BUILD)/test-mtheme tests/mtheme_cases.tsv
-	$(BUILD)/test-oom tests/cases/*.mmd tests/docs/*/*.mmd
-	python3 tools/docs_audit.py -q -v $(BUILD)/mmd
-	python3 tools/css_audit.py $(BUILD)/mmd
+	$(BUILD)/test-oom $(corpus)
 
-# both compilers must stay warning-free: make both [CLANG=clang-23] [GCC=gcc-16]
-CLANG ?= clang
-GCC ?= $(call gnu2y,gcc gcc-16 gcc-15)
 both:
-	$(if $(GCC),,$(error no gcc with -std=gnu2y (gcc 15+) found: make both GCC=...))
-	$(MAKE) CC=$(CLANG) BUILD=build
-	$(MAKE) CC=$(GCC) BUILD=build-gcc
+	$(MAKE) CC=$(GCC) BUILD=build-gcc CFLAGS='$(CFLAGS) -Werror' tools
+	$(MAKE) CC=$(CLANG) BUILD=build-clang CFLAGS='$(CFLAGS) -Werror' tools
 
-# test-oom failing arena allocations too, under ASan: ~40 s to build, ~2 s to run
-oom:
-	$(MAKE) BUILD=build-oom OPT="-O1 -g -DMMD_FAULT_INJECT -fsanitize=address,undefined -fno-omit-frame-pointer" LDLIBS="-lm -fsanitize=address,undefined" build-oom/test-oom
-	UBSAN_OPTIONS=halt_on_error=1 build-oom/test-oom tests/cases/*.mmd tests/docs/*/*.mmd
+san  := -O1 -g -fno-omit-frame-pointer -fno-sanitize-recover=all
+asan := $(san) -fsanitize=address,undefined
+msan := $(san) -fsanitize=memory -fsanitize-memory-track-origins
 
+# The second half fills what malloc returns with a byte: output that changes with it was read
+# from the arena before it was written. 0xA5 makes tiny negative doubles, 0x41 large positive ones.
 asan:
-	$(MAKE) BUILD=build-asan OPT="-O1 -fsanitize=address,undefined -fno-omit-frame-pointer" LDLIBS="-lm -fsanitize=address,undefined"
+	$(MAKE) BUILD=build-asan CFLAGS='$(asan)' test
+	for b in 165 65; do \
+	    ASAN_OPTIONS=max_malloc_fill_size=1073741824:malloc_fill_byte=$$b build-asan/test-corpus build-asan/mmd || exit; \
+	done
+
+# MemorySanitizer is clang's.
+msan:
+	$(MAKE) CC=$(CLANG) BUILD=build-msan CFLAGS='$(msan)' test
+
+# `make test` fails each malloc; with MMD_FAULT_INJECT the arena's allocations fail too.
+oom:
+	$(MAKE) BUILD=build-oom CPPFLAGS=-DMMD_FAULT_INJECT CFLAGS='$(asan)' build-oom/test-oom
+	build-oom/test-oom $(corpus)
+
+N    ?= 1000
+SEED ?= 1
+fuzz:
+	$(MAKE) BUILD=build-asan CFLAGS='$(asan)' build-asan/mmd build-asan/fuzz
+	build-asan/fuzz build-asan/mmd $(N) $(SEED)
+
+# ---- profile-guided build ----
+# Trained on the CLI rendering every input in the tree: code a profile never saw is optimised for size.
+pgo:
+	rm -rf build-pgo
+	$(MAKE) BUILD=build-pgo PGO=generate build-pgo/mmd
+	for f in $(corpus) tests/flow/*.mmd bench/*/*.mmd; do build-pgo/mmd $$f >/dev/null 2>&1; done
+	$(if $(clang),$(shell $(CC) -print-prog-name=llvm-profdata) merge -o build-pgo/profile/default.profdata build-pgo/profile)
+	$(MAKE) -B BUILD=build-pgo PGO=use all build-pgo/bench-render
 
 clean:
-	rm -rf build build-gcc build-asan build-msan build-oom build-pgo build-pgo-gen build-pgo-prof
-.PHONY: all test both asan oom clean install pgo
+	rm -rf build build-*
+
+.PHONY: all tools install uninstall test both asan msan oom fuzz pgo clean

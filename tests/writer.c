@@ -190,7 +190,7 @@ static void squeeze(char *s) {
 static char svgt[1 << 20];
 
 /* --dump DIR: also save each diagram the test builds as DIR/NNNN.mmd, with the labels its SVG must
- * show (whitespace dropped, one per line) in NNNN.want, for tools/writer_mmdc_check.py */
+ * show (whitespace dropped, one per line) in NNNN.want, for tools/writer_check.c */
 static const char *dump_dir;
 static unsigned ndump;
 static void dump(const char *name, const char *src, size_t n, const char *const labels[static n]) {

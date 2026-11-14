@@ -22,7 +22,7 @@ They are deliberately not merged:
 
 Unifying them would mean either slowing large graphs down to dagre's
 bookkeeping or giving up mermaid parity on small ones. Changes to either file
-must keep `bench/eq/cmp.sh` at `bad=0`.
+must leave `tests/sums` and the goldens unchanged (`make test`).
 
 dorder.c scratch: small graphs (`NS <= 1024 && S <= 32`) allocate from the
 render arena; larger ones use tracked malloc blocks (`Heap`). A per-call Arena

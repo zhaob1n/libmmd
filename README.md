@@ -62,18 +62,17 @@ Per-type feature notes are in [docs/dev/INTERNALS.md](docs/dev/INTERNALS.md).
 
 ## Build
 
-You need a C compiler that takes `-std=gnu2y`: a recent **clang** or **gcc** 15 or later (developed with clang 23 and gcc 16). Without `CC=`, the Makefile uses the first of `clang`, `gcc`, `gcc-16`, `gcc-15` that has it, and says so if none does. It builds with `-std=gnu2y -fms-extensions`. You also need GNU make. Python 3 is needed only for the test and benchmark scripts.
+You need GNU make and a C compiler that takes `-std=gnu2y`: **gcc** 15 or later, or a recent **clang** (developed with gcc 16 and clang 23). `make` uses `cc`; where that is an older compiler, name a newer one with `CC=`. Nothing else is needed: the tests, the benchmarks and the developer tools are C programs too.
 
 ```sh
-make                      # -> build/mmd, build/libmmd.{a,so}, build/mmd.pc, build/bench
-make CC=gcc-16            # pick the compiler
-make both                 # clang into build/, gcc into build-gcc/ (CLANG=, GCC= to choose)
-make MARCH=native LTO=1   # optional: tuned build
-make pgo                  # optional: profile-guided build in build-pgo/
-make install PREFIX=/usr/local   # header, static + shared lib, pkg-config file, mmd
+make                                  # build/mmd, build/libmmd.a, build/libmmd.so
+make CC=clang CFLAGS='-O2 -march=native' LTO=1
+make pgo                              # profile-guided build in build-pgo/
+make install PREFIX=/usr DESTDIR=pkg  # mmd, mmd.h, both libraries, mmd.pc (make uninstall removes them)
+make test                             # what a change has to pass; about a second
 ```
 
-The build has zero warnings under `-Wall -Wextra` with both gcc and clang.
+`CC`, `CPPFLAGS`, `CFLAGS`, `LDFLAGS` and `LDLIBS` are yours; the flags the code needs are added before them. The build has zero warnings under `-Wall -Wextra` with both gcc and clang: `make both` builds everything with each of them, warnings as errors. The same source gives the same SVG bytes whatever the compiler, the optimisation level or the CPU.
 
 ## CLI
 
@@ -175,7 +174,7 @@ The run was made on 2026-10-23.
 
 ![CLI benchmark chart](docs/bench.svg)
 
-In brackets: how many times slower than libmmd. Data: [`bench/cli_times.csv`](bench/cli_times.csv); `python3 tools/bench_chart.py` regenerates the chart and this table.
+The chart shows how many times slower than libmmd each tool is; the table has the times, with the same ratios in brackets. Data: [`bench/cli_times.csv`](bench/cli_times.csv). `build/bench-chart` writes both, and libmmd draws the chart.
 
 <!-- bench-table -->
 | input | libmmd | mmdr 0.3.1 | mermaid-cli 11.17 |
@@ -188,7 +187,7 @@ In brackets: how many times slower than libmmd. Data: [`bench/cli_times.csv`](be
 | class_full (tests/cases) | 0.72 ms | 9.64 ms (13×) | 1124 ms (1561×) |
 <!-- /bench-table -->
 
-Rendering in-process through the library, timed with `build/bench` (minimum over repeated renders, clang build, from [`bench/results_v14.txt`](bench/results_v14.txt) and [`bench/results_libmmd_inproc.txt`](bench/results_libmmd_inproc.txt)):
+Rendering in-process through the library, timed with `build/bench-render` (minimum over repeated renders, clang build, from [`bench/results_v14.txt`](bench/results_v14.txt) and [`bench/results_libmmd_inproc.txt`](bench/results_libmmd_inproc.txt)):
 
 | input | size in → SVG out | time |
 |---|---|---:|
@@ -201,15 +200,16 @@ Rendering in-process through the library, timed with `build/bench` (minimum over
 [`bench/results_fixtures.txt`](bench/results_fixtures.txt) has library and CLI times against mmdr for all 31 mmdr flowchart fixtures. To reproduce:
 
 ```sh
-make && build/bench bench/inputs/medium.mmd 30
-MMDR=/path/to/mmdr python3 bench/compare.py bench/mmdr_fixtures/*.mmd
+make build/bench-render build/bench-compare
+build/bench-render bench/inputs/medium.mmd 30
+MMDR=/path/to/mmdr build/bench-compare bench/mmdr_fixtures/*.mmd
 ```
 
 mermaid-cli spends most of its time starting Chrome. Its per-diagram cost is lower when it renders many diagrams in one process. The comparison is still useful for the common case of one CLI call per diagram.
 
 ## Gallery: libmmd vs mermaid-cli
 
-Each image puts libmmd on the left and mermaid-cli on the right (11.17; 12.0.0 for agent flow and use case, which 11.17 lacks), rendered from the same source in `tests/cases/`. To regenerate them, run `python3 tools/gallery.py tests/cases/<name>.mmd`.
+Each image puts libmmd on the left and mermaid-cli on the right (11.17; 12.0.0 for agent flow and use case, which 11.17 lacks), rendered from the same source in `tests/cases/`. To regenerate them, run `build/sbs --gallery tests/cases/<name>.mmd`.
 
 | | |
 |---|---|
@@ -230,22 +230,22 @@ More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 
 | what | how |
 |---|---|
-| Golden + sanity tests (200 cases; XML well-formedness, error positions, viewBox bounds, mermaid docs corpus) | `make test` (`UPDATE_GOLDEN=1 make test` to refresh) |
-| Locale independence: the corpus rendered under a comma-decimal locale must match the C locale byte for byte (skipped when none is installed) | `make test` |
+| The corpus through the CLI: 204 cases, mermaid's 432 documentation examples, 400 random flowcharts, the benchmark inputs. No crash; well-formed XML; everything drawn inside the viewBox; errors that name line and column; output byte-identical to the goldens (`tests/golden/`, `tests/sums`); every example mermaid renders, rendered; no CSS selector that matches nothing | `make test` (`UPDATE_GOLDEN=1 make test` accepts changed output) |
+| Locale independence: the corpus rendered under a comma-decimal locale must match the C locale byte for byte (where none is installed the test compiles one with `localedef`) | `make test` |
 | Writer round trip: random labels through 102 slots of every diagram type, every typed helper (keyword-like ids included), number round trip, error paths | `make test` (`build/test-writer [iterations]`) |
-| Writer vs mermaid.js: the writer test's corpus (~400 diagrams per seed) must parse in mermaid and show every label (skips without mermaid-cli) | `python3 tools/writer_mmdc_check.py [-v] [--seeds=N]` |
-| Mermaid docs corpus: 432 examples from mermaid's syntax docs, 432/432 (all of them render in mermaid too) | `python3 tools/docs_audit.py [-v]` |
-| CSS audit: every class selector a renderer's `<style>` or the `themeVariables` table can write must match an element in some output of its diagram type (a rule that matches nothing is dead weight, or a theme variable with no effect) | `make test` (`python3 tools/css_audit.py`) |
-| ASan + UBSan build | `make asan` → `build-asan/mmd` |
-| Fuzzing (mutational, under ASan or MSan; crashing inputs are saved under `TMPDIR` and printed) | `python3 tests/fuzz.py build-asan/mmd 1000 [seed]` |
-| Uninitialised arena reads (malloc poisoned with two fill bytes, output compared; needs `make` and `make asan` first) | `sh tests/poison.sh` |
-| Allocation failure: each malloc fails in turn in `make test` (0.2 s); `make oom` also fails arena allocations, sampled, under ASan (2 s run) | `make oom` |
-| ASan+UBSan and MemorySanitizer over the tests and the corpus (needs clang) | `tools/sancheck.sh` (`CC=clang-23` to pick one) |
-| Stress generator (every type, density 1×–5×) | `python3 tools/stress_gen.py OUT 2 SEED SCALE` |
-| Visual quality scanner (edges through nodes, label overlaps, labels on edges, out-of-bounds…) | `python3 tools/quality_scan.py files… [-v]` |
-| Layout agreement with mermaid (rank/cross-axis order, node-centre error) | `python3 bench/posagree.py` |
-| Side-by-side ranking against mermaid-cli renders | `python3 tools/sbs_rank.py`, `tools/sbs_pair.sh` |
-| Byte-identity check for perf work | `sh bench/eq/cmp.sh` |
+| Number formats and theme colours against values taken from d3-format and mermaid | `make test` |
+| Allocation failure: each malloc fails in turn; `make oom` also fails arena allocations, sampled, under ASan | `make test`, `make oom` |
+| All of the above under ASan + UBSan; then the corpus again with malloc'd memory filled with a byte, so that output read from an unwritten arena changes | `make asan` |
+| All of the above under MemorySanitizer (clang) | `make msan` |
+| Fuzzing (mutational, under ASan + UBSan; crashing inputs are saved under `TMPDIR` and printed) | `make fuzz [N=1000] [SEED=1]` |
+| Writer vs mermaid.js: the writer test's corpus (~400 diagrams per seed) must parse in mermaid and show every label (skips without mermaid-cli) | `build/writer_check [-v] [--seeds=N]` |
+| Which documentation examples mermaid itself renders (`tests/docs/mermaid_status.txt`) | `build/docs status` |
+| Stress generator (every type, density 1×–5×) | `build/gen stress OUT 2 SEED SCALE` |
+| Visual quality scanner (edges through nodes, label overlaps, labels on edges, out-of-bounds…) | `build/quality_scan [files…]` |
+| Layout agreement with mermaid: node order along each axis, node-centre error, diagram proportions | `build/agree flow`, `build/agree state`, `build/agree size` |
+| Pictures beside mermaid's, before and after a change | `build/sbs [--base REV] files…` |
+
+`make tools` builds the programs of the lower rows. Those that compare with mermaid need node, mermaid-cli and Chrome: `MMDC`, `MMDC_PUPPETEER` and `CHROME` name them where `PATH` does not.
 
 ## Status and limitations
 

@@ -49,7 +49,7 @@ Numbers here are historical; see bench/results_v*.txt.
 
 ## Docs syntax corpus
 
-`tests/docs/<doc>/NN.mmd`: all 432 ```` ```mermaid ```` examples from mermaid's `packages/mermaid/src/docs/syntax/*.md` (mermaid 6d8921f, extracted by `tools/extract_docs.py`). `python3 tools/docs_audit.py [-v] [--mmdc]` reports per-type pass counts against mermaid-cli (cached in `tests/docs/mermaid_status.txt`); `tools/docs_sbs.py` renders side-by-sides. Every type passes 100% of the examples mermaid itself renders (432/432; examples mermaid rejects would be excluded). `make test` runs the audit and fails on any regression.
+`tests/docs/<doc>/NN.mmd`: all 432 ```` ```mermaid ```` examples from mermaid's `packages/mermaid/src/docs/syntax/*.md` (mermaid 6d8921f, extracted by `build/docs extract`). `build/docs status` asks mermaid.js which of them it renders and records that in `tests/docs/mermaid_status.txt`; `build/sbs <doc>` renders side-by-sides. Every type passes 100% of the examples mermaid itself renders (432/432; examples mermaid rejects would be excluded). `make test` fails on any regression.
 
 ## Fidelity vs mermaid
 
@@ -148,13 +148,13 @@ on the nested-cluster cases checked, ranks and ordering then agree and libmmd's 
 - Themes: `default`, `dark`, `forest`, `neutral` via `%%{init: {"theme": ...}}%%`, frontmatter, or `-t`.
 - Markdown strings (`"`**bold** *italic*`"`) with auto-wrap at 200px, `fa:fa-name` icons
   (Font Awesome glyphs; needs the font installed to render), edge ids `A e1@--> B`, `e1@{ animate: true }`.
-- Golden tests in `tests/golden` (`UPDATE_GOLDEN=1 bash tests/run_tests.sh` to refresh).
+- Golden tests in `tests/golden` (`UPDATE_GOLDEN=1 make test` to refresh).
 - Benchmarks: `bench/results_v2.txt`.
 
 ## v3: build options, batch API, routing
 
-- Build: `make` (portable `-O2`), opt-in `make MARCH=native`, `make LTO=1`, `make pgo [LTO=1 MARCH=native]` (output in `build-pgo/`).
-- Shared library: `build/libmmd.so.0.3.0` (soname `libmmd.so.0`, only `mmd_*` exported) plus `build/mmd.pc`; `make install PREFIX=/usr DESTDIR=...`.
+- Build: `make` (portable `-O2`), opt-in `-march=native` through `CFLAGS`, `make LTO=1`, `make pgo` (output in `build-pgo/`).
+- Shared library: `build/libmmd.so.0.3.0` (soname `libmmd.so.0`, only `mmd_*` exported); `make install PREFIX=/usr DESTDIR=...` also writes `mmd.pc`.
 - Batch rendering: `mmd_context_new()` / `mmd_context_render_svg()` / `mmd_context_free()` reuse the arena and output buffer between calls.
   A context also keeps the theme it last derived (`DThemeMemo` in `src/dcfg.h`): mermaid's engine recomputes about 300
   variables whenever a named theme meets `themeVariables`, 17–50 µs a render (`theme: default` runs `updateColors()`
@@ -197,7 +197,7 @@ on the nested-cluster cases checked, ranks and ordering then agree and libmmd's 
 
 ## v8
 - Medium avoid-on 394.7 µs (v1 404.1): single ordering sweep for mid-size graphs (512 < segs ≤ 4096).
-- `tests/bounds.py`: every case and repo fixture must keep all geometry (path control points, exact arcs,
+- Bounds check (now in `tests/corpus.c`): every case and repo fixture must keep all geometry (path control points, exact arcs,
   shapes, text anchors) inside the root viewBox; self-loop curves now included in the flowchart viewBox.
 - Compound ordering seeded with dagre's tie order; same-rank order agreement with mermaid 0.175 → 0.936.
 - Numbers: bench/results_v8.txt.
@@ -205,7 +205,7 @@ on the nested-cluster cases checked, ranks and ordering then agree and libmmd's 
 ## v10
 
 - Faithful dagre compound ranking in dagre mode (`src/drank.c`): nesting graph (border top/bottom nodes, nodeSep weights), network simplex (graphlib iteration order), label proxies, removeEmptyRanks, cleanup, border segments.
-- Ordering agreement with mermaid: 1051/1051. Rank-axis position ordering vs mermaid SVGs: 100%. Cross-axis: 99.1% (`bench/posagree.py`).
+- Ordering agreement with mermaid: 1051/1051. Rank-axis position ordering vs mermaid SVGs: 100%. Cross-axis: 99.1% (`build/agree flow`).
 - Small graphs use arena scratch in `dagre_order`. Small takes 16.9 µs in dagre mode, or 12.8 µs in fast mode. See `bench/results_v10.txt`.
 
 ## v9
@@ -224,7 +224,7 @@ Mermaid-exact text metrics (Liberation/Arial advances+kerning), mermaid node pad
   padding in dagre mode, dagre ordering threshold (now N<=256), exact edge-label bbox sizes, and dagre's
   labelRank (proxy rank on nesting-graph ranks before removeEmptyRanks).
 - Small render 15.0 us (target 11.7 us not met); medium 590 us (dagre-exact ordering now applies).
-- bench/eq/: byte-identity harness. See bench/results_v12.txt.
+- Byte-identity harness over 400 random flowcharts (now `tests/flow/` and `tests/sums`, part of `make test`). See bench/results_v12.txt.
 
 ## v13 (speed)
 Byte-identical output. medium 590.5 → 481.5 µs, small 15.1 → 14.6 µs (min, this box). v1 is at 407 / 11.9, so the targets are not met yet.
@@ -232,11 +232,33 @@ Main gains came from incremental network simplex (rank cycles 449k → 231k) and
 Build with `-DMMD_PROFILE` to get per-phase cycle counters. See bench/results_v13.txt and bench/prof13/.
 
 ## Toolchain
-- Builds use `-std=gnu2y -fms-extensions -Wno-microsoft-anon-tag` with clang and gcc (`make both`; developed on clang 23 and gcc 16). Code must compile warning-free under both. Where no distro ships a recent gcc, a C-only build is quick: `configure --enable-languages=c --disable-bootstrap --disable-multilib --program-suffix=-16` (about 5 minutes on 8 cores). `gcc-16 -fanalyzer` is clean on `src/`; `clang --analyze` only reports leaks through `[[gnu::cleanup]]` owners, which it does not model.
-- Scripts run from any directory and assume no machine layout: mermaid-cli, its puppeteer config and Chrome come from `MMDC`, `MMDC_PUPPETEER` and `CHROME` or `PATH` (`tools/env.py`), scratch files go under `TMPDIR`.
-- Byte-identity gate: `bench/eq/cmp.sh build/mmd` must print `bad=0`.
+- Builds use `-std=gnu2y -fms-extensions -Wno-microsoft-anon-tag` with gcc and clang (`make both`, warnings as errors; developed on gcc 16 and clang 23). Code must compile warning-free under both. Where no distro ships a recent gcc, a C-only build is quick: `configure --enable-languages=c --disable-bootstrap --disable-multilib --program-suffix=-16` (about 5 minutes on 8 cores). `gcc-16 -fanalyzer` is clean on `src/`; `clang --analyze` only reports leaks through `[[gnu::cleanup]]` owners, which it does not model. `make compile_commands.json` writes what clangd needs.
+- Byte-identity gate: `make test` compares every output with its golden or its hash in `tests/sums`; a change that is not meant to change output must leave both alone.
 - Before writing a string helper, check `src/base.h` (`str_sub`/`str_from`/`str_span`, `str_split`, `str_cat`/`STR_CAT`, `buf_cstr`), `src/text.h` (`label_br_len`) and `src/dgraph.h` (`dg_unquote`, `dg_css_ok`, `dg_arrowhead`). Literal config keys go through `dcfg_get_str(S("..."))`.
 - `restrict` is a caller contract, not decoration: use it only where every caller provably passes disjoint objects (Buf appends vs. their source, independent scratch arrays). Never append a Buf into itself — `buf_reserve` may move it. `str_cat`, `str_split` and `arena_grow` stay unqualified (their inputs and results may legitimately share storage), and the public `include/mmd.h` stays unrestricted.
 - Resource release uses `[[gnu::cleanup]]` via `src/base.h`: `AUTOFREE` (free), `AUTO_BUF` (Buf), `AUTO_ARENA` (Arena), `AUTOCLOSE` (FILE). No hand-written frees or goto-cleanup; return ownership with `TAKE_PTR(p)` / `buf_take(&b)`. Never `goto` past a cleanup variable's declaration (clang errors, gcc silently skips it): declare them before the first jump.
-- Diagram code may format with printf `%g`/`%.2f` and read config numbers with `strtod`: `render()` in `src/mmd.c` switches the thread to a cached C locale for the whole render (about 5 ns), so none of them needs a locale-free twin. Code outside a render takes the same switch where it needs one: `c_locale_enter()` in `src/base.h`. `tests/locale_test.c` guards it.
-- Output must not depend on earlier renders in the same process: arena memory is not zeroed (`ANEW`), and fresh chunks only look zero. MemorySanitizer finds reads before writes in fresh memory (`tools/sancheck.sh`), `tests/poison.sh` the ones that a zero fill hides, and the locale test's reused context the ones that only stale data from an earlier render exposes.
+- Diagram code may format with printf `%g`/`%.2f` and read config numbers with `strtod`: `render()` in `src/mmd.c` switches the thread to a cached C locale for the whole render (about 5 ns), so none of them needs a locale-free twin. Code outside a render takes the same switch where it needs one: `c_locale_enter()` in `src/base.h`. `tests/locale.c` guards it.
+- Output must not depend on earlier renders in the same process: arena memory is not zeroed (`ANEW`), and fresh chunks only look zero. MemorySanitizer finds reads before writes in fresh memory (`make msan`), the poisoned second half of `make asan` the ones that a zero fill hides, and the locale test's reused context the ones that only stale data from an earlier render exposes.
+
+## Build, tests and tools
+
+Everything is C and one Makefile; nothing in the tree needs Python or a shell script. JavaScript remains only where mermaid's own code has to run: `tools/mermaid_render.mjs` (mermaid.js in a browser), `tools/quality_scan.js` (runs inside Chrome), and the generators that take tables out of mermaid and d3 (`tools/gen_mtheme.mjs`, `tools/*_cases.mjs`, `tools/genicons.js`).
+
+```mermaid
+flowchart LR
+  src[src/*.c] --> a[libmmd.a] & so[libmmd.so]
+  a --> mmd[build/mmd]
+  qa[tools/qa/*.c] --> kit[libqa.a]
+  a & kit --> t["tests/X.c → test-X"] & b["bench/X.c → bench-X"] & d["tools/X.c → X"]
+  so --> ts[test-shared]
+```
+
+- **Makefile.** `CC`, `CPPFLAGS`, `CFLAGS`, `LDFLAGS`, `LDLIBS` belong to the user; what the code needs sits in front of them, so `make CFLAGS=-O3` still builds. A variant is a sub-make into its own `BUILD` directory (`both`, `asan`, `msan`, `oom`, `pgo`); flags are not tracked, so changing them in place needs `make clean`. Header dependencies come from `-MMD`. `mmd.pc` is written by `make install`, where `PREFIX` is final.
+- **`-ffp-contract=off`.** With `-march=native` both compilers fused multiply-adds and five outputs of the corpus changed in a late digit (`tests/docs/eventmodeling/08`, `sankey/01`, three of `tests/flow`). Without contraction gcc and clang, `-O2` and `-O3`, generic and native builds all give the same bytes, and the benchmarks do not move.
+- **`LTO=1`** compiles fat objects (`-flto -ffat-lto-objects`): `libmmd.a` keeps machine code, so plain `ar` indexes it and a user's compiler and linker need not match ours. clang gets `-fuse-ld=lld`, the linker that reads its bitcode back. LTO is worth about nothing here; it exists for packagers who build everything that way.
+- **`make pgo`** builds twice in `build-pgo/` (gcc names each profile after the object's path, so a second directory silently finds none) and trains the CLI on every input in the tree. Trained on the flowchart benchmarks alone, the build was slower than `-O2` on every other diagram type: code the profile never saw is optimised for size. Measured over `-O2`: 5–13% with gcc 16, 1–8% with clang 23.
+- **Tiers.** `make test` is the gate (about a second). `make both` is the warning check. `make asan` and `make msan` run the same tests in sanitizer builds (`-fno-sanitize-recover`, so a report fails the render that made it), `make oom` the allocation-failure test with the arena failing too, `make fuzz` the mutation fuzzer on the ASan build.
+- **`tests/corpus.c`** renders every input in the tree once through the CLI, in parallel, and checks all it can about each: status, sanitizer reports, XML, bounds, golden or hash, CSS. It pins `MMD_TODAY`, so gantt output does not depend on the day the test runs. `UPDATE_GOLDEN=1` rewrites `tests/golden/*.svg` (the 201 cases, reviewable as diffs) and `tests/sums` (a hash per other input: which outputs a change touched).
+- **`tools/qa/`** is the kit the programs share (`qa.h`): child processes with captured output, a thread pool, files and globs, a small strict XML reader (`xml.c`: it is the well-formedness check, so it rejects what XML 1.0 rejects), and a bit-exact `random.Random`. The generators used to be Python; `build/gen` reproduces `bench/inputs/` and `tests/flow/` byte for byte, and a fuzz seed still names the same inputs.
+- **mermaid as reference.** `qa_mermaid()` runs `tools/mermaid_render.mjs`: one browser, mermaid-cli's own mermaid, plugins and page, results cached under `$TMPDIR/mmd-UID/`. It must load the stylesheets mermaid-cli loads: without the Recursive font mermaid measures labels in a fallback font and every node comes out a different size. mermaid-cli, its puppeteer config and Chrome come from `MMDC`, `MMDC_PUPPETEER` and `CHROME`, else `PATH`. Pictures (`build/sbs`) are composed as an HTML page and screenshot by Chrome; there is no image library.
+- **Which mermaid.** mermaid 12 draws most types in a new look and lays some out with another engine unless told otherwise; libmmd draws the classic look with dagre's layout. Every comparison of layout or pictures (`build/agree`, `build/sbs`) therefore renders mermaid with `QA_CLASSIC` (`look: classic, layout: dagre, theme: default`). With mermaid's defaults, flowchart node order agrees 15% instead of 99.9%.

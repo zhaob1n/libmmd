@@ -1,11 +1,46 @@
 /* A host that sets a comma-decimal LC_NUMERIC must get the same SVG as one in the C locale, and keep
  * its own locale afterwards. Renders every file named on the command line plus inputs that reach each
- * printf/strtod site, in "C" and then in the first comma locale installed; skips if there is none. */
+ * printf/strtod site, in "C" and then in a comma locale: the first one installed, else one compiled
+ * for the run with localedef; skips where that fails too. */
+#define _GNU_SOURCE
+#include <fcntl.h>
+#include <ftw.h>
 #include <locale.h>
+#include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include "mmd.h"
+
+static const char *comma_locale(void) {
+    static const char *const COMMA[] = {"de_DE.UTF-8", "de_DE.utf8", "fr_FR.UTF-8", "fr_FR.utf8", "nl_NL.UTF-8",
+                                        "ru_RU.UTF-8", "es_ES.UTF-8", "it_IT.UTF-8", "pt_BR.UTF-8"};
+    for (size_t i = 0; i < sizeof COMMA / sizeof *COMMA; i++)
+        if (setlocale(LC_ALL, COMMA[i]) && !strcmp(localeconv()->decimal_point, ",")) return COMMA[i];
+    return nullptr;
+}
+
+/* de_DE.UTF-8 in a directory of its own, which LOCPATH then names and exit() removes. localedef's
+ * status is not checked: it reports warnings as failure, and comma_locale() says whether the result
+ * works. */
+static char locpath[64] = "/tmp/mmd-locale.XXXXXX";
+static int rm_one(const char *path, const struct stat *, int, struct FTW *) { return remove(path); }
+static void rm_locale(void) { nftw(locpath, rm_one, 8, FTW_DEPTH | FTW_PHYS); }
+static bool compile_locale(void) {
+    char out[96];
+    if (!mkdtemp(locpath) || atexit(rm_locale) != 0) return false;
+    snprintf(out, sizeof out, "%s/de_DE.UTF-8", locpath);
+    char *const argv[] = {"localedef", "-i", "de_DE", "-f", "UTF-8", out, nullptr};
+    posix_spawn_file_actions_t quiet;
+    pid_t pid;
+    if (posix_spawn_file_actions_init(&quiet) != 0) return false;
+    bool ran = posix_spawn_file_actions_addopen(&quiet, 2, "/dev/null", O_WRONLY, 0) == 0 &&
+               posix_spawnp(&pid, argv[0], &quiet, nullptr, argv, environ) == 0 && waitpid(pid, nullptr, 0) == pid;
+    posix_spawn_file_actions_destroy(&quiet);
+    return ran && setenv("LOCPATH", locpath, 1) == 0;
+}
 
 static const char *const INLINE[] = {
     "%%{init: {\"pie\": {\"textPosition\": 0.6}}}%%\npie\n  \"a\" : 1\n  \"b\" : 3\n",
@@ -38,12 +73,9 @@ static char *slurp(const char *path, size_t n[static 1]) {
 }
 
 int main(int argc, char **argv) {
-    static const char *const COMMA[] = {"de_DE.UTF-8", "de_DE.utf8", "fr_FR.UTF-8", "fr_FR.utf8", "nl_NL.UTF-8",
-                                        "ru_RU.UTF-8", "es_ES.UTF-8", "it_IT.UTF-8", "pt_BR.UTF-8"};
-    const char *loc = nullptr;
-    for (size_t i = 0; i < sizeof COMMA / sizeof *COMMA && !loc; i++)
-        if (setlocale(LC_ALL, COMMA[i]) && !strcmp(localeconv()->decimal_point, ",")) loc = COMMA[i];
-    if (!loc) { puts("locale: skipped (no comma-decimal locale installed)"); return 0; }
+    const char *loc = comma_locale();
+    if (!loc && compile_locale()) loc = comma_locale();
+    if (!loc) { puts("locale: skipped (no comma-decimal locale installed, and localedef made none)"); return 0; }
 
     size_t ni = sizeof INLINE / sizeof *INLINE, total = ni + (size_t)(argc - 1), bad = 0, rendered = 0;
     char **src = calloc(total, sizeof *src);

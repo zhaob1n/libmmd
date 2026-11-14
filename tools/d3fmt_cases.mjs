@@ -1,4 +1,4 @@
-// Cases for tests/d3fmt_test.c from the real d3-format: spec \t value (hex bits) \t d3.format(spec)(value),
+// Cases for tests/d3fmt.c from the real d3-format: spec \t value (hex bits) \t d3.format(spec)(value),
 // "!" where d3 rejects the spec. Usage: node tools/d3fmt_cases.mjs [d3-format dir] > tests/d3fmt_cases.tsv
 // The default d3-format is the one mermaid-cli (mmdc on PATH) ships, which mermaid's treemap uses.
 import { execSync } from 'node:child_process';

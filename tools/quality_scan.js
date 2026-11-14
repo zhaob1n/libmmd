@@ -1,3 +1,10 @@
+// Geometric defects of the SVGs in the page's div[data-f] wrappers (build/quality_scan builds the page):
+// ll label/label overlap, le label/edge overlap, ct cluster title hit by an edge, ov text overflowing its
+// node shape, cl text clipped by the viewport, en edge through a node that is not one of its ends.
+// <pre id="out"> receives one line per diagram and defect kind, then a line "end" once the scan finished:
+//   FILE \t KIND \t COUNT \t A1 \t B1 \t A2 \t B2 \t A3 \t B3
+// with the first three of the COUNT samples (A, B): two texts, or for ov and cl a text and its excess in
+// px. In the fields '\\', tab, newline and CR are written \\ \t \n \r.
 function R(e){const b=e.getBoundingClientRect();return [b.left,b.top,b.right,b.bottom];}
 function inter(a,b,i){return Math.min(a[2],b[2])-Math.max(a[0],b[0])>i&&Math.min(a[3],b[3])-Math.max(a[1],b[1])>i;}
 function inside(p,b,i){return p[0]>b[0]+i&&p[0]<b[2]-i&&p[1]>b[1]+i&&p[1]<b[3]-i;}
@@ -12,6 +19,7 @@ function sat(A,B){for(const P of [A,B])for(let k=0;k<4;k++){const p=P[k],q=P[(k+
   for(const v of B){const d=v[0]*nx+v[1]*ny;b0=Math.min(b0,d);b1=Math.max(b1,d);} if(a1<=b0||b1<=a0) return false;} return true;}
 function inq(p,A){let s=0;for(let k=0;k<4;k++){const a=A[k],b=A[(k+1)%4],c=(b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]);if(c===0)return false;s+=c>0?1:-1;}return Math.abs(s)===4;}
 const EDGE=/edge|link|relation|transition|message|arrow|flowchart-link|branch|commit-line|messageLine|loopLine|er relationshipLine|path|(^|\s)ae(\s|$)/i;
+const esc=s=>String(s).replace(/[\\\t\n\r]/g,c=>({'\\':'\\\\','\t':'\\t','\n':'\\n','\r':'\\r'})[c]);
 const out=[];
 for(const wrap of document.querySelectorAll('div[data-f]')){
   const f=wrap.dataset.f, svg=wrap.querySelector('svg'); if(!svg) continue;
@@ -75,6 +83,7 @@ for(const wrap of document.querySelectorAll('div[data-f]')){
     for(const n of nodes){const B=n.b; const near=p=>p[0]>B[0]-10&&p[0]<B[2]+10&&p[1]>B[1]-10&&p[1]<B[3]+10;
       if(near(a)||near(z)||n.g.contains(e.p)) continue;
       if(e.pts.filter(p=>inside(p,B,4)).length>=3){res.en.push([e.id,(n.g.textContent||'').trim().slice(0,18)]);}}}
-  for(const k of ['ll','le','ov','ct','cl','en']) if(res[k].length){out.push(res);break;}
+  for(const k of ['ll','le','ov','ct','cl','en']) if(res[k].length) out.push([f,k,res[k].length,...res[k].slice(0,3).flat()].map(esc).join('\t'));
 }
-document.getElementById('out').textContent=JSON.stringify(out);
+out.push('end');
+document.getElementById('out').textContent=out.join('\n')+'\n';
