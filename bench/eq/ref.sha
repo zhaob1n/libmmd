@@ -529,7 +529,8 @@ fdca08e3b4e52100 tests/cases/quadrant_ring_fallback.mmd
 f147e4c67453da7e tests/cases/railroad_edge.mmd
 ab2b73b5e2416d17 tests/cases/railroad_fn.mmd
 d17df4c25acb8c5f tests/cases/railroad_peg.mmd
-52b8efd48048039b tests/cases/requirement_full.mmd
+f5673e3d58852dd4 tests/cases/requirement_dark_label.mmd
+58218354c8b2a031 tests/cases/requirement_full.mmd
 aeb4a72799994932 tests/cases/rich_text.mmd
 224ffdbd5d4d547c tests/cases/sankey_align_center.mmd
 3a4c06864068266b tests/cases/sankey_align_right.mmd
@@ -579,7 +580,7 @@ da4ff7aa1e87bd2f tests/cases/theme_forest_state.mmd
 7867504613dc622e tests/cases/theme_forest_treemap.mmd
 35f3a459562c7d42 tests/cases/theme_neutral.mmd
 ad8c63433a3f1c25 tests/cases/theme_neutral_er.mmd
-5c37fa7b40af477b tests/cases/theme_neutral_req.mmd
+0470a36528b81524 tests/cases/theme_neutral_req.mmd
 3563464936d975d8 tests/cases/theme_neutral_seq.mmd
 3462f41f4d320ca8 tests/cases/theme_neutral_xychart.mmd
 492a9345b229032d tests/cases/theme_vars_derived.mmd

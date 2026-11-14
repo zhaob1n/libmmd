@@ -22,7 +22,7 @@ static constexpr char RELS[][10] = {"contains", "copies", "derives", "satisfies"
 static constexpr char CSS[] =
     "#mermaid .rq{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#mermaid .rqd{stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .rr{fill:none;stroke:#333;stroke-width:1px;stroke-dasharray:10,7;}#mermaid .rr.c{stroke-dasharray:none;}"
-    "#mermaid .rh{fill:#333;}#mermaid .rl{fill:#fff;opacity:.9;}#mermaid .rn{font-weight:bold;}#mermaid .rt{font-size:14px;}";
+    "#mermaid .rh{fill:#333;}#mermaid .rl{fill:rgba(232,232,232,0.8);}#mermaid .rn{font-weight:bold;}#mermaid .rt{font-size:14px;}";
 
 static Str cap(Arena a[static 1], Str s) { /* Medium / Test: capitalise like mermaid */
     if (!s.n || !(s.p[0] >= 'a' && s.p[0] <= 'z')) return s;
@@ -133,7 +133,19 @@ DIAG_FN(requirement_render) {
     BBox bb = dg_bbox(&g);
     if (title.n) bb.y0 -= 30;
     if (!buf_reserve(out, 2048 + g.nn * 700 + g.ne * 400)) return MMD_ERR_NOMEM;
-    DG_HEAD(out, bb, 12, "requirementDiagram", CSS);
+    {
+        /* mermaid 12 draws relation labels as HTML: text in nodeTextColor || textColor on a
+         * requirementEdgeLabelBackground ?? edgeLabelBackground plate (styles.js .label, .labelBkg) */
+        Str bg = dcfg_css("themeVariables.requirementEdgeLabelBackground"), fg = dcfg_theme_var("nodeTextColor");
+        if (!bg.n) bg = dcfg_theme_var("edgeLabelBackground");
+        if (!fg.n) fg = dcfg_theme_var("textColor");
+        AUTO_BUF Buf css = {};
+        buf_lit(&css, CSS);
+        if (bg.n) { buf_lit(&css, "#mermaid .rl{fill:"); buf_str(&css, bg); buf_lit(&css, ";}"); }
+        if (fg.n) { buf_lit(&css, "#mermaid .rlt{fill:"); buf_str(&css, fg); buf_lit(&css, ";}"); }
+        if (css.oom) return MMD_ERR_NOMEM;
+        dg_head(out, bb, 12, "requirementDiagram", css.n, css.p);
+    }
     if (title.n) dg_text(out, title, 18, (bb.x0 + bb.x1) / 2, bb.y0 + 12, "middle", "rn");
     for (size_t e = 0; e < g.ne; e++) {
         if (!g.eptn[e]) continue;
@@ -156,16 +168,12 @@ DIAG_FN(requirement_render) {
             const double *end = P + 2 * g.eptn[e];
             dg_arrowhead(out, "rh", end - 2, end - 4, 5);
         }
-        dg_rect(out, g.elx[e] - g.elw[e] / 2, g.ely[e] - g.elh[e] / 2, g.elw[e], g.elh[e], 0, "rl");
-        { /* mermaid draws relation labels on a light grey plate */
-            double lw, lh;
-            unsigned ln;
-            label_measure(g.elabel[e], fs, &lw, &ln);
-            lh = ln * fs * 1.3;
-            buf_lit(out, "<rect fill=\"#e8e8e8\" fill-opacity=\".8\" x=\""); buf_num(out, g.elx[e] - lw / 2 - 2); buf_lit(out, "\" y=\""); buf_num(out, g.ely[e] - lh / 2);
-            buf_lit(out, "\" width=\""); buf_num(out, lw + 4); buf_lit(out, "\" height=\""); buf_num(out, lh); buf_lit(out, "\"/>");
-        }
-        dg_text(out, g.elabel[e], fs, g.elx[e], g.ely[e], "middle", nullptr);
+        double lw, lh;
+        unsigned ln;
+        label_measure(g.elabel[e], fs, &lw, &ln);
+        lh = ln * fs * 1.3;
+        dg_rect(out, g.elx[e] - lw / 2 - 2, g.ely[e] - lh / 2, lw + 4, lh, 0, "rl");
+        dg_text(out, g.elabel[e], fs, g.elx[e], g.ely[e], "middle", "rlt");
     }
     for (size_t v = 0; v < g.nn; v++) {
         const RInfo *r = &ri.v[v];

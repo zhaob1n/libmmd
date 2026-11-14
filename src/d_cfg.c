@@ -548,7 +548,6 @@ static const TV TVS[] = {
     {"requirementDiagram", "requirementBackground", "#mermaid .rq{fill:$;}"},
     {"requirementDiagram", "requirementBorderColor", "#mermaid .rq,#mermaid .rqd{stroke:$;}"},
     {"requirementDiagram", "relationColor", "#mermaid .rr{stroke:$;}#mermaid .rh{fill:$;stroke:$;}"},
-    {"requirementDiagram", "relationLabelBackground", "#mermaid .rl{fill:$;}"},
     {"requirementDiagram", "requirementTextColor", "#mermaid text{fill:$;}"},
     {"block", "mainBkg", "#mermaid .bn{fill:$;}"},
     {"block", "nodeBorder", "#mermaid .bn,#mermaid .bg{stroke:$;}"},
