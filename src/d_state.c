@@ -10,7 +10,9 @@
 
 typedef enum : uint8_t { SK_STATE, SK_START, SK_END, SK_FORK, SK_JOIN, SK_CHOICE, SK_COMPOSITE } SKind;
 typedef struct Note { int32_t v; bool left; Str text; uint32_t ord, at; } Note; /* at: transitions before it */
-typedef struct Frame { int32_t comp, region; unsigned nregions; } Frame;
+/* one `state X { ... }` block: its states go in `region`, the composite until a `--` splits the block.
+ * dir: the block's `direction`, the composite's unless the block splits, then its regions' */
+typedef struct Frame { int32_t comp, region; uint32_t blk, ord0; Dir dir; bool split; } Frame;
 typedef struct CDef { Str name, css; } CDef;
 
 typedef struct StP {
@@ -20,11 +22,14 @@ typedef struct StP {
     VEC(int32_t) ccl;  /* composite node -> its cluster, else NONE */
     VEC(Str) desc;     /* description lines joined by '\n' */
     VEC(uint32_t) ord; /* per node: its place in mermaid's node list, UNSEEN until a statement draws it */
+    VEC(uint32_t) blk; /* per node: the block that put it in its parent (0: none, the root) */
     VEC(Note) notes;
     VEC(CDef) cdefs;
+    uint8_t *ext;      /* per cluster: 1 when a transition crosses it, so its parent's graph lays it out */
     Frame stk[64];
     unsigned depth;
-    uint32_t seq; /* next place in mermaid's node list */
+    uint32_t seq;  /* next place in mermaid's node list */
+    uint32_t nblk; /* blocks opened so far */
     size_t *err_off;
     char *msg;
 } StP;
@@ -34,6 +39,7 @@ constexpr uint32_t UNSEEN = UINT32_MAX;
 static mmd_status sfail(StP p[static 1], size_t off, const char m[static 1]) { return diag_fail(p->err_off, p->msg, off, m); }
 
 static int32_t cur_scope(const StP p[static 1]) { return p->depth ? p->stk[p->depth - 1].region : NONE; }
+static uint32_t cur_blk(const StP p[static 1]) { return p->depth ? p->stk[p->depth - 1].blk : 0; }
 
 [[nodiscard]] static int32_t state(StP p[static 1], Str id, SKind k) {
     bool fresh;
@@ -41,11 +47,12 @@ static int32_t cur_scope(const StP p[static 1]) { return p->depth ? p->stk[p->de
     if (v == NONE) return NONE;
     if (fresh) {
         if (!VEC_PUSH(p->A, &p->kind, (uint8_t)k) || !VEC_PUSH(p->A, &p->desc, (Str){}) ||
-            !VEC_PUSH(p->A, &p->ccl, NONE) || !VEC_PUSH(p->A, &p->ord, UNSEEN))
+            !VEC_PUSH(p->A, &p->ccl, NONE) || !VEC_PUSH(p->A, &p->ord, UNSEEN) || !VEC_PUSH(p->A, &p->blk, cur_blk(p)))
             return NONE;
         p->g.nparent[v] = cur_scope(p);
     } else if (p->g.nparent[v] == NONE && cur_scope(p) != NONE && p->kind.v[v] != SK_COMPOSITE) {
         p->g.nparent[v] = cur_scope(p); /* first referenced outside, defined inside a composite */
+        p->blk.v[v] = cur_blk(p);
     }
     if (k != SK_STATE) p->kind.v[v] = (uint8_t)k;
     return v;
@@ -72,6 +79,14 @@ static void seen(StP p[static 1], int32_t v) {
         Str scope = sc == NONE ? S("") : p->g.sid[sc];
         Str nid = STR_CAT(p->A, scope, S("\x01"), src ? S("start") : S("end"));
         if (!nid.n) return NONE;
+        int32_t old = graph_find(&p->g, nid);
+        if (old != NONE && p->g.nparent[old] != sc) {
+            /* an earlier block of this composite split and took that one into its first region */
+            char buf[16];
+            int len = snprintf(buf, sizeof buf, "\x01%u", cur_blk(p));
+            nid = STR_CAT(p->A, nid, (Str){.p = buf, .n = (size_t)len});
+            if (!nid.n) return NONE;
+        }
         int32_t v = state(p, nid, src ? SK_START : SK_END);
         if (v != NONE) seen(p, v);
         return v;
@@ -94,29 +109,43 @@ static mmd_status open_composite(StP p[static 1], int32_t v, size_t off) {
         g->sdir[c] = DIR_TB; /* mermaid's DEFAULT_NESTED_DOC_DIR, whatever the diagram's direction */
     }
     p->ccl.v[v] = c;
-    p->stk[p->depth++] = (Frame){.comp = c, .region = c, .nregions = 1};
+    /* mermaid keeps every block of a composite as a doc of its own: a second `state X {` adds to
+     * X, and its `--` split that block only */
+    p->stk[p->depth++] = (Frame){.comp = c, .region = c, .blk = ++p->nblk, .ord0 = p->seq++, .dir = g->sdir[c]};
     return MMD_OK;
+}
+
+/* a region is a composite without a name: a hidden node for its place among its siblings, and a cluster */
+[[nodiscard]] static int32_t add_region(StP p[static 1], const Frame f[static 1], uint32_t ord) {
+    Graph *g = &p->g;
+    char buf[24];
+    int len = snprintf(buf, sizeof buf, "\x02r%zu", g->ns);
+    Str id = STR_CAT(p->A, g->sid[f->comp], (Str){.p = buf, .n = (size_t)len});
+    int32_t v = id.n ? state(p, id, SK_COMPOSITE) : NONE;
+    int32_t r = v == NONE ? NONE : dg_cluster(g, id, (Str){}, f->comp);
+    if (r == NONE) return NONE;
+    g->nparent[v] = f->comp, g->nflags[v] |= NF_SUBREF | NF_HIDDEN;
+    p->ord.v[v] = ord, p->ccl.v[v] = r;
+    g->sclass[r] = S("region"), g->sdir[r] = f->dir;
+    return r;
 }
 
 static mmd_status new_region(StP p[static 1], size_t off) {
     if (!p->depth) return sfail(p, off, "'--' outside a composite state");
     Graph *g = &p->g;
     Frame *f = &p->stk[p->depth - 1];
-    char buf[24];
-    if (f->nregions == 1) { /* move existing children into region 0 */
-        Str id = STR_CAT(p->A, g->sid[f->comp], S("\x02r0"));
-        int32_t r0 = id.n ? dg_cluster(g, id, (Str){}, f->comp) : NONE;
+    if (!f->split) { /* what the block has put in the composite so far is its first region */
+        int32_t r0 = add_region(p, f, f->ord0);
         if (r0 == NONE) return MMD_ERR_NOMEM;
-        g->sclass[r0] = S("region");
-        for (size_t v = 0; v < g->nn; v++) if (g->nparent[v] == f->comp) g->nparent[v] = r0;
-        for (size_t s = 0; s < g->ns; s++) if ((int32_t)s != r0 && g->sparent[s] == f->comp) g->sparent[s] = r0;
+        for (size_t v = 0; v < g->nn; v++) {
+            int32_t c = p->ccl.v[v];
+            if (g->nparent[v] != f->comp || p->blk.v[v] != f->blk || c == r0) continue;
+            g->nparent[v] = r0;
+            if (c != NONE) g->sparent[c] = r0;
+        }
+        f->split = true;
     }
-    int len = snprintf(buf, sizeof buf, "\x02r%u", f->nregions++);
-    Str id = STR_CAT(p->A, g->sid[f->comp], (Str){.p = buf, .n = (size_t)len});
-    int32_t r = id.n ? dg_cluster(g, id, (Str){}, f->comp) : NONE;
-    if (r == NONE) return MMD_ERR_NOMEM;
-    g->sclass[r] = S("region");
-    f->region = r;
+    if ((f->region = add_region(p, f, p->seq++)) == NONE) return MMD_ERR_NOMEM;
     return MMD_OK;
 }
 
@@ -143,25 +172,26 @@ static const char *find_sub(Str s, Str needle) {
 /* directions as mermaid's layout settles them, outer clusters first. A cluster that a transition
  * crosses (one end inside it, one outside; a transition to a composite itself does not cross it)
  * stays in its parent's graph there, so it runs its parent's way whatever it says, as flowchart
- * subgraphs do. A region nothing crosses, without a direction of its own, takes the one its composite
- * declares. Note links do not count: mermaid's note groups sit at the root, so a note on a state in
- * a composite would cross it. */
+ * subgraphs do. Note links do not count: mermaid's note groups sit at the root, so a note on a state
+ * in a composite would cross it. */
 static mmd_status settle_dirs(StP p[static 1]) {
     Graph *g = &p->g;
     size_t S = g->ns;
-    uint8_t *ext = ANEW(p->A, uint8_t, S + 1);
+    p->ext = ANEW(p->A, uint8_t, S + 1);
     unsigned *dep = ANEW(p->A, unsigned, S + 1), maxd = 0;
-    Dir *decl = ANEW(p->A, Dir, S + 1);
-    if (!ext || !dep || !decl) return MMD_ERR_NOMEM;
+    if (!p->ext || !dep) return MMD_ERR_NOMEM;
+    uint8_t *ext = p->ext;
     for (size_t r = 0; r < S; r++) {
-        ext[r] = 0, dep[r] = 0, decl[r] = g->sdir[r];
+        ext[r] = 0, dep[r] = 0;
         for (int32_t q = (int32_t)r; q != NONE; q = g->sparent[q]) dep[r]++;
         if (dep[r] > maxd) maxd = dep[r];
     }
     for (size_t e = 0; e < g->ne; e++)
         for (unsigned side = 0; side < 2; side++) {
             int32_t x = side ? g->eto[e] : g->efrom[e], y = side ? g->efrom[e] : g->eto[e];
+            int32_t cy = p->ccl.v[y]; /* a transition to composite C itself stays outside C */
             for (int32_t c = g->nparent[x]; c != NONE; c = g->sparent[c]) {
+                if (c == cy) break;
                 bool shared = false;
                 for (int32_t d = g->nparent[y]; d != NONE && !shared; d = g->sparent[d]) shared = d == c;
                 if (shared) break; /* and so are c's ancestors */
@@ -170,10 +200,9 @@ static mmd_status settle_dirs(StP p[static 1]) {
         }
     for (unsigned d = 1; d <= maxd; d++)
         for (size_t r = 0; r < S; r++) {
-            if (dep[r] != d) continue;
+            if (dep[r] != d || !ext[r]) continue;
             int32_t up = g->sparent[r];
-            if (ext[r]) g->sdir[r] = up == NONE ? g->dir : g->sdir[up];
-            else if (g->sclass[r].n && !(g->sflags[r] & SF_DIRSET)) g->sdir[r] = decl[up];
+            g->sdir[r] = up == NONE ? g->dir : g->sdir[up];
         }
     return MMD_OK;
 }
@@ -197,15 +226,16 @@ static mmd_status parse(StP p[static 1], LineIt it[static 1]) {
                 continue;
             }
             /* mermaid reads it from the doc it stands in, so in the first of several regions it
-             * turns only that one; it is the composite's here, for every region without its own */
-            const Frame *f = &p->stk[p->depth - 1];
-            int32_t c = f->nregions > 1 ? f->region : f->comp;
-            g->sdir[c] = dd, g->sflags[c] |= SF_DIRSET;
+             * turns only that one; it is the block's here, for every region of it without its own */
+            Frame *f = &p->stk[p->depth - 1];
+            if (f->split) g->sdir[f->region] = dd;
+            else f->dir = dd;
             continue;
         }
         if (str_eq(line, S("}"))) {
             if (!p->depth) return sfail(p, off, "unbalanced '}'");
-            p->depth--;
+            const Frame *f = &p->stk[--p->depth];
+            if (!f->split) g->sdir[f->comp] = f->dir;
             continue;
         }
         if (str_eq(line, S("--"))) { mmd_status st = new_region(p, off); if (st) return st; continue; }
@@ -374,20 +404,21 @@ static void css_attr(Buf b[static 1], const StP p[static 1], Str cls) {
 }
 
 
-/* ---- recursive layout: each composite / region is laid out on its own and becomes a sized node
- * in its parent (as mermaid does), so clusters stay compact and nested `direction` is honoured. */
+/* ---- recursive layout: a composite or region nothing crosses is laid out on its own and stands as
+ * one sized node in its parent, so clusters stay compact and nested `direction` holds; one a
+ * transition crosses stays a cluster of its parent's graph, as mermaid's adjustClustersAndEdges
+ * leaves it, so the arrow reaches the inner state. */
 constexpr double C_PAD = 16;   /* composite inner padding */
 constexpr double C_TITLE = 26; /* composite title bar */
 constexpr double R_PAD = 10;   /* region padding */
 
-
 typedef struct Scope {
-    Graph lg;           /* note links are its ST_DOTTED edges */
-    int32_t *elem;      /* local node -> element (node v >= 0, cluster s -> -(s+2)) */
+    Graph lg;      /* note links are its ST_DOTTED edges */
+    int32_t *elem; /* local node -> element (node v >= 0, cluster s -> -(s+2)) */
+    int32_t *ccl;  /* local cluster -> global cluster, or NONE (a note group) */
     double w, h, bx0, by0;
-    bool regions;       /* composite whose children are concurrent regions */
 } Scope;
-typedef struct EdgeLoc { int32_t scope, ra, rb; } EdgeLoc; /* scope as cluster id (NONE = root) */
+typedef struct EdgeLoc { int32_t scope, ra, rb; } EdgeLoc; /* scope: cluster id, NONE = root, -2 = drop */
 
 static inline int32_t el_cl(int32_t s) { return -(s + 2); }
 /* notes are layout nodes too (mermaid: note node + undirected edge, inside an invisible noteGroup) */
@@ -397,6 +428,11 @@ static inline int32_t sc_ix(int32_t c) { return c + 1; } /* scope index: 0 = roo
 
 static int32_t elem_parent(const StP p[static 1], int32_t e) {
     return e >= 0 ? p->g.nparent[e] : p->g.sparent[-e - 2];
+}
+/* nearest ancestor cluster (itself included) that has a scope graph of its own, or NONE for the root */
+static int32_t sc_at(const StP p[static 1], int32_t c) {
+    while (c != NONE && p->ext[c]) c = p->g.sparent[c];
+    return c;
 }
 static int32_t node_elem(const StP p[static 1], int32_t v) { return p->ccl.v[v] != NONE ? el_cl(p->ccl.v[v]) : v; }
 static Str elem_id(const StP p[static 1], int32_t e) { return e >= 0 ? p->g.nid[e] : p->g.sid[-e - 2]; }
@@ -411,7 +447,6 @@ static unsigned elem_path(const StP p[static 1], int32_t e, int32_t out[static P
     for (unsigned i = 0; i < k; i++) out[i] = tmp[k - 1 - i];
     return k;
 }
-
 typedef struct Slot { uint64_t key; int32_t el; } Slot;
 static int slot_cmp(const void *a, const void *b) {
     uint64_t x = ((const Slot *)a)->key, y = ((const Slot *)b)->key;
@@ -424,9 +459,9 @@ typedef struct Ctx {
     EdgeLoc *eloc;
     double *ax, *ay;   /* absolute centre per global node */
     double *cx, *cy, *cw, *ch; /* absolute box per cluster */
-    double *relx;      /* region x offset inside its composite */
     double *ntx, *nty, *ntw, *nth; /* per note: absolute centre and size */
     int32_t *nlv;      /* per note: its node in its scope's graph */
+    int32_t *lcl;      /* per cluster: its local cluster in its scope's graph, or NONE */
     Slot *slot;        /* build_scope's scratch: room for every node and note */
     double fs;
 } Ctx;
@@ -441,30 +476,66 @@ static int32_t add_elem(Scope s[static 1], int32_t e, Str id, double w, double h
     return lv;
 }
 
+/* crossed cluster r as a cluster of its scope's graph (created outer-first on demand) */
+static int32_t inline_cl(Ctx c[static 1], Scope s[static 1], int32_t cl, int32_t r) {
+    if (r == cl || r == NONE) return NONE;
+    if (c->lcl[r] != NONE) return c->lcl[r];
+    const Graph *g = &c->p->g;
+    int32_t up = inline_cl(c, s, cl, g->sparent[r]);
+    if (g->sparent[r] != cl && up == NONE) return NONE;
+    int32_t lc = dg_cluster(&s->lg, g->sid[r], g->stitle[r], up);
+    if (lc == NONE) return NONE;
+    if (g->sclass[r].n) s->lg.sflags[lc] |= SF_NOTITLE;
+    s->ccl[lc] = r, c->lcl[r] = lc;
+    return lc;
+}
+
+static mmd_status set_lparent(Ctx c[static 1], Scope s[static 1], int32_t cl, int32_t lv, int32_t up) {
+    if (up == cl) return MMD_OK;
+    int32_t lc = inline_cl(c, s, cl, up);
+    if (lc == NONE) return MMD_ERR_NOMEM;
+    s->lg.nparent[lv] = lc;
+    return MMD_OK;
+}
+
 /* a note goes in its noteGroup (one per annotated state, as mermaid names it), invisible */
-static mmd_status add_note(Ctx c[static 1], Scope s[static 1], size_t i) {
+static mmd_status add_note(Ctx c[static 1], Scope s[static 1], int32_t cl, size_t i) {
     StP *p = c->p;
-    Str of = elem_id(p, node_elem(p, p->notes.v[i].v));
+    int32_t target = node_elem(p, p->notes.v[i].v);
+    Str of = elem_id(p, target);
     char tag[24];
     int len = snprintf(tag, sizeof tag, "----note-%zu", i);
     Str nid = STR_CAT(p->A, of, (Str){.p = tag, .n = (size_t)len}), gid = STR_CAT(p->A, of, S("----parent"));
     if (!nid.n || !gid.n) return MMD_ERR_NOMEM;
     int32_t lv = add_elem(s, NOTE_EL0 + (int32_t)i, nid, c->ntw[i], c->nth[i], SH_RECT), gc = graph_find_sg(&s->lg, gid);
-    if (gc == NONE) gc = dg_cluster(&s->lg, gid, (Str){}, NONE);
+    if (gc == NONE) {
+        int32_t up = inline_cl(c, s, cl, elem_parent(p, target));
+        if (elem_parent(p, target) != cl && up == NONE) return MMD_ERR_NOMEM;
+        gc = dg_cluster(&s->lg, gid, (Str){}, up);
+        if (gc != NONE) { s->lg.sflags[gc] |= SF_NOTITLE; s->ccl[gc] = NONE; }
+    }
     if (lv == NONE || gc == NONE) return MMD_ERR_NOMEM;
     s->lg.nparent[lv] = gc;
     c->nlv[i] = lv;
     return MMD_OK;
 }
-
+/* a composite or a region, laid out already, as one node of its parent's graph. Regions are the
+ * nodes of their composite's graph: one rank, as in mermaid, each as tall as it needs */
 static mmd_status add_composite(Ctx c[static 1], Scope s[static 1], int32_t r) {
     const Graph *g = &c->p->g;
     const Scope *rs = &c->sc[sc_ix(r)];
-    double w = rs->w + 2 * C_PAD, h = rs->h + 2 * C_PAD + C_TITLE, tw = text_width(g->stitle[r], c->fs) + 30;
-    if (w < tw) w = tw;
-    if (w < 60) w = 60;
+    bool region = g->sclass[r].n;
+    /* mermaid's sub-graph margin and cluster padding put the content 37.5px below the outer top,
+     * where the 26px title sits, and 37.5px above the outer bottom, so the outer box centres it */
+    double pad = region ? R_PAD : C_PAD, w = rs->w + 2 * pad, h = rs->h + 2 * (region ? R_PAD : C_PAD + C_TITLE);
+    if (!region) {
+        double tw = text_width(g->stitle[r], c->fs) + 30;
+        if (w < tw) w = tw;
+        if (w < 60) w = 60;
+    }
     c->cw[r] = w, c->ch[r] = h;
-    return add_elem(s, el_cl(r), g->sid[r], w, h, SH_RECT) == NONE ? MMD_ERR_NOMEM : MMD_OK;
+    int32_t lv = add_elem(s, el_cl(r), g->sid[r], w, h, SH_RECT);
+    return lv == NONE ? MMD_ERR_NOMEM : set_lparent(c, s, sc_at(c->p, g->sparent[r]), lv, g->sparent[r]);
 }
 
 /* the scope's graph as mermaid hands it to dagre, whose order step starts from insertion order:
@@ -477,24 +548,43 @@ static mmd_status build_scope(Ctx c[static 1], Scope s[static 1], int32_t cl) {
     size_t n = 0;
     for (size_t v = 0; v < g->nn; v++) {
         int32_t e = node_elem(p, (int32_t)v);
-        if (elem_parent(p, e) != cl) continue;
+        if (sc_at(p, elem_parent(p, e)) != cl) continue;
         sl[n] = (Slot){.key = (uint64_t)p->ord.v[v] << 32 | n, .el = e};
         n++;
     }
     for (size_t i = 0; i < p->notes.n; i++) {
-        if (elem_parent(p, node_elem(p, p->notes.v[i].v)) != cl) continue;
+        if (sc_at(p, elem_parent(p, node_elem(p, p->notes.v[i].v))) != cl) continue;
         sl[n] = (Slot){.key = (uint64_t)p->notes.v[i].ord << 32 | n, .el = NOTE_EL0 + (int32_t)i};
         n++;
     }
     qsort(sl, n, sizeof *sl, slot_cmp);
     s->elem = ANEW(p->A, int32_t, n + 1);
-    if (!s->elem) return MMD_ERR_NOMEM;
+    s->ccl = ANEW(p->A, int32_t, g->ns + p->notes.n + 1);
+    if (!s->elem || !s->ccl) return MMD_ERR_NOMEM;
     for (size_t k = 0; k < n; k++) {
         int32_t e = sl[k].el;
-        mmd_status st = el_is_note(e) ? add_note(c, s, (size_t)(e - NOTE_EL0))
-                        : e < 0       ? add_composite(c, s, -e - 2)
-                        : add_elem(s, e, g->nid[e], g->nw[e], g->nh[e], g->nshape[e]) == NONE ? MMD_ERR_NOMEM
-                                                                                               : MMD_OK;
+        if (el_is_note(e)) {
+            mmd_status st = add_note(c, s, cl, (size_t)(e - NOTE_EL0));
+            if (st) return st;
+            continue;
+        }
+        if (e < 0) {
+            int32_t r = -e - 2;
+            if (!p->ext[r]) {
+                mmd_status st = add_composite(c, s, r);
+                if (st) return st;
+                continue;
+            }
+            /* crossed: a cluster here, plus a hidden SUBREF node for transitions to the composite */
+            if (inline_cl(c, s, cl, r) == NONE) return MMD_ERR_NOMEM;
+            int32_t lv = add_elem(s, e, g->sid[r], 1, 1, SH_RECT);
+            if (lv == NONE) return MMD_ERR_NOMEM;
+            lg->nflags[lv] |= NF_SUBREF | NF_HIDDEN;
+            continue;
+        }
+        int32_t lv = add_elem(s, e, g->nid[e], g->nw[e], g->nh[e], g->nshape[e]);
+        if (lv == NONE) return MMD_ERR_NOMEM;
+        mmd_status st = set_lparent(c, s, cl, lv, g->nparent[e]);
         if (st) return st;
     }
     for (unsigned late = 0; late < 2; late++)
@@ -502,7 +592,7 @@ static mmd_status build_scope(Ctx c[static 1], Scope s[static 1], int32_t cl) {
             for (; i < p->notes.n && p->notes.v[i].at == e; i++) {
                 const Note *no = &p->notes.v[i];
                 int32_t of = node_elem(p, no->v);
-                if (elem_parent(p, of) != cl || (of < 0) != (late == 1)) continue;
+                if (sc_at(p, elem_parent(p, of)) != cl || (of < 0) != (late == 1)) continue;
                 int32_t sv = graph_find(lg, elem_id(p, of)), lv = c->nlv[i];
                 if (sv == NONE) continue;
                 int32_t le = dg_edge(lg, no->left ? lv : sv, no->left ? sv : lv, (Str){});
@@ -512,7 +602,7 @@ static mmd_status build_scope(Ctx c[static 1], Scope s[static 1], int32_t cl) {
             if (e == g->ne) break;
             const EdgeLoc *L = &c->eloc[e];
             bool comp = p->kind.v[g->efrom[e]] == SK_COMPOSITE || p->kind.v[g->eto[e]] == SK_COMPOSITE;
-            if (L->scope != cl || L->ra == INT32_MIN || comp != (late == 1)) continue;
+            if (L->scope != cl || comp != (late == 1)) continue;
             int32_t la = graph_find(lg, elem_id(p, L->ra)), lb = graph_find(lg, elem_id(p, L->rb));
             if (la != NONE && lb != NONE && dg_edge(lg, la, lb, g->elabel[e]) == NONE) return MMD_ERR_NOMEM;
         }
@@ -523,27 +613,6 @@ static mmd_status layout_scope(Ctx c[static 1], int32_t cl) {
     StP *p = c->p;
     Graph *g = &p->g;
     Scope *s = &c->sc[sc_ix(cl)];
-    if (cl != NONE) {
-        bool any = false;
-        for (size_t r = 0; r < g->ns; r++) any |= g->sparent[r] == cl && g->sclass[r].n;
-        if (any) { /* concurrent regions side by side */
-            s->regions = true;
-            /* mermaid lays the regions out as one rank of its composite: nodeSpacing apart */
-            double x = 0, h = 0, gap = dcfg_spacing("state", false, 50);
-            for (size_t r = 0; r < g->ns; r++) {
-                if (g->sparent[r] != cl || !g->sclass[r].n) continue;
-                const Scope *rs = &c->sc[sc_ix((int32_t)r)];
-                if (x > 0) x += gap;
-                c->relx[r] = x;
-                x += rs->w + 2 * R_PAD;
-                if (rs->h + 2 * R_PAD > h) h = rs->h + 2 * R_PAD;
-            }
-            s->w = x, s->h = h, s->bx0 = s->by0 = 0;
-            for (size_t r = 0; r < g->ns; r++)
-                if (g->sparent[r] == cl && g->sclass[r].n) c->ch[r] = h;
-            return MMD_OK;
-        }
-    }
     Graph *lg = &s->lg;
     dg_init(lg, p->A, cl == NONE ? g->dir : g->sdir[cl], c->fs);
     lg->node_sep = dcfg_spacing("state", false, 50), lg->rank_sep = dcfg_spacing("state", true, 50);
@@ -552,6 +621,8 @@ static mmd_status layout_scope(Ctx c[static 1], int32_t cl) {
     if (st) return st;
     if (!lg->nn) { s->w = s->h = 0; s->bx0 = s->by0 = 0; return MMD_OK; }
     if ((st = flow_layout(lg))) return st;
+    /* dg_bbox counts every cluster in lg; skip note groups (invisible, their padding is for spacing) */
+    for (size_t ls = 0; ls < lg->ns; ls++) if (s->ccl[ls] == NONE) lg->sw[ls] = lg->sh[ls] = 0;
     BBox bb = dg_bbox(lg);
     s->bx0 = bb.x0, s->by0 = bb.y0, s->w = bb.x1 - bb.x0, s->h = bb.y1 - bb.y0;
     return MMD_OK;
@@ -559,37 +630,33 @@ static mmd_status layout_scope(Ctx c[static 1], int32_t cl) {
 
 static void translate(Graph lg[static 1], double dx, double dy) {
     for (size_t v = 0; v < lg->nn; v++) lg->nx[v] += dx, lg->ny[v] += dy;
+    for (size_t s = 0; s < lg->ns; s++) lg->sx[s] += dx, lg->sy[s] += dy;
     for (size_t i = 0; i + 1 < lg->pts.n; i += 2) lg->pts.v[i] += dx, lg->pts.v[i + 1] += dy;
     for (size_t e = 0; e < lg->ne; e++) lg->elx[e] += dx, lg->ely[e] += dy;
 }
 
 static void place(Ctx c[static 1], int32_t cl, double ox, double oy, unsigned depth) {
     StP *p = c->p;
-    Graph *g = &p->g;
     Scope *s = &c->sc[sc_ix(cl)];
     if (depth > 200) return;
-    if (s->regions) {
-        for (size_t r = 0; r < g->ns; r++) {
-            if (g->sparent[r] != cl || !g->sclass[r].n) continue;
-            const Scope *rs = &c->sc[sc_ix((int32_t)r)];
-            c->cx[r] = ox + c->relx[r], c->cy[r] = oy, c->cw[r] = rs->w + 2 * R_PAD;
-            place(c, (int32_t)r, ox + c->relx[r] + R_PAD - rs->bx0, oy + R_PAD - rs->by0, depth + 1);
-        }
-        return;
-    }
     Graph *lg = &s->lg;
     translate(lg, ox, oy);
+    for (size_t ls = 0; ls < lg->ns; ls++) {
+        int32_t r = s->ccl[ls];
+        if (r != NONE && lg->sw[ls] > 0)
+            c->cx[r] = lg->sx[ls], c->cy[r] = lg->sy[ls], c->cw[r] = lg->sw[ls], c->ch[r] = lg->sh[ls];
+    }
     for (size_t lv = 0; lv < lg->nn; lv++) {
         int32_t e = s->elem[lv];
         double x = lg->nx[lv], y = lg->ny[lv];
         if (e >= 0) { c->ax[e] = x, c->ay[e] = y; continue; }
         if (el_is_note(e)) { c->ntx[e - NOTE_EL0] = x, c->nty[e - NOTE_EL0] = y; continue; }
         int32_t r = -e - 2;
+        if (p->ext[r]) continue;
         double h = c->ch[r];
         c->cx[r] = x - c->cw[r] / 2, c->cy[r] = y - h / 2;
         const Scope *rs = &c->sc[sc_ix(r)];
-        double ix = x - rs->w / 2, iy = y - h / 2 + C_TITLE + C_PAD; /* centre content horizontally */
-        place(c, r, ix - rs->bx0, iy - rs->by0, depth + 1);
+        place(c, r, x - rs->w / 2 - rs->bx0, y - rs->h / 2 - rs->by0, depth + 1);
     }
 }
 
@@ -641,39 +708,45 @@ DIAG_FN(state_render) {
     c.eloc = ANEW(a, EdgeLoc, E + 1);
     c.ax = ANEW(a, double, N); c.ay = ANEW(a, double, N);
     c.cx = ANEW(a, double, S + 1); c.cy = ANEW(a, double, S + 1);
-    c.cw = ANEW(a, double, S + 1); c.ch = ANEW(a, double, S + 1); c.relx = ANEW(a, double, S + 1);
+    c.cw = ANEW(a, double, S + 1); c.ch = ANEW(a, double, S + 1);
+    c.lcl = ANEW(a, int32_t, S + 1);
     int32_t *sdep = ANEW(a, int32_t, S + 1);
-    if (!c.sc || !c.eloc || !c.ax || !c.ay || !c.cx || !c.cy || !c.cw || !c.ch || !c.relx || !sdep) return MMD_ERR_NOMEM;
-    for (size_t r = 0; r <= S; r++) c.sc[r] = (Scope){}, c.cx[r] = c.cy[r] = c.cw[r] = c.ch[r] = c.relx[r] = 0;
+    if (!c.sc || !c.eloc || !c.ax || !c.ay || !c.cx || !c.cy || !c.cw || !c.ch || !c.lcl || !sdep) return MMD_ERR_NOMEM;
+    for (size_t r = 0; r <= S; r++) c.sc[r] = (Scope){}, c.cx[r] = c.cy[r] = c.cw[r] = c.ch[r] = 0, c.lcl[r] = NONE;
     for (size_t v = 0; v < N; v++) c.ax[v] = c.ay[v] = 0;
-    /* where does each edge live? deepest common scope, with the children-of-scope representatives */
+    /* where does each edge live? in the scope that owns both ends once crossed clusters are inlined */
     for (size_t e = 0; e < E; e++) {
         int32_t pa[PATH_MAX_ELEMS], pb[PATH_MAX_ELEMS];
         unsigned na = elem_path(&p, node_elem(&p, g->efrom[e]), pa), nb = elem_path(&p, node_elem(&p, g->eto[e]), pb);
         unsigned k = 0;
         while (k < na && k < nb && pa[k] == pb[k]) k++;
-        c.eloc[e] = (EdgeLoc){.scope = NONE, .ra = INT32_MIN, .rb = INT32_MIN};
-        if (k == na && k == nb) { /* self loop */
-            c.eloc[e] = (EdgeLoc){.scope = elem_parent(&p, pa[na - 1]), .ra = pa[na - 1], .rb = pa[na - 1]};
+        c.eloc[e] = (EdgeLoc){.scope = -2, .ra = INT32_MIN, .rb = INT32_MIN};
+        if (k == na && k == nb) {
+            c.eloc[e] = (EdgeLoc){.scope = sc_at(&p, elem_parent(&p, pa[na - 1])), .ra = pa[na - 1], .rb = pa[na - 1]};
             continue;
         }
         if (k == na || k == nb) continue; /* edge between a composite and its own content */
-        int32_t scope = k ? -pa[k - 1] - 2 : NONE;
-        if (scope != NONE && g->sclass[scope].n == 0) {
-            bool has_regions = false; /* edges across concurrent regions are not drawn */
-            for (size_t r = 0; r < S; r++) has_regions |= g->sparent[r] == scope && g->sclass[r].n;
-            if (has_regions) continue;
+        int32_t scope = sc_at(&p, k ? -pa[k - 1] - 2 : NONE), ra = pa[na - 1], rb = pb[nb - 1];
+        for (unsigned j = na - 1; j >= k; j--) {
+            if (pa[j] < 0 && !p.ext[-pa[j] - 2]) ra = pa[j];
+            if (!j) break;
         }
-        c.eloc[e] = (EdgeLoc){.scope = scope, .ra = pa[k], .rb = pb[k]};
+        for (unsigned j = nb - 1; j >= k; j--) {
+            if (pb[j] < 0 && !p.ext[-pb[j] - 2]) rb = pb[j];
+            if (!j) break;
+        }
+        c.eloc[e] = (EdgeLoc){.scope = scope, .ra = ra, .rb = rb};
     }
     double *nx = ANEW(a, double, p.notes.n + 1), *ny = ANEW(a, double, p.notes.n + 1),
            *nw = ANEW(a, double, p.notes.n + 1), *nh = ANEW(a, double, p.notes.n + 1);
     c.ntx = ANEW(a, double, p.notes.n + 1), c.nty = ANEW(a, double, p.notes.n + 1);
     c.ntw = nw, c.nth = nh, c.nlv = ANEW(a, int32_t, p.notes.n + 1), c.slot = ANEW(a, Slot, N + p.notes.n + 1);
     if (!nx || !ny || !nw || !nh || !c.ntx || !c.nty || !c.nlv || !c.slot) return MMD_ERR_NOMEM;
-    for (size_t i = 0; i < p.notes.n; i++) { /* mermaid note: text wrapped at 200px, padding 15 */
+    double wrapw = dcfg_num("state.wrappingWidth", 120); /* mermaid 12: state.wrappingWidth = 120 */
+    if (wrapw <= 0) wrapw = 120;
+    for (size_t i = 0; i < p.notes.n; i++) {
         Note *no = &p.notes.v[i];
-        no->text = dg_wrap(a, no->text, fs, 200);
+        no->text = dg_wrap(a, no->text, fs, wrapw);
         double tw;
         unsigned ln;
         label_measure(no->text, fs, &tw, &ln);
@@ -689,7 +762,7 @@ DIAG_FN(state_render) {
     }
     for (int32_t d = maxd; d >= 1; d--)
         for (size_t r = 0; r < S; r++)
-            if (sdep[r] == d && (st = layout_scope(&c, (int32_t)r))) return st;
+            if (sdep[r] == d && !p.ext[r] && (st = layout_scope(&c, (int32_t)r))) return st;
     if ((st = layout_scope(&c, NONE))) return st;
     place(&c, NONE, 0, 0, 0);
 

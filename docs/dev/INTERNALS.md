@@ -15,7 +15,7 @@ Numbers here are historical; see bench/results_v*.txt.
 | diagram registry | `src/d_registry.c`, `src/diagrams.h` | keyword → renderer table; new types live in `src/d_*.c` |
 | shared helpers | `src/dgraph.[ch]` | graph building on top of `flow_layout`, line scanner, SVG primitives |
 | writer | `src/writer.c`, writer section of `include/mmd.h` | builds mermaid text by escape context (entities `#NN;`), shortest round-trip numbers, typed helpers for eleven diagram types; per-diagram audit in [writer.md](writer.md) |
-| stateDiagram(-v2) | `src/d_state.c` | composites (recursive per-scope layout), `--` regions, `[*]`, fork/join/choice, notes, classDef; each scope reaches dagre in mermaid's order (dataFetcher's node list, a note's group cluster just before the note, edges touching a composite last), which decides left and right: 98% of node pairs agree with mermaid-cli 12 (classic, dagre) on the docs examples and state tests (`bench/stateagree.py`) |
+| stateDiagram(-v2) | `src/d_state.c` | composites (recursive per-scope layout; a composite or region a transition crosses stays a cluster of its parent's graph), `--` regions, `[*]`, fork/join/choice, notes (`state.wrappingWidth`), classDef; each scope reaches dagre in mermaid's order (dataFetcher's node list, each cluster before its first member, edges touching a composite last): 96% x / 95% y of node pairs agree with mermaid-cli 12 (classic, dagre) on the docs examples and state tests (`bench/stateagree.py`) |
 | classDiagram | `src/d_class.c` | members, `~generics~`, visibility/`$`/`*`, annotations, all relations + lollipop, cardinality, namespaces, notes |
 | erDiagram | `src/d_er.c` | attribute tables (type/name/keys/comment), aliases, all crow's-foot cardinalities (symbolic + word forms), `:::cls` / classDef / class / style, `subgraph` clusters (relations may target a subgraph id) |
 | pie | `src/d_pie.c` | slices, showData, title, legend; a percentage that does not fit its slice goes outside on a leader line (runs of them spaced along the label circle) |
@@ -92,8 +92,8 @@ Mermaid faults libmmd does not copy:
 - packet: mermaid-cli's sanitizeDirective drops `themeVariables.packet.byteFontSize` and
   `blockStrokeWidth` (keys missing from its default config); libmmd honours them;
 - state: a `direction` in the first of a composite's `--` regions turns only that region in mermaid
-  (it lands in that region's doc); libmmd takes it as the composite's, for every region that does not
-  set its own;
+  (it lands in that region's doc); libmmd takes it as the block's, for every region of that block that
+  does not set its own;
 - state: mermaid puts a note's group at the root, so a note on a state inside a composite counts as a
   transition crossing it, and the composite drops its own direction for its parent's; libmmd keeps the
   note in the state's scope and counts only transitions.

@@ -804,8 +804,9 @@ static mmd_status dagre_prep_order(Lay L[static 1], const Graph g[static 1], siz
         for (size_t i = np; i-- > 0;) nord[nn++] = (uint32_t)V + post[i];
     }
     for (size_t v = 0; v < N; v++) {
-        int32_t c = g->nparent[v];
-        if (g->cluster_order == CLUSTERS_INLINE && c != NONE && !done[c]) done[c] = 1, nord[nn++] = (uint32_t)(V + (size_t)c);
+        if (g->cluster_order == CLUSTERS_INLINE)
+            for (int32_t c = g->nparent[v]; c != NONE; c = g->sparent[c])
+                if (!done[c]) done[c] = 1, nord[nn++] = (uint32_t)(V + (size_t)c);
         if (L->rank[v] >= 0) nord[nn++] = (uint32_t)v;
     }
     if (g->cluster_order != CLUSTERS_FIRST)
@@ -956,8 +957,9 @@ static mmd_status dagre_rank_graph(Arena A[static 1], const Graph g[static 1], s
         size_t q = 0;
         memset(done, 0, S + 1);
         for (size_t v = 0; v < N; v++) {
-            int32_t c = g->nparent[v];
-            if (g->cluster_order == CLUSTERS_INLINE && c != NONE && !done[c]) done[c] = 1, ins[N + (size_t)c] = (uint32_t)q++;
+            if (g->cluster_order == CLUSTERS_INLINE)
+                for (int32_t c = g->nparent[v]; c != NONE; c = g->sparent[c])
+                    if (!done[c]) done[c] = 1, ins[N + (size_t)c] = (uint32_t)q++;
             ins[v] = (uint32_t)q++;
         }
         for (size_t c = 0; c < S; c++) if (!done[c]) ins[N + c] = (uint32_t)q++;
@@ -1694,10 +1696,11 @@ static mmd_status layout_core(Graph g[static 1]) {
             if (sdepth[s] != d || g->sx[s] == INFINITY) continue;
             double tw;
             unsigned tl;
+            double top = g->sflags[s] & SF_NOTITLE ? 0 : CLUSTER_TITLE;
             measure(g, &g->stitle[s], &tw, &tl);
             tw += 2 * CLUSTER_PAD;
             g->sx[s] -= CLUSTER_PAD; g->sw[s] += CLUSTER_PAD;
-            g->sy[s] -= CLUSTER_PAD + CLUSTER_TITLE; g->sh[s] += CLUSTER_PAD;
+            g->sy[s] -= CLUSTER_PAD + top; g->sh[s] += CLUSTER_PAD;
             if (g->sw[s] - g->sx[s] < tw) { double c = (g->sw[s] + g->sx[s]) / 2; g->sx[s] = c - tw / 2; g->sw[s] = c + tw / 2; }
             int32_t p = g->sparent[s];
             if (p != NONE) {
