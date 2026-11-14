@@ -2343,20 +2343,23 @@ static int vis_path(Router R[static 1], Arena A[static 1], double sx, double sy,
     return -1;
 }
 
-/* cheap detour: hug one side of the single blocking box (2 corners). Returns corner count or -1. */
+/* cheap detour round the single blocking box: by one corner, else along one side (two corners).
+ * Returns corner count or -1. */
 static int side_path(Router R[static 1], double sx, double sy, double tx, double ty, int32_t s1, int32_t s2,
                      double out[static 4]) {
     int32_t h = seg_hit(R, sx, sy, tx, ty, s1, s2);
     if (h == NONE) return 0;
     const BBox *b = &R->nb[h];
     if (pt_in(b, sx, sy) || pt_in(b, tx, ty)) return -1;
-    double c[4][4] = {
+    double c[8][4] = {
+        {b->x0, b->y0, b->x0, b->y0}, {b->x1, b->y0, b->x1, b->y0}, /* one corner (twice) */
+        {b->x0, b->y1, b->x0, b->y1}, {b->x1, b->y1, b->x1, b->y1},
         {b->x0, b->y0, b->x0, b->y1}, {b->x1, b->y0, b->x1, b->y1}, /* left, right side */
         {b->x0, b->y0, b->x1, b->y0}, {b->x0, b->y1, b->x1, b->y1}, /* top, bottom side */
     };
-    double len[4];
-    unsigned ord[4] = {0, 1, 2, 3};
-    for (unsigned k = 0; k < 4; k++) {
+    double len[8];
+    unsigned ord[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    for (unsigned k = 0; k < 8; k++) {
         double *q = c[k];
         /* visit the corner nearer S first */
         if (edist(q[0] - sx, q[1] - sy) > edist(q[2] - sx, q[3] - sy)) {
@@ -2365,10 +2368,10 @@ static int side_path(Router R[static 1], double sx, double sy, double tx, double
         }
         len[k] = edist(q[0] - sx, q[1] - sy) + edist(q[2] - q[0], q[3] - q[1]) + edist(tx - q[2], ty - q[3]);
     }
-    for (unsigned i = 1; i < 4; i++) /* stable insertion sort by length: first clear one is the best */
+    for (unsigned i = 1; i < 8; i++) /* stable insertion sort by length: first clear one is the best */
         for (unsigned j = i; j > 0 && len[ord[j]] < len[ord[j - 1]]; j--) { unsigned t = ord[j]; ord[j] = ord[j - 1]; ord[j - 1] = t; }
     int bk = -1;
-    for (unsigned i = 0; i < 4 && bk < 0; i++) {
+    for (unsigned i = 0; i < 8 && bk < 0; i++) {
         const double *q = c[ord[i]];
         if (seg_hit(R, sx, sy, q[0], q[1], s1, s2) != NONE || seg_hit(R, q[0], q[1], q[2], q[3], s1, s2) != NONE ||
             seg_hit(R, q[2], q[3], tx, ty, s1, s2) != NONE) continue;
@@ -2376,7 +2379,7 @@ static int side_path(Router R[static 1], double sx, double sy, double tx, double
     }
     if (bk < 0) return -1;
     memcpy(out, c[bk], sizeof c[bk]);
-    return 2;
+    return bk < 4 ? 1 : 2;
 }
 
 [[nodiscard]] static bool route_avoid(Graph g[static 1]) {
