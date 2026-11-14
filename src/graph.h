@@ -18,8 +18,7 @@ enum { CURVE_BASIS = 0, CURVE_LINEAR, CURVE_STEP, CURVE_STEP_BEFORE, CURVE_STEP_
 enum { MMD_ACYC_AUTO = 0, MMD_ACYC_DFS = 1, MMD_ACYC_GREEDY = 2 };
 enum { MMD_ORDER_AUTO = 0, MMD_ORDER_DAGRE = 1, MMD_ORDER_FAST = 2 };
 /* where clusters stand in g.nodes(): first, in reverse closing order (flowDb), after the vertices by
- * index (usecase), or each just before its first direct member vertex, the rest last (state's note
- * groups, which nest nothing) */
+ * index (usecase), or each just before its first descendant vertex, the rest last (state) */
 enum { CLUSTERS_FIRST = 0, CLUSTERS_LAST, CLUSTERS_INLINE };
 
 typedef struct ClassDef { Str name, css; } ClassDef;
@@ -83,7 +82,7 @@ typedef struct Graph {
 } Graph;
 
 enum { NF_DEFINED = 1u, NF_HIDDEN = 2u, NF_SUBREF = 4u, NF_FIXED = 8u /* size preset (cluster proxy) */, NF_PROXY = 16u /* stands in for an isolated cluster */ };
-enum { SF_DIRSET = 1u, SF_COLLAPSED = 2u /* agentflow: drawn as one node */ };
+enum { SF_DIRSET = 1u, SF_COLLAPSED = 2u /* agentflow: drawn as one node */, SF_NOTITLE = 4u /* no title band (state's note group / region) */ };
 enum { EF_ANIM = 1u, EF_ANIM_SLOW = 2u, EF_LOOPPTS = 4u /* self-loop routed as a polyline (mermaid helpers) */ };
 
 /* ---- tables (graph.c) ---- */

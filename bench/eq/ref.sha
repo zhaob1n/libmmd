@@ -549,8 +549,8 @@ d6a0b254775dc986 tests/cases/seq_central.mmd
 af64380ec0563af0 tests/cases/seq_full.mmd
 c30d794f7e2c5580 tests/cases/seq_types.mmd
 047f87ad8e9ce83c tests/cases/shapes.mmd
-33833f39f95586bd tests/cases/state_full.mmd
-3b13d108f925492d tests/cases/state_nested_direction.mmd
+39528835d6fc8d88 tests/cases/state_full.mmd
+726253c43fa0f6cc tests/cases/state_nested_direction.mmd
 455e2c3cb99fef10 tests/cases/state_region_direction.mmd
 77ade1b41f0df0ad tests/cases/state_regions_dark.mmd
 f5998d1faec6cb6d tests/cases/state_reopen_regions.mmd
@@ -574,7 +574,7 @@ fbd2f0182f209389 tests/cases/theme_dark_journey.mmd
 3b194c570303d690 tests/cases/theme_dark_pie.mmd
 2d125869f3f8275b tests/cases/theme_dark_quadrant.mmd
 b07b00847928b341 tests/cases/theme_dark_seq.mmd
-ed3049973e858504 tests/cases/theme_dark_state.mmd
+b40935f771984dac tests/cases/theme_dark_state.mmd
 0ed212e1b11f2d02 tests/cases/theme_dark_timeline.mmd
 9df4c036847ccd94 tests/cases/theme_dark_xychart.mmd
 afa12367c0904ff5 tests/cases/theme_dark_xychart_field.mmd
@@ -582,7 +582,7 @@ aa9b3b45327094f3 tests/cases/theme_forest.mmd
 557220e952c0fd7b tests/cases/theme_forest_class.mmd
 065b65eed93b6e96 tests/cases/theme_forest_gantt.mmd
 2bfb3ee04ba423cf tests/cases/theme_forest_gitgraph.mmd
-f76ed0cbd3b41c65 tests/cases/theme_forest_state.mmd
+c191d493d44586f1 tests/cases/theme_forest_state.mmd
 7867504613dc622e tests/cases/theme_forest_treemap.mmd
 35f3a459562c7d42 tests/cases/theme_neutral.mmd
 ad8c63433a3f1c25 tests/cases/theme_neutral_er.mmd
