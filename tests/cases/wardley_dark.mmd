@@ -1,0 +1,15 @@
+---
+config:
+  theme: dark
+---
+wardley-beta
+title Dark map
+anchor User [0.90, 0.95]
+component "App" [0.75, 0.80] (build)
+component "Cloud" [0.30, 0.95] (market)
+User -> "App"
+"App" -> "Cloud"
+evolve "App" 0.9
+annotations [0.10, 0.20]
+annotation 1,[0.70, 0.60] "Integration layer"
+note "Go cloud" [0.60, 0.50]
