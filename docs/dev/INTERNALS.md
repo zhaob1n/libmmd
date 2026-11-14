@@ -64,9 +64,10 @@ Exact ports (khroma, d3-format, dagre's order step) exist to agree on values and
 real library, not to reproduce its accidents.
 
 Mermaid faults libmmd does not copy:
-- quadrant: mermaid derives the point colour with khroma's `lighten()` and no amount, `hsl(..., NaN%)`,
-  which no viewer draws; libmmd draws such points `#0000eb` (a `quadrantPointFill` the source sets is
-  used, as in mermaid);
+- quadrant: mermaid derives the point colour as `quadrant1Fill` lightened (dark quadrants) or darkened,
+  but calls khroma without an amount and gets `hsl(..., NaN%)`, which no viewer draws; libmmd uses 50,
+  the contrast meant (dark blue in the default theme, light grey in dark); a `quadrantPointFill` the
+  source sets is used as in mermaid;
 - pie: mermaid (11.14 on) leaves out slices under 1% and closes the pie over the rest, so the angles
   stop matching the shares (82 and twenty slices of 0.9 draw a full disc labelled 82%); libmmd draws
   every slice;

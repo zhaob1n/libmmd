@@ -462,7 +462,7 @@ d983e2c70c47e09c tests/cases/class_state_spacing.mmd
 351b6f7a66989e7d tests/cases/config_directive_class.mmd
 eeadabde68c69c9d tests/cases/config_keys.mmd
 b2a9983ee0faecb0 tests/cases/config_pie.mmd
-3f90ebf94953c684 tests/cases/config_quadrant.mmd
+cccd9dd4dcf5051b tests/cases/config_quadrant.mmd
 5da2bc28c7ddb7ab tests/cases/config_sankey.mmd
 9d68a2cb5325389d tests/cases/config_seq.mmd
 8378919ef2dcd229 tests/cases/config_state.mmd
@@ -514,11 +514,11 @@ bc31d149bb5b4002 tests/cases/mindmap_full.mmd
 019ba026f596694d tests/cases/pie_many_tiny.mmd
 88f96d39539e6832 tests/cases/pie_tall_legend.mmd
 b53d2037cdd03d06 tests/cases/pie_tiny_slices.mmd
-d66bcba1c0c7ab1c tests/cases/quadrant_crowded.mmd
-a255a819ea6cfa90 tests/cases/quadrant_dense_labels.mmd
-578abe0ad86c9f8d tests/cases/quadrant_full.mmd
+bdb280e116b572be tests/cases/quadrant_crowded.mmd
+e553b1ebf92737dd tests/cases/quadrant_dense_labels.mmd
+b1ddaa83f912e6f9 tests/cases/quadrant_full.mmd
 e3421c02168b518c tests/cases/quadrant_point_fill.mmd
-512c39564070a1c9 tests/cases/quadrant_ring_fallback.mmd
+fdca08e3b4e52100 tests/cases/quadrant_ring_fallback.mmd
 5d529551c71e664c tests/cases/radar_full.mmd
 46a85b2e6172aede tests/cases/railroad_abnf.mmd
 61d448727e53c5c6 tests/cases/railroad_ebnf.mmd
@@ -554,6 +554,7 @@ fbd2f0182f209389 tests/cases/theme_dark_journey.mmd
 7aeff9a7f789566e tests/cases/theme_dark_kanban.mmd
 1f0cebb35405085d tests/cases/theme_dark_mindmap.mmd
 3b194c570303d690 tests/cases/theme_dark_pie.mmd
+2d125869f3f8275b tests/cases/theme_dark_quadrant.mmd
 b07b00847928b341 tests/cases/theme_dark_seq.mmd
 988c0bb1a340ca11 tests/cases/theme_dark_state.mmd
 375ed7f0a5371dbf tests/cases/theme_dark_timeline.mmd
