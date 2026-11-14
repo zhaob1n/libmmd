@@ -1,6 +1,6 @@
 prefix=@PREFIX@
 libdir=@LIBDIR@
-includedir=@INCDIR@
+includedir=@INCLUDEDIR@
 
 Name: libmmd
 Description: Fast Mermaid diagram to SVG renderer

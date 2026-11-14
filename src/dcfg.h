@@ -63,6 +63,10 @@ Str dcfg_css(const char key[static 1]);         /* value only if safe inside CSS
 Str dcfg_css_str(Str key);
 bool dcfg_is_acc(Str line, bool block[static 1]); /* accTitle:/accDescr: line; *block if "accDescr {" */
 void dcfg_theme_css(Buf b[static 1], const char kind[static 1]); /* CSS overrides from themeVariables */
+/* the table behind it (d_cfg.c): CSS template tpl ('$' = value) for themeVariable var in diagrams of kind */
+typedef struct DThemeRule { const char *kind, *var, *tpl; } DThemeRule;
+extern const DThemeRule DCFG_TVS[];
+extern const size_t DCFG_NTVS;
 /* a CSS rule ('$' = the value) for a theme variable, and the value when the theme has none */
 typedef struct DRule { const char *var, *def, *tpl; } DRule;
 /* every rule with its variable's value in the theme in effect (dcfg_theme_var), for renderers that

@@ -141,7 +141,7 @@ typedef struct Arena {
 
 [[nodiscard, gnu::malloc, gnu::alloc_size(2)]] void *arena_alloc_slow(Arena a[static 1], size_t size, size_t align);
 #ifdef MMD_FAULT_INJECT
-bool mmd_fault_inject(void); /* `make oom`: tests/oom_test.c fails chosen arena allocations */
+bool mmd_fault_inject(void); /* `make oom`: tests/oom.c fails chosen arena allocations */
 #endif
 /* fresh, unaliased storage; arena_grow is not malloc-like (it may return old in place) */
 [[nodiscard, gnu::malloc, gnu::alloc_size(2)]] static inline void *arena_alloc(Arena a[static 1], size_t size, size_t align) {
