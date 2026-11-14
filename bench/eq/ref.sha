@@ -542,6 +542,7 @@ aeb4a72799994932 tests/cases/rich_text.mmd
 c932b2ce01b90d88 tests/cases/sankey_label_edge.mmd
 5da997b7c17a67c0 tests/cases/sankey_link_target.mmd
 65ceb8c45ddf2e59 tests/cases/sankey_link_unsafe.mmd
+a1ef98d79474b5c2 tests/cases/sankey_node_colors.mmd
 5289ad1ee2f9738a tests/cases/sankey_outlined.mmd
 0847e02477adc791 tests/cases/seq_act_interleave.mmd
 345674ce1cac7130 tests/cases/seq_basic.mmd

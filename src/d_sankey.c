@@ -296,6 +296,15 @@ DIAG_FN(sankey_render) {
     BBox bb = {-fmax(lw, 0), ymin - top, W + fmax(rw, 0), ymax};
     if (!buf_reserve(out, 1024 + nl * 500 + nn * 300)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 0, "sankey", CSS);
+    Str *ncol = ANEW(a, Str, nn);
+    if (!ncol) return MMD_ERR_NOMEM;
+    size_t pi = 0; /* d3's ordinal(Tableau10) only advances for nodes without an entry in nodeColors */
+    for (size_t i = 0; i < nn; i++) {
+        Str k = STR_CAT(a, S("sankey.nodeColors."), N[i].name);
+        if (!k.p) return MMD_ERR_NOMEM;
+        ncol[i] = dcfg_css_str(k);
+        if (!ncol[i].n) ncol[i] = (Str){.p = PAL[pi++ % countof(PAL)], .n = 7};
+    }
     /* sankey.linkColor: source, target, a colour, or (mermaid's default) a gradient from source to target */
     Str lc = dcfg_css("sankey.linkColor");
     const bool GRAD = !lc.n || str_eq(lc, S("gradient")), BY_S = str_eq(lc, S("source")), BY_T = str_eq(lc, S("target"));
@@ -305,20 +314,22 @@ DIAG_FN(sankey_render) {
         if (GRAD) {
             buf_lit(out, "<linearGradient id=\"sankey-lg"); buf_int(out, (int64_t)i);
             buf_lit(out, "\" gradientUnits=\"userSpaceOnUse\" x1=\""); buf_num(out, x0); buf_lit(out, "\" x2=\""); buf_num(out, x1);
-            buf_lit(out, "\"><stop offset=\"0%\" stop-color=\""); buf_cstr(out, PAL[l->s % countof(PAL)]);
-            buf_lit(out, "\"/><stop offset=\"100%\" stop-color=\""); buf_cstr(out, PAL[l->t % countof(PAL)]);
+            buf_lit(out, "\"><stop offset=\"0%\" stop-color=\""); buf_str(out, ncol[l->s]);
+            buf_lit(out, "\"/><stop offset=\"100%\" stop-color=\""); buf_str(out, ncol[l->t]);
             buf_lit(out, "\"/></linearGradient>");
         }
         buf_lit(out, "<path class=\"sl\" stroke=\"");
         if (GRAD) { buf_lit(out, "url(#sankey-lg"); buf_int(out, (int64_t)i); buf_ch(out, ')'); }
-        else if (BY_S || BY_T) buf_cstr(out, PAL[(BY_T ? l->t : l->s) % countof(PAL)]);
+        else if (BY_S || BY_T) buf_str(out, ncol[BY_T ? l->t : l->s]);
         else buf_str(out, lc);
         buf_lit(out, "\" stroke-width=\""); buf_num(out, fmax(1, l->v * ky)); buf_lit(out, "\" d=\"M");
         buf_pt(out, x0, l->y0); buf_ch(out, 'C'); buf_pt(out, xm, l->y0); buf_ch(out, ' '); buf_pt(out, xm, l->y1);
         buf_ch(out, ' '); buf_pt(out, x1, l->y1); buf_lit(out, "\"/>");
     }
     for (size_t i = 0; i < nn; i++) {
-        dg_rect_fill(out, N[i].x, N[i].y, NW, N[i].h, 0, "sn", PAL[i % countof(PAL)]);
+        buf_lit(out, "<rect class=\"sn\" x=\""); buf_num(out, N[i].x); buf_lit(out, "\" y=\""); buf_num(out, N[i].y);
+        buf_lit(out, "\" width=\""); buf_num(out, NW); buf_lit(out, "\" height=\""); buf_num(out, N[i].h);
+        buf_lit(out, "\" fill=\""); buf_str(out, ncol[i]); buf_lit(out, "\"/>");
         if (!OUTL) label(out, &N[i], lx0[i], lx1[i], ly[i]);
     }
     if (OUTL) { /* every label over a halo of the node background, then all of them again on top */

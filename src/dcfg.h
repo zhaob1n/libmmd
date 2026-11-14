@@ -60,6 +60,7 @@ bool dcfg_bool(const char key[static 1], bool def);
  * classic theme, named by the caller or by the source (not redux*) */
 bool dcfg_neo(void);
 Str dcfg_css(const char key[static 1]);         /* value only if safe inside CSS / an attribute */
+Str dcfg_css_str(Str key);
 bool dcfg_is_acc(Str line, bool block[static 1]); /* accTitle:/accDescr: line; *block if "accDescr {" */
 void dcfg_theme_css(Buf b[static 1], const char kind[static 1]); /* CSS overrides from themeVariables */
 /* a CSS rule ('$' = the value) for a theme variable, and the value when the theme has none */

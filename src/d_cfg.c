@@ -352,6 +352,7 @@ static Str css_safe(Str v) {
     return v;
 }
 
+Str dcfg_css_str(Str key) { return css_safe(dcfg_get_str(key)); }
 Str dcfg_css(const char key[static 1]) { return css_safe(dcfg_get(key)); }
 
 /* mtheme_new() through the context's memo: the theme and overrides of its last derivation give
