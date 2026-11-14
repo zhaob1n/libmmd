@@ -23,7 +23,9 @@ enum { C_LABEL = ND, C_TEXT, C_BOUND, C_CLIFF, C_ARROW, NC };
 static constexpr char CVAR[NC][22] = {"cynefin.complexBg", "cynefin.complicatedBg", "cynefin.chaoticBg", "cynefin.clearBg",
                                       "cynefin.confusionBg", "cynefin.labelColor", "cynefin.textColor",
                                       "cynefin.boundaryColor", "cynefin.cliffColor", "cynefin.arrowColor"};
-
+/* what mtheme_gen.h falls back to for each CVAR when cynefin.<field> is unset */
+static constexpr char CFALL[NC][17] = {"#E8F5E9", "#E3F2FD", "#FBE9E7", "#FFF8E1", "#F3E5F5",
+                                       "primaryTextColor", "textColor", "lineColor", "#8B0000", "lineColor"};
 typedef struct CItem { unsigned dom; Str label; } CItem;
 typedef struct CTr { unsigned a, b; Str label; } CTr;
 
@@ -36,12 +38,15 @@ static constexpr char CSS[] =
     "#mermaid .cah{fill:$9;stroke:none;}#mermaid .cal{font-size:11px;fill:$6;}"
     "#mermaid .cttl{font-size:18px;font-weight:bold;fill:$5;}";
 
-/* the theme in effect's colour; that theme's own where the source's is none khroma reads */
-static Str theme_col(const char var[static 1]) {
-    Str v = dcfg_theme_var(var);
+/* the theme in effect's colour; where the source's value is none khroma reads, fall back to what
+ * mtheme_gen.h derives cynefin.<field> from, so other themeVariables (primaryTextColor ...) stay */
+static Str theme_col(int i) {
     bool dark;
+    Str v = dcfg_theme_var(CVAR[i]);
     if (v.n && mc_is_dark(v, &dark)) return v;
-    return dcfg_preset_var(var);
+    if (CFALL[i][0] == '#') return (Str){.p = CFALL[i], .n = strlen(CFALL[i])};
+    v = dcfg_theme_var(CFALL[i]);
+    return v.n && mc_is_dark(v, &dark) ? v : dcfg_preset_var(CFALL[i]);
 }
 
 static double rnd(int64_t seed) { /* mermaid seededRandom (mulberry32 step) */
@@ -130,7 +135,7 @@ DIAG_FN(cynefin_render) {
     double cfg_seed = dcfg_num("cynefin.seed", 0);
     int64_t seed = cfg_seed != 0 && isfinite(cfg_seed) && fabs(cfg_seed) < 1e15 ? (int64_t)cfg_seed : hash_id("my-svg");
     Str col[NC];
-    for (int c = 0; c < NC; c++) col[c] = theme_col(CVAR[c]);
+    for (int c = 0; c < NC; c++) col[c] = theme_col(c);
     double hw = W / 2, hh = H / 2;
     const double L[ND][4] = {{hw / 2, hh / 2, 0, 0}, {hw + hw / 2, hh / 2, hw, 0}, {hw / 2, hh + hh / 2, 0, hh},
                              {hw + hw / 2, hh + hh / 2, hw, hh}, {hw, hh, 0, 0}};
