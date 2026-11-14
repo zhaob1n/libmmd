@@ -90,7 +90,10 @@ Mermaid faults libmmd does not copy:
 - wardley: mermaid hard-codes white annotation boxes and black stage and anchor labels, unreadable
   under dark; libmmd takes them from the theme's `wardley` object, as its styles mean to;
 - packet: mermaid-cli's sanitizeDirective drops `themeVariables.packet.byteFontSize` and
-  `blockStrokeWidth` (keys missing from its default config); libmmd honours them.
+  `blockStrokeWidth` (keys missing from its default config); libmmd honours them;
+- state: a `direction` in the first of a composite's `--` regions turns only that region in mermaid
+  (it lands in that region's doc); libmmd takes it as the composite's, for every region that does not
+  set its own.
 
 Side-by-side renders (left: libmmd, right: mermaid 11.17) live in `samples/sbs/*.png`.
 Already fixed:

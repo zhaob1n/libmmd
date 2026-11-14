@@ -153,8 +153,15 @@ static mmd_status parse(StP p[static 1], LineIt it[static 1]) {
             else if (str_eq(d, S("BT"))) dd = DIR_BT;
             else if (str_eq(d, S("TB")) || str_eq(d, S("TD"))) dd = DIR_TB;
             else return sfail(p, off, "invalid direction");
-            if (p->depth) g->sdir[p->stk[p->depth - 1].comp] = dd; /* per-composite hint */
-            else g->dir = dd;
+            if (!p->depth) {
+                g->dir = dd;
+                continue;
+            }
+            /* mermaid reads it from the doc it stands in, so in the first of several regions it
+             * turns only that one; it is the composite's here, for every region without its own */
+            const Frame *f = &p->stk[p->depth - 1];
+            int32_t c = f->nregions > 1 ? f->region : f->comp;
+            g->sdir[c] = dd, g->sflags[c] |= SF_DIRSET;
             continue;
         }
         if (str_eq(line, S("}"))) {
@@ -299,6 +306,8 @@ static mmd_status parse(StP p[static 1], LineIt it[static 1]) {
         }
     }
     if (p->depth) return sfail(p, it->n, "unterminated composite state (missing '}')");
+    for (size_t r = 0; r < g->ns; r++) /* a region's parent is its composite */
+        if (g->sclass[r].n && !(g->sflags[r] & SF_DIRSET)) g->sdir[r] = g->sdir[g->sparent[r]];
     return MMD_OK;
 }
 
