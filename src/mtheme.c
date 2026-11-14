@@ -221,25 +221,19 @@ static Val scalar(Str s) {
     return str_trim(s).n && mc_js_number(s, &d) ? vnum(d) : vstr(s);
 }
 
-/* calculate()'s keys.forEach((k) => { this[k] = overrides[k]; }): one assignment per top-level
- * key, so a nested override replaces the theme's whole object with the user's */
+/* calculate()'s keys.forEach((k) => { this[k] = overrides[k]; }), the last value for each key
+ * winning, with one deliberate difference: mermaid assigns each top-level key, so a nested override
+ * (xyChart.titleColor) replaces the theme's whole object and a dark xychart loses every other dark
+ * colour; here it sets that field, and the object keeps the rest */
 static void copy_overrides(MTheme t[static 1], size_t n, const Str *keys, const Str *vals) {
     for (size_t i = 0; i < n; i++) {
+        bool later = false;
+        for (size_t m = i + 1; m < n && !later; m++) later = str_eq(keys[m], keys[i]);
+        if (later) continue;
         const char *dot = memchr(keys[i].p, '.', keys[i].n);
-        Str top = {.p = keys[i].p, .n = dot ? (size_t)(dot - keys[i].p) : keys[i].n};
-        bool first = true; /* the first key naming this top-level key assigns it */
-        for (size_t j = 0; j < i && first; j++)
-            first = !(str_eq(keys[j], top) || is_field(keys[j], top));
-        if (!first) continue;
-        drop(t, key_of(top));
-        for (size_t j = i; j < n; j++) { /* the user's value, the last one for each key winning */
-            if (!str_eq(keys[j], top) && !is_field(keys[j], top)) continue;
-            bool later = false;
-            for (size_t m = j + 1; m < n && !later; m++) later = str_eq(keys[m], keys[j]);
-            if (later) continue;
-            if (str_eq(keys[j], top)) drop(t, key_of(top)); /* a plain value after fields replaces the object */
-            put(t, key_of(keys[j]), scalar(vals[j]));
-        }
+        Key top = key_of((Str){.p = keys[i].p, .n = dot ? (size_t)(dot - keys[i].p) : 0});
+        if (dot && root_of(t, top.s) == t->nroots) drop(t, top); /* a field turns a plain value into an object */
+        put(t, key_of(keys[i]), scalar(vals[i]));
     }
 }
 

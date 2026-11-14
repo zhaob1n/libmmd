@@ -18,7 +18,7 @@ Numbers here are historical; see bench/results_v*.txt.
 | stateDiagram(-v2) | `src/d_state.c` | composites (recursive per-scope layout), `--` regions, `[*]`, fork/join/choice, notes, classDef |
 | classDiagram | `src/d_class.c` | members, `~generics~`, visibility/`$`/`*`, annotations, all relations + lollipop, cardinality, namespaces, notes |
 | erDiagram | `src/d_er.c` | attribute tables (type/name/keys/comment), aliases, all crow's-foot cardinalities (symbolic + word forms), `:::cls` / classDef / class / style, `subgraph` clusters (relations may target a subgraph id) |
-| pie | `src/d_pie.c` | slices, showData, title, legend |
+| pie | `src/d_pie.c` | slices, showData, title, legend; a percentage that does not fit its slice goes outside on a leader line (runs of them spaced along the label circle) |
 | gantt | `src/d_gantt.c` | dayjs-style dateFormat (incl. Z/ZZ offsets), todayMarker (MMD_TODAY override), weekday/weekend friday, strftime axisFormat, tickInterval, excludes (weekends/dates), after/until deps, done/active/crit/milestone/vert, invalid tickInterval ignored, `gantt.useWidth` |
 | journey | `src/d_journey.c` | sections, scored tasks with faces, actor legend/dots |
 | mindmap | `src/d_mindmap.c` | indentation tree, all node shapes, radial layout (tidy-tree opt-in), `::icon(fa ...)` drawn as real Font Awesome paths (badge fallback), `:::class`, section colours |
@@ -38,7 +38,7 @@ Numbers here are historical; see bench/results_v*.txt.
 | ishikawa | `src/d_ishikawa.c` | fishbone port of mermaid's renderer: alternating up/down causes, nested sub-causes along bones, wrapped head |
 | cynefin | `src/d_cynefin.c` | five domains, items (confusion capped at 3 + overflow badge), transitions; seeded wavy boundaries match mermaid-cli byte-for-byte |
 | ZenUML | `src/d_zenuml.c` | native renderer in ZenUML's look: titled outer frame, boxed participant headers with `@Actor/@Database/@Boundary/@Control/@Entity/@Collections/@Queue` icons, unnamed starter column (or `@Starter(X)`), hierarchical message numbers (1, 2.1, 2.1.1), `// comments` above the next message, sync calls with `{}` bodies (activations, explicit `return` plus `x =` assignment return), `new X()` creating an `x:X` box mid-diagram, async `A->B: msg` / dashed `A-->B`, Alt/Loop/Opt/Par/Try/Critical/Section fragments (if/else if/else, while/for/forEach/loop, try/catch/finally) with numbered headers, ZenUML-style header icons and condition rows, title |
-| config / a11y | `src/d_cfg.c`, `src/dcfg.h` | `%%{init}%%` (relaxed JSON) + YAML frontmatter `config:` flattened to dotted keys; a directive's `config` object lands where mermaid's detectInit files it, under the detector id: the diagram's section, except for class, state, xychart, flowchart-elk and the railroad dialects, whose ids no renderer reads, and nowhere when there are several directives; and `theme`/`look` resolve as mermaid 12's resolveAppearance does: the section's (`flowchart.theme`, `sequence.look` ...) before the top-level one, names mermaid does not know passed over (the caller's `mmd_options.theme` wins over both); `nodeSpacing`/`rankSpacing` as mermaid's dagre layout reads them (`dcfg_spacing`): a top-level one first, then the diagram's section, which is `state` for class and requirement diagrams too (their own sections are ignored), 0 and negatives as unset; ~85 themeVariables mapped to CSS per type (values whitelisted, `url(` rejected); themes `default`/`base`/`dark`/`forest`/`neutral` through mermaid's own theme engine (`src/mtheme.c`, generated from mermaid's theme sources by `tools/gen_mtheme.mjs` into `src/mtheme_gen.h`, khroma's colour maths in `src/mcolor.c`): user themeVariables are derived as mermaid derives them (`theme: base` with a `primaryColor` recolours everything computed from it) and only where mermaid's updateCurrentConfig does: the source names a theme, or resolves to one other than the site's (default, or the caller's); otherwise they land as given, checked against mermaid's getThemeVariables on every variable of ~1000 override sets (`tests/mtheme_cases.tsv`, `node tools/mtheme_cases.mjs`); renderers get the variables that differ from what they draw on their own (`dcfg_tv`), flowcharts the ones the themeVariables change; per-diagram keys (pie.textPosition, timeline.disableMulticolor, sankey.showValues, quadrantChart.chartHeight, gantt.axisFormat/tickInterval, gantt.barHeight/barGap/topPadding/leftPadding, quadrantChart.chartWidth, xyChart.width/height, xyChart.showDataLabel/showDataLabelOutsideBar/barOverlap, sankey.width/height, packet.bitsPerRow); accTitle/accDescr (incl. `{}` block) → `<title>`/`<desc>` + aria-labelledby/describedby |
+| config / a11y | `src/d_cfg.c`, `src/dcfg.h` | `%%{init}%%` (relaxed JSON) + YAML frontmatter `config:` flattened to dotted keys; a directive's `config` object lands in the diagram's section, however many directives there are (mermaid's detectInit files it under the detector id, which no renderer reads for class, state, xychart, flowchart-elk and the railroad dialects, and drops it when there are several directives); `theme`/`look` resolve as mermaid 12's resolveAppearance does: the section's (`flowchart.theme`, `sequence.look` ...) before the top-level one, names mermaid does not know passed over (the caller's `mmd_options.theme` wins over both); `nodeSpacing`/`rankSpacing` as mermaid's dagre layout reads them (`dcfg_spacing`): a top-level one first, then the diagram's section, which is `state` for class and requirement diagrams too (their own sections are ignored), 0 and negatives as unset; themeVariables mapped to CSS per type for the variables mermaid's styles read there (`TVS`, values whitelisted, `url(` rejected; `tools/css_audit.py` checks every selector lands); themes `default`/`base`/`dark`/`forest`/`neutral` through mermaid's own theme engine (`src/mtheme.c`, generated from mermaid's theme sources by `tools/gen_mtheme.mjs` into `src/mtheme_gen.h`, khroma's colour maths in `src/mcolor.c`): user themeVariables are derived as mermaid derives them (`theme: base` with a `primaryColor` recolours everything computed from it) and only where mermaid's updateCurrentConfig does: the source names a theme, or resolves to one other than the site's (default, or the caller's); otherwise they land as given, checked against mermaid's getThemeVariables on every variable of ~1000 override sets (`tests/mtheme_cases.tsv`, `node tools/mtheme_cases.mjs`); renderers get the variables that differ from what they draw on their own (`dcfg_tv`), flowcharts the ones the themeVariables change; per-diagram keys (pie.textPosition, timeline.disableMulticolor, sankey.showValues, quadrantChart.chartHeight, gantt.axisFormat/tickInterval, gantt.barHeight/barGap/topPadding/leftPadding, quadrantChart.chartWidth, xyChart.width/height, xyChart.showDataLabel/showDataLabelOutsideBar/barOverlap, sankey.width/height, packet.bitsPerRow); accTitle/accDescr (incl. `{}` block) → `<title>`/`<desc>` + aria-labelledby/describedby |
 | text metrics | `src/text.c` | embedded Helvetica-compatible advance table, Unicode East Asian Width for CJK, 8-byte ASCII fast path |
 | venn | `src/d_venn.c` | sets, unions with sizes, indented `text` nodes, `style`; venn.js-style area-proportional layout (lens-area bisection + stress descent), labels at each region's deepest point |
 | treeView | `src/d_treeview.c` | indentation or box-drawing (`├──`/`└──`/`│`) trees, `:::highlight`, `icon(pack:name)` / showIcons file+folder icons, filename/extension icon maps, `## descriptions` |
@@ -64,19 +64,22 @@ Exact ports (khroma, d3-format, dagre's order step) exist to agree on values and
 real library, not to reproduce its accidents.
 
 Mermaid faults libmmd does not copy:
-- quadrant: mermaid's point fill is khroma's `lighten()` with no amount, `hsl(..., NaN%)`; points stay blue;
+- quadrant: mermaid derives the point colour as `quadrant1Fill` lightened (dark quadrants) or darkened,
+  but calls khroma without an amount and gets `hsl(..., NaN%)`, which no viewer draws; libmmd uses 50,
+  the contrast meant (dark blue in the default theme, light grey in dark); a `quadrantPointFill` the
+  source sets is used as in mermaid;
+- pie: mermaid (11.14 on) leaves out slices under 1% and closes the pie over the rest, so the angles
+  stop matching the shares (82 and twenty slices of 0.9 draw a full disc labelled 82%); libmmd draws
+  every slice;
 - usecase: mermaid's parser wipes the front-matter title; libmmd draws it (see below);
 - `themeVariables` khroma cannot read make mermaid fail the render; libmmd draws the theme with them as given;
-- mermaid fails to render `block_full` and `radar_full` (partial named curve); libmmd draws them.
-
-Still copied, to undo:
-- pie (9e6bd35): slices under 1% are left out and the pie closes over the rest, so the drawn angles
-  no longer match the labelled shares; 82 and twenty slices of 0.9 draw a full disc labelled 82%;
-- `themeVariables`: when the theme is derived, a nested override (`xyChart.titleColor`) replaces the
-  theme's whole `xyChart` object, as mermaid's `calculate()` does; under `theme: dark` the rest of the
-  chart then falls back to light-theme text on the dark background (mermaid's xychart merges the
-  default theme's object instead, and draws the whole chart light);
-- quadrant: the derived `hsl(..., NaN%)` still lands in a `.qp` rule that no element carries.
+- a nested `themeVariables` override (`xyChart.titleColor`) makes mermaid's `calculate()` replace the
+  theme's whole `xyChart` object, and its xychart then fills the gaps from the default theme: a dark
+  chart turns light. libmmd sets that one field (`src/mtheme.c`, `copy_overrides`);
+- mermaid fails to render `block_full` and `radar_full` (partial named curve); libmmd draws them;
+- a directive's `config` object reaches the diagram whatever its type and however many directives
+  there are; mermaid loses it for class, state, xychart, flowchart-elk and the railroad dialects, and
+  whenever there are several directives.
 
 Side-by-side renders (left: libmmd, right: mermaid 11.17) live in `samples/sbs/*.png`.
 Already fixed:
@@ -98,7 +101,6 @@ Known remaining differences:
 - state: concurrent regions are not drawn as grey boxes;
 - class: wide single-row layout, same as mermaid's;
 - journey: legend order;
-- quadrant: points ignore a user's `quadrantPointFill`, which mermaid draws them in;
 - C4: arbitrary bgColor strings are rejected.
 
 ### mermaid 12 defaults (checked against mermaid-cli 12.0.0)

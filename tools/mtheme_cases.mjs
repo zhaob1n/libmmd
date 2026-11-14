@@ -2,6 +2,10 @@
 //   = <theme> <n>                       then n lines  <key> \t <value>  (the overrides), then
 //   lines <key> \t <value> of every variable getThemeVariables(overrides) yields (flattened, dotted
 //   for nested objects, String(v)), or the single line "!" where it throws.
+// Nested overrides (xyChart.titleColor) are the one place libmmd departs from mermaid on purpose:
+// mermaid's calculate() replaces the theme's whole object with the user's, libmmd sets the field.
+// No theme derives a field of such an object from another one, so libmmd's answer is mermaid's for
+// the flat overrides with the user's fields laid over it.
 // To keep the file small, a block lists only the variables that differ from the same theme's first
 // block (no overrides), plus "-<key>" for variables that disappear.
 // usage: node tools/mtheme_cases.mjs [mermaid package dir] > tests/mtheme_cases.tsv
@@ -50,18 +54,10 @@ function flat(o, pre, out) {
   }
   return out;
 }
-// the overrides as dotted keys -> the object mermaid's config would hand over (YAML scalars typed)
-function object(ov) {
-  const o = {};
-  for (const [k, v] of ov) {
-    const typed = v === 'true' ? true : v === 'false' ? false : v.trim() !== '' && !Number.isNaN(Number(v)) ? Number(v) : v;
-    const ks = k.split('.');
-    let at = o;
-    for (const p of ks.slice(0, -1)) at = at[p] = typeof at[p] === 'object' ? at[p] : {};
-    at[ks.at(-1)] = typed;
-  }
-  return o;
-}
+// a YAML scalar as mermaid's config types it
+const typed = (v) => v === 'true' ? true : v === 'false' ? false : v.trim() !== '' && !Number.isNaN(Number(v)) ? Number(v) : v;
+// the flat overrides -> the object mermaid's config would hand over
+const object = (ov) => Object.fromEntries(ov.map(([k, v]) => [k, typed(v)]));
 
 const out = [];
 for (const theme of ['default', 'base', 'dark', 'forest', 'neutral']) {
@@ -80,7 +76,9 @@ for (const theme of ['default', 'base', 'dark', 'forest', 'neutral']) {
   let ref = null;
   for (const ov of sets) {
     let vars;
-    try { vars = flat(themes[theme].getThemeVariables(object(ov)), '', {}); } catch { vars = null; }
+    const nested = ov.filter(([k]) => k.includes('.'));
+    try { vars = flat(themes[theme].getThemeVariables(object(ov.filter(([k]) => !k.includes('.')))), '', {}); } catch { vars = null; }
+    if (vars) for (const [k, v] of nested) vars[k] = String(typed(v));
     out.push(`= ${theme} ${ov.length}`);
     for (const [k, v] of ov) out.push(`${k}\t${v}`);
     if (!vars) { out.push('!'); continue; }

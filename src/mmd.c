@@ -115,7 +115,7 @@ static mmd_status render_c(Arena ap[static 1], Buf bp[static 1], size_t n, const
     PMARK("");
     /* %%{init}%% / frontmatter keys + accTitle/accDescr, all diagram kinds */
     const Diag dg = diag_lookup(kw);
-    dcfg_begin(&arena, n, src, off, dg.sect, dg.init, opt ? opt->theme : MMD_THEME_AUTO);
+    dcfg_begin(&arena, n, src, off, dg.sect, opt ? opt->theme : MMD_THEME_AUTO);
     bool af = str_eq(kw, S("agentflow-beta"));
     if (str_eq(kw, S("graph")) || str_eq(kw, S("flowchart")) || str_eq(kw, S("flowchart-elk")) || str_eq(kw, S("swimlane-beta")) || af) {
         int theme = dcfg_theme();

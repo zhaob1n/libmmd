@@ -241,16 +241,20 @@ static size_t fmt_time(Str f, double t, size_t cap, char out[static cap]) {
     return o;
 }
 
+/* task states as mermaid's gantt styles colour them: a crit task strokes critBorderColor and fills
+ * critBkgColor, or the active/done fill when it is active/done too. Each state rule names .task as well,
+ * and a crit task's every rule .crit, so the theme's rules (dcfg_theme_css, written after these and
+ * only for the variables a theme changes) keep the same order of precedence */
 static constexpr char CSS[] =
     "#mermaid .sec0,#mermaid .sec2{fill:#6666ff;opacity:0.2;}#mermaid .sec1,#mermaid .sec3{fill:#fff400;opacity:0.2;}"
     "#mermaid .stitle{font-size:11px;fill:#333;}#mermaid .grid{stroke:lightgrey;opacity:.8;stroke-width:1px;}"
     "#mermaid .tick{font-size:10px;fill:#000;}#mermaid .exr{fill:#eee;stroke:none;}"
-    "#mermaid .task{fill:#8a90dd;stroke:#534fbc;}#mermaid .done{fill:#d3d3d3;stroke:grey;}"
-    "#mermaid .active{fill:#bfc7ff;stroke:#534fbc;}#mermaid .crit{fill:#ff8888;stroke:#ff0000;}"
-    "#mermaid .crit.done{fill:#d3d3d3;stroke:#ff0000;}#mermaid .crit.active{fill:#ff8888;stroke:#ff0000;}"
+    "#mermaid .task{fill:#8a90dd;stroke:#534fbc;}#mermaid .task.active{fill:#bfc7ff;stroke:#534fbc;}"
+    "#mermaid .task.done{fill:#d3d3d3;stroke:grey;}#mermaid .task.crit{fill:red;stroke:#ff8888;}"
+    "#mermaid .task.crit.active{fill:#bfc7ff;stroke:#ff8888;}#mermaid .task.crit.done{fill:#d3d3d3;stroke:#ff8888;}"
     "#mermaid .tin{fill:#fff;font-size:11px;}#mermaid .tout{fill:#000;font-size:11px;}"
-    "#mermaid .done+.tin,#mermaid .tin.dk{fill:#000;}#mermaid .today{stroke:red;stroke-width:2px;fill:none;}#mermaid .vert{stroke:navy;stroke-width:4px;}#mermaid .vtx{fill:navy;font-size:11px;}"
-    "#mermaid .today{stroke:red;stroke-width:2px;}#mermaid .ttl{font-size:18px;}";
+    "#mermaid .done+.tin,#mermaid .tin.dk{fill:#000;}#mermaid .today{stroke:red;stroke-width:2px;fill:none;}"
+    "#mermaid .vert{stroke:navy;stroke-width:4px;}#mermaid .vtx{fill:navy;font-size:11px;}#mermaid .ttl{font-size:18px;}";
 
 DIAG_FN(gantt_render) {
     LineIt it = {.s = src, .n = n, .i = off};

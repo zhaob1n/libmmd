@@ -52,8 +52,10 @@ It needs no browser, no Node.js, no JavaScript engine and no dependencies beyond
 Every type also supports:
 - the `default`, `base`, `dark`, `forest` and `neutral` themes;
 - `%%{init}%%` and YAML front-matter config, with `themeVariables` derived as mermaid derives them
-  when the source names a theme (`theme: base` with a `primaryColor` recolours everything computed from it),
-  and their values whitelisted;
+  when the source names a theme (`theme: base` with a `primaryColor` recolours everything computed from it);
+  without one, as in mermaid with a classic theme, a variable changes only what the diagram's styles
+  read directly (flowchart, class and ER boxes read `mainBkg` and `nodeBorder`, state boxes `stateBkg`,
+  so `primaryColor` alone leaves them as they are). Values are whitelisted;
 - `accTitle`/`accDescr`, which become `<title>`/`<desc>` plus ARIA attributes.
 
 Per-type feature notes are in [docs/dev/INTERNALS.md](docs/dev/INTERNALS.md).

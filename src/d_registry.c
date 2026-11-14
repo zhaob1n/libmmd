@@ -9,28 +9,26 @@ mmd_status diag_fail(size_t err_off[static 1], char msg[static 160], size_t off,
 }
 
 typedef struct DiagEnt { Str kw; Diag d; } DiagEnt;
-/* D: the detector id is the config section; DI: it is not (init) */
-#define D(kw, fn, sect) {S(kw), {fn, S(sect), S(sect)}}
-#define DI(kw, fn, sect, init) {S(kw), {fn, S(sect), S(init)}}
+#define D(kw, fn, sect) {S(kw), {fn, S(sect)}}
 static const DiagEnt DIAGS[] = {
     D("graph", nullptr, "flowchart"),
     D("flowchart", nullptr, "flowchart"),
-    DI("flowchart-elk", nullptr, "flowchart", "flowchart-elk"),
+    D("flowchart-elk", nullptr, "flowchart"),
     D("swimlane-beta", nullptr, "swimlane"),
     D("agentflow-beta", nullptr, "agentflow"),
     D("sequenceDiagram", nullptr, "sequence"),
-    DI("stateDiagram", state_render, "state", "stateDiagram"),
-    DI("stateDiagram-v2", state_render, "state", "stateDiagram"),
-    DI("classDiagram", class_render, "class", "classDiagram"),
-    DI("classDiagram-v2", class_render, "class", "classDiagram"),
+    D("stateDiagram", state_render, "state"),
+    D("stateDiagram-v2", state_render, "state"),
+    D("classDiagram", class_render, "class"),
+    D("classDiagram-v2", class_render, "class"),
     D("erDiagram", er_render, "er"),
     D("pie", pie_render, "pie"),
     D("gantt", gantt_render, "gantt"),
     D("journey", journey_render, "journey"),
     D("timeline", timeline_render, "timeline"),
     D("quadrantChart", quadrant_render, "quadrantChart"),
-    DI("xychart-beta", xychart_render, "xyChart", "xychart"),
-    DI("xychart", xychart_render, "xyChart", "xychart"),
+    D("xychart-beta", xychart_render, "xyChart"),
+    D("xychart", xychart_render, "xyChart"),
     D("gitGraph", gitgraph_render, "gitGraph"),
     D("mindmap", mindmap_render, "mindmap"),
     D("architecture", architecture_render, "architecture"),
@@ -63,14 +61,13 @@ static const DiagEnt DIAGS[] = {
     D("treeView", treeview_render, "treeView"),
     D("eventmodeling", eventmodeling_render, "eventmodeling"),
     D("railroad-beta", railroad_render, "railroad"),
-    DI("railroad-ebnf-beta", railroad_render, "railroad", "railroadEbnf"),
-    DI("railroad-abnf-beta", railroad_render, "railroad", "railroadAbnf"),
-    DI("railroad-peg-beta", railroad_render, "railroad", "railroadPeg"),
+    D("railroad-ebnf-beta", railroad_render, "railroad"),
+    D("railroad-abnf-beta", railroad_render, "railroad"),
+    D("railroad-peg-beta", railroad_render, "railroad"),
     D("wardley-beta", wardley_render, "wardley"),
     D("usecase-beta", usecase_render, "usecase"),
 };
 #undef D
-#undef DI
 
 Diag diag_lookup(Str kw) {
     for (size_t i = 0; i < countof(DIAGS); i++)

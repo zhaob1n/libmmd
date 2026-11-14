@@ -26,7 +26,7 @@ typedef struct Series { bool line; uint32_t v0, nv; Str name; const char *col; }
 
 static constexpr char CSS[] =
     "#mermaid .ax{stroke:#131300;stroke-width:2px;}#mermaid .tk{stroke:#131300;stroke-width:2px;}"
-    "#mermaid .tl{font-size:14px;fill:#131300;}#mermaid .at{font-size:16px;fill:#131300;}"
+    "#mermaid .tl,#mermaid .lt{font-size:14px;fill:#131300;}#mermaid .at{font-size:16px;fill:#131300;}"
     "#mermaid .ttl{font-size:20px;fill:#131300;}#mermaid .ln{fill:none;stroke-width:2px;}#mermaid .lg{stroke:#131300;stroke-width:.5px;}";
 static constexpr char PAL[][8] = {"#ECECFF", "#8493A6", "#FFC3A0", "#DCDDE1", "#B8E994",
                                   "#D1A36F", "#C3CDE6", "#FFB6C1", "#496078", "#F8F3E3"};
@@ -399,25 +399,27 @@ DIAG_FN(xychart_render) {
             else dg_text(out, l, 12, c, p - 10, "middle", nullptr);
             buf_lit(out, "</g>");
         }
-    /* axes */
-    dg_line(out, ox, oy, ox, oy + ph, "ax");
-    dg_line(out, ox, oy + ph, ox + pw, oy + ph, "ax");
+    /* axes: x is the category axis (left in a horizontal chart), y the value axis; each carries its
+     * own class so the xyChart.{x,y}Axis*Color variables reach it */
+    const char *vx = horiz ? "ax x" : "ax y", *cx = horiz ? "ax y" : "ax x";
+    dg_line(out, ox, oy, ox, oy + ph, vx);
+    dg_line(out, ox, oy + ph, ox + pw, oy + ph, cx);
     for (int k = 0; k <= nt; k++) {
         double v = tick_at(t0 + k, step), p = VPOS(v);
         Str t = {.p = nb, .n = fmt_js(v, nb)};
-        if (horiz) { dg_line(out, p, oy + ph, p, oy + ph + 5, "tk"); dg_text(out, t, 14, p, oy + ph + 16, "middle", "tl"); }
-        else { dg_line(out, ox - 5, p, ox, p, "tk"); dg_text(out, t, 14, ox - 8, p, "end", "tl"); }
+        if (horiz) { dg_line(out, p, oy + ph, p, oy + ph + 5, "tk y"); dg_text(out, t, 14, p, oy + ph + 16, "middle", "tl y"); }
+        else { dg_line(out, ox - 5, p, ox, p, "tk y"); dg_text(out, t, 14, ox - 8, p, "end", "tl y"); }
     }
     for (size_t i = 0; i < nc; i++) {
         Str t = !cats.n ? x_num(xr, xmin, xmax, nc, i, nb) : clab ? clab[i] : cats.v[i];
         double p = CPOS(i);
-        if (horiz) { dg_line(out, ox - 5, p, ox, p, "tk"); dg_text(out, t, 14, ox - 8, p, "end", "tl"); }
+        if (horiz) { dg_line(out, ox - 5, p, ox, p, "tk x"); dg_text(out, t, 14, ox - 8, p, "end", "tl x"); }
         else {
-            dg_line(out, p, oy + ph, p, oy + ph + 5, "tk");
+            dg_line(out, p, oy + ph, p, oy + ph + 5, "tk x");
             unsigned ln = 1;
             for (size_t k = 0; k < t.n; k++) ln += t.p[k] == '\n';
             /* first line stays at +16, where a single-line label is centred */
-            dg_text(out, t, 14, p, oy + ph + 16 + (ln - 1) * 10.5, "middle", "tl");
+            dg_text(out, t, 14, p, oy + ph + 16 + (ln - 1) * 10.5, "middle", "tl x");
         }
     }
     if (legw > 0) {
@@ -427,16 +429,17 @@ DIAG_FN(xychart_render) {
             if (ser.v[s].line) { buf_lit(out, "<path class=\"ln\" stroke=\""); buf_cstr(out, ser.v[s].col);
                 buf_lit(out, "\" d=\"M"); buf_pt(out, lx, ly); buf_ch(out, 'L'); buf_pt(out, lx + 16, ly); buf_lit(out, "\"/>"); }
             else dg_rect_fill(out, lx + 2, ly - 6, 12, 12, 0, "lg", ser.v[s].col);
-            dg_text(out, ser.v[s].name, 14, lx + 22, ly, "start", "tl");
+            dg_text(out, ser.v[s].name, 14, lx + 22, ly, "start", "lt");
             ly += 22;
         }
     }
 #undef VPOS
 #undef CPOS
     Str bottom = horiz ? yt : xt, side = horiz ? xt : yt;
-    if (bottom.n) dg_text(out, bottom, 16, ox + pw / 2, oy + ph + 42 + cat_extra, "middle", "at");
+    if (bottom.n) dg_text(out, bottom, 16, ox + pw / 2, oy + ph + 42 + cat_extra, "middle", horiz ? "at y" : "at x");
     if (side.n) {
-        buf_lit(out, "<text class=\"at\" text-anchor=\"middle\" dominant-baseline=\"central\" transform=\"translate(");
+        buf_cstr(out, horiz ? "<text class=\"at x\"" : "<text class=\"at y\"");
+        buf_lit(out, " text-anchor=\"middle\" dominant-baseline=\"central\" transform=\"translate(");
         buf_num(out, 30); buf_ch(out, ','); buf_num(out, oy + ph / 2); buf_lit(out, ") rotate(-90)\">");
         buf_xml(out, side);
         buf_lit(out, "</text>");

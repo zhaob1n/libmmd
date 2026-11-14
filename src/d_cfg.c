@@ -15,20 +15,15 @@ static thread_local size_t cur_cap;
 
 static constexpr size_t MAX_KV = 512;
 static thread_local Str cur_sect; /* the diagram's section of mermaid's config: flowchart, xyChart ... */
-static thread_local Str cur_init; /* where mermaid's detectInit files a directive's `config` */
 static thread_local Str cfg_to;   /* what a leading "config." becomes: nothing in the front matter,
-                                   * cur_init in a directive */
-static thread_local bool cfg_drop; /* a directive's `config` is dropped: there are several directives */
+                                   * cur_sect in a directive */
 
 static Str join(Str pre, Str k);
 static void kv_put(Str k, Str v) {
     static const Str PRE[] = {S("init."), S("initialize.")};
     for (size_t i = 0; i < countof(PRE); i++)
         if (str_starts(k, PRE[i])) { k.p += PRE[i].n; k.n -= PRE[i].n; break; }
-    if (str_starts(k, S("config."))) {
-        if (cfg_drop) return;
-        k = join(cfg_to, (Str){.p = k.p + 7, .n = k.n - 7});
-    }
+    if (str_starts(k, S("config."))) k = join(cfg_to, (Str){.p = k.p + 7, .n = k.n - 7});
     if (!k.n || cur.n >= MAX_KV) return;
     if (cur.n == cur_cap) {
         size_t nc = cur_cap ? cur_cap * 2 : 32;
@@ -155,16 +150,18 @@ static bool init_directive(Str body, const char *c[static 1]) {
     return str_eq(name, S("init")) || str_eq(name, S("initialize"));
 }
 
-/* mermaid's detectInit moves a directive's `config` object to the detected diagram's key, or,
- * when there are several directives, drops it with every other key it does not know */
-static void directive(Str body, bool several) {
+/* a directive's `config` object lands in the diagram's section. mermaid's detectInit files it under
+ * the detector id, which no renderer reads for class, state, xychart, flowchart-elk and the railroad
+ * dialects, and loses it when there are several directives (sanitizeDirective drops the key):
+ * settings the author wrote that silently do nothing, which libmmd does not copy */
+static void directive(Str body) {
     const char *c;
     if (!init_directive(body, &c)) return;
     JP p = {.s = c + 1, .n = (size_t)(body.p + body.n - c - 1)};
     jp_ws(&p);
-    cfg_to = cur_init, cfg_drop = several;
+    cfg_to = cur_sect;
     if (p.i < p.n && p.s[p.i] == '{') jp_obj(&p, (Str){}, 1);
-    cfg_to = (Str){}, cfg_drop = false;
+    cfg_to = (Str){};
 }
 
 bool dcfg_is_acc(Str t, bool block[static 1]) {
@@ -218,13 +215,10 @@ static int theme_named(Str w) {
     return MMD_THEME_AUTO;
 }
 
-void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t off, Str sect, Str init, int api) {
+void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t off, Str sect, int api) {
     cur = (DCfg){};
-    cur_a = a, cur_cap = 0, cur_sect = sect, cur_init = init, api_theme = api;
+    cur_a = a, cur_cap = 0, cur_sect = sect, api_theme = api;
     size_t i = off >= 3 && !memcmp(src, "\xEF\xBB\xBF", 3) ? 3 : 0; /* a BOM, as preamble() skips it */
-    unsigned ninit = 0;
-    for (const char *q = src + i, *c; (q = memmem(q, off - (size_t)(q - src), "%%{", 3)); q += 3)
-        ninit += init_directive((Str){.p = q + 3, .n = off - (size_t)(q + 3 - src)}, &c);
     /* preamble: frontmatter + directives */
     while (i < off) {
         const char *nl = memchr(src + i, '\n', off - i);
@@ -247,7 +241,7 @@ void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t of
             for (const char *q = s0; q + 2 < src + off; q++)
                 if (q[0] == '}' && q[1] == '%' && q[2] == '%') { end = q; break; }
             if (end) {
-                directive((Str){.p = s0, .n = (size_t)(end - s0)}, ninit > 1);
+                directive((Str){.p = s0, .n = (size_t)(end - s0)});
                 nxt = (size_t)(end - src) + 3; /* another directive may follow on the line */
             }
         }
@@ -288,7 +282,7 @@ void dcfg_begin(Arena a[static 1], size_t n, const char src[static n], size_t of
 
 void dcfg_end(void) {
     cur_theme = api_theme = 0;
-    cur = (DCfg){}, cur_a = nullptr, cur_cap = 0, cur_sect = cur_init = (Str){};
+    cur = (DCfg){}, cur_a = nullptr, cur_cap = 0, cur_sect = (Str){};
     own_theme = derive = eng_tried = eng_user = user_vars = false, eng = eng_base = nullptr;
 }
 const DCfg *dcfg_cur(void) { return &cur; }
@@ -461,24 +455,23 @@ bool dcfg_neo(void) {
     return !theme.n || str_starts(theme, S("redux"));
 }
 
-/* themeVariable -> CSS template ('$' = value); kind "*" applies to every diagram */
+/* themeVariable -> CSS template ('$' = value), for the classes the renderers emit; kind "*" applies to
+ * every diagram. Per kind, the variables mermaid's styles for that diagram read, so a variable the
+ * source sets without naming a theme changes what it changes in mermaid; later rows win, as mermaid's
+ * `a || b` fallbacks do. tools/css_audit.py fails on a selector no element carries. */
 typedef struct TV { const char *kind, *var, *tpl; } TV;
 static const TV TVS[] = {
     {"*", "fontFamily", "#mermaid{font-family:$;}"},
     {"*", "fontSize", "#mermaid{font-size:$;}"},
     {"*", "textColor", "#mermaid{fill:$;}"},
-    {"flowchart", "primaryColor", "#mermaid .node rect,#mermaid .node circle,#mermaid .node ellipse,#mermaid .node polygon,#mermaid .node path{fill:$;}"},
     {"flowchart", "mainBkg", "#mermaid .node rect,#mermaid .node circle,#mermaid .node ellipse,#mermaid .node polygon,#mermaid .node path{fill:$;}"},
-    {"flowchart", "primaryBorderColor", "#mermaid .node rect,#mermaid .node circle,#mermaid .node ellipse,#mermaid .node polygon,#mermaid .node path{stroke:$;}"},
     {"flowchart", "nodeBorder", "#mermaid .node rect,#mermaid .node circle,#mermaid .node ellipse,#mermaid .node polygon,#mermaid .node path{stroke:$;}"},
-    {"flowchart", "primaryTextColor", "#mermaid .node text{fill:$;}"},
     {"flowchart", "nodeTextColor", "#mermaid .node text{fill:$;}"},
     {"flowchart", "lineColor", "#mermaid .flowchart-link{stroke:$;}#mermaid .marker{fill:$;stroke:$;}"},
     {"flowchart", "edgeLabelBackground", "#mermaid .edgeLabel rect{fill:$;}"},
     {"flowchart", "clusterBkg", "#mermaid .cluster rect{fill:$;}"},
     {"flowchart", "clusterBorder", "#mermaid .cluster rect{stroke:$;}"},
     {"flowchart", "titleColor", "#mermaid .cluster-label,#mermaid .title{fill:$;}"},
-    /* mermaid 12 usecase styles: later rows win, as its `a ?? b` fallbacks do */
     {"usecase", "mainBkg", "#mermaid .gl,#mermaid .uc,#mermaid .js,#mermaid .mke{fill:$;}"},
     {"usecase", "actorBkg", "#mermaid .gl{fill:$;}"},
     {"usecase", "nodeBorder", "#mermaid .gl,#mermaid .uc,#mermaid .bm,#mermaid .js{stroke:$;}"},
@@ -501,135 +494,77 @@ static const TV TVS[] = {
     {"usecase", "usecaseBoundaryBorder", "#mermaid .bd{stroke:$;}"},
     {"usecase", "usecaseIncludeLine", "#mermaid .rel.inc{stroke:$;}"},
     {"usecase", "usecaseExtendLine", "#mermaid .rel.ext{stroke:$;}"},
-    {"statediagram", "primaryColor", "#mermaid .st{fill:$;}"},
-    {"statediagram", "primaryBorderColor", "#mermaid .st{stroke:$;}"},
-    {"statediagram", "lineColor", "#mermaid .tr{stroke:$;}"},
-    {"statediagram", "noteBkgColor", "#mermaid .note{fill:$;}"},
-    {"statediagram", "noteBorderColor", "#mermaid .note{stroke:$;}"},
-    {"classDiagram", "primaryColor", "#mermaid .cls{fill:$;}"},
-    {"classDiagram", "primaryBorderColor", "#mermaid .cls,#mermaid .cdiv{stroke:$;}"},
-    {"classDiagram", "lineColor", "#mermaid .rel{stroke:$;}"},
-    {"classDiagram", "noteBkgColor", "#mermaid .note{fill:$;}"},
-    {"erDiagram", "primaryColor", "#mermaid .ent{fill:$;}"},
-    {"erDiagram", "primaryBorderColor", "#mermaid .ent,#mermaid .row{stroke:$;}"},
-    {"erDiagram", "lineColor", "#mermaid .rel{stroke:$;}"},
-    {"requirementDiagram", "primaryColor", "#mermaid .rq{fill:$;}"},
-    {"requirementDiagram", "primaryBorderColor", "#mermaid .rq,#mermaid .rh{stroke:$;}"},
-    {"requirementDiagram", "lineColor", "#mermaid .rr{stroke:$;}"},
-    {"block", "primaryColor", "#mermaid .bn{fill:$;}"},
-    {"block", "primaryBorderColor", "#mermaid .bn{stroke:$;}"},
-    {"block", "lineColor", "#mermaid .be{stroke:$;}"},
-    {"gantt", "taskBkgColor", "#mermaid .task{fill:$;}"},
-    {"gantt", "taskBorderColor", "#mermaid .task{stroke:$;}"},
-    {"gantt", "activeTaskBkgColor", "#mermaid .active{fill:$;}"},
-    {"gantt", "activeTaskBorderColor", "#mermaid .active{stroke:$;}"},
-    {"gantt", "doneTaskBkgColor", "#mermaid .done{fill:$;}"},
-    {"gantt", "doneTaskBorderColor", "#mermaid .done{stroke:$;}"},
-    {"gantt", "critBkgColor", "#mermaid .crit{fill:$;}"},
-    {"gantt", "critBorderColor", "#mermaid .crit{stroke:$;}"},
-    {"gantt", "taskTextColor", "#mermaid .taskText{fill:$;}"},
-    {"gantt", "taskTextOutsideColor", "#mermaid .taskTextOutside{fill:$;}"},
-    {"gantt", "sectionBkgColor", "#mermaid .sec0,#mermaid .sec2{fill:$;}"},
-    {"gantt", "altSectionBkgColor", "#mermaid .sec1,#mermaid .sec3{fill:$;}"},
-    {"gantt", "gridColor", "#mermaid .grid{stroke:$;}"},
-    {"gantt", "excludeBkgColor", "#mermaid .excl{fill:$;}"},
-    {"pie", "pieStrokeColor", "#mermaid .slice{stroke:$;}"},
-    {"pie", "pieOuterStrokeColor", "#mermaid .outer{stroke:$;}"},
-    {"pie", "pieOpacity", "#mermaid .slice{opacity:$;}"},
-    {"pie", "pieTitleTextColor", "#mermaid .title{fill:$;}"},
-    {"pie", "pieSectionTextColor", "#mermaid .sliceText{fill:$;}"},
-    {"pie", "pieLegendTextColor", "#mermaid .legend text{fill:$;}"},
-    {"quadrantChart", "quadrant1Fill", "#mermaid .q1{fill:$;}"},
-    {"quadrantChart", "quadrant2Fill", "#mermaid .q2{fill:$;}"},
-    {"quadrantChart", "quadrant3Fill", "#mermaid .q3{fill:$;}"},
-    {"quadrantChart", "quadrant4Fill", "#mermaid .q4{fill:$;}"},
-    {"quadrantChart", "quadrant1TextFill", "#mermaid .q1t{fill:$;}"},
-    {"quadrantChart", "quadrantPointFill", "#mermaid .qp{fill:$;}"},
-    {"quadrantChart", "quadrantInternalBorderStrokeFill", "#mermaid .qib{stroke:$;}"},
-    {"quadrantChart", "quadrantExternalBorderStrokeFill", "#mermaid .qeb{stroke:$;}"},
-    {"xychart", "xyChart.backgroundColor", "#mermaid .bg{fill:$;}"},
-    {"xychart", "xyChart.titleColor", "#mermaid .title{fill:$;}"},
-    {"xychart", "xyChart.xAxisLineColor", "#mermaid .xaxis line,#mermaid .xaxis path{stroke:$;}"},
-    {"xychart", "xyChart.yAxisLineColor", "#mermaid .yaxis line,#mermaid .yaxis path{stroke:$;}"},
-    {"xychart", "xyChart.xAxisLabelColor", "#mermaid .xaxis text{fill:$;}"},
-    {"xychart", "xyChart.yAxisLabelColor", "#mermaid .yaxis text{fill:$;}"},
-    {"gitGraph", "commitLabelColor", "#mermaid .commit-label{fill:$;}"},
-    {"gitGraph", "commitLabelBackground", "#mermaid .commit-label-bkg{fill:$;}"},
-    {"gitGraph", "tagLabelColor", "#mermaid .tag-label{fill:$;}"},
-    {"gitGraph", "tagLabelBackground", "#mermaid .tag-label-bkg{fill:$;}"},
-    {"gitGraph", "tagLabelBorder", "#mermaid .tag-label-bkg{stroke:$;}"},
-    {"packet", "packet.blockFillColor", "#mermaid .packetBlock{fill:$;}"},
-    {"packet", "packet.blockStrokeColor", "#mermaid .packetBlock{stroke:$;}"},
-    {"packet", "packet.labelColor", "#mermaid .packetLabel{fill:$;}"},
-    {"packet", "packet.titleColor", "#mermaid .packetTitle{fill:$;}"},
-    {"radar", "radar.axisColor", "#mermaid .radarAxisLine{stroke:$;}"},
-    {"radar", "radar.graticuleColor", "#mermaid .radarGraticule{stroke:$;}"},
-    {"c4", "lineColor", "#mermaid .cr{stroke:$;}#mermaid .crh{fill:$;}"},
-    {"architecture", "lineColor", "#mermaid .edge{stroke:$;}"},
-    {"sequence", "actorBkg", "#mermaid .actor{fill:$;}"},
-    {"sequence", "actorBorder", "#mermaid .actor{stroke:$;}"},
-    {"sequence", "actorTextColor", "#mermaid .actor-text{fill:$;}"},
-    {"sequence", "actorLineColor", "#mermaid .actor-line{stroke:$;}"},
-    {"sequence", "signalColor", "#mermaid .messageLine0,#mermaid .messageLine1{stroke:$;}#mermaid .arrowhead{fill:$;}"},
-    {"sequence", "signalTextColor", "#mermaid .messageText{fill:$;}"},
-    {"sequence", "noteBkgColor", "#mermaid .note{fill:$;}"},
-    {"sequence", "noteBorderColor", "#mermaid .note{stroke:$;}"},
-    {"sequence", "noteTextColor", "#mermaid .noteText{fill:$;}"},
-    {"sequence", "activationBkgColor", "#mermaid .activation0,#mermaid .activation1,#mermaid .activation2{fill:$;}"},
-    {"sequence", "activationBorderColor", "#mermaid .activation0,#mermaid .activation1,#mermaid .activation2{stroke:$;}"},
-    {"sequence", "labelBoxBkgColor", "#mermaid .labelBox{fill:$;}"},
-    {"sequence", "labelBoxBorderColor", "#mermaid .labelBox{stroke:$;}"},
-    {"sequence", "sequenceNumberColor", "#mermaid .sequenceNumber{fill:$;}"},
-    {"sankey", "textColor", "#mermaid .sankey-label{fill:$;}"},
-    /* class names as actually emitted by d_*.c / seq.c (also drive the named themes) */
-    {"sequence", "actorBorder", "#mermaid .actor-man circle,#mermaid .actor-line{stroke:$;}"},
-    {"sequence", "actorBkg", "#mermaid .actor-man circle{fill:$;}"},
+    {"sequence", "actorBkg", "#mermaid .actor,#mermaid .actor-man circle{fill:$;}"},
+    {"sequence", "actorBorder", "#mermaid .actor,#mermaid .actor-man circle,#mermaid .actor-line{stroke:$;}"},
     {"sequence", "actorTextColor", "#mermaid .actor+text,#mermaid .actor~text{fill:$;}"},
     {"sequence", "textColor", "#mermaid text{fill:$;}"},
     {"sequence", "actorLineColor", "#mermaid .lifeline{stroke:$;}"},
     {"sequence", "signalColor", "#mermaid .msg,#mermaid .destroy{stroke:$;}#mermaid .seqnum{fill:$;}#mermaid marker path,#mermaid marker polygon{fill:$;stroke:$;}"},
+    {"sequence", "signalTextColor", "#mermaid .msg-text{fill:$;}"},
+    {"sequence", "sequenceNumberColor", "#mermaid .seqnum-t{fill:$;}"},
+    {"sequence", "noteBkgColor", "#mermaid .note{fill:$;}"},
+    {"sequence", "noteBorderColor", "#mermaid .note{stroke:$;}"},
+    {"sequence", "noteTextColor", "#mermaid .note+text{fill:$;}"},
     {"sequence", "activationBkgColor", "#mermaid .act{fill:$;}"},
     {"sequence", "activationBorderColor", "#mermaid .act{stroke:$;}"},
     {"sequence", "labelBoxBorderColor", "#mermaid .block,#mermaid .block-sep,#mermaid .block-tab{stroke:$;}"},
     {"sequence", "labelBoxBkgColor", "#mermaid .block-tab{fill:$;}"},
-    {"sequence", "noteTextColor", "#mermaid .note+text{fill:$;}"},
-    {"statediagram", "mainBkg", "#mermaid .st,#mermaid .choice,#mermaid .comp-t{fill:$;}"},
-    {"statediagram", "nodeBorder", "#mermaid .st,#mermaid .choice,#mermaid .comp,#mermaid .comp-t,#mermaid .div{stroke:$;}"},
-    {"statediagram", "lineColor", "#mermaid .tr,#mermaid .endo{stroke:$;}#mermaid .bar,#mermaid .start,#mermaid .endi{fill:$;}#mermaid marker path{fill:$;stroke:$;}"},
-    {"statediagram", "background", "#mermaid .comp,#mermaid .endo{fill:$;}"},
+    {"statediagram", "noteBkgColor", "#mermaid .note{fill:$;}"},
+    {"statediagram", "noteBorderColor", "#mermaid .note,#mermaid .note-l{stroke:$;}"},
+    {"statediagram", "mainBkg", "#mermaid .choice,#mermaid .endo{fill:$;}"},
+    {"statediagram", "stateBkg", "#mermaid .st{fill:$;}"},
+    {"statediagram", "compositeTitleBackground", "#mermaid .comp-t{fill:$;}"},
+    {"statediagram", "nodeBorder", "#mermaid .st,#mermaid .choice,#mermaid .comp,#mermaid .comp-t,#mermaid .div{stroke:$;}#mermaid .endi{fill:$;}"},
+    {"statediagram", "stateBorder", "#mermaid .st,#mermaid .choice,#mermaid .comp,#mermaid .comp-t,#mermaid .div{stroke:$;}#mermaid .endi{fill:$;}"},
+    {"statediagram", "lineColor", "#mermaid .bar{fill:$;}#mermaid .endo{stroke:$;}"},
+    {"statediagram", "specialStateColor", "#mermaid .start{fill:$;}"},
+    {"statediagram", "transitionColor", "#mermaid .tr{stroke:$;}#mermaid marker path{fill:$;stroke:$;}"},
+    {"statediagram", "background", "#mermaid .comp{fill:$;}"},
     {"statediagram", "edgeLabelBackground", "#mermaid .lbl{fill:$;}"},
-    {"statediagram", "noteBorderColor", "#mermaid .note-l{stroke:$;}"},
     {"statediagram", "textColor", "#mermaid text{fill:$;}"},
     {"statediagram", "noteTextColor", "#mermaid .note+text{fill:$;}"},
     {"classDiagram", "mainBkg", "#mermaid .cls{fill:$;}"},
     {"classDiagram", "nodeBorder", "#mermaid .cls,#mermaid .div{stroke:$;}"},
-    {"classDiagram", "lineColor", "#mermaid marker path{stroke:$;}"},
+    {"classDiagram", "lineColor", "#mermaid .rel,#mermaid marker path{stroke:$;}"},
     {"classDiagram", "edgeLabelBackground", "#mermaid .lbl{fill:$;}"},
     {"classDiagram", "clusterBkg", "#mermaid .ns{fill:$;}"},
     {"classDiagram", "clusterBorder", "#mermaid .ns{stroke:$;}"},
+    {"classDiagram", "noteBkgColor", "#mermaid .note{fill:$;}"},
     {"classDiagram", "noteBorderColor", "#mermaid .note{stroke:$;}"},
     {"classDiagram", "textColor", "#mermaid text{fill:$;}"},
     {"erDiagram", "mainBkg", "#mermaid .ent{fill:$;}"},
     {"erDiagram", "nodeBorder", "#mermaid .ent,#mermaid .row0,#mermaid .row1{stroke:$;}"},
-    {"erDiagram", "attributeBackgroundColorOdd", "#mermaid .row0{fill:$;}"},
-    {"erDiagram", "attributeBackgroundColorEven", "#mermaid .row1{fill:$;}"},
-    {"erDiagram", "lineColor", "#mermaid .mk,#mermaid .mkc{stroke:$;}"},
+    {"erDiagram", "rowOdd", "#mermaid .row0{fill:$;}"},
+    {"erDiagram", "rowEven", "#mermaid .row1{fill:$;}"},
+    {"erDiagram", "lineColor", "#mermaid .rel,#mermaid .mk,#mermaid .mkc{stroke:$;}"},
     {"erDiagram", "background", "#mermaid .mkc,#mermaid .lbl{fill:$;}"},
     {"erDiagram", "textColor", "#mermaid text{fill:$;}"},
     {"requirementDiagram", "requirementBackground", "#mermaid .rq{fill:$;}"},
     {"requirementDiagram", "requirementBorderColor", "#mermaid .rq,#mermaid .rqd{stroke:$;}"},
-    {"requirementDiagram", "relationColor", "#mermaid .rr{stroke:$;}#mermaid .rh{fill:$;}"},
+    {"requirementDiagram", "relationColor", "#mermaid .rr{stroke:$;}#mermaid .rh{fill:$;stroke:$;}"},
     {"requirementDiagram", "relationLabelBackground", "#mermaid .rl{fill:$;}"},
     {"requirementDiagram", "requirementTextColor", "#mermaid text{fill:$;}"},
     {"block", "mainBkg", "#mermaid .bn{fill:$;}"},
     {"block", "nodeBorder", "#mermaid .bn,#mermaid .bg{stroke:$;}"},
     {"block", "clusterBkg", "#mermaid .bg{fill:$;}"},
     {"block", "edgeLabelBackground", "#mermaid .bl{fill:$;}"},
-    {"block", "lineColor", "#mermaid marker path{fill:$;stroke:$;}"},
+    {"block", "lineColor", "#mermaid .be{stroke:$;}#mermaid marker path{fill:$;stroke:$;}"},
     {"block", "textColor", "#mermaid text{fill:$;}"},
     {"kanban", "background", "#mermaid .ki{fill:$;}"},
     {"kanban", "nodeBorder", "#mermaid .ki{stroke:$;}"},
     {"kanban", "textColor", "#mermaid .kt,#mermaid .kl{fill:$;}"},
+    {"gantt", "taskBkgColor", "#mermaid .task{fill:$;}"},
+    {"gantt", "taskBorderColor", "#mermaid .task{stroke:$;}"},
+    {"gantt", "activeTaskBkgColor", "#mermaid .task.active,#mermaid .task.crit.active{fill:$;}"},
+    {"gantt", "activeTaskBorderColor", "#mermaid .task.active{stroke:$;}"},
+    {"gantt", "doneTaskBkgColor", "#mermaid .task.done,#mermaid .task.crit.done{fill:$;}"},
+    {"gantt", "doneTaskBorderColor", "#mermaid .task.done{stroke:$;}"},
+    {"gantt", "critBkgColor", "#mermaid .task.crit{fill:$;}"},
+    {"gantt", "critBorderColor", "#mermaid .task.crit,#mermaid .task.crit.active,#mermaid .task.crit.done{stroke:$;}"},
+    {"gantt", "vertLineColor", "#mermaid .vert{stroke:$;}#mermaid .vtx{fill:$;}"},
+    {"gantt", "sectionBkgColor", "#mermaid .sec0,#mermaid .sec2{fill:$;}"},
+    {"gantt", "altSectionBkgColor", "#mermaid .sec1,#mermaid .sec3{fill:$;}"},
+    {"gantt", "gridColor", "#mermaid .grid{stroke:$;}"},
     {"gantt", "taskTextColor", "#mermaid .tin{fill:$;}"},
     {"gantt", "taskTextOutsideColor", "#mermaid .tout{fill:$;}"},
     {"gantt", "taskTextDarkColor", "#mermaid .done+.tin,#mermaid .tin.dk{fill:$;}"},
@@ -638,18 +573,31 @@ static const TV TVS[] = {
     {"gantt", "textColor", "#mermaid .tick,#mermaid .stitle{fill:$;}"},
     {"gantt", "titleColor", "#mermaid .ttl{fill:$;}"},
     {"pie", "pieStrokeColor", "#mermaid .slice{stroke:$;}"},
+    {"pie", "pieOuterStrokeColor", "#mermaid .outer{stroke:$;}"},
+    {"pie", "pieOpacity", "#mermaid .slice{opacity:$;}"},
     {"pie", "pieTitleTextColor", "#mermaid .ttl{fill:$;}"},
     {"pie", "pieSectionTextColor", "#mermaid .pct{fill:$;}"},
     {"pie", "pieLegendTextColor", "#mermaid text:not(.pct):not(.ttl){fill:$;}"},
+    {"quadrantChart", "quadrant1Fill", "#mermaid .q1{fill:$;}"},
+    {"quadrantChart", "quadrant2Fill", "#mermaid .q2{fill:$;}"},
+    {"quadrantChart", "quadrant3Fill", "#mermaid .q3{fill:$;}"},
+    {"quadrantChart", "quadrant4Fill", "#mermaid .q4{fill:$;}"},
     {"quadrantChart", "quadrantExternalBorderStrokeFill", "#mermaid .bd{stroke:$;}"},
     {"quadrantChart", "quadrantInternalBorderStrokeFill", "#mermaid .in{stroke:$;}"},
     {"quadrantChart", "quadrant1TextFill", "#mermaid .ql{fill:$;}"},
     {"quadrantChart", "quadrantXAxisTextFill", "#mermaid .al{fill:$;}"},
     {"quadrantChart", "quadrantPointTextFill", "#mermaid .pl{fill:$;}"},
     {"quadrantChart", "quadrantTitleFill", "#mermaid .ttl{fill:$;}"},
-    {"xychart", "xyChart.xAxisLineColor", "#mermaid .ax,#mermaid .tk,#mermaid .lg{stroke:$;}"},
-    {"xychart", "xyChart.xAxisLabelColor", "#mermaid .tl,#mermaid .at{fill:$;}"},
     {"xychart", "xyChart.titleColor", "#mermaid .ttl{fill:$;}"},
+    {"xychart", "xyChart.xAxisLineColor", "#mermaid .ax.x{stroke:$;}"},
+    {"xychart", "xyChart.xAxisTickColor", "#mermaid .tk.x{stroke:$;}"},
+    {"xychart", "xyChart.xAxisLabelColor", "#mermaid .tl.x{fill:$;}"},
+    {"xychart", "xyChart.xAxisTitleColor", "#mermaid .at.x{fill:$;}"},
+    {"xychart", "xyChart.yAxisLineColor", "#mermaid .ax.y{stroke:$;}"},
+    {"xychart", "xyChart.yAxisTickColor", "#mermaid .tk.y{stroke:$;}"},
+    {"xychart", "xyChart.yAxisLabelColor", "#mermaid .tl.y{fill:$;}"},
+    {"xychart", "xyChart.yAxisTitleColor", "#mermaid .at.y{fill:$;}"},
+    {"xychart", "xyChart.legendTextColor", "#mermaid .lt{fill:$;}#mermaid .lg{stroke:$;}"},
     {"gitGraph", "commitLabelColor", "#mermaid .cl{fill:$;}"},
     {"gitGraph", "commitLabelBackground", "#mermaid .clb{fill:$;}"},
     {"gitGraph", "tagLabelColor", "#mermaid .tg{fill:$;}"},
@@ -666,17 +614,12 @@ static const TV TVS[] = {
     {"radar", "textColor", "#mermaid .al,#mermaid .lg,#mermaid .ttl{fill:$;}"},
     {"treemap", "textColor", "#mermaid .sh,#mermaid .sv,#mermaid .ttl{fill:$;}"},
     {"sankey", "textColor", "#mermaid .st{fill:$;}"},
-    {"mindmap", "lineColor", "#mermaid .ic{stroke:$;}"},
-    {"mindmap", "background", "#mermaid .ic{fill:$;}"},
-    {"timeline", "lineColor", "#mermaid .axis,#mermaid .ln{stroke:$;}"},
-    {"timeline", "background", "#mermaid .ev{fill:$;}"},
-    {"timeline", "textColor", "#mermaid .ev+text{fill:$;}"},
     {"journey", "lineColor", "#mermaid .axis,#mermaid .adot,#mermaid .tl{stroke:$;}"},
     {"journey", "textColor", "#mermaid .ttl{fill:$;}"},
     {"architecture", "lineColor", "#mermaid .ae{stroke:$;}#mermaid .ah,#mermaid .aj{fill:$;}"},
     {"architecture", "textColor", "#mermaid text{fill:$;}"},
+    {"c4", "lineColor", "#mermaid .cr,#mermaid .cb{stroke:$;}#mermaid .crh{fill:$;}"},
     {"c4", "textColor", "#mermaid .cbt,#mermaid .cbs,#mermaid .crl,#mermaid .crt{fill:$;}"},
-    {"c4", "lineColor", "#mermaid .cb{stroke:$;}"},
 };
 
 void dcfg_theme_css(Buf b[static 1], const char kind[static 1]) {
