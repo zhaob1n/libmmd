@@ -17,6 +17,10 @@ constexpr int32_t NONE = -1;
 enum { CURVE_BASIS = 0, CURVE_LINEAR, CURVE_STEP, CURVE_STEP_BEFORE, CURVE_STEP_AFTER, CURVE_CARDINAL };
 enum { MMD_ACYC_AUTO = 0, MMD_ACYC_DFS = 1, MMD_ACYC_GREEDY = 2 };
 enum { MMD_ORDER_AUTO = 0, MMD_ORDER_DAGRE = 1, MMD_ORDER_FAST = 2 };
+/* where clusters stand in g.nodes(): first, in reverse closing order (flowDb), after the vertices by
+ * index (usecase), or each just before its first direct member vertex, the rest last (state's note
+ * groups, which nest nothing) */
+enum { CLUSTERS_FIRST = 0, CLUSTERS_LAST, CLUSTERS_INLINE };
 
 typedef struct ClassDef { Str name, css; } ClassDef;
 typedef struct LinkStyle { int32_t idx; Str css; } LinkStyle; /* idx -1 => default */
@@ -31,7 +35,7 @@ typedef struct Graph {
     uint8_t order_mode; /* MMD_ORDER_* */
     uint8_t curve;     /* CURVE_* (flowchart.curve) */
     bool iso_toggle;   /* mermaid unified renderer (er/class/state): clusters with no external links lay out in the other direction */
-    bool clusters_last; /* g.nodes(): vertices, then clusters by index (usecase), not clusters first (flowDb) */
+    uint8_t cluster_order; /* CLUSTERS_* */
     bool iso_keep;     /* ELK-like (agentflow): such clusters lay out on their own in their own direction */
     double node_sep, rank_sep, font_size;
 

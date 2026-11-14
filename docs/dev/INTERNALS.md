@@ -15,7 +15,7 @@ Numbers here are historical; see bench/results_v*.txt.
 | diagram registry | `src/d_registry.c`, `src/diagrams.h` | keyword → renderer table; new types live in `src/d_*.c` |
 | shared helpers | `src/dgraph.[ch]` | graph building on top of `flow_layout`, line scanner, SVG primitives |
 | writer | `src/writer.c`, writer section of `include/mmd.h` | builds mermaid text by escape context (entities `#NN;`), shortest round-trip numbers, typed helpers for eleven diagram types; per-diagram audit in [writer.md](writer.md) |
-| stateDiagram(-v2) | `src/d_state.c` | composites (recursive per-scope layout), `--` regions, `[*]`, fork/join/choice, notes, classDef |
+| stateDiagram(-v2) | `src/d_state.c` | composites (recursive per-scope layout), `--` regions, `[*]`, fork/join/choice, notes, classDef; each scope reaches dagre in mermaid's order (dataFetcher's node list, a note's group cluster just before the note, edges touching a composite last), which decides left and right: 98% of node pairs agree with mermaid-cli 12 (classic, dagre) on the docs examples and state tests (`bench/stateagree.py`) |
 | classDiagram | `src/d_class.c` | members, `~generics~`, visibility/`$`/`*`, annotations, all relations + lollipop, cardinality, namespaces, notes |
 | erDiagram | `src/d_er.c` | attribute tables (type/name/keys/comment), aliases, all crow's-foot cardinalities (symbolic + word forms), `:::cls` / classDef / class / style, `subgraph` clusters (relations may target a subgraph id) |
 | pie | `src/d_pie.c` | slices, showData, title, legend; a percentage that does not fit its slice goes outside on a leader line (runs of them spaced along the label circle) |

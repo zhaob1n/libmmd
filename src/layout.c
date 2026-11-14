@@ -780,15 +780,15 @@ static mmd_status dagre_prep_order(Lay L[static 1], const Graph g[static 1], siz
             if (sub == (pass == 1)) eseq[ne++] = (uint32_t)e, inseq[e] = 1;
         }
     for (size_t i = 0; i < nrevord; i++) if (DV(revord[i]) && !inseq[revord[i]]) eseq[ne++] = revord[i], inseq[revord[i]] = 1;
-    /* g.nodes(): subgraphs in reverse closing order, then vertices; array-index ids first */
+    /* g.nodes() (CLUSTERS_*); array-index ids first */
     size_t nn = 0;
-    {
+    uint8_t *done = ANEW(A, uint8_t, S + 1);
+    if (!done) return MMD_ERR_NOMEM;
+    memset(done, 0, S + 1);
+    if (g->cluster_order == CLUSTERS_FIRST) {
         /* iterative post-order over the cluster forest with children in ascending index */
         uint32_t *post = kid; /* reuse */
         size_t np = 0;
-        uint8_t *done = ANEW(A, uint8_t, S + 1);
-        if (!done) return MMD_ERR_NOMEM;
-        memset(done, 0, S + 1);
         for (size_t r = 0; r < S; r++) {
             if (g->sparent[r] != NONE) continue;
             size_t sp = 0;
@@ -801,10 +801,15 @@ static mmd_status dagre_prep_order(Lay L[static 1], const Graph g[static 1], siz
                 done[c] = 1, post[np++] = c, sp--;
             }
         }
-        if (!g->clusters_last) for (size_t i = np; i-- > 0;) nord[nn++] = (uint32_t)V + post[i];
+        for (size_t i = np; i-- > 0;) nord[nn++] = (uint32_t)V + post[i];
     }
-    for (size_t v = 0; v < N; v++) if (L->rank[v] >= 0) nord[nn++] = (uint32_t)v;
-    if (g->clusters_last) for (size_t c = 0; c < S; c++) nord[nn++] = (uint32_t)(V + c);
+    for (size_t v = 0; v < N; v++) {
+        int32_t c = g->nparent[v];
+        if (g->cluster_order == CLUSTERS_INLINE && c != NONE && !done[c]) done[c] = 1, nord[nn++] = (uint32_t)(V + (size_t)c);
+        if (L->rank[v] >= 0) nord[nn++] = (uint32_t)v;
+    }
+    if (g->cluster_order != CLUSTERS_FIRST)
+        for (size_t c = 0; c < S; c++) if (!done[c]) nord[nn++] = (uint32_t)(V + c);
     { /* stable: integer-like keys first, ascending */
         size_t a = 0;
         uint32_t *tmp = ANEW(A, uint32_t, nn + 1);
@@ -947,9 +952,16 @@ static mmd_status dagre_rank_graph(Arena A[static 1], const Graph g[static 1], s
         return MMD_ERR_NOMEM;
     for (size_t v = 0; v < N; v++) ikey[v] = js_ikey(g->nid[v]), ins[v] = (uint32_t)(S + v);
     for (size_t c = 0; c < S; c++) ikey[N + c] = js_ikey(g->sid[c]);
-    if (g->clusters_last) /* vertices, then clusters by index */
-        for (size_t x = 0; x < N + S; x++) ins[x] = (uint32_t)x;
-    else { /* clusters are inserted in reverse closing (post-order) order */
+    if (g->cluster_order != CLUSTERS_FIRST) { /* vertices; each cluster before its first member (inline), else after them all */
+        size_t q = 0;
+        memset(done, 0, S + 1);
+        for (size_t v = 0; v < N; v++) {
+            int32_t c = g->nparent[v];
+            if (g->cluster_order == CLUSTERS_INLINE && c != NONE && !done[c]) done[c] = 1, ins[N + (size_t)c] = (uint32_t)q++;
+            ins[v] = (uint32_t)q++;
+        }
+        for (size_t c = 0; c < S; c++) if (!done[c]) ins[N + c] = (uint32_t)q++;
+    } else { /* clusters are inserted in reverse closing (post-order) order */
         size_t np = 0, nq = 0;
         memset(done, 0, S + 1);
         uint32_t *post = real;
@@ -1834,7 +1846,7 @@ static inline double iso_pad_rank(const Graph g[static 1]) { return (g->rank_sep
 static inline double iso_pad_cross(const Graph g[static 1]) { return (g->node_sep + 20) / 2; }
 
 [[nodiscard]] static bool gsub_alloc(Graph d[static 1], const Graph g[static 1], Dir dir, size_t nn, size_t ne, size_t ns) {
-    *d = (Graph){.arena = g->arena, .dir = dir, .theme = g->theme, .flags = g->flags, .acyclicer = g->acyclicer, .order_mode = g->order_mode, .iso_toggle = g->iso_toggle, .iso_keep = g->iso_keep, .clusters_last = g->clusters_last, .node_sep = g->node_sep,
+    *d = (Graph){.arena = g->arena, .dir = dir, .theme = g->theme, .flags = g->flags, .acyclicer = g->acyclicer, .order_mode = g->order_mode, .iso_toggle = g->iso_toggle, .iso_keep = g->iso_keep, .cluster_order = g->cluster_order, .node_sep = g->node_sep,
                  .rank_sep = g->rank_sep, .font_size = g->font_size};
     if (!graph_reserve(d, nn + 1, ne + 1, ns + 1)) return false;
     d->nn = nn, d->ne = ne, d->ns = ns;
@@ -2343,20 +2355,23 @@ static int vis_path(Router R[static 1], Arena A[static 1], double sx, double sy,
     return -1;
 }
 
-/* cheap detour: hug one side of the single blocking box (2 corners). Returns corner count or -1. */
+/* cheap detour round the single blocking box: by one corner, else along one side (two corners).
+ * Returns corner count or -1. */
 static int side_path(Router R[static 1], double sx, double sy, double tx, double ty, int32_t s1, int32_t s2,
                      double out[static 4]) {
     int32_t h = seg_hit(R, sx, sy, tx, ty, s1, s2);
     if (h == NONE) return 0;
     const BBox *b = &R->nb[h];
     if (pt_in(b, sx, sy) || pt_in(b, tx, ty)) return -1;
-    double c[4][4] = {
+    double c[8][4] = {
+        {b->x0, b->y0, b->x0, b->y0}, {b->x1, b->y0, b->x1, b->y0}, /* one corner (twice) */
+        {b->x0, b->y1, b->x0, b->y1}, {b->x1, b->y1, b->x1, b->y1},
         {b->x0, b->y0, b->x0, b->y1}, {b->x1, b->y0, b->x1, b->y1}, /* left, right side */
         {b->x0, b->y0, b->x1, b->y0}, {b->x0, b->y1, b->x1, b->y1}, /* top, bottom side */
     };
-    double len[4];
-    unsigned ord[4] = {0, 1, 2, 3};
-    for (unsigned k = 0; k < 4; k++) {
+    double len[8];
+    unsigned ord[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    for (unsigned k = 0; k < 8; k++) {
         double *q = c[k];
         /* visit the corner nearer S first */
         if (edist(q[0] - sx, q[1] - sy) > edist(q[2] - sx, q[3] - sy)) {
@@ -2365,10 +2380,10 @@ static int side_path(Router R[static 1], double sx, double sy, double tx, double
         }
         len[k] = edist(q[0] - sx, q[1] - sy) + edist(q[2] - q[0], q[3] - q[1]) + edist(tx - q[2], ty - q[3]);
     }
-    for (unsigned i = 1; i < 4; i++) /* stable insertion sort by length: first clear one is the best */
+    for (unsigned i = 1; i < 8; i++) /* stable insertion sort by length: first clear one is the best */
         for (unsigned j = i; j > 0 && len[ord[j]] < len[ord[j - 1]]; j--) { unsigned t = ord[j]; ord[j] = ord[j - 1]; ord[j - 1] = t; }
     int bk = -1;
-    for (unsigned i = 0; i < 4 && bk < 0; i++) {
+    for (unsigned i = 0; i < 8 && bk < 0; i++) {
         const double *q = c[ord[i]];
         if (seg_hit(R, sx, sy, q[0], q[1], s1, s2) != NONE || seg_hit(R, q[0], q[1], q[2], q[3], s1, s2) != NONE ||
             seg_hit(R, q[2], q[3], tx, ty, s1, s2) != NONE) continue;
@@ -2376,7 +2391,7 @@ static int side_path(Router R[static 1], double sx, double sy, double tx, double
     }
     if (bk < 0) return -1;
     memcpy(out, c[bk], sizeof c[bk]);
-    return 2;
+    return bk < 4 ? 1 : 2;
 }
 
 [[nodiscard]] static bool route_avoid(Graph g[static 1]) {
