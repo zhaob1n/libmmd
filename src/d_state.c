@@ -742,9 +742,11 @@ DIAG_FN(state_render) {
     c.ntx = ANEW(a, double, p.notes.n + 1), c.nty = ANEW(a, double, p.notes.n + 1);
     c.ntw = nw, c.nth = nh, c.nlv = ANEW(a, int32_t, p.notes.n + 1), c.slot = ANEW(a, Slot, N + p.notes.n + 1);
     if (!nx || !ny || !nw || !nh || !c.ntx || !c.nty || !c.nlv || !c.slot) return MMD_ERR_NOMEM;
-    for (size_t i = 0; i < p.notes.n; i++) { /* mermaid note: text wrapped at 200px, padding 15 */
+    double wrapw = dcfg_num("state.wrappingWidth", 120); /* mermaid 12: state.wrappingWidth = 120 */
+    if (wrapw <= 0) wrapw = 120;
+    for (size_t i = 0; i < p.notes.n; i++) {
         Note *no = &p.notes.v[i];
-        no->text = dg_wrap(a, no->text, fs, 200);
+        no->text = dg_wrap(a, no->text, fs, wrapw);
         double tw;
         unsigned ln;
         label_measure(no->text, fs, &tw, &ln);
