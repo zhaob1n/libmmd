@@ -51,7 +51,7 @@ Numbers here are historical; see bench/results_v*.txt.
 
 `tests/docs/<doc>/NN.mmd`: all 432 ```` ```mermaid ```` examples from mermaid's `packages/mermaid/src/docs/syntax/*.md` (mermaid 6d8921f, extracted by `tools/extract_docs.py`). `python3 tools/docs_audit.py [-v] [--mmdc]` reports per-type pass counts against mermaid-cli (cached in `tests/docs/mermaid_status.txt`); `tools/docs_sbs.py` renders side-by-sides. Every type passes 100% of the examples mermaid itself renders (432/432; examples mermaid rejects would be excluded). `make test` runs the audit and fails on any regression.
 
-## Fidelity vs mermaid-cli 11.17
+## Fidelity vs mermaid
 
 Mermaid defines what a diagram's text means, not what its bugs draw. libmmd follows mermaid where
 an author sees the result and builds on it: syntax, which settings take effect and where, defaults,
@@ -79,7 +79,18 @@ Mermaid faults libmmd does not copy:
 - mermaid fails to render `block_full` and `radar_full` (partial named curve); libmmd draws them;
 - a directive's `config` object reaches the diagram whatever its type and however many directives
   there are; mermaid loses it for class, state, xychart, flowchart-elk and the railroad dialects, and
-  whenever there are several directives.
+  whenever there are several directives;
+- gantt: tick positions are d3's, as in mermaid, but a tick label that would print over its neighbour
+  is skipped (every m-th tick labelled); mermaid prints them all, on top of each other;
+- mindmap: dark, forest, neutral and base drop the default shape's underline in mermaid 12 (a
+  `.section-N line{stroke-width:0}` rule meant for the neo look leaks into classic); libmmd draws it;
+- sankey: an unknown `nodeAlignment` gives NaN columns in mermaid, a `nodePadding` past the height
+  zero-height nodes, a missing `height` the width; libmmd falls back to justify, keeps some height
+  for the fullest column, and defaults the height to 400;
+- wardley: mermaid hard-codes white annotation boxes and black stage and anchor labels, unreadable
+  under dark; libmmd takes them from the theme's `wardley` object, as its styles mean to;
+- packet: mermaid-cli's sanitizeDirective drops `themeVariables.packet.byteFontSize` and
+  `blockStrokeWidth` (keys missing from its default config); libmmd honours them.
 
 Side-by-side renders (left: libmmd, right: mermaid 11.17) live in `samples/sbs/*.png`.
 Already fixed:
@@ -99,10 +110,9 @@ Already fixed:
 
 Known remaining differences:
 - mindmap: nodes keep a cScalePeer border mermaid does not draw, and the layout is still not cose-bilkent;
-- gantt: mermaid draws denser ticks;
-- class: wide single-row layout, same as mermaid's;
-- journey: legend order;
-- C4: arbitrary bgColor strings are rejected.
+- architecture: its own grid layout, not fcose; edge labels sit on a plate in the background colour,
+  where mermaid draws them straight over the edge;
+- xychart: tick density differs from d3's.
 
 ### mermaid 12 defaults (checked against mermaid-cli 12.0.0)
 
