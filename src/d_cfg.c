@@ -622,20 +622,30 @@ static const TV TVS[] = {
     {"sankey", "textColor", "#mermaid .st{fill:$;}"},
     {"journey", "lineColor", "#mermaid .axis,#mermaid .adot,#mermaid .tl{stroke:$;}"},
     {"journey", "textColor", "#mermaid .ttl{fill:$;}"},
-    {"architecture", "lineColor", "#mermaid .ae{stroke:$;}#mermaid .ah,#mermaid .aj{fill:$;}"},
     {"architecture", "textColor", "#mermaid text{fill:$;}"},
     {"c4", "lineColor", "#mermaid .cr,#mermaid .cb{stroke:$;}#mermaid .crh{fill:$;}"},
     {"c4", "textColor", "#mermaid .cbt,#mermaid .cbs,#mermaid .crl,#mermaid .crt{fill:$;}"},
 };
+
+/* tpl with each '$' replaced by v */
+static void rule_put(Buf b[static 1], const char tpl[static 1], Str v) {
+    for (const char *t = tpl; *t; t++)
+        if (*t == '$') buf_str(b, v); else buf_ch(b, *t);
+}
 
 void dcfg_theme_css(Buf b[static 1], const char kind[static 1]) {
     if (!themed()) return;
     for (size_t i = 0; i < countof(TVS); i++) {
         if (strcmp(TVS[i].kind, "*") && strcmp(TVS[i].kind, kind)) continue;
         Str v = dcfg_tv(TVS[i].var);
-        if (!v.n) continue;
-        for (const char *t = TVS[i].tpl; *t; t++)
-            if (*t == '$') buf_str(b, v); else buf_ch(b, *t);
+        if (v.n) rule_put(b, TVS[i].tpl, v);
+    }
+}
+
+void dcfg_rules(Buf b[static 1], size_t n, const DRule rules[static n]) {
+    for (size_t i = 0; i < n; i++) {
+        Str v = dcfg_theme_var(rules[i].var);
+        rule_put(b, rules[i].tpl, v.n ? v : (Str){.p = rules[i].def, .n = strlen(rules[i].def)});
     }
 }
 
