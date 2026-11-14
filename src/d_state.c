@@ -291,7 +291,7 @@ static mmd_status parse(StP p[static 1], LineIt it[static 1]) {
 static constexpr char CSS[] =
     "#mermaid .st{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .bar,#mermaid .start{fill:#333;stroke:none;}"
-    "#mermaid .endo{fill:#ECECFF;stroke:#333;stroke-width:1.5px;}#mermaid .endi{fill:#9370DB;}"
+    "#mermaid .endo{fill:#ECECFF;stroke:#333;stroke-width:2px;}#mermaid .endi{fill:#9370DB;}"
     "#mermaid .choice{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .comp{fill:#fff;stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .comp-t{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
@@ -709,7 +709,7 @@ DIAG_FN(state_render) {
         case SK_END:
             buf_lit(out, "<circle class=\"endo\" cx=\""); buf_num(out, x); buf_lit(out, "\" cy=\""); buf_num(out, y);
             buf_lit(out, "\" r=\"7\"/><circle class=\"endi\" cx=\""); buf_num(out, x); buf_lit(out, "\" cy=\"");
-            buf_num(out, y); buf_lit(out, "\" r=\"4\"/>");
+            buf_num(out, y); buf_lit(out, "\" r=\"3.5\"/>"); /* mermaid: r 2.5 with a 2px stroke of its fill */
             break;
         case SK_FORK: case SK_JOIN: dg_rect(out, x - w / 2, y - h / 2, w, h, 0, "bar"); break;
         case SK_CHOICE:

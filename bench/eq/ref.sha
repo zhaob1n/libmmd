@@ -465,7 +465,7 @@ b2a9983ee0faecb0 tests/cases/config_pie.mmd
 cccd9dd4dcf5051b tests/cases/config_quadrant.mmd
 db4796157d723418 tests/cases/config_sankey.mmd
 9d68a2cb5325389d tests/cases/config_seq.mmd
-e44399d51d02f30e tests/cases/config_state.mmd
+f1fa3f6b8b78ecfd tests/cases/config_state.mmd
 723444a4efee77e6 tests/cases/config_timeline.mmd
 f3133154ff51823d tests/cases/cynefin_badcolor.mmd
 ab20c3892be7592b tests/cases/cynefin_dark.mmd
@@ -544,9 +544,9 @@ d6a0b254775dc986 tests/cases/seq_central.mmd
 af64380ec0563af0 tests/cases/seq_full.mmd
 c30d794f7e2c5580 tests/cases/seq_types.mmd
 047f87ad8e9ce83c tests/cases/shapes.mmd
-7faba0fbc11db835 tests/cases/state_full.mmd
-0bdf0aedf79c5e36 tests/cases/state_regions_dark.mmd
-3201f4ea19a3443d tests/cases/state_stress_looplabels.mmd
+0b8021b2baf3d5a1 tests/cases/state_full.mmd
+db0a5062347b0ebc tests/cases/state_regions_dark.mmd
+ad3b4691df0a389e tests/cases/state_stress_looplabels.mmd
 715f5012f0d8902c tests/cases/styles.mmd
 d5e4e73584499e6d tests/cases/subgraph_claim.mmd
 cd68ad5b79474019 tests/cases/subgraphs.mmd
@@ -566,7 +566,7 @@ fbd2f0182f209389 tests/cases/theme_dark_journey.mmd
 3b194c570303d690 tests/cases/theme_dark_pie.mmd
 2d125869f3f8275b tests/cases/theme_dark_quadrant.mmd
 b07b00847928b341 tests/cases/theme_dark_seq.mmd
-b0d964b77ccc9644 tests/cases/theme_dark_state.mmd
+ab6077a54157c1bb tests/cases/theme_dark_state.mmd
 375ed7f0a5371dbf tests/cases/theme_dark_timeline.mmd
 9df4c036847ccd94 tests/cases/theme_dark_xychart.mmd
 afa12367c0904ff5 tests/cases/theme_dark_xychart_field.mmd
@@ -574,7 +574,7 @@ aa9b3b45327094f3 tests/cases/theme_forest.mmd
 557220e952c0fd7b tests/cases/theme_forest_class.mmd
 065b65eed93b6e96 tests/cases/theme_forest_gantt.mmd
 2bfb3ee04ba423cf tests/cases/theme_forest_gitgraph.mmd
-aeac98e7ad939c62 tests/cases/theme_forest_state.mmd
+da4ff7aa1e87bd2f tests/cases/theme_forest_state.mmd
 7867504613dc622e tests/cases/theme_forest_treemap.mmd
 35f3a459562c7d42 tests/cases/theme_neutral.mmd
 ad8c63433a3f1c25 tests/cases/theme_neutral_er.mmd
