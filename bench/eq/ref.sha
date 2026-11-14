@@ -595,10 +595,10 @@ dd81f9158ac2a5ba tests/cases/treeview_cfg.mmd
 fb738ace227d4f0d tests/cases/usecase.mmd
 32b6dd47ff6d0035 tests/cases/usecase_classic.mmd
 60be05a50f55b2cd tests/cases/usecase_order.mmd
-4c651dda832dd6cd tests/cases/venn_edge.mmd
-b601d6a85e59422d tests/cases/venn_styled.mmd
-008512d134e5187a tests/cases/venn_text.mmd
-92513506e013ec88 tests/cases/venn_three.mmd
+e505a4b63b2f1e9b tests/cases/venn_edge.mmd
+a02037996b75b1fd tests/cases/venn_styled.mmd
+339bd34492b9dba1 tests/cases/venn_text.mmd
+21b882b2433efe44 tests/cases/venn_three.mmd
 9082968f3eb448a9 tests/cases/wardley_01.mmd
 a21142bf56798dc1 tests/cases/wardley_08.mmd
 30d5676468d35896 tests/cases/wardley_09.mmd
