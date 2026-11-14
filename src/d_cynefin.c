@@ -134,7 +134,7 @@ DIAG_FN(cynefin_render) {
     double hw = W / 2, hh = H / 2;
     const double L[ND][4] = {{hw / 2, hh / 2, 0, 0}, {hw + hw / 2, hh / 2, hw, 0}, {hw / 2, hh + hh / 2, 0, hh},
                              {hw + hw / 2, hh + hh / 2, hw, hh}, {hw, hh, 0, 0}};
-    Buf b = {};
+    AUTO_BUF Buf b = {};
     buf_lit(&b, "<defs><marker id=\"cyn-arrow\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" "
                 "orient=\"auto-start-reverse\"><path d=\"M 0 0 L 10 5 L 0 10 z\" class=\"cah\"/></marker></defs><g transform=\"translate(");
     buf_num(&b, P); buf_ch(&b, ','); buf_num(&b, P); buf_lit(&b, ")\">");
