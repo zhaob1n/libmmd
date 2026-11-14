@@ -27,6 +27,8 @@ void dcfg_theme_own(void);
 Str dcfg_tv(const char var[static 1]);
 /* a variable of the theme in effect, whatever the renderer draws on its own (CSS-safe, else empty) */
 Str dcfg_theme_var(const char var[static 1]);
+/* the same variable as the theme in effect has it before the source's themeVariables */
+Str dcfg_preset_var(const char var[static 1]);
 bool dcfg_dark(void); /* the theme in effect's darkMode */
 /* palette entry <prefix><i> (pie1.., cScale0.., git0..) from themeVariables / named theme, else def */
 const char *dcfg_pal(const char prefix[static 1], size_t i, const char def[static 1]);

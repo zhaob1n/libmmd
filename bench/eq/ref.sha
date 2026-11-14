@@ -467,6 +467,8 @@ db4796157d723418 tests/cases/config_sankey.mmd
 9d68a2cb5325389d tests/cases/config_seq.mmd
 e44399d51d02f30e tests/cases/config_state.mmd
 723444a4efee77e6 tests/cases/config_timeline.mmd
+f3133154ff51823d tests/cases/cynefin_badcolor.mmd
+ab20c3892be7592b tests/cases/cynefin_dark.mmd
 5b3a0c38009d651c tests/cases/cynefin_full.mmd
 85608fea9717e622 tests/cases/cynefin_overflow.mmd
 a163e308f3db855a tests/cases/dir_subgraphs.mmd
@@ -486,6 +488,7 @@ af7e6f9cbf935c8d tests/cases/eventmodeling_06.mmd
 9a9ab2cb2a653126 tests/cases/eventmodeling_09.mmd
 47ec8b95f6e3496c tests/cases/eventmodeling_12.mmd
 b4cfb9f2d1076698 tests/cases/eventmodeling_edge.mmd
+b5e6da6b828a8240 tests/cases/eventmodeling_longdata.mmd
 0569153300fc169e tests/cases/flow_config_acc.mmd
 b86cfe9ab2e03b76 tests/cases/flow_config_curve.mmd
 da12ad4c1e8e2285 tests/cases/flow_config_linear.mmd

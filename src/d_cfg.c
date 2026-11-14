@@ -415,6 +415,12 @@ Str dcfg_theme_var(const char var[static 1]) {
     return t ? css_safe(mtheme_get(t, k)) : (Str){};
 }
 
+Str dcfg_preset_var(const char var[static 1]) {
+    const MTheme *t = mtheme_preset(eng_id);
+    if (!t) cur_a->oom = true;
+    return t ? css_safe(mtheme_get(t, (Str){.p = var, .n = strlen(var)})) : (Str){};
+}
+
 bool dcfg_dark(void) { return str_eq(dcfg_theme_var("darkMode"), S("true")); }
 
 /* NUL-terminated copy of v that outlives the call (eight live at once), or def when v is empty or long */

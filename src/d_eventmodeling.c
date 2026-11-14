@@ -237,6 +237,8 @@ DIAG_FN(eventmodeling_render) {
         }
         double bw = fmax(80, fmin(450, tw + 20)) + 2 * BOX_PAD;
         double bh = fmax(80, fmin(750, nlines * LH + 20)) + 2 * BOX_PAD;
+        if (f->data.p) /* never smaller than the code block drawn below */
+            bh = fmax(bh, LH * 2 + code_lines(f->data, bw - 4 * BOX_PAD, nullptr) * 15 + 4 * BOX_PAD);
         Lane *L = &ln_.v[li];
         double x;
         if (prev_lane < 0) x = START_X;
