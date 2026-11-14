@@ -1,7 +1,8 @@
 /* sankey(-beta): CSV rows `source,target,value` (RFC 4180 quoting, "" escapes, blank lines ok).
- * Layout is a port of d3-sankey 0.12 as configured by mermaid 11 (justify alignment, node width 10,
- * padding 12 (+15 with showValues), 6 relaxation iterations with collision resolution); links are
- * cubic bands coloured by their source. Labels show the value (showValues). */
+ * Layout is a port of d3-sankey 0.12 as configured by mermaid 12 (sankey.nodeAlignment, nodeWidth,
+ * nodePadding (+15 with showValues), 6 relaxation iterations with collision resolution); links are
+ * cubic bands coloured by linkColor (by default a gradient from source to target colour). Labels show
+ * the value (showValues, between prefix and suffix), outlined by labelStyle. */
 #include <math.h>
 #include <stdio.h>
 
@@ -10,7 +11,7 @@
 #include "diagrams.h"
 #include "text.h"
 
-typedef struct SNode { Str name; double in, out, v, x, y, h; uint32_t col; } SNode;
+typedef struct SNode { Str name, val; double in, out, v, x, y, h; uint32_t col, dep, hgt; bool r; } SNode;
 typedef struct SLink { uint32_t s, t; double v, y0, y1; } SLink;
 
 static constexpr char CSS[] =
@@ -18,11 +19,13 @@ static constexpr char CSS[] =
 static constexpr char PAL[][8] = {"#4e79a7", "#f28e2c", "#e15759", "#76b7b2", "#59a14f", "#edc949",
                                   "#af7aa1", "#ff9da7", "#9c755f", "#bab0ab"};
 
-/* the value after a node's name, as mermaid writes it: String(Math.round(v * 100) / 100) */
-static Str val_text(bool show, double v, char nb[static 40]) {
-    if (!show) return (Str){};
-    nb[0] = ' ';
-    return (Str){.p = nb, .n = 1 + fmt_js(round(v * 100) / 100, nb + 1)};
+/* name and value: starting at x0 right of the node, else ending at x1 */
+static void label(Buf b[static 1], const SNode q[static 1], double x0, double x1, double y) {
+    if (q->r) dg_text_open(b, x0, y, "start", "st");
+    else dg_text_open(b, x1, y, "end", "st");
+    buf_xml(b, q->name);
+    buf_xml(b, q->val);
+    buf_lit(b, "</text>");
 }
 
 /* one CSV field from s (advances); quoted fields unescape "" into arena memory */
@@ -89,18 +92,20 @@ DIAG_FN(sankey_render) {
     SLink *L = lv.v;
     size_t nn = nv.n, nl = lv.n;
     for (size_t i = 0; i < nl; i++) N[L[i].s].out += L[i].v, N[L[i].t].in += L[i].v;
-    /* depth = longest path (Bellman-Ford style relaxation, bounded => cycles rejected) */
+    /* d3-sankey's depth and height: longest path from a source / to a sink (bounded => cycles rejected) */
     uint32_t maxc = 0;
     for (size_t round = 0;; round++) {
         bool ch = false;
-        for (size_t i = 0; i < nl; i++)
-            if (N[L[i].t].col < N[L[i].s].col + 1) N[L[i].t].col = N[L[i].s].col + 1, ch = true;
+        for (size_t i = 0; i < nl; i++) {
+            SNode *s = &N[L[i].s], *t = &N[L[i].t];
+            if (t->dep < s->dep + 1) t->dep = s->dep + 1, ch = true;
+            if (s->hgt < t->hgt + 1) s->hgt = t->hgt + 1, ch = true;
+        }
         if (!ch) break;
         if (round > nn) return diag_fail(err_off, msg, off, "sankey links form a cycle");
     }
-    for (size_t i = 0; i < nn; i++) if (N[i].col > maxc) maxc = N[i].col;
-    /* --- port of d3-sankey 0.12 (mermaid 11: justify, nodeWidth 10, nodePadding 12 (+15 with
-       showValues), extent [[0,0],[width,height]], 6 iterations) --- */
+    for (size_t i = 0; i < nn; i++) if (N[i].dep > maxc) maxc = N[i].dep;
+    /* --- port of d3-sankey 0.12 (mermaid 12: extent [[0,0],[width,height]], 6 iterations) --- */
     const bool SHOWV = dcfg_bool("sankey.showValues", true);
     uint32_t *soff = ANEW(a, uint32_t, nn + 1), *toff = ANEW(a, uint32_t, nn + 1);
     uint32_t *sl = ANEW(a, uint32_t, nl), *tl = ANEW(a, uint32_t, nl), *fill = ANEW(a, uint32_t, nn);
@@ -112,13 +117,24 @@ DIAG_FN(sankey_render) {
     for (size_t l = 0; l < nl; l++) sl[fill[L[l].s]++] = (uint32_t)l;
     for (size_t i = 0; i < nn; i++) fill[i] = toff[i];
     for (size_t l = 0; l < nl; l++) tl[fill[L[l].t]++] = (uint32_t)l;
-    for (size_t i = 0; i < nn; i++) { /* justify: nodes without outgoing links to the last column */
-        N[i].v = fmax(N[i].in, N[i].out);
-        if (soff[i + 1] == soff[i]) N[i].col = maxc;
+    /* the column: d3-sankey's align function mermaid picks by sankey.nodeAlignment (justify unless known) */
+    Str al = dcfg_get_str(S("sankey.nodeAlignment"));
+    for (size_t i = 0; i < nn; i++) {
+        SNode *q = &N[i];
+        bool src = soff[i + 1] > soff[i], tgt = toff[i + 1] > toff[i];
+        q->v = fmax(q->in, q->out), q->col = q->dep;
+        if (str_eq(al, S("left"))) continue;
+        if (str_eq(al, S("right"))) q->col = maxc - q->hgt;
+        else if (str_eq(al, S("center"))) {
+            if (tgt) continue;
+            q->col = maxc;
+            for (uint32_t k = soff[i]; k < soff[i + 1]; k++) if (N[L[sl[k]].t].dep - 1 < q->col) q->col = N[L[sl[k]].t].dep - 1;
+        } else if (!src) q->col = maxc;
     }
     const double W = fmin(fmax(dcfg_num("sankey.width", 600), 100), 4000);
     const double H = fmin(fmax(dcfg_num("sankey.height", 400), 100), 4000);
-    constexpr double NW = 10;
+    /* nodeWidth is capped where columns would start to overlap */
+    const double NW = fmin(fmax(dcfg_num("sankey.nodeWidth", 10), 1), W / (maxc + 1.0));
     uint32_t *colcnt = ANEW(a, uint32_t, maxc + 2), *coff = ANEW(a, uint32_t, maxc + 2), *cn = ANEW(a, uint32_t, nn);
     if (!colcnt || !coff || !cn) return MMD_ERR_NOMEM;
     for (uint32_t c = 0; c <= maxc + 1; c++) colcnt[c] = coff[c] = 0;
@@ -127,7 +143,9 @@ DIAG_FN(sankey_render) {
     for (uint32_t c = 0; c <= maxc; c++) coff[c + 1] = coff[c] + colcnt[c], maxcnt = colcnt[c] > maxcnt ? colcnt[c] : maxcnt;
     for (uint32_t c = 0; c <= maxc; c++) colcnt[c] = 0;
     for (size_t i = 0; i < nn; i++) cn[coff[N[i].col] + colcnt[N[i].col]++] = (uint32_t)i; /* input order */
-    const double py = fmin(12.0 + (SHOWV ? 15 : 0), maxcnt > 1 ? H / (maxcnt - 1.0) : INFINITY);
+    /* d3 caps the padding at H / (n - 1) for the fullest column, which leaves its nodes no height
+       (ky = 0); keep a tenth of H for them so a large nodePadding cannot flatten the diagram */
+    const double py = fmin(fmax(dcfg_num("sankey.nodePadding", 12), 0) + (SHOWV ? 15 : 0), maxcnt > 1 ? 0.9 * H / (maxcnt - 1.0) : INFINITY);
     double ky = INFINITY;
     for (uint32_t c = 0; c <= maxc; c++) {
         double sum = 0;
@@ -220,11 +238,23 @@ DIAG_FN(sankey_render) {
     #undef SORT_LINKS
     #undef LW
     #undef Y1
+    /* mermaid writes "name\nprefix value suffix", the '\n' showing as a space. The label sits right of
+     * its node in the left half (legacy), or right of it from the layer of the biggest node on (outlined). */
+    Str pre = dcfg_get_str(S("sankey.prefix")), suf = dcfg_get_str(S("sankey.suffix"));
+    const bool OUTL = str_eq(dcfg_get_str(S("sankey.labelStyle")), S("outlined"));
+    uint32_t central = 0;
+    double vmax = 0;
+    for (size_t i = 0; i < nn; i++) if (N[i].v > vmax) vmax = N[i].v, central = N[i].col;
     double lw = 0, rw = 0;
-    char nb[40];
     for (size_t i = 0; i < nn; i++) {
-        double w = text_width(N[i].name, 14) + text_width(val_text(SHOWV, N[i].v, nb), 14) + 8;
-        if (N[i].x < W / 2) rw = fmax(rw, N[i].x + NW + w - W); else lw = fmax(lw, w - N[i].x);
+        if (SHOWV) {
+            char nb[40];
+            N[i].val = STR_CAT(a, S(" "), pre, ((Str){.p = nb, .n = fmt_js(round(N[i].v * 100) / 100, nb)}), suf);
+            if (!N[i].val.p) return MMD_ERR_NOMEM;
+        }
+        N[i].r = OUTL ? N[i].col >= central : N[i].x < W / 2;
+        double w = text_width(N[i].name, 14) + text_width(N[i].val, 14) + 8;
+        if (N[i].r) rw = fmax(rw, N[i].x + NW + w - W); else lw = fmax(lw, w - N[i].x);
     }
     /* label collision avoidance: boxes overlapping horizontally are pushed apart vertically */
     double *lx0 = ANEW(a, double, nn), *lx1 = ANEW(a, double, nn), *ly = ANEW(a, double, nn);
@@ -232,9 +262,8 @@ DIAG_FN(sankey_render) {
     if (!lx0 || !lx1 || !ly || !lbo) return MMD_ERR_NOMEM;
     constexpr double LH = 17;
     for (size_t i = 0; i < nn; i++) {
-        bool right = N[i].x < W / 2;
-        double w = text_width(N[i].name, 14) + text_width(val_text(SHOWV, N[i].v, nb), 14);
-        lx0[i] = right ? N[i].x + NW + 6 : N[i].x - 6 - w;
+        double w = text_width(N[i].name, 14) + text_width(N[i].val, 14);
+        lx0[i] = N[i].r ? N[i].x + NW + 6 : N[i].x - 6 - w;
         lx1[i] = lx0[i] + w, ly[i] = N[i].y + N[i].h / 2, lbo[i] = (uint32_t)i;
     }
     for (size_t i = 1; i < nn; i++) {
@@ -265,25 +294,41 @@ DIAG_FN(sankey_render) {
         ymin = fmin(ymin, fmin(N[i].y, fmin(cy, ly[i]) - 8)), ymax = fmax(ymax, fmax(N[i].y + N[i].h, fmax(cy, ly[i]) + 8)); /* pushed labels too */
     }
     BBox bb = {-fmax(lw, 0), ymin - top, W + fmax(rw, 0), ymax};
-    if (!buf_reserve(out, 1024 + nl * 300 + nn * 300)) return MMD_ERR_NOMEM;
+    if (!buf_reserve(out, 1024 + nl * 500 + nn * 300)) return MMD_ERR_NOMEM;
     DG_HEAD(out, bb, 0, "sankey", CSS);
+    /* sankey.linkColor: source, target, a colour, or (mermaid's default) a gradient from source to target */
+    Str lc = dcfg_css("sankey.linkColor");
+    const bool GRAD = !lc.n || str_eq(lc, S("gradient")), BY_S = str_eq(lc, S("source")), BY_T = str_eq(lc, S("target"));
     for (size_t i = 0; i < nl; i++) {
         const SLink *l = &L[i];
         double x0 = N[l->s].x + NW, x1 = N[l->t].x, xm = (x0 + x1) / 2;
-        const char *col = PAL[l->s % countof(PAL)];
-        buf_lit(out, "<path class=\"sl\" stroke=\""); buf_cstr(out, col);
+        if (GRAD) {
+            buf_lit(out, "<linearGradient id=\"sankey-lg"); buf_int(out, (int64_t)i);
+            buf_lit(out, "\" gradientUnits=\"userSpaceOnUse\" x1=\""); buf_num(out, x0); buf_lit(out, "\" x2=\""); buf_num(out, x1);
+            buf_lit(out, "\"><stop offset=\"0%\" stop-color=\""); buf_cstr(out, PAL[l->s % countof(PAL)]);
+            buf_lit(out, "\"/><stop offset=\"100%\" stop-color=\""); buf_cstr(out, PAL[l->t % countof(PAL)]);
+            buf_lit(out, "\"/></linearGradient>");
+        }
+        buf_lit(out, "<path class=\"sl\" stroke=\"");
+        if (GRAD) { buf_lit(out, "url(#sankey-lg"); buf_int(out, (int64_t)i); buf_ch(out, ')'); }
+        else if (BY_S || BY_T) buf_cstr(out, PAL[(BY_T ? l->t : l->s) % countof(PAL)]);
+        else buf_str(out, lc);
         buf_lit(out, "\" stroke-width=\""); buf_num(out, fmax(1, l->v * ky)); buf_lit(out, "\" d=\"M");
         buf_pt(out, x0, l->y0); buf_ch(out, 'C'); buf_pt(out, xm, l->y0); buf_ch(out, ' '); buf_pt(out, xm, l->y1);
         buf_ch(out, ' '); buf_pt(out, x1, l->y1); buf_lit(out, "\"/>");
     }
     for (size_t i = 0; i < nn; i++) {
         dg_rect_fill(out, N[i].x, N[i].y, NW, N[i].h, 0, "sn", PAL[i % countof(PAL)]);
-        Str val = val_text(SHOWV, N[i].v, nb);
-        if (N[i].x < W / 2) dg_text_open(out, lx0[i], ly[i], "start", "st");
-        else dg_text_open(out, lx1[i], ly[i], "end", "st");
-        buf_xml(out, N[i].name);
-        buf_xml(out, val);
-        buf_lit(out, "</text>");
+        if (!OUTL) label(out, &N[i], lx0[i], lx1[i], ly[i]);
+    }
+    if (OUTL) { /* every label over a halo of the node background, then all of them again on top */
+        Str bg = dcfg_theme_var("mainBkg");
+        if (!bg.n) bg = dcfg_theme_var("background");
+        buf_lit(out, "<g stroke=\""); if (bg.n) buf_str(out, bg); else buf_lit(out, "#fff");
+        buf_lit(out, "\" stroke-width=\"4\" stroke-linejoin=\"round\" paint-order=\"stroke\">");
+        for (size_t i = 0; i < nn; i++) label(out, &N[i], lx0[i], lx1[i], ly[i]);
+        buf_lit(out, "</g>");
+        for (size_t i = 0; i < nn; i++) label(out, &N[i], lx0[i], lx1[i], ly[i]);
     }
     if (title.n) dg_text(out, title, 18, W / 2, -top / 2 - 5, "middle", "st");
     buf_lit(out, "</svg>\n");
