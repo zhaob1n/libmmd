@@ -582,6 +582,8 @@ DIAG_FN(zenuml_render) {
     double FY0 = title.n ? 0 : TB; /* no empty title bar without a title */
     BBox bb = {FX0, FY0, FX1, bottom};
     DG_HEAD(o, bb, 1, "zenuml", CSS);
+    /* DG_HEAD paints the theme's background; cover the 1px stroke margin in white first */
+    dg_rect_fill(o, FX0 - 1, FY0 - 1, FX1 - FX0 + 2, bottom - FY0 + 2, 0, nullptr, "#fff");
     dg_rect(o, FX0, FY0, FX1 - FX0, bottom - FY0, 0, "zx");
     if (title.n) {
         dg_text(o, title, 13, FX0 + 6, TB / 2, "start", "zti");
