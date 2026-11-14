@@ -1,0 +1,16 @@
+---
+config:
+  packet:
+    bitWidth: 20
+    rowHeight: 40
+    paddingX: 2
+    paddingY: 12
+    showBits: false
+    bitsPerRow: 16
+---
+packet-beta
+title Header
+0-7: "Type"
+8: "F"
+9-23: "Length"
++8: "Flags"

@@ -14,11 +14,12 @@ typedef struct Axis { Str id, label; } Axis;
 static constexpr char COL[][8] = {"#8686ff", "#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2", "#ff8686", "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"};
 typedef struct Curve { Str id, label; uint32_t v0; } Curve;
 
-static constexpr char CSS[] =
-    "#mermaid .gr{fill:#DEDEDE;fill-opacity:.3;stroke:#DEDEDE;stroke-width:1px;}"
-    "#mermaid .ax{stroke:#333;stroke-width:2px;}#mermaid .al{font-size:12px;fill:#333;}"
-    "#mermaid .cv{fill-opacity:.5;stroke-width:2px;}#mermaid .lg{font-size:12px;fill:#333;}"
-    "#mermaid .lb{fill-opacity:.5;}#mermaid .ttl{font-size:16px;fill:#333;font-weight:bold;}";
+/* the radar theme variables mermaid's styles read (themeVariables.radar.*); its config section's
+ * radar keys do not reach the styles. legendBoxSize does nothing in mermaid (boxes are 12). */
+static double rvar(const char var[static 1], double def, double lo, double hi) {
+    double d;
+    return dg_parse_num(dcfg_theme_var(var), &d) && isfinite(d) ? fmin(fmax(d, lo), hi) : def;
+}
 
 /* id or id["label"] at the front of s */
 static void id_label(Str s[static 1], Str id[static 1], Str label[static 1]) {
@@ -125,11 +126,21 @@ DIAG_FN(radar_render) {
     if (vmax <= vmin) vmax = vmin + 1;
     constexpr double R = 250;
     constexpr double CX = 350;
+    const double CO = rvar("radar.curveOpacity", 0.5, 0, 1), LF = rvar("radar.legendFontSize", 12, 1, 100);
+    const double AF = rvar("radar.axisLabelFontSize", 12, 1, 100);
     double cy = (title.n ? 40 : 10) + 300, lgw = 0;
-    if (legend) for (size_t c = 0; c < cv.n; c++) lgw = fmax(lgw, text_width(cv.v[c].label, 12) + 30);
+    if (legend) for (size_t c = 0; c < cv.n; c++) lgw = fmax(lgw, text_width(cv.v[c].label, LF) + 30);
     BBox bb = {0, 0, 700 + lgw, cy + 310};
     if (!buf_reserve(out, 2048 + na * 300 + cv.n * (na * 60 + 300))) return MMD_ERR_NOMEM;
-    DG_HEAD(out, bb, 4, "radar", CSS);
+    char css[512];
+    int cn = snprintf(css, sizeof css,
+                      "#mermaid .gr{fill:#DEDEDE;fill-opacity:%g;stroke:#DEDEDE;stroke-width:%gpx;}"
+                      "#mermaid .ax{stroke:#333;stroke-width:%gpx;}#mermaid .al{font-size:%gpx;fill:#333;}"
+                      "#mermaid .cv{fill-opacity:%g;stroke-width:%gpx;}#mermaid .lg{font-size:%gpx;fill:#333;}"
+                      "#mermaid .lb{fill-opacity:%g;}#mermaid .ttl{font-size:16px;fill:#333;font-weight:bold;}",
+                      rvar("radar.graticuleOpacity", 0.3, 0, 1), rvar("radar.graticuleStrokeWidth", 1, 0, 50),
+                      rvar("radar.axisStrokeWidth", 2, 0, 50), AF, CO, rvar("radar.curveStrokeWidth", 2, 0, 50), LF, CO);
+    dg_head(out, bb, 4, "radar", (size_t)cn, css);
     for (int t = ticks; t >= 1; t--) {
         double r = R * t / ticks;
         if (!poly) {
@@ -145,21 +156,21 @@ DIAG_FN(radar_render) {
         double c = cos(axis_angle(k, na)), s = sin(axis_angle(k, na));
         dg_line(out, CX, cy, CX + R * c, cy + R * s, "ax");
         const char *anc = fabs(c) < 0.1 ? "middle" : c > 0 ? "start" : "end";
-        dg_text(out, ax.v[k].label, 12, CX + R * 1.05 * c + (fabs(c) < 0.1 ? 0 : c > 0 ? 4 : -4), cy + R * 1.05 * s + s * 6, anc, "al");
+        dg_text(out, ax.v[k].label, AF, CX + R * 1.05 * c + (fabs(c) < 0.1 ? 0 : c > 0 ? 4 : -4), cy + R * 1.05 * s + s * 6, anc, "al");
     }
+    double *P = ANEW(a, double, 2 * na);
+    if (!P) return MMD_ERR_NOMEM;
     for (size_t c = 0; c < cv.n; c++) {
         const char *col = dcfg_pal("cScale", c % countof(COL), COL[c % countof(COL)]);
-        double P[2 * 64];
-        size_t m = na < 64 ? na : 64;
-        for (size_t k = 0; k < m; k++) {
+        for (size_t k = 0; k < na; k++) {
             double v = vals.v[cv.v[c].v0 + k], r = R * fmin(fmax((v - vmin) / (vmax - vmin), 0), 1);
             P[2 * k] = CX + r * cos(axis_angle(k, na)), P[2 * k + 1] = cy + r * sin(axis_angle(k, na));
         }
         buf_lit(out, "<path class=\"cv\" fill=\""); buf_cstr(out, col); buf_lit(out, "\" stroke=\"");
         buf_cstr(out, col); buf_lit(out, "\" d=\"M");
         buf_pt(out, P[0], P[1]);
-        for (size_t k = 0; k < m; k++) { /* closed cardinal spline, tension 0.17 */
-            size_t i0 = (k + m - 1) % m, i1 = k, i2 = (k + 1) % m, i3 = (k + 2) % m;
+        for (size_t k = 0; k < na; k++) { /* closed cardinal spline, tension 0.17 */
+            size_t i0 = (k + na - 1) % na, i1 = k, i2 = (k + 1) % na, i3 = (k + 2) % na;
             constexpr double T = (1 - 0.17) / 6; /* d3 curveCardinalClosed.tension(0.17) */
             buf_ch(out, 'C');
             buf_pt(out, P[2 * i1] + (P[2 * i2] - P[2 * i0]) * T, P[2 * i1 + 1] + (P[2 * i2 + 1] - P[2 * i0 + 1]) * T); buf_ch(out, ' ');
@@ -170,9 +181,12 @@ DIAG_FN(radar_render) {
     }
     if (legend)
         for (size_t c = 0; c < cv.n; c++) {
+            const char *col = dcfg_pal("cScale", c % countof(COL), COL[c % countof(COL)]);
             double y = cy - R + 20 * (double)c;
-            dg_rect_fill(out, CX + R + 50, y - 6, 12, 12, 0, "lb", dcfg_pal("cScale", c % countof(COL), COL[c % countof(COL)]));
-            dg_text(out, cv.v[c].label, 12, CX + R + 68, y, "start", "lg");
+            buf_lit(out, "<rect class=\"lb\" x=\""); buf_num(out, CX + R + 50); buf_lit(out, "\" y=\""); buf_num(out, y - 6);
+            buf_lit(out, "\" width=\"12\" height=\"12\" fill=\""); buf_cstr(out, col);
+            buf_lit(out, "\" stroke=\""); buf_cstr(out, col); buf_lit(out, "\"/>");
+            dg_text(out, cv.v[c].label, LF, CX + R + 68, y, "start", "lg");
         }
     if (title.n) dg_text(out, title, 16, CX, 22, "middle", "ttl");
     buf_lit(out, "</svg>\n");

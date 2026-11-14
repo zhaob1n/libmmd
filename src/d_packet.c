@@ -1,6 +1,7 @@
 /* packet(-beta): `start-end: "label"`, `start: "label"` or `+bits: "label"` fields packed into
- * 32-bit rows (mermaid defaults: bitWidth 32, rowHeight 32, paddingX 5, paddingY 5). Fields that
- * straddle a row boundary are split; bit numbers are printed above each field's ends. */
+ * rows of packet.bitsPerRow bits, laid out as mermaid's renderer does: each bit bitWidth wide, rows
+ * rowHeight tall, paddingX cut off each block's right end, paddingY between rows (plus 10 for the
+ * bit numbers when showBits). Fields that straddle a row boundary are split. */
 #include <math.h>
 #include <stdio.h>
 
@@ -10,10 +11,6 @@
 #include "text.h"
 
 typedef struct Field { uint32_t s, e; Str label; } Field;
-
-static constexpr char CSS[] =
-    "#mermaid .pb{fill:#efefef;stroke:#000;stroke-width:1px;}#mermaid .pl{font-size:12px;fill:#000;}"
-    "#mermaid .pn{font-size:10px;fill:#000;}#mermaid .ttl{font-size:14px;fill:#000;}";
 
 [[nodiscard]] static bool num(Str s[static 1], uint32_t v[static 1]) {
     size_t i = 0;
@@ -26,10 +23,16 @@ static constexpr char CSS[] =
 
 DIAG_FN(packet_render) {
     const uint32_t BPR = (uint32_t)fmin(fmax(dcfg_num("packet.bitsPerRow", 32), 1), 256);
-    constexpr double BW = 32;
-    constexpr double RH = 32;
-    constexpr double PX = 5;
-    constexpr double PY = 5;
+    const double BW = fmin(fmax(dcfg_num("packet.bitWidth", 32), 1), 500);
+    const double RH = fmin(fmax(dcfg_num("packet.rowHeight", 32), 1), 500);
+    const double PX = fmin(fmax(dcfg_num("packet.paddingX", 5), 0), BW - 1); /* a one-bit block keeps some width */
+    const bool BITS = dcfg_bool("packet.showBits", true);
+    const double PY = fmin(fmax(dcfg_num("packet.paddingY", 5), 0), 500) + (BITS ? 10 : 0);
+    /* themeVariables.packet sizes (mermaid's sanitizer drops byteFontSize and blockStrokeWidth, which
+     * are not keys it knows elsewhere; libmmd draws them as asked) */
+    const double BF = fmin(fmax(dcfg_num("themeVariables.packet.byteFontSize", 10), 1), 100);
+    const double LF = fmin(fmax(dcfg_num("themeVariables.packet.labelFontSize", 12), 1), 100);
+    const double TF = fmin(fmax(dcfg_num("themeVariables.packet.titleFontSize", 14), 1), 100);
     LineIt it = {.s = src, .n = n, .i = off};
     Str line;
     size_t lo;
@@ -64,25 +67,40 @@ DIAG_FN(packet_render) {
     }
     if (!fv.n) return diag_fail(err_off, msg, off, "packet has no fields");
     uint32_t rows = (next + BPR - 1) / BPR;
-    double top = 0, W = BPR * BW + 2 * PX, H = rows * (RH + PY + 14) + PY + (title.n ? 30 : 0); /* mermaid puts the title below */
+    /* mermaid puts the title below, centred in a band of rowHeight; a bigger title font widens the band */
+    const double TB = title.n ? fmax(RH, TF * 1.2) : 0, TY = rows * (RH + PY) + (PY + TB) / 2;
+    double W = BPR * BW + 2, H = rows * (RH + PY) + PY + TB;
     BBox bb = {0, 0, W, H};
+    if (BITS) bb.y0 = fmin(bb.y0, PY - 1 - BF * 1.1); /* the first row's bit numbers stand BF tall above it */
+    if (title.n) {
+        double hw = text_width(title, TF) / 2;
+        bb.x0 = fmin(bb.x0, W / 2 - hw), bb.x1 = fmax(bb.x1, W / 2 + hw);
+    }
     if (!buf_reserve(out, 1024 + fv.n * 400)) return MMD_ERR_NOMEM;
-    DG_HEAD(out, bb, 4, "packet", CSS);
+    char css[320];
+    int cn = snprintf(css, sizeof css,
+                      "#mermaid .pb{fill:#efefef;stroke:#000;stroke-width:%gpx;}#mermaid .pl{font-size:%gpx;fill:#000;}"
+                      "#mermaid .pn{font-size:%gpx;fill:#000;}#mermaid .ttl{font-size:%gpx;fill:#000;}",
+                      fmin(fmax(dcfg_num("themeVariables.packet.blockStrokeWidth", 1), 0), 50), LF, BF, TF);
+    dg_head(out, bb, 4, "packet", (size_t)cn, css);
     char nb[16];
     for (size_t i = 0; i < fv.n; i++) {
         const Field *f = &fv.v[i];
         for (uint32_t s = f->s; s <= f->e;) { /* one block per row the field touches */
             uint32_t row = s / BPR, e = f->e < (row + 1) * BPR - 1 ? f->e : (row + 1) * BPR - 1;
-            double x = PX + (s % BPR) * BW, w = (e - s + 1) * BW, y = top + row * (RH + PY + 14) + 14;
-            dg_rect(out, x, y, w - 1, RH, 0, "pb");
-            dg_text(out, f->label, 12, x + w / 2, y + RH / 2, "middle", "pl");
-            dg_text(out, (Str){.p = nb, .n = (size_t)snprintf(nb, sizeof nb, "%u", s)}, 10, x + 2, y - 6,
-                    "start", "pn");
-            if (e != s) dg_text(out, (Str){.p = nb, .n = (size_t)snprintf(nb, sizeof nb, "%u", e)}, 10, x + w - 3, y - 6, "end", "pn");
+            double x = 1 + (s % BPR) * BW, w = (e - s + 1) * BW - PX, y = row * (RH + PY) + PY;
+            dg_rect(out, x, y, w, RH, 0, "pb");
+            dg_text(out, f->label, LF, x + w / 2, y + RH / 2, "middle", "pl");
+            if (BITS) { /* mermaid sets them 2 above the block on their baseline */
+                double by = y - 1 - BF / 2;
+                dg_text(out, (Str){.p = nb, .n = (size_t)snprintf(nb, sizeof nb, "%u", s)}, BF, e == s ? x + w / 2 : x,
+                        by, e == s ? "middle" : "start", "pn");
+                if (e != s) dg_text(out, (Str){.p = nb, .n = (size_t)snprintf(nb, sizeof nb, "%u", e)}, BF, x + w, by, "end", "pn");
+            }
             s = e + 1;
         }
     }
-    if (title.n) dg_text(out, title, 14, W / 2, H - 16, "middle", "ttl");
+    if (title.n) dg_text(out, title, TF, W / 2, TY, "middle", "ttl");
     buf_lit(out, "</svg>\n");
     return out->oom ? MMD_ERR_NOMEM : MMD_OK;
 }

@@ -1,0 +1,17 @@
+---
+config:
+  themeVariables:
+    radar:
+      curveOpacity: 0.8
+      curveStrokeWidth: 4
+      axisStrokeWidth: 1
+      axisLabelFontSize: 16
+      graticuleOpacity: 0.1
+      graticuleStrokeWidth: 3
+      legendFontSize: 14
+---
+radar-beta
+  axis m["Math"], s["Science"], e["English"], h["History"], g["Geo"]
+  curve a["Alice"]{85, 90, 80, 70, 75}
+  curve b["Bob"]{70, 75, 85, 80, 90}
+  max 100
