@@ -465,6 +465,7 @@ d983e2c70c47e09c tests/cases/class_state_spacing.mmd
 0762910b73954b84 tests/cases/config_packet.mmd
 b2a9983ee0faecb0 tests/cases/config_pie.mmd
 cccd9dd4dcf5051b tests/cases/config_quadrant.mmd
+e66d7cd668efde83 tests/cases/config_radar.mmd
 db4796157d723418 tests/cases/config_sankey.mmd
 9d68a2cb5325389d tests/cases/config_seq.mmd
 f1fa3f6b8b78ecfd tests/cases/config_state.mmd
@@ -524,8 +525,8 @@ e553b1ebf92737dd tests/cases/quadrant_dense_labels.mmd
 b1ddaa83f912e6f9 tests/cases/quadrant_full.mmd
 e3421c02168b518c tests/cases/quadrant_point_fill.mmd
 fdca08e3b4e52100 tests/cases/quadrant_ring_fallback.mmd
-5d529551c71e664c tests/cases/radar_full.mmd
-0a96ba0db473f370 tests/cases/radar_many_axes.mmd
+029d8bc92a725646 tests/cases/radar_full.mmd
+9070a8fb8d277dbf tests/cases/radar_many_axes.mmd
 46a85b2e6172aede tests/cases/railroad_abnf.mmd
 61d448727e53c5c6 tests/cases/railroad_ebnf.mmd
 f147e4c67453da7e tests/cases/railroad_edge.mmd
