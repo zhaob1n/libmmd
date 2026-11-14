@@ -1,0 +1,15 @@
+stateDiagram-v2
+    direction LR
+    [*] --> Active
+    state Active {
+        [*] --> A1
+        A1 --> A2
+    }
+    Active --> X
+    X --> B1
+    state Crossed {
+        B1 --> B2
+        --
+        C1 --> C2
+    }
+    B2 --> Done

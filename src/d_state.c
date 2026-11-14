@@ -91,6 +91,7 @@ static mmd_status open_composite(StP p[static 1], int32_t v, size_t off) {
     if (c == NONE) {
         c = dg_cluster(g, g->nid[v], g->nlabel[v], g->nparent[v]);
         if (c == NONE) return MMD_ERR_NOMEM;
+        g->sdir[c] = DIR_TB; /* mermaid's DEFAULT_NESTED_DOC_DIR, whatever the diagram's direction */
     }
     p->ccl.v[v] = c;
     p->stk[p->depth++] = (Frame){.comp = c, .region = c, .nregions = 1};
@@ -137,6 +138,44 @@ static const char *find_sub(Str s, Str needle) {
     for (size_t k = 0; k + needle.n <= s.n; k++)
         if (memcmp(s.p + k, needle.p, needle.n) == 0) return s.p + k;
     return nullptr;
+}
+
+/* directions as mermaid's layout settles them, outer clusters first. A cluster that a transition
+ * crosses (one end inside it, one outside; a transition to a composite itself does not cross it)
+ * stays in its parent's graph there, so it runs its parent's way whatever it says, as flowchart
+ * subgraphs do. A region nothing crosses, without a direction of its own, takes the one its composite
+ * declares. Note links do not count: mermaid's note groups sit at the root, so a note on a state in
+ * a composite would cross it. */
+static mmd_status settle_dirs(StP p[static 1]) {
+    Graph *g = &p->g;
+    size_t S = g->ns;
+    uint8_t *ext = ANEW(p->A, uint8_t, S + 1);
+    unsigned *dep = ANEW(p->A, unsigned, S + 1), maxd = 0;
+    Dir *decl = ANEW(p->A, Dir, S + 1);
+    if (!ext || !dep || !decl) return MMD_ERR_NOMEM;
+    for (size_t r = 0; r < S; r++) {
+        ext[r] = 0, dep[r] = 0, decl[r] = g->sdir[r];
+        for (int32_t q = (int32_t)r; q != NONE; q = g->sparent[q]) dep[r]++;
+        if (dep[r] > maxd) maxd = dep[r];
+    }
+    for (size_t e = 0; e < g->ne; e++)
+        for (unsigned side = 0; side < 2; side++) {
+            int32_t x = side ? g->eto[e] : g->efrom[e], y = side ? g->efrom[e] : g->eto[e];
+            for (int32_t c = g->nparent[x]; c != NONE; c = g->sparent[c]) {
+                bool shared = false;
+                for (int32_t d = g->nparent[y]; d != NONE && !shared; d = g->sparent[d]) shared = d == c;
+                if (shared) break; /* and so are c's ancestors */
+                ext[c] = 1;
+            }
+        }
+    for (unsigned d = 1; d <= maxd; d++)
+        for (size_t r = 0; r < S; r++) {
+            if (dep[r] != d) continue;
+            int32_t up = g->sparent[r];
+            if (ext[r]) g->sdir[r] = up == NONE ? g->dir : g->sdir[up];
+            else if (g->sclass[r].n && !(g->sflags[r] & SF_DIRSET)) g->sdir[r] = decl[up];
+        }
+    return MMD_OK;
 }
 
 static mmd_status parse(StP p[static 1], LineIt it[static 1]) {
@@ -306,9 +345,7 @@ static mmd_status parse(StP p[static 1], LineIt it[static 1]) {
         }
     }
     if (p->depth) return sfail(p, it->n, "unterminated composite state (missing '}')");
-    for (size_t r = 0; r < g->ns; r++) /* a region's parent is its composite */
-        if (g->sclass[r].n && !(g->sflags[r] & SF_DIRSET)) g->sdir[r] = g->sdir[g->sparent[r]];
-    return MMD_OK;
+    return settle_dirs(p);
 }
 
 static constexpr char CSS[] =

@@ -550,6 +550,7 @@ af64380ec0563af0 tests/cases/seq_full.mmd
 c30d794f7e2c5580 tests/cases/seq_types.mmd
 047f87ad8e9ce83c tests/cases/shapes.mmd
 a29b2ee016493945 tests/cases/state_full.mmd
+d33abaab00b8530f tests/cases/state_nested_direction.mmd
 3580f49bf8d353a5 tests/cases/state_region_direction.mmd
 77ade1b41f0df0ad tests/cases/state_regions_dark.mmd
 af8d51fa5eca23bb tests/cases/state_stress_looplabels.mmd

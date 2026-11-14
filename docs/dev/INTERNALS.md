@@ -93,7 +93,10 @@ Mermaid faults libmmd does not copy:
   `blockStrokeWidth` (keys missing from its default config); libmmd honours them;
 - state: a `direction` in the first of a composite's `--` regions turns only that region in mermaid
   (it lands in that region's doc); libmmd takes it as the composite's, for every region that does not
-  set its own.
+  set its own;
+- state: mermaid puts a note's group at the root, so a note on a state inside a composite counts as a
+  transition crossing it, and the composite drops its own direction for its parent's; libmmd keeps the
+  note in the state's scope and counts only transitions.
 
 Side-by-side renders (left: libmmd, right: mermaid 11.17) live in `samples/sbs/*.png`.
 Already fixed:
