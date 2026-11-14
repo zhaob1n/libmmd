@@ -49,4 +49,9 @@ bool dcfg_neo(void);
 Str dcfg_css(const char key[static 1]);         /* value only if safe inside CSS / an attribute */
 bool dcfg_is_acc(Str line, bool block[static 1]); /* accTitle:/accDescr: line; *block if "accDescr {" */
 void dcfg_theme_css(Buf b[static 1], const char kind[static 1]); /* CSS overrides from themeVariables */
+/* a CSS rule ('$' = the value) for a theme variable, and the value when the theme has none */
+typedef struct DRule { const char *var, *def, *tpl; } DRule;
+/* every rule with its variable's value in the theme in effect (dcfg_theme_var), for renderers that
+ * take their colours from the theme in every theme rather than only where it differs */
+void dcfg_rules(Buf b[static 1], size_t n, const DRule rules[static n]);
 void dcfg_svg_aria(Buf b[static 1]);            /* call before the '>' of <svg ...: aria attrs, '>', title/desc */

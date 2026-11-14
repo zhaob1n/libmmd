@@ -7,6 +7,7 @@
 #include <math.h>
 #include <stdlib.h>
 
+#include "dcfg.h"
 #include "dgraph.h"
 #include "icons.h"
 #include "diagrams.h"
@@ -20,10 +21,21 @@ static constexpr double PITCH_X = 200;
 static constexpr double PITCH_Y = 210;
 static constexpr double IS = 80; /* icon size */
 static constexpr char CSS[] =
-    "#mermaid .ai{fill:#087ebf;}#mermaid .ag{fill:none;stroke:#cccccc;stroke-width:2px;stroke-dasharray:8;}"
-    "#mermaid .ae{fill:none;stroke:#333;stroke-width:3px;}#mermaid .ah{fill:#333;}#mermaid .aj{fill:#333;}"
+    "#mermaid .ai{fill:#087ebf;}#mermaid .ag{fill:none;stroke-dasharray:8;}#mermaid .ae{fill:none;}"
     "#mermaid .agl{font-size:16px;}#mermaid .aw{fill:none;stroke:#fff;stroke-width:3px;stroke-linecap:round;stroke-linejoin:round;}"
     "#mermaid .awf{fill:#fff;}#mermaid .ael{font-size:14px;}";
+
+/* mermaid's architecture styles take edges, arrows and group borders from the theme's arch*
+ * variables. The label plate is libmmd's (mermaid draws labels straight over the edge): it takes
+ * the background so the label reads in every theme. */
+static const DRule THEME[] = {
+    {"archEdgeColor", "#333333", "#mermaid .ae{stroke:$;}#mermaid .aj{fill:$;}"},
+    {"archEdgeWidth", "3", "#mermaid .ae{stroke-width:$;}"},
+    {"archEdgeArrowColor", "#333333", "#mermaid .ah{fill:$;}"},
+    {"archGroupBorderColor", "hsl(240, 60%, 86.2745098039%)", "#mermaid .ag{stroke:$;}"},
+    {"archGroupBorderWidth", "2px", "#mermaid .ag{stroke-width:$;}"},
+    {"background", "white", "#mermaid .aeb{fill:$;}"},
+};
 
 typedef struct AAlign { bool col; Str ids; size_t off; } AAlign;
 static bool idc(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || (unsigned char)c >= 0x80; }
@@ -435,13 +447,19 @@ DIAG_FN(architecture_render) {
             size_t mid = (k - 1) / 2;
             double lx = (P[2 * mid] + P[2 * mid + 2]) / 2, ly = (P[2 * mid + 1] + P[2 * mid + 3]) / 2;
             double tw = text_width(E->label, 14);
-            dg_rect_fill(&eb, lx - tw / 2 - 3, ly - 10, tw + 6, 20, 0, "ael", "#fff");
+            dg_rect(&eb, lx - tw / 2 - 3, ly - 10, tw + 6, 20, 0, "aeb");
             dg_text(&eb, E->label, 14, lx, ly, "middle", "ael");
         }
     }
     if (eb.oom) return MMD_ERR_NOMEM;
     if (!buf_reserve(out, 4096 + nn * 1500 + eb.n + gv.n * 1200)) return MMD_ERR_NOMEM;
-    DG_HEAD(out, bb, 16, "architecture", CSS);
+    {
+        AUTO_BUF Buf css = {};
+        buf_lit(&css, CSS);
+        dcfg_rules(&css, countof(THEME), THEME);
+        if (css.oom) return MMD_ERR_NOMEM;
+        dg_head(out, bb, 16, "architecture", css.n, css.p);
+    }
     if (title.n) dg_text(out, title, 18, (bb.x0 + bb.x1) / 2, bb.y0 + 14, "middle", "agl");
     for (size_t g = 0; g < gv.n; g++) {
         AGroup *G = &gv.v[g];
