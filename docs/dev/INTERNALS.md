@@ -154,7 +154,7 @@ on the nested-cluster cases checked, ranks and ordering then agree and libmmd's 
 ## v3: build options, batch API, routing
 
 - Build: `make` (portable `-O2`), opt-in `-march=native` through `CFLAGS`, `make LTO=1`, `make pgo` (output in `build-pgo/`).
-- Shared library: `build/libmmd.so.0.3.0` (soname `libmmd.so.0`, only `mmd_*` exported); `make install PREFIX=/usr DESTDIR=...` also writes `mmd.pc`.
+- Shared library: `build/libmmd.so.0.1.0` (soname `libmmd.so.0`, only `mmd_*` exported); `make install PREFIX=/usr DESTDIR=...` also writes `mmd.pc`.
 - Batch rendering: `mmd_context_new()` / `mmd_context_render_svg()` / `mmd_context_free()` reuse the arena and output buffer between calls.
   A context also keeps the theme it last derived (`DThemeMemo` in `src/dcfg.h`): mermaid's engine recomputes about 300
   variables whenever a named theme meets `themeVariables`, 17–50 µs a render (`theme: default` runs `updateColors()`

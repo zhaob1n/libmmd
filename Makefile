@@ -11,7 +11,7 @@
 #   make fuzz [N=1000] [SEED=1]
 #   make pgo                  profile-guided build into build-pgo/
 
-VERSION := 0.3.0
+VERSION := 0.1.0
 SOMAJOR := 0
 
 PREFIX     ?= /usr/local
