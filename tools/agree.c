@@ -11,7 +11,7 @@
  * (NOTE:) and composites (C:) by label; a label used twice is left out. size ranks by
  * |log(aspect_libmmd / aspect_mermaid)| of the root viewBoxes; a libmmd failure counts as 99.
  * mermaid's SVGs come from mermaid.js with its classic look and dagre layout (qa_mermaid, QA_CLASSIC),
- * cached in $TMPDIR/mmd-UID/mermaid-classic. BIN is the renderer, default build/mmd. */
+ * cached in $TMPDIR/mmd-UID/mermaid-classic. BIN is the renderer, default build/release/mmd. */
 #include "qa/qa.h"
 
 #include <ctype.h>
@@ -58,7 +58,7 @@ static double pysum(size_t n, const double x[static n]) {
     return c && isfinite(c) ? s + c : s;
 }
 
-static const char *mmd = "build/mmd";
+static const char *mmd = "build/release/mmd";
 
 static qa_res ours(const char *src) {
     return qa_run(&(qa_cmd){.argv = QA_ARGV(mmd, src), .timeout = 120});

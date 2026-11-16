@@ -1,9 +1,9 @@
-/* writer_check: cross-checks the writer against mermaid.js. build/test-writer --dump writes a corpus of
+/* writer_check: cross-checks the writer against mermaid.js. build/release/tests/writer --dump writes a corpus of
  * every typed helper and escape context fed with hostile labels and ids; each file must parse in
- * mermaid (rendered with qa_mermaid, as build/docs status does) and its SVG must show every intended
+ * mermaid (rendered with qa_mermaid, as build/release/tools/docs status does) and its SVG must show every intended
  * label (whitespace ignored). See docs/dev/writer.md.
  *
- *   build/writer_check [-v] [--seeds=N] [test-writer binary]   (default build/test-writer)
+ *   build/release/tools/writer_check [-v] [--seeds=N] [test-writer binary]   (default build/release/tests/writer)
  *
  * --seeds=N checks N corpora (each ~400 diagrams, ~12 s) instead of the default one; -v shows three
  * sources per failing slot instead of one, and the text mermaid drew. Exit status 1 when a diagram is
@@ -264,7 +264,7 @@ int main(int argc, char *argv[]) {
             if (*end || seeds < 1) qa_die("bad %s", argv[i]);
         } else if (argv[i][0] != '-' && !exe) exe = argv[i];
     }
-    if (!exe) exe = "build/test-writer";
+    if (!exe) exe = "build/release/tests/writer";
     if (!seeds) seeds = 1;
 
     char *tmp = qa_tmpdir("wcheck"); /* left behind for a look when the harness dies */

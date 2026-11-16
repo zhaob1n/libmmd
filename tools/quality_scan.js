@@ -1,4 +1,4 @@
-// Geometric defects of the SVGs in the page's div[data-f] wrappers (build/quality_scan builds the page):
+// Geometric defects of the SVGs in the page's div[data-f] wrappers (build/release/tools/quality_scan builds the page):
 // ll label/label overlap, le label/edge overlap, ct cluster title hit by an edge, ov text overflowing its
 // node shape, cl text clipped by the viewport, en edge through a node that is not one of its ends.
 // <pre id="out"> receives one line per diagram and defect kind, then a line "end" once the scan finished:

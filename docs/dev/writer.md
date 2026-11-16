@@ -1,8 +1,8 @@
 # mmd_writer: escape contexts and the per-diagram audit
 
 `include/mmd.h` (writer section), `src/writer.c`. Tested by `tests/writer.c` (`make test`),
-checked against mermaid.js by `build/writer_check`; timed by `bench/writer.c`
-(`make build/bench-writer`).
+checked against mermaid.js by `build/release/tools/writer_check`; timed by `bench/writer.c`
+(`make build/release/bench/writer`).
 mermaid.js is the reference: where libmmd and mermaid disagree on what a text means, mermaid wins.
 
 ## Decisions
@@ -162,10 +162,10 @@ above (CJK, emoji, `#quot;`, `%%`, `-->`, `fa:fa-car`, newlines...).
 
 ## Cross-check against mermaid.js
 
-`build/writer_check [-v] [--seeds=N]` runs `build/test-writer --dump DIR [SEED]` (the round
+`build/release/tools/writer_check [-v] [--seeds=N]` runs `build/release/tests/writer --dump DIR [SEED]` (the round
 trip and typed-helper corpus, ~400 diagrams), renders them with `qa_mermaid()` (the mermaid,
 zenuml plugin and page mermaid-cli ships, in one browser: ~5 s per corpus instead of ~1 s per file
-through `mmdc`; `build/docs status` uses it too) and checks that each parses and its SVG text holds
+through `mmdc`; `build/release/tools/docs status` uses it too) and checks that each parses and its SVG text holds
 every label. mermaid-cli comes from `MMDC`, `MMDC_PUPPETEER` is the puppeteer config
 (`{"args": ["--no-sandbox"]}` as root), the browser from `CHROME`; without mermaid-cli the check
 prints a skip and exits 0. Last run: mermaid-cli 12.0.0, 25 seeds (10430 diagrams): one failure,

@@ -62,12 +62,12 @@ Per-type feature notes are in [docs/dev/INTERNALS.md](docs/dev/INTERNALS.md).
 
 ## Build
 
-You need GNU make and a C compiler that takes `-std=gnu2y`: **gcc** 15 or later, or a recent **clang** (developed with gcc 16 and clang 23). `make` uses `cc`; where that is an older compiler, name a newer one with `CC=`. Nothing else is needed: the tests, the benchmarks and the developer tools are C programs too.
+You need GNU make 4.2 or later and a C compiler that takes `-std=gnu2y`: **gcc** 15 or later, or a recent **clang** (developed with gcc 16 and clang 23). `make` uses `cc`; where that is an older compiler, name a newer one with `CC=`. Nothing else is needed: the tests, the benchmarks and the developer tools are C programs too.
 
 ```sh
-make                                  # build/mmd, build/libmmd.a, build/libmmd.so
-make CC=clang CFLAGS='-O2 -march=native' LTO=1
-make pgo                              # profile-guided build in build-pgo/
+make                                  # build/release/mmd, build/release/libmmd.a, build/release/libmmd.so
+make CC=clang CFLAGS='-O2 -march=native' LDFLAGS=-fuse-ld=mold
+make pgo                              # profile-guided build in build/pgo/
 make install PREFIX=/usr DESTDIR=pkg  # mmd, mmd.h, both libraries, mmd.pc (make uninstall removes them)
 make test                             # what a change has to pass; about a second
 ```
@@ -77,10 +77,10 @@ make test                             # what a change has to pass; about a secon
 ## CLI
 
 ```sh
-build/mmd in.mmd -o out.svg
-build/mmd -i in.mmd -o out.svg -t dark      # themes: default | dark | forest | neutral (wins over the file's)
-cat in.mmd | build/mmd > out.svg            # stdin -> stdout
-build/mmd in.mmd -o out.svg --no-avoid      # flowchart: skip obstacle re-routing (fastest)
+build/release/mmd in.mmd -o out.svg
+build/release/mmd -i in.mmd -o out.svg -t dark      # themes: default | dark | forest | neutral (wins over the file's)
+cat in.mmd | build/release/mmd > out.svg            # stdin -> stdout
+build/release/mmd in.mmd -o out.svg --no-avoid      # flowchart: skip obstacle re-routing (fastest)
 ```
 
 On a syntax error the tool exits with a non-zero status and prints `line:col: message`.
@@ -108,7 +108,7 @@ int main(void) {
 ```
 
 ```sh
-cc -std=gnu23 -Iinclude example.c build/libmmd.a -lm      # or: $(pkg-config --cflags --libs mmd)
+cc -std=gnu23 -Iinclude example.c build/release/libmmd.a -lm      # or: $(pkg-config --cflags --libs mmd)
 ```
 
 - `mmd_options` (which may be `nullptr`) sets node and rank spacing, font size, theme, and the `MMD_F_*` layout flags. A theme set there (or with `mmd -t`) wins over the one the diagram names; mermaid-cli's `-t` is only a default that the file's `theme` overrides.
@@ -174,7 +174,7 @@ The run was made on 2026-10-23.
 
 ![CLI benchmark chart](docs/bench.svg)
 
-The chart shows how many times slower than libmmd each tool is; the table has the times, with the same ratios in brackets. Data: [`bench/cli_times.csv`](bench/cli_times.csv). `build/bench-chart` writes both, and libmmd draws the chart.
+The chart shows how many times slower than libmmd each tool is; the table has the times, with the same ratios in brackets. Data: [`bench/cli_times.csv`](bench/cli_times.csv). `build/release/bench/chart` writes both, and libmmd draws the chart.
 
 <!-- bench-table -->
 | input | libmmd | mmdr 0.3.1 | mermaid-cli 11.17 |
@@ -187,7 +187,7 @@ The chart shows how many times slower than libmmd each tool is; the table has th
 | class_full (tests/cases) | 0.72 ms | 9.64 ms (13×) | 1124 ms (1561×) |
 <!-- /bench-table -->
 
-Rendering in-process through the library, timed with `build/bench-render` (minimum over repeated renders, clang build, from [`bench/results_v14.txt`](bench/results_v14.txt) and [`bench/results_libmmd_inproc.txt`](bench/results_libmmd_inproc.txt)):
+Rendering in-process through the library, timed with `build/release/bench/render` (minimum over repeated renders, clang build, from [`bench/results_v14.txt`](bench/results_v14.txt) and [`bench/results_libmmd_inproc.txt`](bench/results_libmmd_inproc.txt)):
 
 | input | size in → SVG out | time |
 |---|---|---:|
@@ -200,16 +200,16 @@ Rendering in-process through the library, timed with `build/bench-render` (minim
 [`bench/results_fixtures.txt`](bench/results_fixtures.txt) has library and CLI times against mmdr for all 31 mmdr flowchart fixtures. To reproduce:
 
 ```sh
-make build/bench-render build/bench-compare
-build/bench-render bench/inputs/medium.mmd 30
-MMDR=/path/to/mmdr build/bench-compare bench/mmdr_fixtures/*.mmd
+make build/release/bench/render build/release/bench/compare
+build/release/bench/render bench/inputs/medium.mmd 30
+MMDR=/path/to/mmdr build/release/bench/compare bench/mmdr_fixtures/*.mmd
 ```
 
 mermaid-cli spends most of its time starting Chrome. Its per-diagram cost is lower when it renders many diagrams in one process. The comparison is still useful for the common case of one CLI call per diagram.
 
 ## Gallery: libmmd vs mermaid-cli
 
-Each image puts libmmd on the left and mermaid-cli on the right (11.17; 12.0.0 for agent flow and use case, which 11.17 lacks), rendered from the same source in `tests/cases/`. To regenerate them, run `build/sbs --gallery tests/cases/<name>.mmd`.
+Each image puts libmmd on the left and mermaid-cli on the right (11.17; 12.0.0 for agent flow and use case, which 11.17 lacks), rendered from the same source in `tests/cases/`. To regenerate them, run `build/release/tools/sbs --gallery tests/cases/<name>.mmd`.
 
 | | |
 |---|---|
@@ -232,18 +232,18 @@ More before/after pairs from development are in [`samples/sbs/`](samples/sbs).
 |---|---|
 | The corpus through the CLI: 204 cases, mermaid's 432 documentation examples, 400 random flowcharts, the benchmark inputs. No crash; well-formed XML; everything drawn inside the viewBox; errors that name line and column; output byte-identical to the goldens (`tests/golden/`, `tests/sums`); every example mermaid renders, rendered; no CSS selector that matches nothing | `make test` (`UPDATE_GOLDEN=1 make test` accepts changed output) |
 | Locale independence: the corpus rendered under a comma-decimal locale must match the C locale byte for byte (where none is installed the test compiles one with `localedef`) | `make test` |
-| Writer round trip: random labels through 102 slots of every diagram type, every typed helper (keyword-like ids included), number round trip, error paths | `make test` (`build/test-writer [iterations]`) |
+| Writer round trip: random labels through 102 slots of every diagram type, every typed helper (keyword-like ids included), number round trip, error paths | `make test` (`build/release/tests/writer [iterations]`) |
 | Number formats and theme colours against values taken from d3-format and mermaid | `make test` |
 | Allocation failure: each malloc fails in turn; `make oom` also fails arena allocations, sampled, under ASan | `make test`, `make oom` |
 | All of the above under ASan + UBSan; then the corpus again with malloc'd memory filled with a byte, so that output read from an unwritten arena changes | `make asan` |
 | All of the above under MemorySanitizer (clang) | `make msan` |
 | Fuzzing (mutational, under ASan + UBSan; crashing inputs are saved under `TMPDIR` and printed) | `make fuzz [N=1000] [SEED=1]` |
-| Writer vs mermaid.js: the writer test's corpus (~400 diagrams per seed) must parse in mermaid and show every label (skips without mermaid-cli) | `build/writer_check [-v] [--seeds=N]` |
-| Which documentation examples mermaid itself renders (`tests/docs/mermaid_status.txt`) | `build/docs status` |
-| Stress generator (every type, density 1×–5×) | `build/gen stress OUT 2 SEED SCALE` |
-| Visual quality scanner (edges through nodes, label overlaps, labels on edges, out-of-bounds…) | `build/quality_scan [files…]` |
-| Layout agreement with mermaid: node order along each axis, node-centre error, diagram proportions | `build/agree flow`, `build/agree state`, `build/agree size` |
-| Pictures beside mermaid's, before and after a change | `build/sbs [--base REV] files…` |
+| Writer vs mermaid.js: the writer test's corpus (~400 diagrams per seed) must parse in mermaid and show every label (skips without mermaid-cli) | `build/release/tools/writer_check [-v] [--seeds=N]` |
+| Which documentation examples mermaid itself renders (`tests/docs/mermaid_status.txt`) | `build/release/tools/docs status` |
+| Stress generator (every type, density 1×–5×) | `build/release/tools/gen stress OUT 2 SEED SCALE` |
+| Visual quality scanner (edges through nodes, label overlaps, labels on edges, out-of-bounds…) | `build/release/tools/quality_scan [files…]` |
+| Layout agreement with mermaid: node order along each axis, node-centre error, diagram proportions | `build/release/tools/agree flow`, `build/release/tools/agree state`, `build/release/tools/agree size` |
+| Pictures beside mermaid's, before and after a change | `build/release/tools/sbs [--base REV] files…` |
 
 `make tools` builds the programs of the lower rows. Those that compare with mermaid need node, mermaid-cli and Chrome: `MMDC`, `MMDC_PUPPETEER` and `CHROME` name them where `PATH` does not.
 
@@ -274,6 +274,6 @@ libmmd 是一个用 C 语言（gnu2y）编写的高速 Mermaid 渲染器，可�
 - 单个图表的命令行渲染约 1 毫秒，mermaid-cli 约 1 秒。
 - 流程图采用与 mermaid（dagre）一致的布局算法。
 
-构建只需 `make`，用法为 `build/mmd in.mmd -o out.svg`。效果对比见上方 Gallery。
+构建只需 `make`，用法为 `build/release/mmd in.mmd -o out.svg`。效果对比见上方 Gallery。
 
 许可证：MIT（见 [LICENSE](LICENSE)）。内嵌图标数据来自 Font Awesome Free（CC BY 4.0）和 simple-icons（CC0 1.0），详见 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES)。

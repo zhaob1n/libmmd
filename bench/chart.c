@@ -1,5 +1,5 @@
 /* bench-chart: regenerate docs/bench.svg and the README CLI table from bench/cli_times.csv.
- * usage: build/bench-chart
+ * usage: build/release/bench/chart
  * The chart is a libmmd xychart: per input, how many times slower than libmmd each rival CLI is
  * (rival ms / libmmd ms; a linear axis, as xychart has no log scale). The README table between the
  * <!-- bench-table --> markers gives the absolute times with the same ratios in brackets. */

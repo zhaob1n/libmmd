@@ -1,11 +1,11 @@
 /* gen: the random diagrams the benchmarks and tests run on. The generators were Python scripts; this
  * makes the same random.Random calls in the same order (an expression's operands left to right), so it
  * writes the same files.
- * usage: build/gen bench [DIR]    small, medium, large and xlarge.mmd: flowcharts to time (DIR defaults
+ * usage: build/release/tools/gen bench [DIR]    small, medium, large and xlarge.mmd: flowcharts to time (DIR defaults
  *                                 to bench/inputs)
- *        build/gen flow [DIR]     f000.mmd .. f399.mmd: small flowcharts with subgraphs (DIR defaults to
+ *        build/release/tools/gen flow [DIR]     f000.mmd .. f399.mmd: small flowcharts with subgraphs (DIR defaults to
  *                                 tests/flow)
- *        build/gen stress OUTDIR [per_type=3] [seed=1] [scale=1]
+ *        build/release/tools/gen stress OUTDIR [per_type=3] [seed=1] [scale=1]
  *                                 TYPE_I.mmd: larger diagrams of every type to stress layout quality;
  *                                 scale multiplies the upper bounds (those >= 6) of the size ranges */
 #include "qa/qa.h"

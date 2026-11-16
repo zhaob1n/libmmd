@@ -1,8 +1,8 @@
 /* docs: the mermaid documentation examples in tests/docs.
- * usage: build/docs extract <mermaid-repo>/packages/mermaid/src/docs/syntax
+ * usage: build/release/tools/docs extract <mermaid-repo>/packages/mermaid/src/docs/syntax
  *          copy the ```mermaid / ```mermaid-example blocks of DIR's .md files into tests/docs/<doc>/NN.mmd
  *          (the flowchart doc and flowchart/graph blocks are skipped)
- *        build/docs status
+ *        build/release/tools/docs status
  *          render every tests/docs/x/y.mmd with mermaid.js and rewrite tests/docs/mermaid_status.txt as
  *          sorted lines "path ok|fail"; exits 1 when mermaid-cli is not installed */
 #include <ctype.h>

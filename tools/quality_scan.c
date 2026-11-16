@@ -3,10 +3,10 @@
  * title hit by an edge, ov text overflowing its node, cl text clipped by the viewport, en edge through
  * a node), one line per file: FILE {KIND: (COUNT, [first 3 samples]), ...}.
  *
- *   build/quality_scan [-a] [FILE...]   (default: the .mmd in tests/docs/NAME, tests/cases, bench/mmdr_fixtures)
+ *   build/release/tools/quality_scan [-a] [FILE...]   (default: the .mmd in tests/docs/NAME, tests/cases, bench/mmdr_fixtures)
  *
  * -a also shows the reviewed exceptions in KNOWN, otherwise reported as "FILE known: KINDS".
- * env BIN=path/to/mmd (default build/mmd), CHROME as tools/qa/qa.h says. */
+ * env BIN=path/to/mmd (default build/release/mmd), CHROME as tools/qa/qa.h says. */
 #include "qa/qa.h"
 
 #include <unistd.h>
@@ -160,7 +160,7 @@ int main(int argc, char *argv[]) {
     }
     size_t len;
     char *js = qa_read("tools/quality_scan.js", &len), *dir = qa_tmpdir("scan"), *page = qa_fmt("%s/p.html", dir);
-    job j = {.files = files.v, .svg = qa_alloc((files.n + 1) * sizeof *j.svg), .bin = bin && *bin ? bin : "build/mmd"};
+    job j = {.files = files.v, .svg = qa_alloc((files.n + 1) * sizeof *j.svg), .bin = bin && *bin ? bin : "build/release/mmd"};
     qa_parallel(files.n, render, &j);
 
     for (size_t i = 0; i < files.n; i += BATCH) {

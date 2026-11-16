@@ -1,8 +1,8 @@
 /* bench-compare: compare mmd and mmdr on the same inputs.
- * usage: build/bench-compare FILE.mmd...
+ * usage: build/release/bench/compare FILE.mmd...
  * Columns: process wall-clock median (both CLIs, SVG to a file), plus in-library time (mmd: the
  * bench-render median; mmdr: its own --timing total_us).
- * Environment: MMD (build/mmd), BENCH (build/bench-render), MMDR (mmdr on PATH), TIMEOUT (seconds,
+ * Environment: MMD (build/release/mmd), BENCH (build/release/bench/render), MMDR (mmdr on PATH), TIMEOUT (seconds,
  * 120), MMDR_ARGS (extra mmdr arguments, split on whitespace). */
 #include <math.h>
 #include <signal.h>
@@ -60,7 +60,7 @@ static const char *env(const char *name, const char *dflt) {
 
 int main(int argc, char *argv[]) {
     qa_at_root(argc, argv);
-    const char *mmd = env("MMD", "build/mmd"), *bench = env("BENCH", "build/bench-render");
+    const char *mmd = env("MMD", "build/release/mmd"), *bench = env("BENCH", "build/release/bench/render");
     const char *mmdr = env("MMDR", nullptr);
     if (!mmdr && !(mmdr = qa_which("mmdr"))) {
         fputs("mmdr not found: put it on PATH or set MMDR\n", stderr);

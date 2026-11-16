@@ -1,6 +1,6 @@
 /* gen_eaw: regenerate src/eaw_tbl.inc (East_Asian_Width Wide/Fullwidth, general category Mn/Me) from
  * the Unicode Character Database.
- * usage: build/gen_eaw EastAsianWidth.txt UnicodeData.txt
+ * usage: build/release/tools/gen_eaw EastAsianWidth.txt UnicodeData.txt
  * Wide is what EastAsianWidth.txt says, unassigned code points of its ranges included (the CJK
  * blocks are wide whether or not a character lives there yet). A mark is a code point UnicodeData.txt
  * lists as Mn or Me, its <..., First> and <..., Last> pairs expanded. */

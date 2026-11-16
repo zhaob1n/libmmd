@@ -1,6 +1,6 @@
 /* fuzz: mutation fuzzer. Feeds mutated corpus files to a (sanitizer) build of the CLI on stdin and
  * reports what crashed it.
- * usage: build/fuzz [BIN=build-asan/mmd] [N=1000] [SEED=1]
+ * usage: build/release/tools/fuzz [BIN=build/asan/mmd] [N=1000] [SEED=1]
  * FUZZ_GLOB picks the seed corpus, relative to the repository root (default: the .mmd files of
  * tests/cases), taken in sorted order. A crash is an exit status other than 0 and 1 (death by a signal
  * included) or a sanitizer report on stderr. Each crashing input is saved under $TMPDIR and printed as
@@ -101,7 +101,7 @@ static unsigned long number(const char *s) {
 int main(int argc, char *argv[]) {
     qa_at_root(argc, argv);
     if (argc > 4) qa_die("usage: fuzz [BIN] [N] [SEED]");
-    fuzz f = {.bin = argc > 1 ? argv[1] : "build-asan/mmd"};
+    fuzz f = {.bin = argc > 1 ? argv[1] : "build/asan/mmd"};
     size_t n = argc > 2 ? number(argv[2]) : 1000;
     unsigned long seed = argc > 3 ? number(argv[3]) : 1;
     const char *pattern = getenv("FUZZ_GLOB");

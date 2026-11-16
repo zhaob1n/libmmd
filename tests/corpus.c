@@ -14,7 +14,7 @@
 #include "dcfg.h"
 #include "qa/qa.h"
 
-static const char *bin = "build/mmd";
+static const char *bin = "build/release/mmd";
 
 typedef enum expect : uint8_t { RENDERS, FAILS, EITHER } expect;
 typedef struct file {

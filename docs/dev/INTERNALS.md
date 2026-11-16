@@ -49,7 +49,7 @@ Numbers here are historical; see bench/results_v*.txt.
 
 ## Docs syntax corpus
 
-`tests/docs/<doc>/NN.mmd`: all 432 ```` ```mermaid ```` examples from mermaid's `packages/mermaid/src/docs/syntax/*.md` (mermaid 6d8921f, extracted by `build/docs extract`). `build/docs status` asks mermaid.js which of them it renders and records that in `tests/docs/mermaid_status.txt`; `build/sbs <doc>` renders side-by-sides. Every type passes 100% of the examples mermaid itself renders (432/432; examples mermaid rejects would be excluded). `make test` fails on any regression.
+`tests/docs/<doc>/NN.mmd`: all 432 ```` ```mermaid ```` examples from mermaid's `packages/mermaid/src/docs/syntax/*.md` (mermaid 6d8921f, extracted by `build/release/tools/docs extract`). `build/release/tools/docs status` asks mermaid.js which of them it renders and records that in `tests/docs/mermaid_status.txt`; `build/release/tools/sbs <doc>` renders side-by-sides. Every type passes 100% of the examples mermaid itself renders (432/432; examples mermaid rejects would be excluded). `make test` fails on any regression.
 
 ## Fidelity vs mermaid
 
@@ -153,8 +153,8 @@ on the nested-cluster cases checked, ranks and ordering then agree and libmmd's 
 
 ## v3: build options, batch API, routing
 
-- Build: `make` (portable `-O2`), opt-in `-march=native` through `CFLAGS`, `make LTO=1`, `make pgo` (output in `build-pgo/`).
-- Shared library: `build/libmmd.so.0.1.0` (soname `libmmd.so.0`, only `mmd_*` exported); `make install PREFIX=/usr DESTDIR=...` also writes `mmd.pc`.
+- Build: `make` (portable `-O2`), opt-in `-march=native` through `CFLAGS`, LTO through `CFLAGS='-flto=auto -ffat-lto-objects'`, `make pgo` (output in `build/pgo/`). `MODE=debug|asan|msan` builds the same into `build/<mode>/`.
+- Shared library: `build/release/libmmd.so.0.1.0` (soname `libmmd.so.0`, only `mmd_*` exported); `make install PREFIX=/usr DESTDIR=...` also writes `mmd.pc`.
 - Batch rendering: `mmd_context_new()` / `mmd_context_render_svg()` / `mmd_context_free()` reuse the arena and output buffer between calls.
   A context also keeps the theme it last derived (`DThemeMemo` in `src/dcfg.h`): mermaid's engine recomputes about 300
   variables whenever a named theme meets `themeVariables`, 17–50 µs a render (`theme: default` runs `updateColors()`
@@ -205,7 +205,7 @@ on the nested-cluster cases checked, ranks and ordering then agree and libmmd's 
 ## v10
 
 - Faithful dagre compound ranking in dagre mode (`src/drank.c`): nesting graph (border top/bottom nodes, nodeSep weights), network simplex (graphlib iteration order), label proxies, removeEmptyRanks, cleanup, border segments.
-- Ordering agreement with mermaid: 1051/1051. Rank-axis position ordering vs mermaid SVGs: 100%. Cross-axis: 99.1% (`build/agree flow`).
+- Ordering agreement with mermaid: 1051/1051. Rank-axis position ordering vs mermaid SVGs: 100%. Cross-axis: 99.1% (`build/release/tools/agree flow`).
 - Small graphs use arena scratch in `dagre_order`. Small takes 16.9 µs in dagre mode, or 12.8 µs in fast mode. See `bench/results_v10.txt`.
 
 ## v9
@@ -247,18 +247,18 @@ Everything is C and one Makefile; nothing in the tree needs Python or a shell sc
 ```mermaid
 flowchart LR
   src[src/*.c] --> a[libmmd.a] & so[libmmd.so]
-  a --> mmd[build/mmd]
+  a --> mmd[build/release/mmd]
   qa[tools/qa/*.c] --> kit[libqa.a]
-  a & kit --> t["tests/X.c → test-X"] & b["bench/X.c → bench-X"] & d["tools/X.c → X"]
-  so --> ts[test-shared]
+  a & kit --> t["tests/X.c → tests/X"] & b["bench/X.c → bench/X"] & d["tools/X.c → tools/X"]
+  so --> ts[tests/shared]
 ```
 
-- **Makefile.** `CC`, `CPPFLAGS`, `CFLAGS`, `LDFLAGS`, `LDLIBS` belong to the user; what the code needs sits in front of them, so `make CFLAGS=-O3` still builds. A variant is a sub-make into its own `BUILD` directory (`both`, `asan`, `msan`, `oom`, `pgo`); flags are not tracked, so changing them in place needs `make clean`. Header dependencies come from `-MMD`. `mmd.pc` is written by `make install`, where `PREFIX` is final.
+- **Makefile.** `CC`, `CPPFLAGS`, `CFLAGS`, `LDFLAGS`, `LDLIBS` belong to the user; what the code needs sits in front of them, so `make CFLAGS=-O3` still builds. A mode is a directory of its own (`MODE=release|debug|asan|msan`, under `build/`), and the compiler and every flag are tracked in `$(BUILD)/flags`, so changing them rebuilds and two modes never mix; `both`, `asan`, `msan`, `oom` and `pgo` are sub-makes into a `BUILD` of their own. Header dependencies come from `-MMD`. `mmd.pc` is written by `make install`, where `PREFIX` is final.
 - **`-ffp-contract=off`.** With `-march=native` both compilers fused multiply-adds and five outputs of the corpus changed in a late digit (`tests/docs/eventmodeling/08`, `sankey/01`, three of `tests/flow`). Without contraction gcc and clang, `-O2` and `-O3`, generic and native builds all give the same bytes, and the benchmarks do not move.
-- **`LTO=1`** compiles fat objects (`-flto -ffat-lto-objects`): `libmmd.a` keeps machine code, so plain `ar` indexes it and a user's compiler and linker need not match ours. clang gets `-fuse-ld=lld`, the linker that reads its bitcode back. LTO is worth about nothing here; it exists for packagers who build everything that way.
-- **`make pgo`** builds twice in `build-pgo/` (gcc names each profile after the object's path, so a second directory silently finds none) and trains the CLI on every input in the tree. Trained on the flowchart benchmarks alone, the build was slower than `-O2` on every other diagram type: code the profile never saw is optimised for size. Measured over `-O2`: 5–13% with gcc 16, 1–8% with clang 23.
+- **LTO** is a flag like any other: `make CFLAGS='-flto=auto -ffat-lto-objects'` (gcc) or `-flto=thin` (clang). `-ffat-lto-objects` keeps machine code in `libmmd.a`, so plain `ar` indexes it and a user's compiler and linker need not match ours; lld reads clang's fat objects back, mold and wild link their machine code. LTO is worth about nothing here; it exists for packagers who build everything that way.
+- **`make pgo`** builds twice in `build/pgo/` (gcc names each profile after the object's path, so a second directory silently finds none) and trains the CLI on every input in the tree. Trained on the flowchart benchmarks alone, the build was slower than `-O2` on every other diagram type: code the profile never saw is optimised for size. Measured over `-O2`: 5–13% with gcc 16, 1–8% with clang 23.
 - **Tiers.** `make test` is the gate (about a second). `make both` is the warning check. `make asan` and `make msan` run the same tests in sanitizer builds (`-fno-sanitize-recover`, so a report fails the render that made it), `make oom` the allocation-failure test with the arena failing too, `make fuzz` the mutation fuzzer on the ASan build.
 - **`tests/corpus.c`** renders every input in the tree once through the CLI, in parallel, and checks all it can about each: status, sanitizer reports, XML, bounds, golden or hash, CSS. It pins `MMD_TODAY`, so gantt output does not depend on the day the test runs. `UPDATE_GOLDEN=1` rewrites `tests/golden/*.svg` (the 201 cases, reviewable as diffs) and `tests/sums` (a hash per other input: which outputs a change touched).
-- **`tools/qa/`** is the kit the programs share (`qa.h`): child processes with captured output, a thread pool, files and globs, a small strict XML reader (`xml.c`: it is the well-formedness check, so it rejects what XML 1.0 rejects), and a bit-exact `random.Random`. The generators used to be Python; `build/gen` reproduces `bench/inputs/` and `tests/flow/` byte for byte, and a fuzz seed still names the same inputs.
-- **mermaid as reference.** `qa_mermaid()` runs `tools/mermaid_render.mjs`: one browser, mermaid-cli's own mermaid, plugins and page, results cached under `$TMPDIR/mmd-UID/`. It must load the stylesheets mermaid-cli loads: without the Recursive font mermaid measures labels in a fallback font and every node comes out a different size. mermaid-cli, its puppeteer config and Chrome come from `MMDC`, `MMDC_PUPPETEER` and `CHROME`, else `PATH`. Pictures (`build/sbs`) are composed as an HTML page and screenshot by Chrome; there is no image library.
-- **Which mermaid.** mermaid 12 draws most types in a new look and lays some out with another engine unless told otherwise; libmmd draws the classic look with dagre's layout. Every comparison of layout or pictures (`build/agree`, `build/sbs`) therefore renders mermaid with `QA_CLASSIC` (`look: classic, layout: dagre, theme: default`). With mermaid's defaults, flowchart node order agrees 15% instead of 99.9%.
+- **`tools/qa/`** is the kit the programs share (`qa.h`): child processes with captured output, a thread pool, files and globs, a small strict XML reader (`xml.c`: it is the well-formedness check, so it rejects what XML 1.0 rejects), and a bit-exact `random.Random`. The generators used to be Python; `build/release/tools/gen` reproduces `bench/inputs/` and `tests/flow/` byte for byte, and a fuzz seed still names the same inputs.
+- **mermaid as reference.** `qa_mermaid()` runs `tools/mermaid_render.mjs`: one browser, mermaid-cli's own mermaid, plugins and page, results cached under `$TMPDIR/mmd-UID/`. It must load the stylesheets mermaid-cli loads: without the Recursive font mermaid measures labels in a fallback font and every node comes out a different size. mermaid-cli, its puppeteer config and Chrome come from `MMDC`, `MMDC_PUPPETEER` and `CHROME`, else `PATH`. Pictures (`build/release/tools/sbs`) are composed as an HTML page and screenshot by Chrome; there is no image library.
+- **Which mermaid.** mermaid 12 draws most types in a new look and lays some out with another engine unless told otherwise; libmmd draws the classic look with dagre's layout. Every comparison of layout or pictures (`build/release/tools/agree`, `build/release/tools/sbs`) therefore renders mermaid with `QA_CLASSIC` (`look: classic, layout: dagre, theme: default`). With mermaid's defaults, flowchart node order agrees 15% instead of 99.9%.

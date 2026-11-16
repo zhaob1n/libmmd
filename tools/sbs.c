@@ -12,7 +12,7 @@
  *              is quantised to 128 colours with pngquant when that is on PATH, else kept as Chrome
  *              wrote it.
  *   -o OUT     the output directory; with a single input, a name ending in .png is the file itself.
- *   --mmd BIN  the renderer (default build/mmd).
+ *   --mmd BIN  the renderer (default build/release/mmd).
  *   --base REV the renderer of that revision, built in a git worktree: what a change looked like
  *              before, e.g.  sbs --base HEAD -o x_before.png f.mmd; sbs -o x_after.png f.mmd
  * Prints each PNG written, or `ERR file: reason` and goes on; exits 1 when any input failed.
@@ -41,7 +41,7 @@ static struct {
     enum mode mode;
     const char *mmd, *work, *css, *pngquant;
     job *jobs;
-} g = {.mmd = "build/mmd"};
+} g = {.mmd = "build/release/mmd"};
 
 /* REV's renderer, built in a worktree that stays (TMPDIR/mmd-UID/base): what a change looked like before */
 static const char *base_mmd(const char *rev) {
@@ -51,9 +51,11 @@ static const char *base_mmd(const char *rev) {
     char *hash = qa_fmt("%.*s", (int)strcspn(r.out, "\n"), r.out);
     r = access(git, F_OK) == 0 ? qa_exec("git", "-C", wt, "switch", "-q", "--detach", hash)
                                : qa_exec("git", "worktree", "add", "-q", "--detach", wt, hash);
-    if (r.code == 0) r = qa_exec("make", "-s", "-C", wt, "build/mmd");
+    /* the default goal is `all` in both layouts; only the binary's path under it changed */
+    if (r.code == 0) r = qa_exec("make", "-s", "-C", wt);
     if (r.code != 0) qa_die("--base %s:\n%s", rev, r.err);
-    return qa_fmt("%s/build/mmd", wt);
+    char *rel = qa_fmt("%s/build/release/mmd", wt);
+    return access(rel, F_OK) == 0 ? rel : qa_fmt("%s/build/mmd", wt);
 }
 
 static void put_url(qa_buf b[static 1], const char *path) {
