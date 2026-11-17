@@ -185,7 +185,7 @@ install: all
 	ln -sf $(solib) $(DESTDIR)$(LIBDIR)/$(soname)
 	ln -sf $(soname) $(DESTDIR)$(LIBDIR)/libmmd.so
 	sed -e 's|@PREFIX@|$(PREFIX)|' -e 's|@LIBDIR@|$(LIBDIR)|' -e 's|@INCLUDEDIR@|$(INCLUDEDIR)|' \
-	    -e 's|@VERSION@|$(VERSION)|' mmd.pc.in > $(DESTDIR)$(LIBDIR)/pkgconfig/mmd.pc
+	    -e 's|@VERSION@|$(VERSION)|' mmd.pc.in | $(INSTALL_DATA) /dev/stdin $(DESTDIR)$(LIBDIR)/pkgconfig/mmd.pc
 
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/mmd $(DESTDIR)$(INCLUDEDIR)/mmd.h $(DESTDIR)$(LIBDIR)/pkgconfig/mmd.pc \
