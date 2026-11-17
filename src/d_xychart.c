@@ -13,7 +13,14 @@
  *   moves inside the bar instead.
  *   barOverlap — libmmd only. Bar series share the full band instead of sitting side by side,
  *   and a 0 draws neither a bar nor a label, so one series per group (0 elsewhere) colours
- *   bars by group. mermaid.js ignores the key and draws grouped bars; the text still parses. */
+ *   bars by group. mermaid.js ignores the key and draws grouped bars; the text still parses.
+ *   yAxis.scale: log — libmmd only (mermaid #5438 is open). The value axis is log10: ticks at
+ *   the powers of ten (and 2×, 5× in a range under two decades), an automatic range spans the
+ *   decades around the values, bars grow from the range's start; a value or range start at or
+ *   below zero is an error. mermaid.js ignores the key and draws a linear axis.
+ *
+ * Point labels (`540 "PaLM"`): mermaid 12 draws them past a line's points and ignores them on a
+ * bar; libmmd draws a bar's past its end, in the bar's own slot and the data label colour. */
 #include <math.h>
 #include <stdio.h>
 
@@ -67,7 +74,7 @@ static Str take_title(Str s[static 1]) {
             return dg_parse_num((Str){.p = s.p, .n = i}, lo) && dg_parse_num((Str){.p = s.p + i + 3, .n = s.n - i - 3}, hi);
     return false;
 }
-/* "[a, "b, c", d]" -> items */
+/* "[a, "b, c", 3 "d, e"]" -> items; a quote opens at an item's start or after a blank */
 typedef VEC(Str) StrVec;
 
 [[nodiscard]] static bool list(Arena a[static 1], Str s, StrVec v[static 1], bool oom[static 1]) {
@@ -78,12 +85,12 @@ typedef VEC(Str) StrVec;
     while (i < s.n) {
         while (i < s.n && (s.p[i] == ' ' || s.p[i] == '\t')) i++;
         size_t st = i;
-        if (i < s.n && s.p[i] == '"') {
-            const char *q = memchr(s.p + i + 1, '"', s.n - i - 1);
-            if (!q) return false;
-            i = (size_t)(q - s.p) + 1;
-        }
-        while (i < s.n && s.p[i] != ',') i++;
+        for (; i < s.n && s.p[i] != ','; i++)
+            if (s.p[i] == '"' && (i == st || s.p[i - 1] == ' ' || s.p[i - 1] == '\t')) {
+                const char *q = memchr(s.p + i + 1, '"', s.n - i - 1);
+                if (q) i = (size_t)(q - s.p);
+                else if (i == st) return false;
+            }
         Str it = dg_unquote((Str){.p = s.p + st, .n = i - st}, false);
         if (it.n || i < s.n) if (!VEC_PUSH(a, v, it)) { *oom = true; return false; }
         i++;
@@ -148,6 +155,9 @@ static void data_label(Buf out[static 1], const DLab d[static 1], const char fil
     dg_tspans(out, nullptr, dl_str(d), d->fs, d->fs, d->x, d->y, false, d->anchor, d->tb, nullptr);
     buf_lit(out, "</g>");
 }
+/* a point label (`540 "PaLM"`) of series s, 12px, centred on y as dg_text draws it */
+typedef struct PLab { double x, y; const char *anchor; Str t; size_t s; } PLab;
+static BBox pl_box(const PLab d[static 1]) { return dg_tbox(d->t, 12, 18, d->x, d->y, true, d->anchor, TB_MIDDLE); }
 
 DIAG_FN(xychart_render) {
     LineIt it = {.s = src, .n = n, .i = off};
@@ -167,6 +177,7 @@ DIAG_FN(xychart_render) {
     VEC(Series) ser = {};
     double xmin = 0, xmax = 0, ymin = 0, ymax = 0;
     bool xr = false, yr = false, oom = false;
+    const bool logy = str_eq(dcfg_get("xyChart.yAxis.scale"), S("log"));
     while (dg_next_line(&it, &line, &lo)) {
         Str rest = line, w = dg_word(&rest);
         if (str_eq(w, S("title"))) { title = dg_unquote(rest, false); continue; }
@@ -182,6 +193,7 @@ DIAG_FN(xychart_render) {
                 if (!list(a, rest, &cats, &oom)) return oom ? MMD_ERR_NOMEM : diag_fail(err_off, msg, lo, "bad category list");
             } else if (range(rest, isx ? &xmin : &ymin, isx ? &xmax : &ymax)) {
                 if (isx) xr = true; else yr = true;
+                if (!isx && logy && !(ymin > 0)) return diag_fail(err_off, msg, (size_t)(rest.p - src), "a log axis starts above zero");
             } else return diag_fail(err_off, msg, (size_t)(rest.p - src), "expected [categories] or min --> max");
             continue;
         }
@@ -201,6 +213,7 @@ DIAG_FN(xychart_render) {
                     }
                 if (!VEC_PUSH(a, &labs, lab)) return MMD_ERR_NOMEM;
                 if (!dg_parse_num(items.v[i], &d)) return diag_fail(err_off, msg, (size_t)(items.v[i].p - src), "not a number");
+                if (logy && !(d > 0)) return diag_fail(err_off, msg, (size_t)(items.v[i].p - src), "a log axis takes values above zero only");
                 if (!VEC_PUSH(a, &vals, d)) return MMD_ERR_NOMEM;
             }
             s.nv = (uint32_t)items.n;
@@ -213,15 +226,25 @@ DIAG_FN(xychart_render) {
     size_t np = 0;
     for (size_t i = 0; i < ser.n; i++) if (ser.v[i].nv > np) np = ser.v[i].nv;
     if (!np) return diag_fail(err_off, msg, off, "xychart has no data");
-    if (!yr) {
-        ymin = 1e300, ymax = -1e300;
-        for (size_t i = 0; i < vals.n; i++) { if (vals.v[i] < ymin) ymin = vals.v[i]; if (vals.v[i] > ymax) ymax = vals.v[i]; }
-        if (ymin > 0) ymin = 0; /* bars start at zero, so an automatic range takes it in */
-        if (ymax < 0) ymax = 0;
+    double step = 0;
+    if (logy) { /* an automatic range: the decades around the values */
+        if (!yr) {
+            ymin = INFINITY, ymax = 0;
+            for (size_t i = 0; i < vals.n; i++) ymin = fmin(ymin, vals.v[i]), ymax = fmax(ymax, vals.v[i]);
+            ymin = tick_at(1, pow(10, floor(log10(ymin)))), ymax = tick_at(1, pow(10, ceil(log10(ymax))));
+        }
+        if (!(ymax > ymin)) ymax = ymin * 10;
+    } else {
+        if (!yr) {
+            ymin = 1e300, ymax = -1e300;
+            for (size_t i = 0; i < vals.n; i++) { if (vals.v[i] < ymin) ymin = vals.v[i]; if (vals.v[i] > ymax) ymax = vals.v[i]; }
+            if (ymin > 0) ymin = 0; /* bars start at zero, so an automatic range takes it in */
+            if (ymax < 0) ymax = 0;
+        }
+        if (!(ymax > ymin)) ymax = ymin + 1;
+        step = nice((ymax - ymin) / 5);
+        if (!yr) { ymin = floor(ymin / step) * step; ymax = ceil(ymax / step) * step; }
     }
-    if (!(ymax > ymin)) ymax = ymin + 1;
-    double step = nice((ymax - ymin) / 5);
-    if (!yr) { ymin = floor(ymin / step) * step; ymax = ceil(ymax / step) * step; }
     /* categories: explicit, numeric range or 1..n */
     size_t nc = cats.n ? cats.n : np;
     char nb[32];
@@ -244,17 +267,33 @@ DIAG_FN(xychart_render) {
                 }
         }
     }
-    if (!(ymax - ymin > 0) || !isfinite(ymax - ymin) || (xr && !isfinite(xmax - xmin)))
+    const double l0 = logy ? log10(ymin) : ymin, l1 = logy ? log10(ymax) : ymax;
+    if (!(l1 - l0 > 0) || !isfinite(l1 - l0) || !isfinite(ymax - ymin) || (xr && !isfinite(xmax - xmin)))
         return diag_fail(err_off, msg, off, "axis range too large for a double");
-    /* value ticks: the multiples of step inside the range, at most 1001 (counted with an int: past
-     * 2^53 steps from zero, adding 1 to a double tick index changes nothing); the 1e-6 slack
-     * keeps an end tick lost to float noise, not one that lies outside the range */
-    double t0 = ceil(ymin / step - 1e-6), t1 = floor(ymax / step + 1e-6);
-    if (tick_at(t0, step) < ymin - step * 1e-9) t0++;
-    if (tick_at(t1, step) > ymax + step * 1e-9) t1--;
-    const int nt = (int)fmin(t1 - t0, 1000);
+    VEC(double) tk = {};
+    if (logy) {
+        /* value ticks: the powers of ten inside the range, at most 1001; a range under two
+         * decades also gets 2× and 5× */
+        static constexpr double MUL[] = {1, 2, 5};
+        double e0 = floor(l0), e1 = ceil(l1);
+        size_t nm = e1 - e0 <= 2 ? countof(MUL) : 1;
+        for (double e = e0; e <= e1 && tk.n <= 1000; e++)
+            for (size_t m = 0; m < nm; m++) {
+                double v = tick_at(MUL[m], pow(10, e));
+                if (v >= ymin * (1 - 1e-9) && v <= ymax * (1 + 1e-9) && !VEC_PUSH(a, &tk, v)) return MMD_ERR_NOMEM;
+            }
+    } else {
+        /* value ticks: the multiples of step inside the range, at most 1001 (counted with an int:
+         * past 2^53 steps from zero, adding 1 to a double tick index changes nothing); the 1e-6
+         * slack keeps an end tick lost to float noise, not one that lies outside the range */
+        double t0 = ceil(ymin / step - 1e-6), t1 = floor(ymax / step + 1e-6);
+        if (tick_at(t0, step) < ymin - step * 1e-9) t0++;
+        if (tick_at(t1, step) > ymax + step * 1e-9) t1--;
+        for (int k = 0, nt = (int)fmin(t1 - t0, 1000); k <= nt; k++)
+            if (!VEC_PUSH(a, &tk, tick_at(t0 + k, step))) return MMD_ERR_NOMEM;
+    }
     double tl = 0;
-    for (int k = 0; k <= nt; k++) tl = fmax(tl, text_width((Str){.p = nb, .n = fmt_js(tick_at(t0 + k, step), nb)}, 14));
+    for (size_t k = 0; k < tk.n; k++) tl = fmax(tl, text_width((Str){.p = nb, .n = fmt_js(tk.v[k], nb)}, 14));
     /* vertical: value axis on the left; horizontal: the x labels on the left */
     double catw = 0;
     for (size_t i = 0; horiz && i < nc; i++)
@@ -265,7 +304,8 @@ DIAG_FN(xychart_render) {
     if (dl_out && !horiz && ymax > 0) oy += 24;
     double pw = PW, ph = horiz ? PH + 50 : PH;
     double vlen = horiz ? pw : ph, clen = horiz ? ph : pw, band = clen / (double)nc;
-#define VPOS(v) (horiz ? ox + ((v) - ymin) / (ymax - ymin) * vlen : oy + ph - ((v) - ymin) / (ymax - ymin) * vlen)
+#define VFRAC(v) (((logy ? log10(v) : (v)) - l0) / (l1 - l0))
+#define VPOS(v) (horiz ? ox + VFRAC(v) * vlen : oy + ph - VFRAC(v) * vlen)
 #define CPOS(i) (horiz ? oy + band * ((double)(i) + 0.5) : ox + band * ((double)(i) + 0.5))
     /* vertical category labels wider than their band wrap at spaces; a chart whose labels all fit
      * keeps today's single line and the same box */
@@ -343,22 +383,47 @@ DIAG_FN(xychart_render) {
             bi++;
         }
     }
-    /* gutter between the plot and the legend, so an outside label past a full bar is not covered */
+    /* point labels (`540 "PaLM"`): mermaid draws them past a line's points only; libmmd also past
+     * the far end of a bar, in the bar's own slot */
+    PLab *pl = nullptr;
+    size_t npl = 0;
+    for (size_t s = 0, bi = 0; s < ser.n; bi += !ser.v[s].line, s++)
+        for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
+            Str l = labs.v[ser.v[s].v0 + k];
+            if (!l.n) continue;
+            if (!pl && !(pl = ANEW(a, PLab, vals.n))) return MMD_ERR_NOMEM;
+            double p = VPOS(vals.v[ser.v[s].v0 + k]), c = CPOS(k);
+            PLab *d = &pl[npl++];
+            *d = (PLab){.t = l, .s = s};
+            if (ser.v[s].line) {
+                if (horiz) d->x = p + 6, d->y = c, d->anchor = "start";
+                else d->x = c, d->y = p - 10, d->anchor = "middle";
+                continue;
+            }
+            R2 r = bar_geom(horiz, overlap, nbar, bi, band, base, p, c);
+            bool up = horiz ? p >= base : p <= base;
+            if (horiz) d->x = up ? r.x + r.w + 10 : r.x - 10, d->y = r.y + r.h / 2, d->anchor = up ? "start" : "end";
+            else d->x = r.x + r.w / 2, d->y = up ? r.y - 10 : r.y + r.h + 10, d->anchor = "middle";
+        }
+    /* gutter between the plot and the legend, so a label past a full bar is not covered */
     double gutter = 0;
     for (size_t i = 0; i < ndl && dl_out && horiz; i++) gutter = fmax(gutter, dl_box(&dl[i]).x1 - (ox + pw));
+    for (size_t i = 0; i < npl && horiz; i++) gutter = fmax(gutter, pl_box(&pl[i]).x1 - (ox + pw));
     if (gutter > 0) gutter += 8;
     char dlfill[64];
     memcpy(dlfill, "#131300", 8);
-    if (show_dl) {
-        Str dlc = dcfg_tv("xyChart.dataLabelColor");
-        if (dlc.n && dlc.n < sizeof dlfill) memcpy(dlfill, dlc.p, dlc.n), dlfill[dlc.n] = 0;
-    }
+    Str dlc = dcfg_tv("xyChart.dataLabelColor");
+    if (dlc.n && dlc.n < sizeof dlfill) memcpy(dlfill, dlc.p, dlc.n), dlfill[dlc.n] = 0;
     /* legend for named series, right of the plot */
     double legw = 0;
     for (size_t s = 0; s < ser.n; s++) if (ser.v[s].name.n) legw = fmax(legw, text_width(ser.v[s].name, 14) + 40);
     BBox bb = {0, 0, ox + pw + 20 + gutter + legw, oy + ph + 60 + cat_extra};
     for (size_t i = 0; i < ndl; i++) {
         BBox t = dl_box(&dl[i]);
+        bb_add(&bb, t.x0, t.y0, t.x1, t.y1);
+    }
+    for (size_t i = 0; i < npl; i++) {
+        BBox t = pl_box(&pl[i]);
         bb_add(&bb, t.x0, t.y0, t.x1, t.y1);
     }
     if (!buf_reserve(out, 4096 + vals.n * 200 + nc * 200)) return MMD_ERR_NOMEM;
@@ -389,23 +454,19 @@ DIAG_FN(xychart_render) {
         }
         buf_lit(out, "\"/>");
     }
-    for (size_t s = 0; s < ser.n; s++) /* per-point labels, above the point / bar end */
-        for (uint32_t k = 0; k < ser.v[s].nv && k < nc; k++) {
-            Str l = labs.v[ser.v[s].v0 + k];
-            if (!l.n) continue;
-            double p = VPOS(vals.v[ser.v[s].v0 + k]), c = CPOS(k);
-            buf_lit(out, "<g font-size=\"12\" fill=\""); buf_cstr(out, ser.v[s].col); buf_lit(out, "\">");
-            if (horiz) dg_text(out, l, 12, p + 6, c, "start", nullptr);
-            else dg_text(out, l, 12, c, p - 10, "middle", nullptr);
-            buf_lit(out, "</g>");
-        }
+    for (size_t i = 0; i < npl; i++) { /* bar labels in the data label colour: a bar can be pale */
+        const Series *s = &ser.v[pl[i].s];
+        buf_lit(out, "<g font-size=\"12\" fill=\""); buf_cstr(out, s->line ? s->col : dlfill); buf_lit(out, "\">");
+        dg_text(out, pl[i].t, 12, pl[i].x, pl[i].y, pl[i].anchor, nullptr);
+        buf_lit(out, "</g>");
+    }
     /* axes: x is the category axis (left in a horizontal chart), y the value axis; each carries its
      * own class so the xyChart.{x,y}Axis*Color variables reach it */
     const char *vx = horiz ? "ax x" : "ax y", *cx = horiz ? "ax y" : "ax x";
     dg_line(out, ox, oy, ox, oy + ph, vx);
     dg_line(out, ox, oy + ph, ox + pw, oy + ph, cx);
-    for (int k = 0; k <= nt; k++) {
-        double v = tick_at(t0 + k, step), p = VPOS(v);
+    for (size_t k = 0; k < tk.n; k++) {
+        double v = tk.v[k], p = VPOS(v);
         Str t = {.p = nb, .n = fmt_js(v, nb)};
         if (horiz) { dg_line(out, p, oy + ph, p, oy + ph + 5, "tk y"); dg_text(out, t, 14, p, oy + ph + 16, "middle", "tl y"); }
         else { dg_line(out, ox - 5, p, ox, p, "tk y"); dg_text(out, t, 14, ox - 8, p, "end", "tl y"); }
@@ -434,6 +495,7 @@ DIAG_FN(xychart_render) {
         }
     }
 #undef VPOS
+#undef VFRAC
 #undef CPOS
     Str bottom = horiz ? yt : xt, side = horiz ? xt : yt;
     if (bottom.n) dg_text(out, bottom, 16, ox + pw / 2, oy + ph + 42 + cat_extra, "middle", horiz ? "at y" : "at x");
