@@ -97,7 +97,7 @@ static void table(size_t n, const row rows[static n]) {
     if (!z) qa_die("README.md: no %s ... %s", open, close);
     qa_buf o = {};
     qa_put(&o, (size_t)(a - s) + strlen(open), s);
-    qa_puts(&o, "| input | libmmd | mmdr 0.3.1 | mermaid-cli 11.17 |\n|---|---:|---:|---:|\n");
+    qa_puts(&o, "| input | libmmd | mmdr 0.3.1 | mermaid-cli 12.0 |\n|---|---:|---:|---:|\n");
     for (size_t i = 0; i < n; i++) {
         const double *m = rows[i].ms;
         qa_putf(&o, "| %s (%s) | ", rows[i].input, rows[i].source);

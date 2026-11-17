@@ -4,8 +4,8 @@ A fast [Mermaid](https://mermaid.js.org) renderer written in C (`-std=gnu2y`).
 It turns Mermaid source into SVG. It works as a command-line tool (`mmd`) and as a small C library (`libmmd`).
 It needs no browser, no Node.js, no JavaScript engine and no dependencies beyond libc and libm.
 
-- About **0.6–1.6 ms per diagram from the CLI**. mermaid-cli takes about 0.9–1.6 s for the same diagrams (see [Benchmarks](#benchmarks)).
-- Library renders take about **15 µs** for a small flowchart and about **0.5 ms** for a 4 KB one.
+- About **0.3–0.9 ms per diagram from the CLI**. mermaid-cli takes about 0.4–1.1 s for the same diagrams (see [Benchmarks](#benchmarks)).
+- Library renders take about **18 µs** for a small flowchart and about **0.7 ms** for a 4 KB one.
 - Flowchart layout follows dagre's algorithm, so node positions match mermaid's closely (mean node-centre error 1.6 px on the fixture set).
 - All 432 syntax examples from mermaid's documentation render here (mermaid itself renders each of them).
 
@@ -164,39 +164,39 @@ Which context each diagram slot takes is in [docs/dev/writer.md](docs/dev/writer
 
 ## Benchmarks
 
-All numbers below were measured on the same 8-vCPU Intel Xeon VM. Times are wall-clock for a whole process run, including process start-up. Each value is the best of N runs: N = 20 for libmmd, 5 for mmdr and 3 for mmdc.
+All numbers below were measured on an AMD Ryzen 9 7945HX. Times are wall-clock for a whole process run, including process start-up. Each value is the best of 3 runs. Both native renderers were built with native CPU instructions and maximum optimization (`libmmd`: `clang -O3 -march=native`; `mmdr`: `cargo release target-cpu=native`).
 
 The tools compared are:
 - `mmd`: this project;
 - **mermaid-rs-renderer** (`mmdr` 0.3.1, Rust);
-- **mermaid-cli** (`mmdc` 11.17.0, headless Chrome).
+- **mermaid-cli** (`mmdc` 12.0.0, headless Chrome).
 
-The run was made on 2026-10-23.
+The run was made on 2026-11-17.
 
 ![CLI benchmark chart](docs/bench.svg)
 
 The chart shows how many times slower than libmmd each tool is; the table has the times, with the same ratios in brackets. Data: [`bench/cli_times.csv`](bench/cli_times.csv). `build/release/bench/chart` writes both, and libmmd draws the chart.
 
 <!-- bench-table -->
-| input | libmmd | mmdr 0.3.1 | mermaid-cli 11.17 |
+| input | libmmd | mmdr 0.3.1 | mermaid-cli 12.0 |
 |---|---:|---:|---:|
-| flowchart_small (mmdr fixture) | 0.59 ms | 29.1 ms (49×) | 917 ms (1554×) |
-| flowchart_medium (mmdr fixture) | 0.78 ms | 137 ms (175×) | 1064 ms (1364×) |
-| flowchart_large (mmdr fixture) | 1.56 ms | 437 ms (280×) | 1583 ms (1015×) |
-| flowchart_mega_event_mesh (mmdr fixture) | 0.96 ms | 1777 ms (1851×) | 1017 ms (1059×) |
-| seq_full (tests/cases) | 0.59 ms | 3.15 ms (5.3×) | 860 ms (1458×) |
-| class_full (tests/cases) | 0.72 ms | 9.64 ms (13×) | 1124 ms (1561×) |
+| flowchart_small (mmdr fixture) | 0.44 ms | 27.9 ms (63×) | 608 ms (1382×) |
+| flowchart_medium (mmdr fixture) | 0.45 ms | 98.5 ms (219×) | 720 ms (1600×) |
+| flowchart_large (mmdr fixture) | 0.89 ms | 276 ms (310×) | 1095 ms (1230×) |
+| flowchart_mega_event_mesh (mmdr fixture) | 0.56 ms | 388 ms (692×) | 748 ms (1336×) |
+| seq_full (tests/cases) | 0.31 ms | 1.67 ms (5.4×) | 455 ms (1468×) |
+| class_full (tests/cases) | 0.42 ms | 5.95 ms (14×) | 831 ms (1979×) |
 <!-- /bench-table -->
 
 Rendering in-process through the library, timed with `build/release/bench/render` (minimum over repeated renders, clang build, from [`bench/results_v14.txt`](bench/results_v14.txt) and [`bench/results_libmmd_inproc.txt`](bench/results_libmmd_inproc.txt)):
 
 | input | size in → SVG out | time |
 |---|---|---:|
-| `bench/inputs/small.mmd` | 376 B → 9 KB | 14.9 µs |
-| `bench/inputs/medium.mmd` | 4.4 KB → 80 KB | 527 µs |
-| `bench/mmdr_fixtures/flowchart_large.mmd` | 6.4 KB → 75 KB | 214 µs |
-| `bench/inputs/large.mmd` | 44 KB → 1.2 MB | 9.3 ms |
-| `bench/inputs/xlarge.mmd` | 143 KB → 4.7 MB | 56 ms |
+| `bench/inputs/small.mmd` | 376 B → 8.2 KB | 17.5 µs |
+| `bench/inputs/medium.mmd` | 4.4 KB → 66 KB | 703 µs |
+| `bench/mmdr_fixtures/flowchart_large.mmd` | 6.4 KB → 67 KB | 430 µs |
+| `bench/inputs/large.mmd` | 44 KB → 641 KB | 13.4 ms |
+| `bench/inputs/xlarge.mmd` | 143 KB → 2.0 MB | 80.6 ms |
 
 [`bench/results_fixtures.txt`](bench/results_fixtures.txt) has library and CLI times against mmdr for all 31 mmdr flowchart fixtures. To reproduce:
 
