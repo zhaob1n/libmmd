@@ -1,8 +1,8 @@
 /* bench-chart: regenerate docs/bench.svg and the README CLI table from bench/cli_times.csv.
  * usage: build/release/bench/chart
  * The chart is a libmmd xychart on a log axis: per input, the wall-clock ms of libmmd, mmdr and
- * mermaid-cli, each rival's bar labelled with its ratio to libmmd (a linear axis would leave libmmd's
- * bars under a pixel). The README table between the <!-- bench-table --> markers gives the same. */
+ * mermaid-cli, each rival's bar labelled with its ratio to libmmd. The README table between the
+ * <!-- bench-table --> markers gives the same. */
 #include "mmd.h"
 #include "qa/qa.h"
 

@@ -14,7 +14,7 @@
  *   barOverlap — libmmd only. Bar series share the full band instead of sitting side by side,
  *   and a 0 draws neither a bar nor a label, so one series per group (0 elsewhere) colours
  *   bars by group. mermaid.js ignores the key and draws grouped bars; the text still parses.
- *   yAxis.scale: log — libmmd only (mermaid #5438 is open). The value axis is log10: ticks at
+ *   yAxis.scale: log — libmmd only. The value axis is log10: ticks at
  *   the powers of ten (and 2×, 5× in a range under two decades), an automatic range spans the
  *   decades around the values, bars grow from the range's start; a value or range start at or
  *   below zero is an error. mermaid.js ignores the key and draws a linear axis.
