@@ -118,7 +118,7 @@ $(dirs):
 # `make LDFLAGS=-fuse-ld=mold` only links again, a source that is added or deleted compiles
 # nothing else but puts the libraries together again, and none of these mixes old with new.
 sig.cflags  := $(strip $(CC) $(cflags))
-sig.ldflags := $(strip $(sig.cflags) $(ldflags) $(libs) $(LINK) $(soname) $(objs) $(qa))
+sig.ldflags := $(strip $(sig.cflags) $(ldflags) $(libs) $(AR) $(LINK) $(soname) $(objs) $(qa))
 cstamp      := $(BUILD)/cflags
 lstamp      := $(BUILD)/ldflags
 ifneq ($(sig.cflags),$(file <$(cstamp)))
