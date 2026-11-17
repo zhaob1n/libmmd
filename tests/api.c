@@ -1,4 +1,5 @@
-/* Links against libmmd.so: checks exported API incl. context reuse. */
+/* The API as a program uses it: one-shot and context renders agree, a context's kept theme, and
+ * the theme a caller passes. */
 #include <stdio.h>
 #include <string.h>
 #include "mmd.h"
@@ -64,6 +65,6 @@ int main(void) {
         mmd_buffer_free(&api);
         mmd_buffer_free(&named);
     }
-    puts("shared: ok");
+    puts("api: ok");
     return 0;
 }

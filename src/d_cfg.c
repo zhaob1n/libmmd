@@ -491,7 +491,7 @@ bool dcfg_neo(void) {
 /* themeVariable -> CSS template ('$' = value), for the classes the renderers emit; kind "*" applies to
  * every diagram. Per kind, the variables mermaid's styles for that diagram read, so a variable the
  * source sets without naming a theme changes what it changes in mermaid; later rows win, as mermaid's
- * `a || b` fallbacks do. tests/corpus.c fails on a selector no element carries. */
+ * `a || b` fallbacks do. tests/internal/corpus.c fails on a selector no element carries. */
 const DThemeRule DCFG_TVS[] = {
     {"*", "fontFamily", "#mermaid{font-family:$;}"},
     {"*", "fontSize", "#mermaid{font-size:$;}"},

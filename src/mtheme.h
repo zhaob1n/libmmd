@@ -2,7 +2,7 @@
  * generated from mermaid's own sources into src/mtheme_gen.h (tools/gen_mtheme.mjs), over the
  * khroma colour maths they call (src/mcolor.c). mtheme_get() answers with the value mermaid's
  * themes[id].getThemeVariables(overrides) holds, but for nested overrides (below);
- * tests/mtheme.c checks every variable of ~1000 override sets against mermaid itself. */
+ * tests/internal/mtheme.c checks every variable of ~1000 override sets against mermaid itself. */
 #pragma once
 #include "base.h"
 

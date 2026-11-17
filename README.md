@@ -62,10 +62,11 @@ Per-type feature notes are in [docs/dev/INTERNALS.md](docs/dev/INTERNALS.md).
 
 ## Build
 
-You need GNU make 4.2 or later and a C compiler that takes `-std=gnu2y`: **gcc** 15 or later, or a recent **clang** (developed with gcc 16 and clang 23). `make` uses `cc`; where that is an older compiler, name a newer one with `CC=`. Nothing else is needed: the tests, the benchmarks and the developer tools are C programs too.
+You need GNU make 4.3 or later and a C compiler that takes `-std=gnu2y`: **gcc** 15 or later, or a recent **clang** (developed with gcc 16 and clang 23). `make` uses `cc`; where that is an older compiler, name a newer one with `CC=`. Nothing else is needed: the tests, the benchmarks and the developer tools are C programs too.
 
 ```sh
 make                                  # build/release/mmd, build/release/libmmd.a, build/release/libmmd.so
+make LINK=shared                      # mmd uses libmmd.so instead of holding a copy of libmmd.a
 make CC=clang CFLAGS='-O2 -march=native' LDFLAGS=-fuse-ld=mold
 make pgo                              # profile-guided build in build/pgo/
 make install PREFIX=/usr DESTDIR=pkg  # mmd, mmd.h, both libraries, mmd.pc (make uninstall removes them)

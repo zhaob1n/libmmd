@@ -5,7 +5,6 @@
 #include <string.h>
 
 #include "mmd.h"
-#include "base.h"
 
 [[noreturn]] static void usage(int code) {
     fputs("usage: mmd [-i input.mmd|-] [-o output.svg|-] [-t default|dark|forest|neutral] [--no-avoid]\n", code ? stderr : stdout);
@@ -14,25 +13,29 @@
 
 [[nodiscard]] static char *slurp(FILE *f, size_t len[static 1]) {
     size_t cap = 1 << 16, n = 0;
-    AUTOFREE char *p = malloc(cap);
+    char *p = malloc(cap);
     if (!p) return nullptr;
     for (;;) {
         if (cap - n < 4096) {
             char *np = realloc(p, cap * 2);
-            if (!np) return nullptr;
+            if (!np) break;
             p = np;
             cap *= 2;
         }
         size_t r = fread(p + n, 1, cap - n, f);
         n += r;
         if (r == 0) {
-            if (ferror(f)) return nullptr;
-            break;
+            if (ferror(f)) break;
+            *len = n;
+            return p;
         }
     }
-    *len = n;
-    return TAKE_PTR(p);
+    free(p);
+    return nullptr;
 }
+
+static void freep(char *p[static 1]) { free(*p); }
+static void fclosep(FILE *f[static 1]) { if (*f) fclose(*f); }
 
 static void svg_freep(mmd_buffer *b) { mmd_buffer_free(b); }
 
@@ -56,9 +59,9 @@ int main(int argc, char **argv) {
         else usage(2);
     }
     size_t n = 0;
-    AUTOFREE char *src = nullptr;
+    [[gnu::cleanup(freep)]] char *src = nullptr;
     {
-        AUTOCLOSE FILE *fin = strcmp(in, "-") ? fopen(in, "rb") : nullptr;
+        [[gnu::cleanup(fclosep)]] FILE *fin = strcmp(in, "-") ? fopen(in, "rb") : nullptr;
         if (!fin && strcmp(in, "-")) { fprintf(stderr, "mmd: %s: %s\n", in, strerror(errno)); return 1; }
         src = slurp(fin ? fin : stdin, &n);
     }
@@ -71,11 +74,11 @@ int main(int argc, char **argv) {
         else fprintf(stderr, "mmd: %s: %s\n", in, err.message);
         return 1;
     }
-    AUTOCLOSE FILE *fout = strcmp(outp, "-") ? fopen(outp, "wb") : nullptr;
+    FILE *fout = strcmp(outp, "-") ? fopen(outp, "wb") : nullptr;
     if (!fout && strcmp(outp, "-")) { fprintf(stderr, "mmd: %s: %s\n", outp, strerror(errno)); return 1; }
     FILE *o = fout ? fout : stdout;
     bool ok = fwrite(svg.data, 1, svg.len, o) == svg.len;
-    ok = (fout ? fclose(TAKE_PTR(fout)) : fflush(o)) == 0 && ok;
+    ok = (fout ? fclose(o) : fflush(o)) == 0 && ok;
     if (!ok) { fprintf(stderr, "mmd: write failed\n"); return 1; }
     return 0;
 }

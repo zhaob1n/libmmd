@@ -1,4 +1,4 @@
-// Cases for tests/mtheme.c from mermaid's own themes: blocks of
+// Cases for tests/internal/mtheme.c from mermaid's own themes: blocks of
 //   = <theme> <n>                       then n lines  <key> \t <value>  (the overrides), then
 //   lines <key> \t <value> of every variable getThemeVariables(overrides) yields (flattened, dotted
 //   for nested objects, String(v)), or the single line "!" where it throws.

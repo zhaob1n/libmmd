@@ -1,14 +1,15 @@
 # libmmd: Mermaid diagrams to SVG, in C.
-# Needs GNU make 4.2 and a C compiler with -std=gnu2y: gcc 15 or later, or a recent clang.
+# Needs GNU make 4.3 and a C compiler with -std=gnu2y: gcc 15 or later, or a recent clang.
 #
 #   make                      release build: library, shared library and CLI into build/release/
 #   make MODE=debug           the same unoptimised, into build/debug/
+#   make LINK=shared          the CLI and the programs use libmmd.so, not a copy of libmmd.a
 #   make CC=clang CFLAGS=-march=native LDFLAGS=-fuse-ld=mold
 #   make install [PREFIX=/usr] [DESTDIR=...]
 #   make test                 what has to pass before a merge
 #   make tools                every test, benchmark and developer program
 #   make both [GCC=gcc] [CLANG=clang]   both compilers' builds of everything, warnings as errors
-#   make asan | msan | oom    the tests under sanitizers and under allocation failure
+#   make asan | msan | oom    the tests under sanitizers, with libmmd.so, and under allocation failure
 #   make fuzz [N=1000] [SEED=1]
 #   make pgo                  profile-guided build into build/pgo/
 #
@@ -16,27 +17,20 @@
 # on builds again with the defaults, and `sudo make install` would do that as root. Settings
 # that are meant to last go in config.mk (CC = clang, CFLAGS = -O3, PREFIX = /usr); the command
 # line still wins over it.
-#
-# Link-time optimisation is a flag like any other, and the user's: CFLAGS reach the link too.
-#   make CFLAGS='-flto=auto -ffat-lto-objects'
-#   make CC=clang CFLAGS='-flto=thin -ffat-lto-objects' LDFLAGS=-fuse-ld=lld
-# -ffat-lto-objects is for a libmmd.a that gets installed: it keeps machine code beside the
-# compiler's own format, so any compiler and linker can still use it. lld reads clang's fat
-# objects back for LTO; mold links their machine code instead, so with mold leave the flag out.
-# The linker is one too: LDFLAGS=-fuse-ld=mold, and the same for wild, lld or bfd. gcc knows
-# wild by that name from 16 on; before that, LDFLAGS=-B<a directory where ld is wild>.
 
 VERSION := 0.1.0
 SOMAJOR := 0
 
-# optional, and the user's: see above
 -include config.mk
 
 PREFIX     ?= /usr/local
 BINDIR     ?= $(PREFIX)/bin
 LIBDIR     ?= $(PREFIX)/lib
 INCLUDEDIR ?= $(PREFIX)/include
-INSTALL    ?= install
+# INSTALL_PROGRAM='install -s' strips mmd and libmmd.so as they are installed
+INSTALL         ?= install
+INSTALL_PROGRAM ?= $(INSTALL)
+INSTALL_DATA    ?= $(INSTALL) -m644
 
 MODE  ?= release
 BUILD ?= build/$(MODE)
@@ -46,18 +40,22 @@ BUILD ?= build/$(MODE)
 MAKEFLAGS += -r
 
 # ---- modes ----
-# A mode is a set of optimisation flags and a directory of its own, so two modes never mix.
 # release: speed and size that cost a user of the library nothing. Each function and object gets
 # its own section and the link drops the ones nothing reaches, also from a program that links
 # libmmd.a; calls between the library's exported functions are bound, and inlined, as within a
 # program, not left open to LD_PRELOAD.
-# asan and msan are what the targets of those names build with.
+# -z defs: a libmmd.so that does not bring in what it uses itself (libm) fails to link. Not with
+# the sanitizers, whose runtime clang leaves to the program.
 mode.release := -O2 -fno-semantic-interposition -ffunction-sections -fdata-sections
-link.release := -Wl,--gc-sections
+link.release := -Wl,--gc-sections -Wl,-z,defs
 mode.debug   := -O0 -g3 -fno-omit-frame-pointer
+link.debug   := -Wl,-z,defs
 san          := -O1 -g -fno-omit-frame-pointer -fno-sanitize-recover=all
 mode.asan    := $(san) -fsanitize=address,undefined
-mode.msan    := $(san) -fsanitize=memory -fsanitize-memory-track-origins
+# gnu2: clang keeps values in xmm16-31 across a call to __tls_get_addr, and MemorySanitizer's
+# interceptor of it overwrites them (with AVX-512, libmmd.so read its theme numbers as 0).
+# TLS descriptors do not call it.
+mode.msan    := $(san) -fsanitize=memory -fsanitize-memory-track-origins -mtls-dialect=gnu2
 ifndef mode.$(MODE)
 $(error MODE=$(MODE): expected release, debug, asan or msan)
 endif
@@ -67,18 +65,49 @@ endif
 # user's, and win. `make CFLAGS=-O3` is a release build at -O3.
 # -ffp-contract=off: with fused multiply-adds (-march=native) some layouts come out a digit apart,
 # and the same source has to give the same SVG on every machine.
+# --as-needed: every link is given -lm, and a program that calls nothing in it, mmd with libmmd.so
+# for one, should not name it.
 flags   := -std=gnu2y -fms-extensions -fno-math-errno -ffp-contract=off -fPIC -fvisibility=hidden \
-           -Wall -Wextra -Wno-microsoft-anon-tag -Iinclude -Isrc -Itools -MMD -MP $(mode.$(MODE))
+           -Wall -Wextra -Wno-microsoft-anon-tag -Iinclude -Itools -MMD -MP $(mode.$(MODE))
 cflags  = $(flags) $(CPPFLAGS) $(CFLAGS)
-ldflags = $(link.$(MODE)) $(LDFLAGS)
+ldflags = -Wl,--as-needed $(link.$(MODE)) $(LDFLAGS)
 libs    = -lm $(LDLIBS)
+# The library's own headers are for the library and the tests of its insides. Everything else is
+# built as a user of the library is, from include/mmd.h.
+priv.src/            := -Isrc
+priv.tests/internal/ := -Isrc
+
+# ---- linking ----
+# The CLI, the tests, the tools and the benchmarks hold a copy of libmmd.a, and are linked again
+# when it changes. LINK=shared makes them use libmmd.so: linked after it (|), and again only when
+# their own objects, the flags or its soname change. They get no RUNPATH, so by hand they run
+# with LD_LIBRARY_PATH=build/release.
+# tests/internal always has libmmd.a: those tests call what libmmd.so does not export, or wrap
+# the malloc it calls.
+LINK ?= static
+soname       := libmmd.so.$(SOMAJOR)
+solib        := libmmd.so.$(VERSION)
+lib.shared   := $(BUILD)/libmmd.so
+lib.static   := $(BUILD)/libmmd.a
+after.shared := |
+ifndef lib.$(LINK)
+$(error LINK=$(LINK): expected shared or static)
+endif
+libmmd := $(lib.$(LINK))
 
 # ---- layout ----
-# What gets installed sits at the top of $(BUILD): libmmd.a, libmmd.so*, mmd.
-# Everything else is where its source is: DIR/NAME.c gives $(BUILD)/DIR/NAME.o or $(BUILD)/DIR/NAME.
-dirs := $(addprefix $(BUILD)/,src tools/qa tests bench)
-objs := $(patsubst %.c,$(BUILD)/%.o,$(sort $(wildcard src/*.c)))
-qa   := $(patsubst %.c,$(BUILD)/%.o,$(sort $(wildcard tools/qa/*.c)))
+src.lib   := $(wildcard src/*.c)
+src.qa    := $(wildcard tools/qa/*.c)
+src.test  := $(wildcard tests/*.c)
+src.itest := $(wildcard tests/internal/*.c)
+src.prog  := $(wildcard tools/*.c bench/*.c)
+srcs      := $(src.lib) $(src.qa) $(src.test) $(src.itest) $(src.prog) bin/mmd.c
+objs      := $(src.lib:%.c=$(BUILD)/%.o)
+qa        := $(src.qa:%.c=$(BUILD)/%.o)
+tests     := $(src.test:%.c=$(BUILD)/%)
+itests    := $(src.itest:%.c=$(BUILD)/%)
+progs     := $(src.prog:%.c=$(BUILD)/%)
+dirs      := $(addprefix $(BUILD)/,src bin tools/qa tests/internal bench)
 $(dirs):
 	mkdir -p $@
 
@@ -89,7 +118,7 @@ $(dirs):
 # `make LDFLAGS=-fuse-ld=mold` only links again, a source that is added or deleted compiles
 # nothing else but puts the libraries together again, and none of these mixes old with new.
 sig.cflags  := $(strip $(CC) $(cflags))
-sig.ldflags := $(strip $(sig.cflags) $(ldflags) $(libs) $(objs) $(qa))
+sig.ldflags := $(strip $(sig.cflags) $(ldflags) $(libs) $(LINK) $(soname) $(objs) $(qa))
 cstamp      := $(BUILD)/cflags
 lstamp      := $(BUILD)/ldflags
 ifneq ($(sig.cflags),$(file <$(cstamp)))
@@ -104,65 +133,55 @@ $(cstamp) $(lstamp): | $(dirs)
 FORCE:
 
 # ---- the library ----
-soname := libmmd.so.$(SOMAJOR)
-solib  := libmmd.so.$(VERSION)
-libqa  := $(BUILD)/tools/qa/libqa.a
+libqa := $(BUILD)/tools/qa/libqa.a
 
 all: $(BUILD)/libmmd.a $(BUILD)/libmmd.so $(BUILD)/mmd
-link = $(CC) $(cflags) $(ldflags) $(filter %.c %.a,$^) $(libs) -o $@
 
-$(objs) $(qa): $(BUILD)/%.o: %.c $(cstamp)
-	$(CC) $(cflags) -c $< -o $@
+$(srcs:%.c=$(BUILD)/%.o): $(BUILD)/%.o: %.c $(cstamp)
+	$(CC) $(priv.$(dir $<)) $(cflags) -c $< -o $@
 # rm: ar only adds, and would keep the object of a source that has since been renamed or deleted.
 # $(lstamp) lists the objects, so a deletion that changes nothing else gets here too.
 $(BUILD)/libmmd.a: $(objs) $(lstamp)
 	rm -f $@
-	$(AR) rcs $@ $(filter %.o,$^)
+	$(AR) rcs $@ $(objs)
 $(BUILD)/$(solib): $(objs) $(lstamp)
-	$(CC) $(cflags) $(ldflags) -shared -Wl,-soname,$(soname) $(filter %.o,$^) $(libs) -o $@
+	$(CC) $(cflags) $(ldflags) -shared -Wl,-soname,$(soname) $(objs) $(libs) -o $@
 $(BUILD)/$(soname): $(BUILD)/$(solib)
 	ln -sf $(<F) $@
 $(BUILD)/libmmd.so: $(BUILD)/$(soname)
 	ln -sf $(<F) $@
-$(BUILD)/mmd: tools/mmd.c $(BUILD)/libmmd.a $(lstamp)
-	$(link)
+$(BUILD)/mmd: $(BUILD)/bin/mmd.o $(lstamp) $(after.$(LINK)) $(libmmd)
+	$(CC) $(cflags) $(ldflags) $< $(libmmd) $(libs) -o $@
 
 # ---- test, benchmark and developer programs ----
-# One source each, linked with the static library and the kit they share (tools/qa).
-tools := $(patsubst %.c,$(BUILD)/%,$(filter-out tools/mmd.c,$(wildcard tools/*.c)))
-tests := $(patsubst %.c,$(BUILD)/%,$(wildcard tests/*.c))
-bench := $(patsubst %.c,$(BUILD)/%,$(wildcard bench/*.c))
-
-tools: all $(tools) $(tests) $(bench)
+tools: all $(tests) $(itests) $(progs)
 
 $(libqa): $(qa) $(lstamp)
 	rm -f $@
-	$(AR) rcs $@ $(filter %.o,$^)
-$(filter-out $(BUILD)/tests/shared,$(tools) $(tests) $(bench)): $(BUILD)/%: %.c $(libqa) $(BUILD)/libmmd.a $(lstamp)
-	$(link)
-# as a user of the installed library links it: -lmmd and no -lm, so that a libmmd.so which does
-# not bring in what it needs itself fails here
-$(BUILD)/tests/shared: tests/shared.c $(BUILD)/libmmd.so $(lstamp)
-	$(CC) $(cflags) $(ldflags) $< -L$(BUILD) -lmmd $(LDLIBS) -Wl,-rpath,'$$ORIGIN/..' -o $@
-# tests/oom.c fails the library's allocations one at a time
-$(BUILD)/tests/oom: private ldflags += -Wl,--wrap=malloc,--wrap=calloc,--wrap=realloc
+	$(AR) rcs $@ $(qa)
+$(tests) $(progs): $(BUILD)/%: $(BUILD)/%.o $(libqa) $(lstamp) $(after.$(LINK)) $(libmmd)
+	$(CC) $(cflags) $(ldflags) $< $(libqa) $(libmmd) $(libs) -o $@
+$(itests): $(BUILD)/%: $(BUILD)/%.o $(libqa) $(BUILD)/libmmd.a $(lstamp)
+	$(CC) $(cflags) $(ldflags) $< $(libqa) $(BUILD)/libmmd.a $(libs) -o $@
+# tests/internal/oom.c fails the library's allocations one at a time
+$(BUILD)/tests/internal/oom: private ldflags += -Wl,--wrap=malloc,--wrap=calloc,--wrap=realloc
 
--include $(objs:.o=.d) $(qa:.o=.d) $(addsuffix .d,$(BUILD)/mmd $(tools) $(tests) $(bench))
+-include $(srcs:%.c=$(BUILD)/%.d)
 
-# for clangd: the commands above, without running them. Written afresh each time it is asked for:
-# it changes with the compiler, the flags and the list of sources, and takes no time.
+# for clangd; written afresh each time, as it follows the compiler, the flags and the sources
 comma  := ,
-ccjson  = {"directory": "$(CURDIR)", "file": "$1", "command": "$(CC) $(cflags) -c $1"}
+json    = $(subst ",\",$(subst \,\\,$1))
+ccjson  = {"directory": "$(call json,$(CURDIR))", "file": "$1", "command": "$(call json,$(CC) $(priv.$(dir $1)) $(cflags) -c $1)"}
 compile_commands.json: FORCE
-	$(file >$@,[$(subst } {,}$(comma) {,$(strip $(foreach s,$(wildcard src/*.c tools/*.c tools/qa/*.c tests/*.c bench/*.c),$(call ccjson,$s))))])
+	$(file >$@,[$(subst } {,}$(comma) {,$(strip $(foreach s,$(srcs),$(call ccjson,$s))))])
 
 # ---- install ----
 install: all
 	$(INSTALL) -d $(DESTDIR)$(BINDIR) $(DESTDIR)$(INCLUDEDIR) $(DESTDIR)$(LIBDIR)/pkgconfig
-	$(INSTALL) -m755 $(BUILD)/mmd $(DESTDIR)$(BINDIR)/
-	$(INSTALL) -m644 include/mmd.h $(DESTDIR)$(INCLUDEDIR)/
-	$(INSTALL) -m644 $(BUILD)/libmmd.a $(DESTDIR)$(LIBDIR)/
-	$(INSTALL) -m755 $(BUILD)/$(solib) $(DESTDIR)$(LIBDIR)/
+	$(INSTALL_PROGRAM) $(BUILD)/mmd $(DESTDIR)$(BINDIR)/
+	$(INSTALL_DATA) include/mmd.h $(DESTDIR)$(INCLUDEDIR)/
+	$(INSTALL_DATA) $(BUILD)/libmmd.a $(DESTDIR)$(LIBDIR)/
+	$(INSTALL_PROGRAM) $(BUILD)/$(solib) $(DESTDIR)$(LIBDIR)/
 	ln -sf $(solib) $(DESTDIR)$(LIBDIR)/$(soname)
 	ln -sf $(soname) $(DESTDIR)$(LIBDIR)/libmmd.so
 	sed -e 's|@PREFIX@|$(PREFIX)|' -e 's|@LIBDIR@|$(LIBDIR)|' -e 's|@INCLUDEDIR@|$(INCLUDEDIR)|' \
@@ -173,70 +192,85 @@ uninstall:
 	      $(addprefix $(DESTDIR)$(LIBDIR)/,libmmd.a libmmd.so $(soname) $(solib))
 
 # ---- tests ----
+# With LINK=shared, a recipe that runs what it built says where libmmd.so is: $(out), which is
+# $(BUILD) but for the targets further down that build somewhere of their own.
+out     = $(BUILD)
+ldpath := $(LD_LIBRARY_PATH)
+export LD_LIBRARY_PATH = $(abspath $(out))$(ldpath:%=:%)
 corpus := tests/cases/*.mmd tests/docs/*/*.mmd
 
-test: all $(tests)
-	$(BUILD)/tests/corpus $(BUILD)/mmd
-	$(BUILD)/tests/shared
+test: all $(tests) $(itests)
+	$(BUILD)/tests/internal/corpus $(BUILD)/mmd
+	$(BUILD)/tests/api
 	$(BUILD)/tests/locale $(corpus)
 	$(BUILD)/tests/writer
-	$(BUILD)/tests/d3fmt tests/d3fmt_cases.tsv
-	$(BUILD)/tests/mtheme tests/mtheme_cases.tsv
-	$(BUILD)/tests/oom $(corpus)
+	$(BUILD)/tests/internal/d3fmt tests/d3fmt_cases.tsv
+	$(BUILD)/tests/internal/mtheme tests/mtheme_cases.tsv
+	$(BUILD)/tests/internal/oom $(corpus)
 
 # The targets below build somewhere of their own. BUILD is spelled out for each, since one given
 # on the command line reaches the sub-make too; CFLAGS and the rest reach it as the user's.
 # both and msan say which compiler as well: that is GCC and CLANG, not CC.
+# asan, msan and fuzz say LINK=shared: `make test` holds libmmd.a, where a function that mmd.h
+# forgot to export links all the same.
 GCC   ?= gcc
 CLANG ?= clang
 
-both:
-	$(MAKE) CC=$(GCC) BUILD=build/gcc CFLAGS='$(CFLAGS) -Werror' tools
-	$(MAKE) CC=$(CLANG) BUILD=build/clang CFLAGS='$(CFLAGS) -Werror' tools
+both: both.gcc both.clang
+both.gcc:   cc = $(GCC)
+both.clang: cc = $(CLANG)
+both.gcc both.clang: both.%:
+	$(MAKE) CC=$(cc) BUILD=build/$* CFLAGS='$(CFLAGS) -Werror' tools
+
+asan fuzz: out := build/asan
+msan:      out := build/msan
+oom:       out := build/oom
 
 # The second half fills what malloc returns with a byte: output that changes with it was read
 # from the arena before it was written. 0xA5 makes tiny negative doubles, 0x41 large positive ones.
 asan:
-	$(MAKE) MODE=asan BUILD=build/asan test
+	$(MAKE) MODE=asan BUILD=$(out) LINK=shared test
 	for b in 165 65; do \
-	    ASAN_OPTIONS=max_malloc_fill_size=1073741824:malloc_fill_byte=$$b build/asan/tests/corpus build/asan/mmd || exit; \
+	    ASAN_OPTIONS=max_malloc_fill_size=1073741824:malloc_fill_byte=$$b $(out)/tests/internal/corpus $(out)/mmd || exit; \
 	done
 
-# MemorySanitizer is clang's.
 msan:
-	$(MAKE) CC=$(CLANG) MODE=msan BUILD=build/msan test
+	$(MAKE) CC=$(CLANG) MODE=msan BUILD=$(out) LINK=shared test
 
 # `make test` fails each malloc; with MMD_FAULT_INJECT the arena's allocations fail too.
 oom:
-	$(MAKE) MODE=asan BUILD=build/oom CPPFLAGS='$(CPPFLAGS) -DMMD_FAULT_INJECT' build/oom/tests/oom
-	build/oom/tests/oom $(corpus)
+	$(MAKE) MODE=asan BUILD=$(out) CPPFLAGS='$(CPPFLAGS) -DMMD_FAULT_INJECT' $(out)/tests/internal/oom
+	$(out)/tests/internal/oom $(corpus)
 
 N    ?= 1000
 SEED ?= 1
 fuzz:
-	$(MAKE) MODE=asan BUILD=build/asan build/asan/mmd build/asan/tools/fuzz
-	build/asan/tools/fuzz build/asan/mmd $(N) $(SEED)
+	$(MAKE) MODE=asan BUILD=$(out) LINK=shared $(out)/mmd $(out)/tools/fuzz
+	$(out)/tools/fuzz $(out)/mmd $(N) $(SEED)
 
 # ---- profile-guided build ----
 # A release build trained on the CLI rendering every input in the tree; CC, CFLAGS and LDFLAGS go
 # with it. gcc names a profile after the object's path, so both stages build in the same
 # directory. Only the CLI is trained: the other programs have a main() the profile does not fit.
-# The compiler is asked what it is, since cc can be either, and only when this target runs.
+# The compiler is asked what it is, since cc can be either, and only when this target is asked for.
 # A training run may fail, as some inputs are meant to. That none of them left a profile may
 # not: gcc would build on without one and say nothing.
-pgo.dir   := $(abspath build/pgo)/profile
-pgo.clang  = $(findstring clang,$(shell $(CC) --version 2>/dev/null))
-pgo.use    = $(if $(pgo.clang),-Wno-backend-plugin,-fprofile-partial-training -Wno-missing-profile)
+ifneq ($(filter pgo,$(MAKECMDGOALS)),)
+pgo.clang := $(findstring clang,$(shell $(CC) --version 2>/dev/null))
+endif
+pgo.use = $(if $(pgo.clang),-Wno-backend-plugin,-fprofile-partial-training -Wno-missing-profile)
+pgo: out := build/pgo
+pgo: pgo.dir = $(abspath $(out))/profile
 pgo:
-	rm -rf build/pgo
-	$(MAKE) MODE=release BUILD=build/pgo CFLAGS='$(CFLAGS) -fprofile-generate=$(pgo.dir)' build/pgo/mmd
-	for f in $(corpus) tests/flow/*.mmd bench/*/*.mmd; do build/pgo/mmd $$f >/dev/null 2>&1 || :; done
+	rm -rf $(out)
+	$(MAKE) MODE=release BUILD=$(out) CFLAGS='$(CFLAGS) -fprofile-generate=$(pgo.dir)' $(out)/mmd
+	for f in $(corpus) tests/flow/*.mmd bench/*/*.mmd; do $(out)/mmd $$f >/dev/null 2>&1 || :; done
 	@test -n "$$(find $(pgo.dir) -name '*.gcda' -o -name '*.profraw' 2>/dev/null)" || \
 	    { echo 'pgo: the training runs left no profile in $(pgo.dir)' >&2; exit 1; }
-	$(if $(pgo.clang),$(shell $(CC) -print-prog-name=llvm-profdata) merge -o $(pgo.dir)/default.profdata $(pgo.dir))
-	$(MAKE) MODE=release BUILD=build/pgo CFLAGS='$(CFLAGS) -fprofile-use=$(pgo.dir) $(pgo.use)' all build/pgo/bench/render
+	$(if $(pgo.clang),$$($(CC) -print-prog-name=llvm-profdata) merge -o $(pgo.dir)/default.profdata $(pgo.dir))
+	$(MAKE) MODE=release BUILD=$(out) CFLAGS='$(CFLAGS) -fprofile-use=$(pgo.dir) $(pgo.use)' all $(out)/bench/render
 
 clean:
 	rm -rf build
 
-.PHONY: all tools install uninstall test both asan msan oom fuzz pgo clean FORCE
+.PHONY: all tools install uninstall test both both.gcc both.clang asan msan oom fuzz pgo clean FORCE
