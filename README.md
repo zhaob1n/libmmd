@@ -178,7 +178,7 @@ The run was made on 2026-11-17.
 
 ![CLI benchmark chart](docs/bench.svg)
 
-The chart shows how many times slower than libmmd each tool is; the table has the times, with the same ratios in brackets. Data: [`bench/cli_times.csv`](bench/cli_times.csv). `build/release/bench/chart` writes both, and libmmd draws the chart.
+The chart shows each tool's CLI time on a log axis, each rival's bar labelled with how many times slower than libmmd it is; the table has the same numbers. Data: [`bench/cli_times.csv`](bench/cli_times.csv). `build/release/bench/chart` writes both, and libmmd draws the chart.
 
 <!-- bench-table -->
 | input | libmmd | mmdr 0.3.1 | mermaid-cli 12.0 |
