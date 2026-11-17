@@ -22,8 +22,8 @@ static void build(mmd_writer *w, const double bar[static N], const double line[s
     mmd_xy_begin(w, "Latency per request size", false);
     mmd_xy_x_range(w, "request", 1, N);
     mmd_xy_y_range(w, "µs", 0, 0);
-    mmd_xy_bar(w, "p50", N, bar);
-    mmd_xy_line(w, "p99", N, line);
+    mmd_xy_bar(w, "p50", N, bar, nullptr);
+    mmd_xy_line(w, "p99", N, line, nullptr);
 }
 
 /* what a hand-written helper does: round-trip safe, but not shortest, and no escaping */

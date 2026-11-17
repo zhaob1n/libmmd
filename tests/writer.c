@@ -374,9 +374,11 @@ static int typed(unsigned iters) {
         mmd_xy_x_cats(w, L[5], 4, cats);
         mmd_xy_y_range(w, L[6], 0, 1e-3 * (it + 1));
         double v[4] = {1e-4 * it, 3.25e-4, 1e-7, 7.5e-4};
-        mmd_xy_bar(w, L[7], 4, v);
-        mmd_xy_line(w, nullptr, 4, v);
-        bad += !shows("xychart helpers", w, 8, L);
+        rnd_label(L[8], false), strcat(L[8], "Pt");
+        rnd_label(L[9], false), strcat(L[9], "PtBar"); /* mermaid draws no bar label: writer_check skips *Bar */
+        mmd_xy_bar(w, L[7], 4, v, (const char *[]){nullptr, nullptr, L[9], nullptr});
+        mmd_xy_line(w, nullptr, 4, v, (const char *[]){nullptr, L[8], nullptr, nullptr});
+        bad += !shows("xychart helpers", w, 10, L);
 
         mmd_writer_reset(w);
         rnd_label(L[0], false), strcat(L[0], "Pie");
@@ -588,9 +590,9 @@ static void bad_call(mmd_writer *w, int k) {
     case 12: mmd_flow_edge(w, "a", "end", nullptr); break;
     case 13: mmd_pie_slice(w, "a", -1); break;
     case 14: mmd_flow_node(w, "a", nullptr, (mmd_shape)99); break;
-    case 15: mmd_xy_bar(w, nullptr, 1, (const double[]){NAN}); break;
+    case 15: mmd_xy_bar(w, nullptr, 1, (const double[]){NAN}, nullptr); break;
     case 16: mmd_xy_x_cats(w, nullptr, 0, nullptr); break; /* mermaid's [] needs an item */
-    case 17: mmd_xy_line(w, "l", 0, nullptr); break;
+    case 17: mmd_xy_line(w, "l", 0, nullptr, nullptr); break;
     case 18: mmd_end(w); break; /* nothing open */
     case 19: mmd_seq_block(w, "else", nullptr); break; /* outside alt */
     case 20: mmd_gantt_task(w, "t", "done", 0, nullptr, 1); break; /* id reads as a tag */
@@ -682,8 +684,8 @@ static int config_round(void) {
     mmd_xy_begin(w, "Groups", true);
     const char *cats[] = {"a", "b"};
     mmd_xy_x_cats(w, nullptr, 2, cats);
-    mmd_xy_bar(w, "g1", 2, (double[]){3, 0});
-    mmd_xy_bar(w, "g2", 2, (double[]){0, 4});
+    mmd_xy_bar(w, "g1", 2, (double[]){3, 0}, nullptr);
+    mmd_xy_bar(w, "g2", 2, (double[]){0, 4}, nullptr);
     const char *s;
     size_t n;
     mmd_error e = {};

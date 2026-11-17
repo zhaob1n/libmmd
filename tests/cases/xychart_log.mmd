@@ -1,0 +1,8 @@
+%%{init: {"xyChart": {"yAxis": {"scale": "log"}}}}%%
+xychart horizontal
+    title "CLI time"
+    x-axis [small, "large, dense"]
+    y-axis "ms, log scale"
+    bar fast [0.44 "0.44 ms", 0.89 "0.89 ms"]
+    bar slow [27.88 "27.9 ms (63×)", 275.86 "276 ms, 310×"]
+    bar slowest [608 "608 ms (1382×)", 1095 "1095 ms (1230×)"]
