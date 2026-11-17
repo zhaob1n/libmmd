@@ -5,10 +5,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #define MMD_API [[gnu::visibility("default")]]
 
 /* ---- rendering: Mermaid text to SVG ---- */
@@ -56,7 +52,7 @@ typedef struct mmd_options {
 
 /* Render Mermaid source (n bytes, need not be NUL-terminated) to SVG.
  * opt may be nullptr. err may be nullptr. On success *out owns a buffer. */
-MMD_API mmd_status mmd_render_svg(size_t n, const char *src,
+MMD_API mmd_status mmd_render_svg(size_t n, const char src[n],
                                         const mmd_options *opt,
                                         mmd_buffer *out, mmd_error *err);
 
@@ -72,7 +68,7 @@ MMD_API void mmd_context_free(mmd_context *ctx);
 /* On success *svg (NUL-terminated, *len bytes) is owned by ctx and stays
  * valid until the next call on ctx or mmd_context_free. Not thread-safe per
  * ctx; use one context per thread. */
-MMD_API mmd_status mmd_context_render_svg(mmd_context *ctx, size_t n, const char *src,
+MMD_API mmd_status mmd_context_render_svg(mmd_context *ctx, size_t n, const char src[n],
                                                 const mmd_options *opt, const char **svg, size_t *len,
                                                 mmd_error *err);
 
@@ -133,14 +129,14 @@ MMD_API void mmd_w_config(mmd_writer *w, const char *key, const char *value);
 /* ---- typed helpers: each writes whole lines ---- */
 /* xychart; title may be nullptr */
 MMD_API void mmd_xy_begin(mmd_writer *w, const char *title, bool horizontal);
-MMD_API void mmd_xy_x_cats(mmd_writer *w, const char *title, size_t n, const char *const *cats);
+MMD_API void mmd_xy_x_cats(mmd_writer *w, const char *title, size_t n, const char *const cats[n]);
 /* lo == hi leaves the range automatic */
 MMD_API void mmd_xy_x_range(mmd_writer *w, const char *title, double lo, double hi);
 MMD_API void mmd_xy_y_range(mmd_writer *w, const char *title, double lo, double hi);
 /* labels (nullable, as is each entry) puts a label after a value: `540 "PaLM"`. mermaid draws it
  * past a line's point and ignores it on a bar; libmmd draws it past the bar's end too. */
-MMD_API void mmd_xy_bar(mmd_writer *w, const char *name, size_t n, const double *v, const char *const *labels);
-MMD_API void mmd_xy_line(mmd_writer *w, const char *name, size_t n, const double *v, const char *const *labels);
+MMD_API void mmd_xy_bar(mmd_writer *w, const char *name, size_t n, const double v[n], const char *const labels[n]);
+MMD_API void mmd_xy_line(mmd_writer *w, const char *name, size_t n, const double v[n], const char *const labels[n]);
 
 MMD_API void mmd_pie_begin(mmd_writer *w, const char *title, bool show_data);
 MMD_API void mmd_pie_slice(mmd_writer *w, const char *label, double v);
@@ -258,7 +254,4 @@ MMD_API void mmd_git_checkout(mmd_writer *w, const char *name);
 MMD_API void mmd_git_merge(mmd_writer *w, const char *name, const char *id, const char *tag, mmd_commit type);
 MMD_API void mmd_git_cherry_pick(mmd_writer *w, const char *id);
 
-#ifdef __cplusplus
-}
-#endif
 #endif

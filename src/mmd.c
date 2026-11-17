@@ -188,7 +188,7 @@ static mmd_status render(Arena ap[static 1], Buf bp[static 1], DThemeMemo *memo,
     return st;
 }
 
-mmd_status mmd_render_svg(size_t n, const char *src, const mmd_options *opt, mmd_buffer *out,
+mmd_status mmd_render_svg(size_t n, const char src[n], const mmd_options *opt, mmd_buffer *out,
                           mmd_error *err) {
     if (out) *out = (mmd_buffer){};
     if (!out) return MMD_ERR_EMPTY;
@@ -221,7 +221,7 @@ void mmd_context_free(mmd_context *c) {
     free(c);
 }
 
-mmd_status mmd_context_render_svg(mmd_context *c, size_t n, const char *src, const mmd_options *opt,
+mmd_status mmd_context_render_svg(mmd_context *c, size_t n, const char src[n], const mmd_options *opt,
                                   const char **svg, size_t *len, mmd_error *err) {
     if (svg) *svg = nullptr;
     if (len) *len = 0;
