@@ -125,7 +125,7 @@ builds the text and escapes every value for its context, so a label can hold any
 mmd_writer *w = mmd_writer_new();
 mmd_xy_begin(w, "Latency", false);
 mmd_xy_x_cats(w, nullptr, 3, (const char *[]){"1 KiB", "64 KiB", "1 MiB"});
-mmd_xy_bar(w, "p50 µs", 3, (double[]){12.5, 40.25, 610});
+mmd_xy_bar(w, "p50 µs", 3, (double[]){12.5, 40.25, 610}, nullptr);
 const char *text; size_t len;
 if (mmd_writer_text(w, &text, &len, nullptr) == MMD_OK)     /* save it as a .mmd... */
     fwrite(text, 1, len, stdout);
@@ -139,7 +139,10 @@ before the diagram (`mmd_w_config(w, "xyChart.showDataLabel", "true")`). XY char
 `xyChart.showDataLabel`, `xyChart.showDataLabelOutsideBar` (value inside the bar, or past its
 end), `xyChart.barOverlap` (libmmd only: several `bar` series share the full band, and a `0`
 draws nothing, so one series per group colours the bars; mermaid.js still parses the text and
-draws the series side by side), `xyChart.width` / `xyChart.height`. A vertical chart wraps a
+draws the series side by side), `xyChart.yAxis.scale: log` (libmmd only: a log10 value axis, for
+values that span orders of magnitude; mermaid.js draws a linear one), `xyChart.width` /
+`xyChart.height`. A point label (`mmd_xy_bar(w, name, n, v, labels)`, text `540 "PaLM"`) is
+drawn past a line's point, and by libmmd past a bar's end too. A vertical chart wraps a
 category label at spaces when it is wider than its band.
 
 Typed helpers cover xychart (`mmd_xy_*`), pie, flowchart, sequence (`mmd_seq_*`), gantt, state,

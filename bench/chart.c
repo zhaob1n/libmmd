@@ -81,7 +81,7 @@ static void chart(size_t n, const row rows[static n]) {
     mmd_xy_begin(w, "CLI time per diagram, relative to libmmd (lower is better)", true);
     mmd_xy_x_cats(w, nullptr, n, cats);
     mmd_xy_y_range(w, "rival CLI time / libmmd CLI time", 0, ceil(top * 1.12 / 100) * 100);
-    for (size_t k = 0; k < countof(RIVALS); k++) mmd_xy_bar(w, RIVALS[k], n, v[k]);
+    for (size_t k = 0; k < countof(RIVALS); k++) mmd_xy_bar(w, RIVALS[k], n, v[k], nullptr);
     mmd_buffer svg = {};
     mmd_error err = {};
     if (mmd_writer_render_svg(w, nullptr, &svg, &err) != MMD_OK)

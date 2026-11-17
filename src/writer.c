@@ -439,7 +439,8 @@ void mmd_xy_y_range(mmd_writer *w, const char *title, double lo, double hi) {
     if (live(w)) range(w, "y-axis", title, lo, hi);
 }
 
-static void series(mmd_writer w[static 1], const char kw[static 1], const char *name, size_t n, const double *v) {
+static void series(mmd_writer w[static 1], const char kw[static 1], const char *name, size_t n, const double *v,
+                   const char *const *labels) {
     if (!live(w)) return;
     if (!n) return fail(w, w->b.n, "mmd_xy_%s: mermaid needs at least one value", kw);
     axis(w, kw, name);
@@ -447,12 +448,20 @@ static void series(mmd_writer w[static 1], const char kw[static 1], const char *
     for (size_t i = 0; i < n; i++) {
         if (i) mmd_w_raw(w, ", ");
         mmd_w_num(w, v[i]);
+        if (labels && labels[i] && *labels[i]) {
+            mmd_w_raw(w, " ");
+            mmd_w_str(w, labels[i], 0);
+        }
     }
     mmd_w_raw(w, "]");
     eol(w);
 }
-void mmd_xy_bar(mmd_writer *w, const char *name, size_t n, const double *v) { series(w, "bar", name, n, v); }
-void mmd_xy_line(mmd_writer *w, const char *name, size_t n, const double *v) { series(w, "line", name, n, v); }
+void mmd_xy_bar(mmd_writer *w, const char *name, size_t n, const double *v, const char *const *labels) {
+    series(w, "bar", name, n, v, labels);
+}
+void mmd_xy_line(mmd_writer *w, const char *name, size_t n, const double *v, const char *const *labels) {
+    series(w, "line", name, n, v, labels);
+}
 
 void mmd_pie_begin(mmd_writer *w, const char *title, bool show_data) {
     if (!live(w)) return;
