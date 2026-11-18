@@ -62,7 +62,7 @@ Per-type feature notes are in [docs/dev/INTERNALS.md](docs/dev/INTERNALS.md).
 
 ## Build
 
-You need GNU make 4.3 or later and a C compiler that takes `-std=gnu2y`: **gcc** 15 or later, or a recent **clang** (developed with gcc 16 and clang 23). `make` uses `cc`; where that is an older compiler, name a newer one with `CC=`. Nothing else is needed: the tests, the benchmarks and the developer tools are C programs too.
+You need GNU make 4.3 or later and a C compiler that takes `-std=gnu2y` (e.g. GCC 15+ or Clang 23+).
 
 ```sh
 make                                  # build/release/mmd, build/release/libmmd.a, build/release/libmmd.so
@@ -73,7 +73,15 @@ make install PREFIX=/usr DESTDIR=pkg  # mmd, mmd.h, both libraries, mmd.pc (make
 make test                             # what a change has to pass; about a second
 ```
 
-`CC`, `CPPFLAGS`, `CFLAGS`, `LDFLAGS` and `LDLIBS` are yours; the flags the code needs are added before them. The build has zero warnings under `-Wall -Wextra` with both gcc and clang: `make both` builds everything with each of them, warnings as errors. The same source gives the same SVG bytes whatever the compiler, the optimisation level or the CPU.
+Persistent build settings go in `config.mk` (recommended workflow):
+
+```make
+# this configuration yields the best performance on my machine
+CC = clang
+CFLAGS = -O3 -march=native
+LDFLAGS = -fuse-ld=wild
+PREFIX = /usr
+```
 
 ## CLI
 
