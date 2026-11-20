@@ -406,7 +406,6 @@ static bool engine(void) {
      * overrides as given */
     if (!eng && !cur_a->oom) eng = mtheme_preset(eng_id);
     eng_base = mtheme_preset(base_id);
-    if (!eng || !eng_base) cur_a->oom = true, eng = nullptr; /* render() reports it */
     return eng;
 }
 
@@ -436,16 +435,12 @@ Str dcfg_tv(const char var[static 1]) {
 
 Str dcfg_theme_var(const char var[static 1]) {
     Str k = {.p = var, .n = strlen(var)}, user = user_tv(k);
-    const MTheme *t = engine() ? eng : mtheme_preset(eng_id);
     if (user.n && !eng_user) return css_safe(user);
-    if (!t) cur_a->oom = true;
-    return t ? css_safe(mtheme_get(t, k)) : (Str){};
+    return css_safe(mtheme_get(engine() ? eng : mtheme_preset(eng_id), k));
 }
 
 Str dcfg_preset_var(const char var[static 1]) {
-    const MTheme *t = mtheme_preset(eng_id);
-    if (!t) cur_a->oom = true;
-    return t ? css_safe(mtheme_get(t, (Str){.p = var, .n = strlen(var)})) : (Str){};
+    return css_safe(mtheme_get(mtheme_preset(eng_id), (Str){.p = var, .n = strlen(var)}));
 }
 
 bool dcfg_dark(void) { return str_eq(dcfg_theme_var("darkMode"), S("true")); }

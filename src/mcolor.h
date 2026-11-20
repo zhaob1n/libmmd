@@ -38,5 +38,4 @@ void mc_adjust(const MColor col[static 1], MCAmounts am, MColor out[static 1]);
 void mc_lighten(const MColor col[static 1], double amount, MColor out[static 1]); /* darken: -amount */
 void mc_invert(const MColor col[static 1], double weight, MColor out[static 1]);
 bool mc_is_dark(const MColor col[static 1]);
-void mc_rgba(double r, double g, double b, double alpha, MColor out[static 1]);
 [[nodiscard]] bool mc_js_number(Str s, double out[static 1]);

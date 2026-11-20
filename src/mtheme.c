@@ -1,118 +1,116 @@
 /* mtheme.c: the runtime under mermaid's themes, which src/mtheme_gen.h (tools/gen_mtheme.mjs)
- * holds as C: a theme object (string keys, JavaScript values), the JavaScript operators the
- * themes use, the khroma calls (src/mcolor.c), and the calculate() variants. See mtheme.h. */
+ * holds as C: the theme object, a slot for each variable mermaid's themes know and a list for any
+ * other; the JavaScript operators updateColors() uses; the khroma calls (src/mcolor.c), on colours
+ * kept parsed; and the calculate() variants. See mtheme.h. */
 #include "mtheme.h"
 #include "mcolor.h"
 
 #include <math.h>
-#include <stdatomic.h>
-#include <stdlib.h>
 #include <string.h>
 
-typedef enum : unsigned char { V_UNDEF, V_STR, V_NUM, V_BOOL } VKind;
-typedef struct Val { VKind k; bool b; double num; Str s; } Val;
-#define VUNDEF ((Val){.k = V_UNDEF})
+/* a JavaScript value; V_COL is a string khroma made or read, kept as khroma parses it. A string
+ * is p and n, n beside k so that a Val is two words. */
+typedef enum : unsigned char { V_UNDEF, V_STR, V_NUM, V_BOOL, V_COL } VKind;
+typedef struct Val {
+    VKind k;
+    uint32_t n;
+    union { bool b; double num; const char *p; MColor *c; };
+} Val;
+static_assert(sizeof(Val) == 16);
+#define VUNDEF ((Val){})
+#define VS(lit) {.k = V_STR, .n = sizeof(lit) - 1, .p = (lit)}
+#define VN(d) {.k = V_NUM, .num = (d)}
+#define VB(x) {.k = V_BOOL, .b = (x)}
 
-typedef struct Prop { Str key; uint32_t h; Val val; } Prop; /* key.p == nullptr: a free slot */
+enum { NONE = 0xffff, MAX_VARS = 512 };
+typedef struct Key { unsigned slot; Str name; } Key; /* slot NONE: a variable outside the slots */
+typedef struct Extra { Str key; Val v; } Extra;
 
-enum { SLOTS = 1024, MAX_ROOTS = 16 }; /* the themes hold about 300 variables */
-
-struct MTheme {
+/* the object getThemeVariables() builds: this[key] is v[slot], or an extra */
+typedef struct Th {
     Arena *a;
-    Prop *v; /* open addressing, linear probing */
-    size_t n;
-    Str roots[MAX_ROOTS]; /* keys that hold an object: "xyChart", "radar" ... */
-    unsigned nroots;
-    bool ok; /* false once a khroma call fails (mermaid throws there) or the table is full */
+    Val *v;
+    bool *obj;      /* the slot's name holds an object: "xyChart", "radar" ... */
+    VEC(Extra) x;
+    VEC(Str) xobj;  /* the names outside the slots that hold an object */
+    bool ok;        /* false once khroma throws (mermaid throws there) or past MAX_VARS */
+    MColor dummy;   /* what a khroma call that throws reads on */
+} Th;
+
+typedef struct Obj { uint16_t root, lo, hi; } Obj;               /* its fields: slots lo..hi-1 */
+typedef struct Fam { Str prefix; uint16_t n; const uint16_t *slot; } Fam; /* this[prefix + i] */
+typedef enum Calc : unsigned char { CALC_COPY, CALC_COPY_GRADIENT } Calc;
+
+/* the variables as strings: V_STR, a colour (V_COL) printed on first read, or V_UNDEF */
+struct MTheme {
+    const Val *v; /* per slot */
+    size_t nx;
+    const Extra *x;
 };
+
+typedef struct ThemeDef {
+    const Val *init; /* the variables its constructor leaves */
+    void (*update)(Th[static 1]);
+    Calc calc;
+    MTheme preset;
+    unsigned nroots;
+    const uint16_t *roots; /* the objects in init */
+} ThemeDef;
 
 /* ---- the object ---- */
 
-static uint32_t hash(Str key) { /* FNV-1a; tools/gen_mtheme.mjs hashes the literal keys the same way */
-    uint32_t h = 2166136261u;
-    for (size_t i = 0; i < key.n; i++) h = (h ^ (unsigned char)key.p[i]) * 16777619u;
-    return h;
+#define G(s) (t->v[s])
+static void drop(Th t[static 1], unsigned s);
+
+/* this[key] = v, key a slot that holds no object's field: a plain value replaces an object */
+[[gnu::noinline]] static void put(Th t[static 1], unsigned s, Val v) {
+    if (MMD_UNLIKELY(t->obj[s])) drop(t, s);
+    t->v[s] = v;
 }
 
-typedef struct Key { Str s; uint32_t h; } Key;
-#define K(lit, hv) ((Key){.s = S(lit), .h = (hv)})
-static Key key_of(Str s) { return (Key){.s = s, .h = hash(s)}; }
-
-/* the slot holding key, or the free slot where it would go */
-static size_t find(const MTheme t[static 1], Key k) {
-    size_t i = k.h & (SLOTS - 1);
-    while (t->v[i].key.p && (t->v[i].h != k.h || !str_eq(t->v[i].key, k.s))) i = (i + 1) & (SLOTS - 1);
-    return i;
-}
-
-static Val get(const MTheme t[static 1], Key k) {
-    const Prop *p = &t->v[find(t, k)];
-    return p->key.p ? p->val : VUNDEF;
+/* this[root][field] = v, the field's slot s */
+static void putf(Th t[static 1], unsigned s, unsigned root, Val v) {
+    if (v.k != V_UNDEF) t->obj[root] = true;
+    t->v[s] = v;
 }
 
 static bool is_field(Str k, Str of) { return k.n > of.n && k.p[of.n] == '.' && !memcmp(k.p, of.p, of.n); }
 
-static void unset(MTheme t[static 1], size_t i) { /* backward-shift deletion keeps probe runs whole */
-    t->v[i].key.p = nullptr;
-    t->n--;
-    for (size_t j = (i + 1) & (SLOTS - 1); t->v[j].key.p; j = (j + 1) & (SLOTS - 1)) {
-        size_t home = t->v[j].h & (SLOTS - 1);
-        if (((j - home) & (SLOTS - 1)) < ((j - i) & (SLOTS - 1))) continue; /* still reachable */
-        t->v[i] = t->v[j], t->v[j].key.p = nullptr, i = j;
-    }
+static Extra *xfind(Th t[static 1], Str key) {
+    for (size_t i = 0; i < t->x.n; i++)
+        if (str_eq(t->x.v[i].key, key)) return &t->x.v[i];
+    return nullptr;
 }
 
-static unsigned root_of(const MTheme t[static 1], Str key) { /* its index in roots, nroots if none */
-    unsigned r = 0;
-    while (r < t->nroots && !str_eq(t->roots[r], key)) r++;
-    return r;
+static size_t xobj_of(const Th t[static 1], Str key) { /* its index in xobj, xobj.n if none */
+    size_t i = 0;
+    while (i < t->xobj.n && !str_eq(t->xobj.v[i], key)) i++;
+    return i;
 }
 
-/* delete key and, when it held an object, the object's fields ("key.*") */
-static void drop(MTheme t[static 1], Key k) {
-    size_t i = find(t, k);
-    if (t->v[i].key.p) unset(t, i);
-    unsigned r = root_of(t, k.s);
-    if (r == t->nroots) return;
-    t->roots[r] = t->roots[--t->nroots];
-    for (size_t j = 0; j < SLOTS;) /* rare: an object replaced */
-        if (t->v[j].key.p && is_field(t->v[j].key, k.s)) unset(t, j); else j++;
-}
-
-/* this[key] = v: a plain value replaces whatever object key held; undefined is stored as absence */
-static void put(MTheme t[static 1], Key k, Val v) {
-    if (!t->ok) return;
-    size_t i = find(t, k);
-    if (root_of(t, k.s) < t->nroots) drop(t, k), i = find(t, k);
-    else if (t->v[i].key.p) { /* a plain value: replace it */
-        if (v.k != V_UNDEF) t->v[i].val = v; else unset(t, i);
-        return;
-    }
-    if (v.k == V_UNDEF) return;
-    const char *dot = memchr(k.s.p, '.', k.s.n);
-    if (dot) { /* a field: its object is a root to drop with */
-        Str obj = {.p = k.s.p, .n = (size_t)(dot - k.s.p)};
-        if (root_of(t, obj) == t->nroots) {
-            if (t->nroots == MAX_ROOTS) { t->ok = false; return; }
-            t->roots[t->nroots++] = obj;
-        }
-    }
-    if (t->n >= SLOTS / 2) { t->ok = false; return; }
-    t->v[i] = (Prop){.key = k.s, .h = k.h, .val = v};
-    t->n++;
+static void xdrop_fields(Th t[static 1], Str root) {
+    size_t j = 0;
+    for (size_t i = 0; i < t->x.n; i++)
+        if (!is_field(t->x.v[i].key, root)) t->x.v[j++] = t->x.v[i];
+    t->x.n = j;
 }
 
 /* ---- JavaScript values ---- */
 
-static Val vstr(Str s) { return (Val){.k = V_STR, .s = s}; }
+static Val vstr(Str s) { return (Val){.k = V_STR, .n = (uint32_t)s.n, .p = s.p}; } /* s.n < 4 GiB */
+static Str sv(Val v) { return (Str){.p = v.p, .n = v.n}; }
 static Val vnum(double d) { return (Val){.k = V_NUM, .num = d}; }
 static Val vbool(bool b) { return (Val){.k = V_BOOL, .b = b}; }
+static bool is_str(Val v) { return v.k == V_STR || v.k == V_COL; }
 
-static bool truthy(Val v) {
+static bool truthy_num(double d) { return d != 0 && !isnan(d); }
+
+[[gnu::noinline]] static bool truthy(Val v) {
     switch (v.k) {
-    case V_STR: return v.s.n > 0;
-    case V_NUM: return v.num != 0 && !isnan(v.num);
+    case V_STR: return v.n > 0;
+    case V_NUM: return truthy_num(v.num);
     case V_BOOL: return v.b;
+    case V_COL: return true; /* a colour's text is never empty */
     default: return false;
     }
 }
@@ -122,113 +120,173 @@ static double to_num(Val v) {
     switch (v.k) {
     case V_NUM: return v.num;
     case V_BOOL: return v.b;
-    case V_STR: return mc_js_number(v.s, &d) ? d : NAN;
-    default: return NAN;
+    case V_STR: return mc_js_number(sv(v), &d) ? d : NAN;
+    default: return NAN; /* nor is a colour's text ever a numeral */
     }
 }
 
-/* String(v), in the arena */
-static Str js_str(MTheme t[static 1], Val v) {
+/* String(v), a number's in the arena */
+static Str js_str(Arena a[static 1], Val v) {
     char b[32];
     switch (v.k) {
-    case V_STR: return v.s;
+    case V_STR: return sv(v);
     case V_BOOL: return v.b ? S("true") : S("false");
-    case V_NUM: return arena_strdup(t->a, (Str){.p = b, .n = fmt_js(v.num, b)});
+    case V_NUM: return arena_strdup(a, (Str){.p = b, .n = fmt_js(v.num, b)});
+    case V_COL: return mc_str(v.c);
     default: return S("undefined");
     }
 }
 
-/* a string where khroma or a property name needs one; khroma throws on anything else */
-static Str tstr(MTheme t[static 1], Val v) {
-    if (v.k != V_STR) t->ok = false;
-    return v.k == V_STR ? v.s : S("");
-}
-
-static Val js_add(MTheme t[static 1], Val a, Val b) {
-    if (a.k != V_STR && b.k != V_STR) return vnum(to_num(a) + to_num(b));
-    Str x = js_str(t, a), y = js_str(t, b);
-    char *p = ANEW(t->a, char, x.n + y.n + 1);
-    if (!p) { t->ok = false; return VUNDEF; }
-    if (x.n) memcpy(p, x.p, x.n); /* x.p is null where js_str ran out of memory */
-    if (y.n) memcpy(p + x.n, y.p, y.n);
-    p[x.n + y.n] = 0;
-    return vstr((Str){.p = p, .n = x.n + y.n});
-}
-
-static bool js_seq(Val a, Val b) {
+static bool js_seq(Th t[static 1], Val a, Val b) {
+    if (is_str(a) && is_str(b)) return str_eq(js_str(t->a, a), js_str(t->a, b));
     if (a.k != b.k) return false;
     switch (a.k) {
-    case V_STR: return str_eq(a.s, b.s);
     case V_NUM: return a.num == b.num;
     case V_BOOL: return a.b == b.b;
     default: return true;
     }
 }
 
-/* a < b (or <=): strings by code unit when both are strings, numbers otherwise, NaN unordered */
-static bool js_lt(Val a, Val b, bool eq) {
-    if (a.k == V_STR && b.k == V_STR) { /* by UTF-16 code unit, which byte order matches below U+10000 */
-        size_t n = a.s.n < b.s.n ? a.s.n : b.s.n;
-        int c = n ? memcmp(a.s.p, b.s.p, n) : 0;
-        if (!c) c = (a.s.n > b.s.n) - (a.s.n < b.s.n);
-        return eq ? c <= 0 : c < 0;
-    }
-    double x = to_num(a), y = to_num(b);
-    return eq ? x <= y : x < y;
-}
-
 /* ---- khroma ---- */
 
-static Val colour(MTheme t[static 1], bool ok, Str out) {
-    if (!ok) { t->ok = false; return VUNDEF; }
-    return vstr(out);
+/* the colour khroma reads from v, nullptr where it throws: a string it cannot parse, or no string */
+static MColor *parsed(Th t[static 1], Val v) {
+    if (v.k == V_COL) return v.c->bad ? nullptr : v.c;
+    MColor *c = v.k == V_STR ? ANEW(t->a, MColor, 1) : nullptr;
+    return c && mc_parse(sv(v), c) ? c : nullptr;
 }
-static Val text(MTheme t[static 1], MColor m[static 1]) {
-    Str o = arena_strdup(t->a, mc_str(m));
-    return colour(t, o.p, o);
+
+static const MColor *colv(Th t[static 1], Val v) {
+    const MColor *c = parsed(t, v);
+    if (!c) t->ok = false;
+    return c ? c : &t->dummy;
 }
-static bool parse(MTheme t[static 1], Str c, MColor m[static 1]) {
-    if (t->ok && !mc_parse(c, m)) t->ok = false;
-    return t->ok;
+
+/* this[s] as khroma reads it; a string is parsed once, the slot keeping the colour */
+[[gnu::noinline]] static const MColor *col(Th t[static 1], unsigned s) {
+    MColor *c = parsed(t, t->v[s]);
+    if (!c) return t->ok = false, &t->dummy;
+    return t->v[s] = (Val){.k = V_COL, .c = c}, c;
 }
-static Val cadjust(MTheme t[static 1], Str c, MCAmounts am) {
-    MColor m;
-    return parse(t, c, &m) ? mc_adjust(&m, am, &m), text(t, &m) : VUNDEF;
+
+/* adjust(c, {h, s, l, r, g, b}), mask saying which it names; flat, so the amounts go in registers */
+[[gnu::noinline]] static Val cadjust(Th t[static 1], const MColor c[static 1], unsigned mask,
+                                     double h, double s, double l, double r, double g, double b) {
+    MColor *o = ANEW(t->a, MColor, 1);
+    if (!o) return VUNDEF;
+    mc_adjust(c, (MCAmounts){.mask = (uint8_t)mask, .h = h, .s = s, .l = l, .r = r, .g = g, .b = b}, o);
+    return (Val){.k = V_COL, .c = o};
 }
-static Val clighten(MTheme t[static 1], Str c, double amt) {
-    MColor m;
-    return parse(t, c, &m) ? mc_lighten(&m, amt, &m), text(t, &m) : VUNDEF;
+
+[[gnu::noinline]] static Val clighten(Th t[static 1], const MColor c[static 1], double amt) {
+    MColor *o = ANEW(t->a, MColor, 1);
+    if (!o) return VUNDEF;
+    mc_lighten(c, amt, o);
+    return (Val){.k = V_COL, .c = o};
 }
-static Val cdarken(MTheme t[static 1], Str c, double amt) { return clighten(t, c, -amt); }
-static Val cinvert(MTheme t[static 1], Str c) {
-    MColor m;
-    return parse(t, c, &m) ? mc_invert(&m, 100, &m), text(t, &m) : VUNDEF;
+
+[[gnu::noinline]] static Val cinvert(Th t[static 1], const MColor c[static 1]) {
+    MColor *o = ANEW(t->a, MColor, 1);
+    if (!o) return VUNDEF;
+    mc_invert(c, 100, o);
+    return (Val){.k = V_COL, .c = o};
 }
-static Val cis_dark(MTheme t[static 1], Str c) {
-    MColor m;
-    return vbool(parse(t, c, &m) && mc_is_dark(&m));
-}
-static Val crgba(MTheme t[static 1], double r, double g, double b, double a) {
-    MColor m;
-    mc_rgba(r, g, b, a, &m);
-    return text(t, &m);
-}
+
 /* theme-helpers.js (gen_mtheme.mjs checks it has not changed) */
-static Val mkborder(MTheme t[static 1], Str c, bool dark) { return cadjust(t, c, (MCAmounts){.mask = 6, .s = -40, .l = dark ? 10 : -10}); }
+static Val mkborder(Th t[static 1], const MColor c[static 1], bool dark) {
+    return cadjust(t, c, 6, 0, -40, dark ? 10 : -10, 0, 0, 0);
+}
 
 /* ---- the themes ---- */
 
-typedef enum Calc : unsigned char { CALC_COPY, CALC_RESET_COPY, CALC_COPY_GRADIENT } Calc;
+static Val getk(Th t[static 1], Key k);
+static void putk(Th t[static 1], Key k, Val v);
+static Key fam(Th t[static 1], unsigned f, double n);
 #include "mtheme_gen.h"
 
-typedef struct ThemeDef { void (*ctor)(MTheme *), (*update)(MTheme *); Calc calc; } ThemeDef;
-static const ThemeDef DEFS[] = {
-    [MT_DEFAULT] = {default_ctor, default_update, default_calc},
-    [MT_BASE] = {base_ctor, base_update, base_calc},
-    [MT_DARK] = {dark_ctor, dark_update, dark_calc},
-    [MT_FOREST] = {forest_ctor, forest_update, forest_calc},
-    [MT_NEUTRAL] = {neutral_ctor, neutral_update, neutral_calc},
-};
+static uint32_t hash(Str key) { /* FNV-1a; tools/gen_mtheme.mjs lays HT out with it */
+    uint32_t h = 2166136261u;
+    for (size_t i = 0; i < key.n; i++) h = (h ^ (unsigned char)key.p[i]) * 16777619u;
+    return h;
+}
+
+static unsigned slot_of(Str name) {
+    constexpr size_t mask = countof(HT) - 1;
+    for (size_t i = hash(name) & mask; HT[i]; i = (i + 1) & mask)
+        if (str_eq(NAMES[HT[i] - 1], name)) return HT[i] - 1u;
+    return NONE;
+}
+
+static Key key_of(Str name) { return (Key){.slot = slot_of(name), .name = name}; }
+
+/* this[prefix + n] */
+static Key fam(Th t[static 1], unsigned f, double n) {
+    const Fam *m = &FAMS[f];
+    size_t i = n >= 0 && n < m->n ? (size_t)n : 0;
+    if (i == n && m->slot[i] != NONE) return (Key){.slot = m->slot[i]};
+    char b[32];
+    return key_of(STR_CAT(t->a, m->prefix, (Str){.p = b, .n = fmt_js(n, b)}));
+}
+
+static bool is_obj(const Th t[static 1], Key k) { return k.slot != NONE ? t->obj[k.slot] : xobj_of(t, k.name) < t->xobj.n; }
+
+/* delete this[name] and, where it held an object, the object's fields ("name.*") */
+static void drop(Th t[static 1], unsigned s) {
+    t->v[s] = VUNDEF;
+    if (!t->obj[s]) return;
+    t->obj[s] = false;
+    for (size_t i = 0; i < countof(OBJS); i++)
+        if (OBJS[i].root == s)
+            for (unsigned f = OBJS[i].lo; f < OBJS[i].hi; f++) t->v[f] = VUNDEF;
+    xdrop_fields(t, NAMES[s]);
+}
+
+static void dropk(Th t[static 1], Key k) {
+    if (k.slot != NONE) return drop(t, k.slot);
+    Extra *e = xfind(t, k.name);
+    if (e) *e = t->x.v[--t->x.n];
+    size_t r = xobj_of(t, k.name);
+    if (r == t->xobj.n) return;
+    t->xobj.v[r] = t->xobj.v[--t->xobj.n];
+    xdrop_fields(t, k.name);
+}
+
+static Val getk(Th t[static 1], Key k) {
+    if (k.slot != NONE) return t->v[k.slot];
+    const Extra *e = xfind(t, k.name);
+    return e ? e->v : VUNDEF;
+}
+
+/* MAX_VARS variables defined already; the slots are counted only once the extras could get there */
+static bool full(const Th t[static 1]) {
+    if (t->x.n < MAX_VARS - NSLOT) return false;
+    size_t n = t->x.n;
+    for (size_t s = 0; s < NSLOT; s++) n += t->v[s].k != V_UNDEF;
+    return n >= MAX_VARS;
+}
+
+/* this[key] = v: a plain value replaces whatever object key held; undefined is stored as absence;
+ * a field ("key.field") makes "key" an object */
+static void putk(Th t[static 1], Key k, Val v) {
+    if (is_obj(t, k)) dropk(t, k);
+    else if (k.slot != NONE) {
+        if (t->v[k.slot].k != V_UNDEF) return (void)(t->v[k.slot] = v); /* a plain value */
+    } else {
+        Extra *e = xfind(t, k.name);
+        if (e && v.k != V_UNDEF) return (void)(e->v = v);
+        if (e) return (void)(*e = t->x.v[--t->x.n]);
+    }
+    if (v.k == V_UNDEF) return;
+    Str name = k.slot != NONE ? NAMES[k.slot] : k.name;
+    const char *dot = memchr(name.p, '.', name.n);
+    if (dot) {
+        Key top = key_of((Str){.p = name.p, .n = (size_t)(dot - name.p)});
+        if (top.slot != NONE) t->obj[top.slot] = true;
+        else if (xobj_of(t, top.name) == t->xobj.n && !VEC_PUSH(t->a, &t->xobj, top.name)) t->ok = false;
+    }
+    if (k.slot != NONE) t->v[k.slot] = v;
+    else if (full(t) || !VEC_PUSH(t->a, &t->x, ((Extra){.key = k.name, .v = v}))) t->ok = false;
+}
 
 /* YAML's reading of a scalar: true/false, a number, else the string */
 static Val scalar(Str s) {
@@ -237,76 +295,87 @@ static Val scalar(Str s) {
     return str_trim(s).n && mc_js_number(s, &d) ? vnum(d) : vstr(s);
 }
 
-/* calculate()'s keys.forEach((k) => { this[k] = overrides[k]; }), the last value for each key
- * winning, with one deliberate difference: mermaid assigns each top-level key, so a nested override
- * (xyChart.titleColor) replaces the theme's whole object and a dark xychart loses every other dark
- * colour; here it sets that field, and the object keeps the rest */
-static void copy_overrides(MTheme t[static 1], size_t n, const Str *keys, const Str *vals) {
-    for (size_t i = 0; i < n; i++) {
-        bool later = false;
-        for (size_t m = i + 1; m < n && !later; m++) later = str_eq(keys[m], keys[i]);
+/* an override: this[k] = v; for a field, top is its object */
+typedef struct Ov { Key k, top; bool field; Val v; } Ov;
+
+/* the overrides calculate()'s keys.forEach((k) => { this[k] = overrides[k]; }) assigns, the last
+ * value for each key winning: ov[*first..n) */
+static size_t overrides(size_t n, const Str keys[n], const Str vals[n], Ov ov[n]) {
+    bool seen[NSLOT] = {};
+    size_t w = n;
+    for (size_t i = n; i-- > 0;) {
+        Key k = key_of(keys[i]);
+        bool later = k.slot != NONE && seen[k.slot];
+        for (size_t m = w; m < n && !later && k.slot == NONE; m++) later = ov[m].k.slot == NONE && str_eq(ov[m].k.name, k.name);
         if (later) continue;
+        if (k.slot != NONE) seen[k.slot] = true;
         const char *dot = memchr(keys[i].p, '.', keys[i].n);
-        Key top = key_of((Str){.p = keys[i].p, .n = dot ? (size_t)(dot - keys[i].p) : 0});
-        if (dot && root_of(t, top.s) == t->nroots) drop(t, top); /* a field turns a plain value into an object */
-        put(t, key_of(keys[i]), scalar(vals[i]));
+        ov[--w] = (Ov){.k = k, .v = scalar(vals[i]), .field = dot,
+                       .top = dot ? key_of((Str){.p = keys[i].p, .n = (size_t)(dot - keys[i].p)}) : (Key){}};
     }
+    return w;
+}
+
+/* with one deliberate difference from mermaid, which assigns each top-level key, so a nested
+ * override (xyChart.titleColor) replaces the theme's whole object and a dark xychart loses every
+ * other dark colour; here it sets that field, and the object keeps the rest */
+static void copy_overrides(Th t[static 1], size_t n, const Ov ov[n]) {
+    for (size_t i = 0; i < n; i++) {
+        if (ov[i].field && !is_obj(t, ov[i].top)) dropk(t, ov[i].top); /* a field turns a plain value into an object */
+        putk(t, ov[i].k, ov[i].v);
+    }
+}
+
+/* String() of the numbers and booleans; strings and colours stay as they are */
+static void finish_val(Arena a[static 1], Val v[static 1]) {
+    if (v->k == V_NUM || v->k == V_BOOL) *v = vstr(js_str(a, *v));
+}
+
+static MTheme *finish(Th t[static 1]) {
+    MTheme *m = ANEW(t->a, MTheme, 1);
+    if (!m) return nullptr;
+    for (size_t s = 0; s < NSLOT; s++) finish_val(t->a, &t->v[s]);
+    for (size_t i = 0; i < t->x.n; i++) finish_val(t->a, &t->x.v[i].v);
+    *m = (MTheme){.v = t->v, .nx = t->x.n, .x = t->x.v};
+    return t->a->oom ? nullptr : m;
 }
 
 MTheme *mtheme_new(Arena a[static 1], MThemeId id, size_t n, const Str *keys, const Str *vals) {
-    MTheme *t = ANEW(a, MTheme, 1);
-    Prop *v = ANEW(a, Prop, SLOTS);
-    if (!t || !v || id >= countof(DEFS)) return nullptr;
-    memset(v, 0, SLOTS * sizeof *v);
-    *t = (MTheme){.a = a, .v = v, .ok = true};
-    const ThemeDef *d = &DEFS[id];
-    d->ctor(t);
-    if (d->calc == CALC_RESET_COPY) { /* the default theme's placeholders become undefined */
-        Key calc[SLOTS / 2];
-        size_t nc = 0;
-        for (size_t i = 0; i < SLOTS; i++)
-            if (t->v[i].key.p && t->v[i].val.k == V_STR && str_eq(t->v[i].val.s, S("calculated")))
-                calc[nc++] = (Key){.s = t->v[i].key, .h = t->v[i].h};
-        for (size_t i = 0; i < nc; i++) drop(t, calc[i]);
-    }
-    copy_overrides(t, n, keys, vals);
-    d->update(t);
-    copy_overrides(t, n, keys, vals);
+    if (id >= countof(THEMES)) return nullptr;
+    for (size_t i = 0; i < n; i++)
+        if (vals[i].n > UINT32_MAX) return nullptr; /* past what a Val holds */
+    const ThemeDef *d = &THEMES[id];
+    Val *v = ANEW(a, Val, NSLOT);
+    bool obj[NSLOT] = {};
+    if (!v) return nullptr;
+    memcpy(v, d->init, NSLOT * sizeof *v);
+    for (size_t i = 0; i < d->nroots; i++) obj[d->roots[i]] = true;
+    Th t = {.a = a, .v = v, .obj = obj, .ok = true};
+    Ov *ov = ANEW(a, Ov, n);
+    if (!ov) return nullptr;
+    size_t first = overrides(n, keys, vals, ov), m = n - first;
+    copy_overrides(&t, m, ov + first);
+    d->update(&t);
+    copy_overrides(&t, m, ov + first);
     if (d->calc == CALC_COPY_GRADIENT) {
         bool border = false, gradient = false;
-        for (size_t i = 0; i < n; i++)
-            border |= str_eq(keys[i], S("nodeBorder")) || is_field(keys[i], S("nodeBorder")),
-            gradient |= str_eq(keys[i], S("useGradient")) || is_field(keys[i], S("useGradient"));
-        if (border && !gradient) put(t, key_of(S("useGradient")), vbool(false));
+        for (size_t i = first; i < n; i++) {
+            unsigned s = ov[i].field ? ov[i].top.slot : ov[i].k.slot;
+            border |= s == X_nodeBorder, gradient |= s == X_useGradient;
+        }
+        if (border && !gradient) put(&t, X_useGradient, vbool(false));
     }
-    return t->ok && !a->oom ? t : nullptr;
+    return t.ok && !a->oom ? finish(&t) : nullptr;
 }
+
+static Str text(Val v) { return v.k == V_STR ? sv(v) : v.k == V_COL ? mc_str(v.c) : (Str){}; }
 
 Str mtheme_get(const MTheme *t, Str key) {
-    Val v = get(t, key_of(key));
-    switch (v.k) {
-    case V_STR: return v.s;
-    case V_BOOL: return v.b ? S("true") : S("false");
-    case V_NUM: { /* rare (radius, fontSize as a number ...): the arena is not reachable from a const theme */
-        static thread_local char b[8][32];
-        static thread_local unsigned slot;
-        char *o = b[slot++ % countof(b)];
-        return (Str){.p = o, .n = fmt_js(v.num, o)};
-    }
-    default: return (Str){};
-    }
+    unsigned s = slot_of(key);
+    if (s != NONE) return text(t->v[s]);
+    for (size_t i = 0; i < t->nx; i++)
+        if (str_eq(t->x[i].key, key)) return text(t->x[i].v);
+    return (Str){};
 }
 
-const MTheme *mtheme_preset(MThemeId id) {
-    static _Atomic(MTheme *) cache[countof(DEFS)];
-    if (id >= countof(DEFS)) return nullptr;
-    MTheme *t = atomic_load_explicit(&cache[id], memory_order_acquire);
-    if (t) return t;
-    Arena *a = calloc(1, sizeof *a); /* the cache owns it for the life of the process */
-    if (!a) return nullptr;
-    MTheme *seen = nullptr;
-    if ((t = mtheme_new(a, id, 0, nullptr, nullptr)) && atomic_compare_exchange_strong(&cache[id], &seen, t)) return t;
-    arena_free(a); /* out of memory, or another thread was first */
-    free(a);
-    return seen;
-}
+const MTheme *mtheme_preset(MThemeId id) { return id < countof(THEMES) ? &THEMES[id].preset : nullptr; }

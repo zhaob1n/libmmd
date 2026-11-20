@@ -761,7 +761,7 @@ void mc_lighten(const MColor col[static 1], double amount, MColor out[static 1])
     settle(&c, out);
 }
 
-void mc_rgba(double r, double g, double b, double alpha, MColor out[static 1]) {
+static void mc_rgba(double r, double g, double b, double alpha, MColor out[static 1]) {
     MChannels c = {.has_r = true, .has_g = true, .has_b = true,
                    .r = clamp_255(r), .g = clamp_255(g), .b = clamp_255(b), .a = clamp_a(alpha)};
     settle(&c, out);
