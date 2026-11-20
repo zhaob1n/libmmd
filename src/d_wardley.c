@@ -703,7 +703,7 @@ DIAG_FN(wardley_render) {
 #undef PY
     BBox vb = {0, 0, W_, H};
     AUTO_BUF Buf css = {};
-    buf_lit(&css, "#mermaid{font-family:\"trebuchet ms\",verdana,arial,sans-serif;}");
+    buf_lit(&css, "#mermaid{font-family:" MMD_FONT_FAMILY ";}");
     dcfg_rules(&css, countof(THEME), THEME);
     if (css.oom) return MMD_ERR_NOMEM;
     return dg_finish(out, &b, vb, 0, "wardley", css.n, css.p);

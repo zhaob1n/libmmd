@@ -2,6 +2,12 @@
 #define MMD_TEXT_H
 #include "base.h"
 
+/* CSS font-family that text_width measures. Arial first; Liberation Sans is the
+ * metric-compatible face used when Arial is absent. Not mermaid's Trebuchet stack:
+ * that face is narrower than these advances when it is installed.
+ * themeVariables.fontFamily still overrides. A macro so CSS literals can splice it. */
+#define MMD_FONT_FAMILY "Arial, \"Liberation Sans\", sans-serif"
+
 /* Width in px of a single line of UTF-8 text at font size fs. */
 double text_width(Str s, double fs);
 uint32_t ent_lookup(size_t n, const char s[static n]);

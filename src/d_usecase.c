@@ -598,7 +598,7 @@ constexpr char NEO_CSS[] =
  * themeVariables) from dcfg_theme_css; thin curved edges. Text: .al actor, .ul use case, .el edge,
  * .tl JSON table, .nl note, .bt boundary title. */
 constexpr char CLASSIC_CSS[] =
-    "#mermaid{font-family:\"trebuchet ms\",verdana,arial,sans-serif;fill:#333;}"
+    "#mermaid{font-family:" MMD_FONT_FAMILY ";fill:#333;}"
     "#mermaid .gl,#mermaid .uc,#mermaid .bm{fill:#ECECFF;stroke:#9370DB;stroke-width:2px;}"
     "#mermaid .bd{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}#mermaid .bt{font-size:14px;fill:#333;}"
     "#mermaid .tl,#mermaid .nl{font-size:14px;}#mermaid .el{font-size:10px;}"

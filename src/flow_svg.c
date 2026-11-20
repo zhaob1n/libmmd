@@ -11,13 +11,13 @@ typedef struct Theme {
 } Theme;
 /* colours follow mermaid's built-in themes (flowchart subset) */
 static const Theme THEMES[] = {
-    [MMD_THEME_DEFAULT] = {"white", "\"trebuchet ms\",verdana,arial,sans-serif", "#333", "#ECECFF", "#9370DB",
+    [MMD_THEME_DEFAULT] = {"white", MMD_FONT_FAMILY, "#333", "#ECECFF", "#9370DB",
                            "#333333", "#ffffde", "#aaaa33", "rgba(232,232,232,0.8)", "#333333"},
-    [MMD_THEME_DARK] = {"#333", "\"trebuchet ms\",verdana,arial,sans-serif", "#ccc", "#1f2020", "#cccccc",
+    [MMD_THEME_DARK] = {"#333", MMD_FONT_FAMILY, "#ccc", "#1f2020", "#cccccc",
                         "lightgrey", "#474949", "rgba(255,255,255,0.25)", "rgba(88,88,88,0.85)", "lightgrey"},
-    [MMD_THEME_FOREST] = {"white", "\"trebuchet ms\",verdana,arial,sans-serif", "#333", "#cde498", "#13540c",
+    [MMD_THEME_FOREST] = {"white", MMD_FONT_FAMILY, "#333", "#cde498", "#13540c",
                           "#000000", "#cdffb2", "#6eaa49", "rgba(232,232,232,0.8)", "#000000"},
-    [MMD_THEME_NEUTRAL] = {"white", "\"trebuchet ms\",verdana,arial,sans-serif", "#333", "#eee", "#999",
+    [MMD_THEME_NEUTRAL] = {"white", MMD_FONT_FAMILY, "#333", "#eee", "#999",
                            "#666", "#ffffde", "#999", "rgba(255,255,255,0.8)", "#666"},
 };
 static_assert(countof(THEMES) == MMD_THEME_NEUTRAL + 1, "theme table covers mmd_theme");

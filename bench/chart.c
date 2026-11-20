@@ -72,7 +72,6 @@ static void chart(size_t n, const row rows[static n]) {
     mmd_w_config(w, "xyChart.width", "900");
     snprintf(b, sizeof b, "%d", 120 + 60 * (int)n);
     mmd_w_config(w, "xyChart.height", b);
-    mmd_w_config(w, "themeVariables.fontFamily", "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif");
     mmd_xy_begin(w, "CLI time per diagram (lower is better)", true);
     mmd_xy_x_cats(w, nullptr, n, cats);
     mmd_xy_y_range(w, "wall-clock ms, log scale", 0, 0);

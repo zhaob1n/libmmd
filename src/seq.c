@@ -406,7 +406,7 @@ typedef struct Act { int32_t p; double y0; unsigned depth; } Act;
 typedef struct Blk { size_t ev; double y0; int32_t lo, hi; double xl, xr; /* content x extent (notes, self msgs) */ } Blk;
 
 constexpr char SEQ_CSS[] =
-    "#mermaid{font-family:\"trebuchet ms\",verdana,arial,sans-serif;font-size:16px;}"
+    "#mermaid{font-family:" MMD_FONT_FAMILY ";font-size:16px;}"
     "#mermaid .actor{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .actor-man circle,#mermaid .actor-line{fill:#ECECFF;stroke:#9370DB;stroke-width:2px;}"
     "#mermaid text{fill:#333;}"

@@ -541,13 +541,13 @@ DIAG_FN(railroad_render) {
     if (!rules.n) maxw = 180, y = 80;
     BBox vb = {0, 0, maxw + 2 * PADDING, y + PADDING};
     return DG_FINISH(out, &b, vb, 0, "railroad",
-        "#mermaid{font-family:\"trebuchet ms\",verdana,arial,sans-serif;font-size:16px;}"
+        "#mermaid{font-family:" MMD_FONT_FAMILY ";font-size:16px;}"
         "#mermaid .railroad-terminal rect{fill:#ffffde;stroke:hsl(60, 60%, 83.5294117647%);stroke-width:2px;}"
         "#mermaid .railroad-nonterminal rect{fill:#ECECFF;stroke:hsl(240, 60%, 86.2745098039%);stroke-width:2px;}"
         "#mermaid .railroad-special rect{fill:hsl(80, 100%, 96.2745098039%);stroke:hsl(80, 60%, 86.2745098039%);stroke-width:2px;stroke-dasharray:5,3;}"
-        "#mermaid .railroad-terminal text{fill:#000021;font-family:\"trebuchet ms\",verdana,arial,sans-serif;font-size:16px;text-anchor:middle;dominant-baseline:middle;}"
-        "#mermaid .railroad-nonterminal text,#mermaid .railroad-special text{fill:#131300;font-family:\"trebuchet ms\",verdana,arial,sans-serif;font-size:16px;text-anchor:middle;dominant-baseline:middle;}"
+        "#mermaid .railroad-terminal text{fill:#000021;font-family:" MMD_FONT_FAMILY ";font-size:16px;text-anchor:middle;dominant-baseline:middle;}"
+        "#mermaid .railroad-nonterminal text,#mermaid .railroad-special text{fill:#131300;font-family:" MMD_FONT_FAMILY ";font-size:16px;text-anchor:middle;dominant-baseline:middle;}"
         "#mermaid .railroad-line{stroke:#333333;stroke-width:2px;fill:none;}"
         "#mermaid .railroad-marker{fill:#333333;}"
-        "#mermaid .railroad-rule-name{font-weight:bold;fill:#333;font-family:\"trebuchet ms\",verdana,arial,sans-serif;font-size:16px}");
+        "#mermaid .railroad-rule-name{font-weight:bold;fill:#333;font-family:" MMD_FONT_FAMILY ";font-size:16px}");
 }

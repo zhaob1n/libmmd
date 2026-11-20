@@ -97,6 +97,7 @@ Mermaid faults libmmd does not copy:
 - state: mermaid puts a note's group at the root, so a note on a state inside a composite counts as a
   transition crossing it, and the composite drops its own direction for its parent's; libmmd keeps the
   note in the state's scope and counts only transitions.
+- classic SVG declares `Arial, "Liberation Sans", sans-serif` (`MMD_FONT_FAMILY` in `src/text.h`), the face `text_width` measures. mermaid's classic stack leads with Trebuchet MS, narrower than those advances when the face is installed, so a box sized here overflows or looks thin under it. `themeVariables.fontFamily` still overrides. Neo diagrams that name Recursive keep it. The theme engine still stores mermaid's string; it is not painted unless it differs from the base theme or the source sets it.
 
 Side-by-side renders (left: libmmd, right: mermaid 11.17) live in `samples/sbs/*.png`.
 Already fixed:

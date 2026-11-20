@@ -158,7 +158,7 @@ void dg_head(Buf b[restrict static 1], BBox bb, double m, const char kind[restri
     buf_num(b, w); buf_ch(b, ' '); buf_num(b, h);
     buf_lit(b, "\" role=\"graphics-document document\" aria-roledescription=\""); buf_put(b, kl, kind);
     dcfg_svg_aria(b);
-    buf_lit(b, "<style>#mermaid{font-family:\"trebuchet ms\",verdana,arial,sans-serif;font-size:16px;fill:#333;}");
+    buf_lit(b, "<style>#mermaid{font-family:" MMD_FONT_FAMILY ";font-size:16px;fill:#333;}");
     buf_put(b, ncss, css);
     dcfg_theme_css(b, kind);
     buf_lit(b, "</style><rect x=\""); buf_num(b, x); buf_lit(b, "\" y=\""); buf_num(b, y);

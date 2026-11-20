@@ -3,9 +3,9 @@
 #include "eaw_tbl.inc"
 #include <math.h>
 
-/* Liberation Sans (metric-compatible with Arial, which is what Chromium resolves mermaid's
- * "trebuchet ms", verdana, arial stack to without Trebuchet/Verdana installed) advance
- * widths in 1/2048 em for U+0020..U+007E and U+00A0..U+00FF. Generated from the font's hmtx. */
+/* Liberation Sans (metric-compatible with Arial, the face MMD_FONT_FAMILY declares)
+ * advance widths in 1/2048 em for U+0020..U+007E and U+00A0..U+00FF.
+ * Generated from the font's hmtx. */
 constexpr uint16_t ASCII_W[95] = {
     569, 569, 727, 1139, 1139, 1821, 1366, 391, 682, 682, 797, 1196, 569, 682, 569, 569,
     1139, 1139, 1139, 1139, 1139, 1139, 1139, 1139, 1139, 1139, 569, 569, 1196, 1196, 1196, 1139,
