@@ -17,10 +17,10 @@ typedef struct ANode { Str id, icon, label; int32_t group, gx, gy; bool junction
 typedef struct AGroup { Str id, icon, label; int32_t parent; double x0, y0, x1, y1; bool any; } AGroup;
 typedef struct AEdge { uint32_t a, b; char pa, pb; bool arr_a, arr_b; Str label; } AEdge;
 
-static constexpr double PITCH_X = 200;
-static constexpr double PITCH_Y = 210;
-static constexpr double IS = 80; /* icon size */
-static constexpr char CSS[] =
+constexpr double PITCH_X = 200;
+constexpr double PITCH_Y = 210;
+constexpr double IS = 80; /* icon size */
+constexpr char CSS[] =
     "#mermaid .ai{fill:#087ebf;}#mermaid .ag{fill:none;stroke-dasharray:8;}#mermaid .ae{fill:none;}"
     "#mermaid .agl{font-size:16px;}#mermaid .aw{fill:none;stroke:#fff;stroke-width:3px;stroke-linecap:round;stroke-linejoin:round;}"
     "#mermaid .awf{fill:#fff;}#mermaid .ael{font-size:14px;}";

@@ -431,7 +431,7 @@ static void default_update(MTheme *t) {
     put(t, K("attributeBackgroundColorOdd", 0x651522b7u), ({ Val _v220 = get(t, K("attributeBackgroundColorOdd", 0x651522b7u)); truthy(_v220) ? _v220 : vstr(S("#ffffff")); }));
     put(t, K("attributeBackgroundColorEven", 0xe826b69eu), ({ Val _v221 = get(t, K("attributeBackgroundColorEven", 0xe826b69eu)); truthy(_v221) ? _v221 : vstr(S("#f2f2f2")); }));
 }
-static constexpr Calc default_calc = CALC_RESET_COPY;
+constexpr Calc default_calc = CALC_RESET_COPY;
 
 static void base_update(MTheme *t);
 static void base_ctor(MTheme *t) {
@@ -826,7 +826,7 @@ static void base_update(MTheme *t) {
     put(t, K("gradientStart", 0xa259a69fu), get(t, K("primaryBorderColor", 0x9e990652u)));
     put(t, K("gradientStop", 0x8a87aca5u), get(t, K("secondaryBorderColor", 0x4df4269au)));
 }
-static constexpr Calc base_calc = CALC_COPY_GRADIENT;
+constexpr Calc base_calc = CALC_COPY_GRADIENT;
 
 static void dark_update(MTheme *t);
 static void dark_ctor(MTheme *t) {
@@ -1235,7 +1235,7 @@ static void dark_update(MTheme *t) {
     put(t, K("attributeBackgroundColorEven", 0xe826b69eu), ({ Val _v206 = get(t, K("attributeBackgroundColorEven", 0xe826b69eu)); truthy(_v206) ? _v206 : clighten(t, tstr(t, get(t, K("background", 0x4babd89du))), 2); }));
     put(t, K("nodeBorder", 0x7764680fu), ({ Val _v207 = get(t, K("nodeBorder", 0x7764680fu)); truthy(_v207) ? _v207 : vstr(S("#999")); }));
 }
-static constexpr Calc dark_calc = CALC_COPY;
+constexpr Calc dark_calc = CALC_COPY;
 
 static void forest_update(MTheme *t);
 static void forest_ctor(MTheme *t) {
@@ -1650,7 +1650,7 @@ static void forest_update(MTheme *t) {
     put(t, K("attributeBackgroundColorOdd", 0x651522b7u), ({ Val _v217 = get(t, K("attributeBackgroundColorOdd", 0x651522b7u)); truthy(_v217) ? _v217 : vstr(S("#ffffff")); }));
     put(t, K("attributeBackgroundColorEven", 0xe826b69eu), ({ Val _v218 = get(t, K("attributeBackgroundColorEven", 0xe826b69eu)); truthy(_v218) ? _v218 : vstr(S("#f2f2f2")); }));
 }
-static constexpr Calc forest_calc = CALC_COPY;
+constexpr Calc forest_calc = CALC_COPY;
 
 static void neutral_update(MTheme *t);
 static void neutral_ctor(MTheme *t) {
@@ -2044,4 +2044,4 @@ static void neutral_update(MTheme *t) {
     put(t, K("attributeBackgroundColorOdd", 0x651522b7u), ({ Val _v193 = get(t, K("attributeBackgroundColorOdd", 0x651522b7u)); truthy(_v193) ? _v193 : vstr(S("#ffffff")); }));
     put(t, K("attributeBackgroundColorEven", 0xe826b69eu), ({ Val _v194 = get(t, K("attributeBackgroundColorEven", 0xe826b69eu)); truthy(_v194) ? _v194 : vstr(S("#f2f2f2")); }));
 }
-static constexpr Calc neutral_calc = CALC_COPY;
+constexpr Calc neutral_calc = CALC_COPY;

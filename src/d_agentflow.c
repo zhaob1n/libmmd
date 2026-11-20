@@ -152,7 +152,7 @@ mmd_status af_prepare(Graph *g, AfInfo *out[static 1]) {
 
 bool af_neo(const AfInfo *inf) { return inf && inf->neo; }
 
-static constexpr char CSS[] =
+constexpr char CSS[] =
     "#mermaid{font-family:\"Recursive Variable\",arial,sans-serif;font-size:14px;fill:#28253D;}"
     "#mermaid .shape{stroke-width:2px;filter:url(#neo-shadow);}"
     "#mermaid .flow{stroke-width:1px;filter:url(#neo-shadow);}"

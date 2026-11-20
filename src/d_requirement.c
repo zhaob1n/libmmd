@@ -13,13 +13,13 @@ typedef struct RInfo { Str kind, f[4]; bool elem; } RInfo; /* f: id,text,risk,ve
 typedef struct RRel { Str type; } RRel;
 
 typedef struct ReqKind { char kw[23], disp[24]; } ReqKind;
-static constexpr ReqKind KINDS[] = {
+constexpr ReqKind KINDS[] = {
     {"requirement", "Requirement"}, {"functionalRequirement", "Functional Requirement"},
     {"interfaceRequirement", "Interface Requirement"}, {"performanceRequirement", "Performance Requirement"},
     {"physicalRequirement", "Physical Requirement"}, {"designConstraint", "Design Constraint"}, {"element", "Element"}};
-static constexpr char RELS[][10] = {"contains", "copies", "derives", "satisfies", "verifies", "refines", "traces"};
+constexpr char RELS[][10] = {"contains", "copies", "derives", "satisfies", "verifies", "refines", "traces"};
 
-static constexpr char CSS[] =
+constexpr char CSS[] =
     "#mermaid .rq{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#mermaid .rqd{stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .rr{fill:none;stroke:#333;stroke-width:1px;stroke-dasharray:10,7;}#mermaid .rr.c{stroke-dasharray:none;}"
     "#mermaid .rh{fill:#333;}#mermaid .rl{fill:rgba(232,232,232,0.8);}#mermaid .rn{font-weight:bold;}#mermaid .rt{font-size:14px;}";

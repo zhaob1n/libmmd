@@ -354,7 +354,7 @@ size_t fmt_js(double v, char out[static 32]) {
 }
 
 typedef struct { char n[8]; uint32_t c; } Ent;
-static constexpr Ent ENTS[] = {
+constexpr Ent ENTS[] = {
     {"AElig", 198},
     {"Aacute", 193},
     {"Acirc", 194},

@@ -36,12 +36,12 @@ static void emit_css(Buf b[static 1], const Theme t[static 1]) {
     buf_lit(b, "#mermaid .title{font-size:18px;}");
 }
 
-static constexpr char ANIM_CSS[] =
+constexpr char ANIM_CSS[] =
     "#mermaid .edge-animation-fast{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 50s linear infinite;stroke-linecap:round;}"
     "#mermaid .edge-animation-slow{stroke-dasharray:9,5!important;stroke-dashoffset:900;animation:dash 20s linear infinite;stroke-linecap:round;}"
     "@keyframes dash{to{stroke-dashoffset:0;}}";
 
-static constexpr char DEFS[] =
+constexpr char DEFS[] =
     "<defs>"
     "<marker id=\"mm-arrow-end\" class=\"marker\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" "
     "markerUnits=\"userSpaceOnUse\" markerWidth=\"8\" markerHeight=\"8\" orient=\"auto\">"

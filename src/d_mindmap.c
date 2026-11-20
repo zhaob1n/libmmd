@@ -24,14 +24,14 @@ typedef struct MNode {
     double w, h, x, y, sub; /* sub: subtree height */
 } MNode;
 
-static constexpr char CSS[] = "#mermaid .mt{font-size:16px;}#mermaid .me{fill:none;}";
+constexpr char CSS[] = "#mermaid .mt{font-size:16px;}#mermaid .me{fill:none;}";
 /* mermaid's default cScale and cScaleInv from slot 1 (section k uses slot k%11+1; root is the darker git0),
  * darker strokes for borders; its cScaleLabel is white on slot 3, black elsewhere */
-static constexpr char SEC[][8] = {"#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2", "#ff8686",
+constexpr char SEC[][8] = {"#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2", "#ff8686",
                                   "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"};
-static constexpr char SECI[][8] = {"#ababff", "#d0b9ff", "#dcffb9", "#b9ffb9", "#b9ffdc", "#b9ffff",
+constexpr char SECI[][8] = {"#ababff", "#d0b9ff", "#dcffb9", "#b9ffb9", "#b9ffdc", "#b9ffff",
                                    "#b9dcff", "#dcb9ff", "#ffb9dc", "#ffb9b9", "#ffdcb9"};
-static constexpr char SECS[][8] = {"#cccc33", "#99cc33", "#7f33cc", "#cc33cc", "#cc3380", "#cc3333",
+constexpr char SECS[][8] = {"#cccc33", "#99cc33", "#7f33cc", "#cc33cc", "#cc3380", "#cc3333",
                                    "#cc8033", "#80cc33", "#33cc80", "#33cccc", "#337fcc"};
 
 static void parse_node(Str s, Str label[static 1], uint8_t shape[static 1]) {

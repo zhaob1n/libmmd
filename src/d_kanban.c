@@ -12,7 +12,7 @@
 
 typedef struct KItem { Str label, assigned, ticket, priority; uint32_t col; double h; } KItem;
 
-static constexpr char CSS[] =
+constexpr char CSS[] =
     "#mermaid .kc{stroke-width:1px;}#mermaid .kt{font-size:16px;fill:#333;}"
     "#mermaid .ki{fill:#fff;stroke:#9370DB;stroke-width:1px;}#mermaid .kl{font-size:16px;fill:#333;}"
     "#mermaid .km{font-size:12px;fill:#666;}#mermaid .kp{stroke-width:4px;}";

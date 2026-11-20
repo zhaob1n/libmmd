@@ -107,7 +107,7 @@ enum : unsigned {
 /* always escaped: they end or split a label somewhere, or mermaid.js drops them ('#' starts a sequence
  * or journey comment, '%' a timeline one, '\\' an escape in quoted strings, '*' markdown emphasis,
  * gitGraph shows a quoted '=' as "&equals;"; audit in docs/dev/writer.md) */
-static constexpr uint8_t ESC[128] = {
+constexpr uint8_t ESC[128] = {
     ['"'] = CQ | CT, [':'] = CQ | CT, ['['] = CQ | CT, [']'] = CQ | CT, ['{'] = CQ | CT, ['}'] = CQ | CT,
     ['|'] = CQ | CT, ['<'] = CQ | CT, ['#'] = CQ | CT, ['%'] = CQ | CT, ['\\'] = CQ | CT, ['*'] = CQ | CT, ['='] = CQ,
     ['`'] = CQ, [';'] = CT, [','] = CT, ['~'] = CT,

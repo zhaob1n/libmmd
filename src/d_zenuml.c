@@ -327,7 +327,7 @@ static void stmt(ZT z[static 1], Str s, bool block) {
 
 /* mermaid's ZenUML plugin draws on white in its own colours whatever the theme: the frame is filled
  * white and every element carries its colour, so neither the theme's background nor its text colour shows */
-static constexpr char CSS[] =
+constexpr char CSS[] =
     "#mermaid .zx{fill:#fff;stroke:#666;stroke-width:1px;}#mermaid .zti{font-size:13px;font-weight:bold;fill:#000;}"
     "#mermaid .zb{fill:#fff;stroke:#555;stroke-width:1px;}#mermaid .zt{font-size:13px;fill:#000;}"
     "#mermaid .zi{fill:none;stroke:#000;stroke-width:1px;}"
@@ -339,9 +339,9 @@ static constexpr char CSS[] =
     "#mermaid .zht{font-size:13px;font-weight:bold;fill:#000;}#mermaid .zs{stroke:#e2e2e2;stroke-width:1px;}"
     "#mermaid .zfc{font-size:11px;fill:#666;}";
 
-static constexpr double BH = 32;
-static constexpr double AW = 5;
-static constexpr double TB = 26;
+constexpr double BH = 32;
+constexpr double AW = 5;
+constexpr double TB = 26;
 
 /* 14x14 stroked fragment-header glyphs (ZenUML style), top-left at (x, y) */
 static void frag_icon(Buf o[static 1], Str label, double x, double y) {

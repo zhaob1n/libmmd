@@ -19,7 +19,7 @@ typedef struct VText { unsigned mask; Str id, label; } VText;
 typedef struct VStyle { Str fill, fop, stroke, sw, color; } VStyle;
 typedef struct VSty { Str key; unsigned mask; VStyle s; } VSty;
 
-static constexpr char PAL[8][8] = {"#5353ff", "#ffff45", "#b5ff20", "#ff53ff", "#53ffff", "#45ff45", "#ff5353", "#45ffff"};
+constexpr char PAL[8][8] = {"#5353ff", "#ffff45", "#b5ff20", "#ff53ff", "#53ffff", "#45ff45", "#ff5353", "#45ffff"};
 
 /* mermaid's venn styles: title vennTitleTextColor, intersection labels and text nodes vennSetTextColor */
 static void venn_css(Buf b[static 1]) {

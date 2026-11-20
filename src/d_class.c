@@ -157,8 +157,8 @@ static mmd_status add_member(CP p[static 1], int32_t v, Str t) {
 }
 
 typedef struct RelTok { char t[3]; uint8_t len; RMark m; } RelTok;
-static constexpr RelTok LEFT[] = {{"<|", 2, RM_EXT}, {"()", 2, RM_LOLLI}, {"*", 1, RM_COMP}, {"o", 1, RM_AGG}, {"<", 1, RM_ARROW}};
-static constexpr RelTok RIGHT[] = {{"|>", 2, RM_EXT}, {"()", 2, RM_LOLLI}, {"*", 1, RM_COMP}, {"o", 1, RM_AGG}, {">", 1, RM_ARROW}};
+constexpr RelTok LEFT[] = {{"<|", 2, RM_EXT}, {"()", 2, RM_LOLLI}, {"*", 1, RM_COMP}, {"o", 1, RM_AGG}, {"<", 1, RM_ARROW}};
+constexpr RelTok RIGHT[] = {{"|>", 2, RM_EXT}, {"()", 2, RM_LOLLI}, {"*", 1, RM_COMP}, {"o", 1, RM_AGG}, {">", 1, RM_ARROW}};
 
 /* find relation operator; returns true and fills [s0,s1) span + marks */
 static bool find_rel(Str l, size_t s0[static 1], size_t s1[static 1], Rel r[static 1]) {
@@ -403,7 +403,7 @@ static mmd_status parse(CP p[static 1], LineIt it[static 1]) {
     return MMD_OK;
 }
 
-static constexpr char CSS[] =
+constexpr char CSS[] =
     "#mermaid .cls{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .div{stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .rel{fill:none;stroke:#333;stroke-width:1px;}#mermaid .rel.dot{stroke-dasharray:3,3;}"
@@ -413,7 +413,7 @@ static constexpr char CSS[] =
     "#mermaid .static{text-decoration:underline;}#mermaid .abstract{font-style:italic;}"
     "#mermaid .title{font-weight:bold;}#mermaid .ann{font-size:14px;}";
 
-static constexpr char DEFS[] =
+constexpr char DEFS[] =
     "<defs>"
     "<marker id=\"cl-ext-s\" viewBox=\"0 0 20 14\" refX=\"1\" refY=\"7\" markerWidth=\"20\" markerHeight=\"14\" markerUnits=\"userSpaceOnUse\" orient=\"auto\"><path d=\"M1,7 L19,1 L19,13 z\" fill=\"#fff\" stroke=\"#333\"/></marker>"
     "<marker id=\"cl-ext-e\" viewBox=\"0 0 20 14\" refX=\"19\" refY=\"7\" markerWidth=\"20\" markerHeight=\"14\" markerUnits=\"userSpaceOnUse\" orient=\"auto\"><path d=\"M19,7 L1,1 L1,13 z\" fill=\"#fff\" stroke=\"#333\"/></marker>"

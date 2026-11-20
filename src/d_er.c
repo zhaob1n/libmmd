@@ -67,15 +67,15 @@ typedef struct EP {
 }
 
 typedef struct CardTok { char t[13]; Card c; } CardTok;
-static constexpr CardTok LCARD[] = {
+constexpr CardTok LCARD[] = {
     {"|o", CD_ZERO_ONE}, {"||", CD_ONE}, {"}o", CD_ZERO_MANY}, {"}|", CD_ONE_MANY},
     {"o|", CD_ZERO_ONE}, {"o{", CD_ZERO_MANY}, {"|{", CD_ONE_MANY}, /* mermaid's lexer accepts either facing */
 };
-static constexpr CardTok RCARD[] = {
+constexpr CardTok RCARD[] = {
     {"o|", CD_ZERO_ONE}, {"||", CD_ONE}, {"o{", CD_ZERO_MANY}, {"|{", CD_ONE_MANY},
     {"|o", CD_ZERO_ONE}, {"}o", CD_ZERO_MANY}, {"}|", CD_ONE_MANY},
 };
-static constexpr CardTok WCARD[] = { /* word forms, longest first */
+constexpr CardTok WCARD[] = { /* word forms, longest first */
     {"one or zero", CD_ZERO_ONE}, {"zero or one", CD_ZERO_ONE}, {"one or more", CD_ONE_MANY},
     {"one or many", CD_ONE_MANY}, {"zero or more", CD_ZERO_MANY}, {"zero or many", CD_ZERO_MANY},
     {"many(1)", CD_ONE_MANY}, {"many(0)", CD_ZERO_MANY}, {"only one", CD_ONE}, {"1+", CD_ONE_MANY},
@@ -258,7 +258,7 @@ static void ent_style(Buf b[static 1], const EP p[static 1], Str cls, Str sty) {
     buf_lit(b, "\"/>");
 }
 
-static constexpr char CSS[] =
+constexpr char CSS[] =
     "#mermaid .sg{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}"
     "#mermaid .ent{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .row0{fill:#ffffff;stroke:#9370DB;stroke-width:0.5px;}"

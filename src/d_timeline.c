@@ -9,13 +9,13 @@
 
 typedef struct Period { Str name; uint32_t sec, e0, ne; } Period;
 
-static constexpr char CSS[] =
+constexpr char CSS[] =
     "#mermaid .tl4{font-size:4ex;font-weight:bold;}#mermaid .t16{font-size:16px;}"
     "#mermaid .dl{stroke-width:2px;stroke-dasharray:5 5;}#mermaid .ax4{stroke-width:4px;}";
 /* the default theme's cScale, cScaleInv; its cScaleLabel is white on slots 0 and 3, black elsewhere */
-static constexpr char COL[][8] = {"#8686ff", "#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2",
+constexpr char COL[][8] = {"#8686ff", "#ffff78", "#d7ff86", "#c286ff", "#ff86ff", "#ff86c2",
                                   "#ff8686", "#ffc286", "#c2ff86", "#86ffc2", "#86ffff", "#86c2ff"};
-static constexpr char INV[][8] = {"#ffffb9", "#ababff", "#d0b9ff", "#dcffb9", "#b9ffb9", "#b9ffdc",
+constexpr char INV[][8] = {"#ffffb9", "#ababff", "#d0b9ff", "#dcffb9", "#b9ffb9", "#b9ffdc",
                                   "#b9ffff", "#b9dcff", "#dcb9ff", "#ffb9dc", "#ffb9b9", "#ffdcb9"};
 
 typedef VEC(Str) StrVec;

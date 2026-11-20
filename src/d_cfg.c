@@ -13,7 +13,7 @@ static thread_local DCfg cur;
 static thread_local Arena *cur_a;
 static thread_local size_t cur_cap;
 
-static constexpr size_t MAX_KV = 512;
+constexpr size_t MAX_KV = 512;
 static thread_local Str cur_sect; /* the diagram's section of mermaid's config: flowchart, xyChart ... */
 static thread_local Str cfg_to;   /* what a leading "config." becomes: nothing in the front matter,
                                    * cur_sect in a directive */

@@ -13,23 +13,23 @@
 #include "text.h"
 
 enum { CX, CD, CH, CL, CF, ND }; /* complex complicated chaotic clear confusion (draw order) */
-static constexpr char NAME[ND][12] = {"complex", "complicated", "chaotic", "clear", "confusion"};
-static constexpr char CAP[ND][12] = {"Complex", "Complicated", "Chaotic", "Clear", "Confusion"};
-static constexpr char MODEL[ND][33] = {"Probe \u2192 Sense \u2192 Respond", "Sense \u2192 Analyse \u2192 Respond",
+constexpr char NAME[ND][12] = {"complex", "complicated", "chaotic", "clear", "confusion"};
+constexpr char CAP[ND][12] = {"Complex", "Complicated", "Chaotic", "Clear", "Confusion"};
+constexpr char MODEL[ND][33] = {"Probe \u2192 Sense \u2192 Respond", "Sense \u2192 Analyse \u2192 Respond",
                                       "Act \u2192 Sense \u2192 Respond", "Sense \u2192 Categorise \u2192 Respond", ""};
-static constexpr char PRACT[ND][19] = {"Emergent Practices", "Good Practices", "Novel Practices", "Best Practices", "Disorder"};
+constexpr char PRACT[ND][19] = {"Emergent Practices", "Good Practices", "Novel Practices", "Best Practices", "Disorder"};
 /* themeVariables cynefin.<field>: the domain fills in domain order, then the colours CSS names $5..$9 */
 enum { C_LABEL = ND, C_TEXT, C_BOUND, C_CLIFF, C_ARROW, NC };
-static constexpr char CVAR[NC][22] = {"cynefin.complexBg", "cynefin.complicatedBg", "cynefin.chaoticBg", "cynefin.clearBg",
+constexpr char CVAR[NC][22] = {"cynefin.complexBg", "cynefin.complicatedBg", "cynefin.chaoticBg", "cynefin.clearBg",
                                       "cynefin.confusionBg", "cynefin.labelColor", "cynefin.textColor",
                                       "cynefin.boundaryColor", "cynefin.cliffColor", "cynefin.arrowColor"};
 /* what mtheme_gen.h falls back to for each CVAR when cynefin.<field> is unset */
-static constexpr char CFALL[NC][17] = {"#E8F5E9", "#E3F2FD", "#FBE9E7", "#FFF8E1", "#F3E5F5",
+constexpr char CFALL[NC][17] = {"#E8F5E9", "#E3F2FD", "#FBE9E7", "#FFF8E1", "#F3E5F5",
                                        "primaryTextColor", "textColor", "lineColor", "#8B0000", "lineColor"};
 typedef struct CItem { unsigned dom; Str label; } CItem;
 typedef struct CTr { unsigned a, b; Str label; } CTr;
 
-static constexpr char CSS[] =
+constexpr char CSS[] =
     "#mermaid .cdl{font-size:16px;font-weight:bold;fill:$5;}#mermaid .csub{font-size:11px;fill:$6;font-style:italic;}"
     "#mermaid .cit{fill-opacity:0.95;stroke:$7;stroke-width:1;}#mermaid .citt{font-size:12px;fill:$6;}"
     "#mermaid .cio{fill-opacity:0.6;stroke:$7;stroke-width:1;stroke-dasharray:3 2;}"

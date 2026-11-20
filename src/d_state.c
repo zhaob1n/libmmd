@@ -378,7 +378,7 @@ static mmd_status parse(StP p[static 1], LineIt it[static 1]) {
     return settle_dirs(p);
 }
 
-static constexpr char CSS[] =
+constexpr char CSS[] =
     "#mermaid .st{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .bar,#mermaid .start{fill:#333;stroke:none;}"
     "#mermaid .endo{fill:#ECECFF;stroke:#333;stroke-width:2px;}#mermaid .endi{fill:#9370DB;}"

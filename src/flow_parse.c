@@ -23,7 +23,7 @@ constexpr int32_t AF_GLOBAL = -2; /* sg[] entry for `global … end`, nparent of
 
 /* character classes, table driven */
 enum { C_ID = 1u, C_SP = 2u, C_LINK = 4u };
-static constexpr uint8_t CC[256] = {
+constexpr uint8_t CC[256] = {
     [' '] = C_SP, ['\t'] = C_SP, ['\r'] = C_SP,
     ['-'] = C_LINK, ['='] = C_LINK, ['.'] = C_LINK, ['~'] = C_LINK,
     ['_'] = C_ID,
@@ -60,7 +60,7 @@ static Str rest_of_line(P p[static 1]) {
 /* ---- node shapes ---- */
 typedef struct ShapeTok { char open[4]; char close[4]; Shape sh; uint8_t ol, cl; } ShapeTok;
 #define ST(o, c, s) {o, c, s, sizeof o - 1, sizeof c - 1}
-static constexpr ShapeTok SHAPES[] = {
+constexpr ShapeTok SHAPES[] = {
     ST("(((", ")))", SH_DCIRCLE), ST("((", "))", SH_CIRCLE), ST("([", "])", SH_STADIUM),
     ST("(", ")", SH_ROUND),       ST("[[", "]]", SH_SUBROUTINE), ST("[(", ")]", SH_CYLINDER),
     ST("[/", "/]", SH_LEAN_R),    ST("[\\", "\\]", SH_LEAN_L),   ST("[", "]", SH_RECT),

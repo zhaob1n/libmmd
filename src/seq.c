@@ -76,7 +76,7 @@ static Str word(Str s[static 1]) {
 
 typedef struct ArrowTok { char t[8]; uint8_t n; Head h; bool dotted, bidir; } ArrowTok;
 #define AT(tok, ...) {tok, sizeof(tok) - 1, __VA_ARGS__}
-static constexpr ArrowTok ARROWS[] = {
+constexpr ArrowTok ARROWS[] = {
     AT("<<-->>", HD_ARROW, true, true), AT("<<->>", HD_ARROW, false, true),
     AT("-->>", HD_ARROW, true, false),  AT("->>", HD_ARROW, false, false),
     AT("--x", HD_CROSS, true, false),   AT("-x", HD_CROSS, false, false),
@@ -405,7 +405,7 @@ static void actor_box(Buf b[static 1], const Part pa[static 1], double y, double
 typedef struct Act { int32_t p; double y0; unsigned depth; } Act;
 typedef struct Blk { size_t ev; double y0; int32_t lo, hi; double xl, xr; /* content x extent (notes, self msgs) */ } Blk;
 
-static constexpr char SEQ_CSS[] =
+constexpr char SEQ_CSS[] =
     "#mermaid{font-family:\"trebuchet ms\",verdana,arial,sans-serif;font-size:16px;}"
     "#mermaid .actor{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}"
     "#mermaid .actor-man circle,#mermaid .actor-line{fill:#ECECFF;stroke:#9370DB;stroke-width:2px;}"
@@ -423,7 +423,7 @@ static constexpr char SEQ_CSS[] =
     "#mermaid .title{font-size:18px;}"
     "#mermaid .box{stroke:rgba(0,0,0,0.5);stroke-width:1px;}#mermaid .destroy{stroke:#333;stroke-width:2px;fill:none;}";
 
-static constexpr char SEQ_DEFS[] =
+constexpr char SEQ_DEFS[] =
     "<defs><marker id=\"sq-arrow\" viewBox=\"0 0 12 12\" refX=\"11\" refY=\"6\" markerWidth=\"12\" markerHeight=\"12\" "
     "markerUnits=\"userSpaceOnUse\" orient=\"auto\"><path d=\"M0,0 L12,6 L0,12 z\" fill=\"#333\"/></marker>"
     "<marker id=\"sq-arrow-start\" viewBox=\"0 0 12 12\" refX=\"1\" refY=\"6\" markerWidth=\"12\" markerHeight=\"12\" "

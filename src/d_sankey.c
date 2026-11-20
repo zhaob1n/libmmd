@@ -14,9 +14,9 @@
 typedef struct SNode { Str name, val; double in, out, v, x, y, h; uint32_t col, dep, hgt; bool r; } SNode;
 typedef struct SLink { uint32_t s, t; double v, y0, y1; } SLink;
 
-static constexpr char CSS[] =
+constexpr char CSS[] =
     "#mermaid .sl{fill:none;stroke-opacity:.5;}#mermaid .sn{stroke:none;}#mermaid .st{font-size:14px;fill:#333;}";
-static constexpr char PAL[][8] = {"#4e79a7", "#f28e2c", "#e15759", "#76b7b2", "#59a14f", "#edc949",
+constexpr char PAL[][8] = {"#4e79a7", "#f28e2c", "#e15759", "#76b7b2", "#59a14f", "#edc949",
                                   "#af7aa1", "#ff9da7", "#9c755f", "#bab0ab"};
 
 /* name and value: starting at x0 right of the node, else ending at x1 */

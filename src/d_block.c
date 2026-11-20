@@ -25,12 +25,12 @@ typedef struct Blk {
 typedef struct BEdge { uint32_t a, b; Str label; bool arrow, arrow_s; } BEdge;
 typedef VEC(Blk) BlkVec;
 
-static constexpr double GAP = 8; /* mermaid block.padding */
-static constexpr double PAD = 8;
-static constexpr char CSS[] =
+constexpr double GAP = 8; /* mermaid block.padding */
+constexpr double PAD = 8;
+constexpr char CSS[] =
     "#mermaid .bn{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#mermaid .bg{fill:#f4f4ff;stroke:#9370DB;stroke-width:1px;stroke-dasharray:4,2;}"
     "#mermaid .be{fill:none;stroke:#333;stroke-width:2px;}#mermaid .bl{fill:#e8e8e8;opacity:.85;}#mermaid .bt{font-size:16px;}";
-static constexpr char DEFS[] =
+constexpr char DEFS[] =
     "<defs><marker id=\"blk-ae\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" markerWidth=\"10\" markerHeight=\"10\" markerUnits=\"userSpaceOnUse\" orient=\"auto\">"
     "<path d=\"M0,0 L10,5 L0,10 z\" fill=\"#333\"/></marker>"
     "<marker id=\"blk-as\" viewBox=\"0 0 10 10\" refX=\"1\" refY=\"5\" markerWidth=\"10\" markerHeight=\"10\" markerUnits=\"userSpaceOnUse\" orient=\"auto\">"

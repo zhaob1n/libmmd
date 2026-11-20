@@ -5,7 +5,7 @@
 
 typedef struct FaIcon { char name[20]; uint16_t cp; } FaIcon;
 /* Font Awesome 6 free codepoints (solid unless brand); sorted by name for bsearch */
-static constexpr FaIcon FA[] = {
+constexpr FaIcon FA[] = {
     {"arrow-right", 0xf061}, {"aws", 0xf375}, {"ban", 0xf05e}, {"bell", 0xf0f3}, {"bolt", 0xf0e7},
     {"box", 0xf466}, {"bug", 0xf188}, {"building", 0xf1ad}, {"calendar", 0xf133}, {"camera-retro", 0xf083},
     {"car", 0xf1b9}, {"chart-bar", 0xf080}, {"check", 0xf00c}, {"clock", 0xf017}, {"cloud", 0xf0c2},

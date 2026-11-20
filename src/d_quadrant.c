@@ -12,7 +12,7 @@ typedef struct QStyle { double r, sw; Str fill, stroke; } QStyle;
 typedef struct QPt { Str name; double x, y; QStyle st; } QPt;
 typedef struct QCls { Str name; QStyle st; } QCls;
 
-static constexpr char CSS[] =
+constexpr char CSS[] =
     "#mermaid .q1{fill:#ECECFF;}#mermaid .q2{fill:#f1f1ff;}#mermaid .q3{fill:#f6f6ff;}#mermaid .q4{fill:#fbfbff;}"
     "#mermaid .bd{stroke:#c7c7f1;stroke-width:2px;fill:none;}#mermaid .in{stroke:#c7c7f1;stroke-width:1px;}"
     "#mermaid .ql{font-size:16px;fill:#131300;}#mermaid .al{font-size:16px;fill:#131300;}"

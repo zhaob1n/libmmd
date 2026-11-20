@@ -585,7 +585,7 @@ static Str concat(Arena a[static 1], Str x, Str y) {
 }
 
 #define UC_TAIL "#mermaid .bm{fill:none;}#mermaid .ic{fill:#1976d2;stroke:#0d47a1;stroke-width:1px;}#mermaid .iq{fill:#ffffff;font-size:20px;}"
-static constexpr char NEO_CSS[] =
+constexpr char NEO_CSS[] =
     "#mermaid{font-family:\"Recursive Variable\",arial,sans-serif;fill:#28253D;}"
     "#mermaid .gl{stroke-width:2px;}#mermaid .uc{stroke-width:2px;filter:url(#neo-shadow);}"
     "#mermaid .bd{stroke-width:1px;}#mermaid .bt{font-size:14px;fill:#000000;}"
@@ -597,7 +597,7 @@ static constexpr char NEO_CSS[] =
 /* `look: classic` on a classic theme: the default theme's colours here, the others' (and any
  * themeVariables) from dcfg_theme_css; thin curved edges. Text: .al actor, .ul use case, .el edge,
  * .tl JSON table, .nl note, .bt boundary title. */
-static constexpr char CLASSIC_CSS[] =
+constexpr char CLASSIC_CSS[] =
     "#mermaid{font-family:\"trebuchet ms\",verdana,arial,sans-serif;fill:#333;}"
     "#mermaid .gl,#mermaid .uc,#mermaid .bm{fill:#ECECFF;stroke:#9370DB;stroke-width:2px;}"
     "#mermaid .bd{fill:#ffffde;stroke:#aaaa33;stroke-width:1px;}#mermaid .bt{font-size:14px;fill:#333;}"

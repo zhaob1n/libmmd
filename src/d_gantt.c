@@ -245,7 +245,7 @@ static size_t fmt_time(Str f, double t, size_t cap, char out[static cap]) {
  * critBkgColor, or the active/done fill when it is active/done too. Each state rule names .task as well,
  * and a crit task's every rule .crit, so the theme's rules (dcfg_theme_css, written after these and
  * only for the variables a theme changes) keep the same order of precedence */
-static constexpr char CSS[] =
+constexpr char CSS[] =
     "#mermaid .sec0,#mermaid .sec2{fill:#6666ff;opacity:0.2;}#mermaid .sec1,#mermaid .sec3{fill:#fff400;opacity:0.2;}"
     "#mermaid .stitle{font-size:11px;fill:#333;}#mermaid .grid{stroke:lightgrey;opacity:.8;stroke-width:1px;}"
     "#mermaid .tick{font-size:10px;fill:#000;}#mermaid .exr{fill:#eee;stroke:none;}"

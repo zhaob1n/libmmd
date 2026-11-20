@@ -13,14 +13,14 @@ enum : uint8_t { C_NORMAL, C_REVERSE, C_HIGHLIGHT, C_MERGE, C_CHERRY };
 typedef struct Commit { Str id, tag, msg; uint32_t lane, p1, p2; uint8_t type; } Commit; /* p = UINT32_MAX: none */
 typedef struct Branch { Str name; double order; uint32_t head, idx; bool has_head; } Branch;
 
-static constexpr char CSS[] =
+constexpr char CSS[] =
     "#mermaid .bl{stroke:#333;stroke-width:1px;stroke-dasharray:2;}#mermaid .ar{fill:none;stroke-width:8px;stroke-linecap:round;}"
     "#mermaid .cl{font-size:10px;fill:#000;}#mermaid .clb{fill:#ffffde;opacity:0.5;}"
     "#mermaid .bn{font-size:14px;fill:#000;}#mermaid .bnx{fill:inherit;}#mermaid .tg{font-size:10px;fill:#131300;}"
     "#mermaid .tgb{fill:#ECECFF;stroke:#9370DB;stroke-width:1px;}#mermaid .ttl{font-size:18px;}";
 /* mermaid 11 default theme git0..git7 (hsl(h, 100%, 46.27%)) and their branch-label text colours */
-static constexpr char COL[][8] = {"#0000ec", "#dede00", "#9dec00", "#0076ec", "#00ecec", "#00ec76", "#ec00ec", "#ec0000"};
-static constexpr char LTXT[][5] = {"#fff", "#000", "#000", "#fff", "#000", "#000", "#000", "#000"};
+constexpr char COL[][8] = {"#0000ec", "#dede00", "#9dec00", "#0076ec", "#00ecec", "#00ec76", "#ec00ec", "#ec0000"};
+constexpr char LTXT[][5] = {"#fff", "#000", "#000", "#fff", "#000", "#000", "#000", "#000"};
 
 typedef struct Attr { Str id, tag, msg, parent; uint8_t type; double order; bool has_type, has_order; } Attr;
 [[nodiscard]] static bool attrs(Str s, Attr at[static 1]) {

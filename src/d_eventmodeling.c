@@ -47,11 +47,11 @@ static int kind_of(Str t) {
 }
 static int group_of(int k) { return k <= 1 ? 0 : k <= 3 ? 1 : 2; }
 
-static constexpr char FILL[][8] = {"white", "#edb3f6", "#d3f1a2", "#bcd6fe", "#ffb778"};
-static constexpr char STROKE[][8] = {"#dbdada", "#b88cbf", "#a3b732", "#679ac3", "#c19a0f"};
-static constexpr char TV_FILL[][31] = {"themeVariables.emUiFill", "themeVariables.emProcessorFill",
+constexpr char FILL[][8] = {"white", "#edb3f6", "#d3f1a2", "#bcd6fe", "#ffb778"};
+constexpr char STROKE[][8] = {"#dbdada", "#b88cbf", "#a3b732", "#679ac3", "#c19a0f"};
+constexpr char TV_FILL[][31] = {"themeVariables.emUiFill", "themeVariables.emProcessorFill",
     "themeVariables.emReadModelFill", "themeVariables.emCommandFill", "themeVariables.emEventFill"};
-static constexpr char TV_STROKE[][33] = {"themeVariables.emUiStroke", "themeVariables.emProcessorStroke",
+constexpr char TV_STROKE[][33] = {"themeVariables.emUiStroke", "themeVariables.emProcessorStroke",
     "themeVariables.emReadModelStroke", "themeVariables.emCommandStroke", "themeVariables.emEventStroke"};
 
 static void put_col(Buf b[static 1], Str v, const char def[static 1]) {

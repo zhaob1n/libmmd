@@ -9,12 +9,12 @@
 
 typedef struct Slice { Str label; double v; } Slice;
 
-static constexpr char CSS[] =
+constexpr char CSS[] =
     "#mermaid .slice{stroke:#000;stroke-width:2px;opacity:0.7;}"
     "#mermaid .outer{fill:none;stroke:#000;stroke-width:2px;}"
     "#mermaid .pct{font-size:17px;}#mermaid .ttl{font-size:25px;}";
 /* mermaid default theme pie1..pie12 (hsl adjustments of primary/secondary/tertiary) */
-static constexpr char COLORS[][8] = {"#ececff", "#ffffde", "#b5ff20", "#b9b9ff", "#ffff45", "#d7ff86", "#ff86ff", "#20ffff", "#ff2020", "#ff20ff", "#20ff8f", "#ff5353"};
+constexpr char COLORS[][8] = {"#ececff", "#ffffde", "#b5ff20", "#b9b9ff", "#ffff45", "#d7ff86", "#ff86ff", "#20ffff", "#ff2020", "#ff20ff", "#20ff8f", "#ff5353"};
 
 /* showData's " [v]" after a legend label, v as mermaid writes it (String(v)) */
 static Str shown_value(double v, char out[static 40]) {

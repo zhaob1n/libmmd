@@ -48,7 +48,7 @@ static char *east_asian_width(const char *path) {
 }
 
 static void emit(qa_buf o[static 1], const char *name, const bool set[static NCP], const char *comment, size_t count[static 1]) {
-    qa_putf(o, "/* %s */\nstatic constexpr uint32_t %s[][2] = {\n", comment, name);
+    qa_putf(o, "/* %s */\nconstexpr uint32_t %s[][2] = {\n", comment, name);
     char row[256] = "   ";
     size_t rn = 3;
     for (unsigned cp = 0; cp < NCP; cp++) {

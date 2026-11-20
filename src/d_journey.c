@@ -17,14 +17,14 @@ static bool jr_less(Str x, Str y) {
     return c < 0 || (c == 0 && x.n < y.n);
 }
 
-static constexpr char CSS[] =
+constexpr char CSS[] =
     "#mermaid .face{fill:#FFF8DC;stroke:#999;stroke-width:1px;}#mermaid .feat{fill:none;stroke:#666;stroke-width:1.5px;}"
     "#mermaid .eye{fill:#666;}#mermaid .tl{stroke:#666;stroke-width:1px;stroke-dasharray:4 4;}"
     "#mermaid .tbox{stroke:#666;stroke-width:1px;}#mermaid .axis{stroke:#000;stroke-width:4px;}"
     "#mermaid .ttl{font-size:20px;font-weight:bold;}#mermaid .tx{font-size:14px;}"
     "#mermaid .adot{stroke:#000;stroke-width:1px;}";
-static constexpr char SECCOL[][8] = {"#ECECFF", "#ffffde", "#f5ffe0", "#e0f0ff", "#ffe0f0", "#e0ffe8"};
-static constexpr char ACTCOL[][8] = {"#8FBC8F", "#7CFC00", "#00FFFF", "#20B2AA", "#B0E0E6", "#FFFFE0", "#FFB6C1", "#87CEFA"};
+constexpr char SECCOL[][8] = {"#ECECFF", "#ffffde", "#f5ffe0", "#e0f0ff", "#ffe0f0", "#e0ffe8"};
+constexpr char ACTCOL[][8] = {"#8FBC8F", "#7CFC00", "#00FFFF", "#20B2AA", "#B0E0E6", "#FFFFE0", "#FFB6C1", "#87CEFA"};
 
 static void face(Buf b[static 1], double cx, double cy, double score) {
     buf_lit(b, "<circle class=\"face\" cx=\""); buf_num(b, cx); buf_lit(b, "\" cy=\""); buf_num(b, cy);

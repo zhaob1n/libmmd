@@ -25,11 +25,11 @@ static void ish_css(Buf b[static 1]) {
     buf_lit(b, ";stroke-width:2;}#mermaid .iht{font-weight:600;font-size:14px;}");
 }
 
-static constexpr double SPINE = 250;
-static constexpr double STUB = 30;
-static constexpr double BASE = 60;
-static constexpr double PERCHILD = 5;
-static constexpr unsigned MAXD = 64;
+constexpr double SPINE = 250;
+constexpr double STUB = 30;
+constexpr double BASE = 60;
+constexpr double PERCHILD = 5;
+constexpr unsigned MAXD = 64;
 
 typedef struct IS {
     Arena *A;

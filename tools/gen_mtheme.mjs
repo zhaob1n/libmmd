@@ -348,6 +348,6 @@ for (const id of ['default', 'base', 'dark', 'forest', 'neutral']) {
     tmp = 0;
     out += `static void ${id}_${m === 'constructor' ? 'ctor' : 'update'}(MTheme *t) {\n${stmts(body, new Set(), id, 1)}}\n`;
   }
-  out += `static constexpr Calc ${id}_calc = ${KNOWN[id]};\n`;
+  out += `constexpr Calc ${id}_calc = ${KNOWN[id]};\n`;
 }
 process.stdout.write(out);
