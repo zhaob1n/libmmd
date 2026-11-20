@@ -70,7 +70,7 @@ DIAG_FN(sankey_render) {
     while (dg_next_line(&it, &line, &lo)) {
         Str s = line, f[3];
         for (int k = 0; k < 3; k++) {
-            if (!s.n && k < 3) { if (k < 3) return diag_fail(err_off, msg, lo, "expected source,target,value"); }
+            if (!s.n) return diag_fail(err_off, msg, lo, "expected source,target,value");
             if (!field(a, &s, &f[k], &oom)) return oom ? MMD_ERR_NOMEM : diag_fail(err_off, msg, lo, "bad CSV field");
         }
         if (s.n) return diag_fail(err_off, msg, (size_t)(s.p - src), "too many CSV fields");
