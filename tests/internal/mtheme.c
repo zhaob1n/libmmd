@@ -18,7 +18,37 @@ typedef struct Ref { MThemeId id; size_t n; char **k, **v; } Ref;
 
 static Str str(const char *s) { return (Str){.p = s, .n = strlen(s)}; }
 
+/* base's constructor leaves 11 variables, so full() holds MAX_VARS-11 unknown names;
+ * past that, and at 1e5 names (with duplicates), mtheme_new must stay cheap. */
+static int test_override_limit(void) {
+    enum { N = 100000, STRIDE = 16, BASE_INIT = 11, FIT = 512 - BASE_INIT };
+    AUTOFREE char *store = calloc(N, STRIDE);
+    AUTOFREE Str *ks = calloc(N, sizeof *ks);
+    AUTOFREE Str *vs = calloc(N, sizeof *vs);
+    if (!store || !ks || !vs) return 1;
+    for (size_t i = 0; i < N; i++) {
+        int n = snprintf(store + i * STRIDE, STRIDE, "u%zu", i);
+        ks[i] = (Str){.p = store + i * STRIDE, .n = (size_t)n};
+        vs[i] = S("x");
+    }
+    AUTO_ARENA Arena a = {};
+    if (!mtheme_new(&a, MT_BASE, FIT, ks, vs)) return fputs("FAIL override limit: 501 unknown keys\n", stdout), 1;
+    arena_reset(&a);
+    if (mtheme_new(&a, MT_BASE, FIT + 1, ks, vs)) return fputs("FAIL override limit: 502 unknown keys succeeded\n", stdout), 1;
+    for (size_t i = FIT; i < N; i++) ks[i] = ks[0];
+    arena_reset(&a);
+    if (!mtheme_new(&a, MT_BASE, N, ks, vs)) return fputs("FAIL override limit: 1e5 keys with 501 names\n", stdout), 1;
+    for (size_t i = FIT; i < N; i++) {
+        int n = snprintf(store + i * STRIDE, STRIDE, "u%zu", i);
+        ks[i] = (Str){.p = store + i * STRIDE, .n = (size_t)n};
+    }
+    arena_reset(&a);
+    if (mtheme_new(&a, MT_BASE, N, ks, vs)) return fputs("FAIL override limit: 1e5 unique keys succeeded\n", stdout), 1;
+    return 0;
+}
+
 int main(int argc, char **argv) {
+    if (test_override_limit()) return 1;
     const char *path = argc > 1 ? argv[1] : "tests/mtheme_cases.tsv";
     FILE *in = fopen(path, "r");
     if (!in) return perror(path), 1;

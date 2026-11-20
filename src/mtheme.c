@@ -299,16 +299,17 @@ static Val scalar(Str s) {
 typedef struct Ov { Key k, top; bool field; Val v; } Ov;
 
 /* the overrides calculate()'s keys.forEach((k) => { this[k] = overrides[k]; }) assigns, the last
- * value for each key winning: ov[*first..n) */
+ * value for each key winning: ov[*first..n), or n+1 past MAX_VARS unknown names */
 static size_t overrides(size_t n, const Str keys[n], const Str vals[n], Ov ov[n]) {
     bool seen[NSLOT] = {};
-    size_t w = n;
+    size_t w = n, nx = 0;
     for (size_t i = n; i-- > 0;) {
         Key k = key_of(keys[i]);
         bool later = k.slot != NONE && seen[k.slot];
         for (size_t m = w; m < n && !later && k.slot == NONE; m++) later = ov[m].k.slot == NONE && str_eq(ov[m].k.name, k.name);
         if (later) continue;
         if (k.slot != NONE) seen[k.slot] = true;
+        else if (++nx > MAX_VARS) return n + 1; /* full() cannot hold more extras */
         const char *dot = memchr(keys[i].p, '.', keys[i].n);
         ov[--w] = (Ov){.k = k, .v = scalar(vals[i]), .field = dot,
                        .top = dot ? key_of((Str){.p = keys[i].p, .n = (size_t)(dot - keys[i].p)}) : (Key){}};
@@ -353,7 +354,9 @@ MTheme *mtheme_new(Arena a[static 1], MThemeId id, size_t n, const Str *keys, co
     Th t = {.a = a, .v = v, .obj = obj, .ok = true};
     Ov *ov = ANEW(a, Ov, n);
     if (!ov) return nullptr;
-    size_t first = overrides(n, keys, vals, ov), m = n - first;
+    size_t first = overrides(n, keys, vals, ov);
+    if (first > n) return nullptr;
+    size_t m = n - first;
     copy_overrides(&t, m, ov + first);
     d->update(&t);
     copy_overrides(&t, m, ov + first);
