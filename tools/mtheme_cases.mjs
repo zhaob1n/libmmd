@@ -9,27 +9,9 @@
 // To keep the file small, a block lists only the variables that differ from the same theme's first
 // block (no overrides), plus "-<key>" for variables that disappear.
 // usage: node tools/mtheme_cases.mjs [mermaid package dir] > tests/mtheme_cases.tsv
-import { execSync } from 'node:child_process';
-import { readdirSync, readFileSync, realpathSync } from 'node:fs';
-import path from 'node:path';
-import url from 'node:url';
+import { flat, loadThemes, mermaidDir } from './mermaid_themes.mjs';
 
-const dir = process.argv[2] ?? (() => {
-  const cli = realpathSync(execSync('command -v mmdc', { shell: '/bin/sh' }).toString().trim());
-  for (let d = path.dirname(cli); d !== '/'; d = path.dirname(d))
-    for (const p of [path.join(d, 'node_modules', 'mermaid'), path.join(d, 'mermaid')])
-      try { if (JSON.parse(readFileSync(path.join(p, 'package.json'), 'utf8')).name === 'mermaid') return p; } catch {}
-  throw new Error('no mermaid package above ' + cli);
-})();
-const chunks = path.join(dir, 'dist/chunks/mermaid.core');
-let themes;
-for (const f of readdirSync(chunks).filter((f) => f.endsWith('.mjs'))) {
-  if (!readFileSync(path.join(chunks, f), 'utf8').includes('getThemeVariables')) continue;
-  const m = await import(url.pathToFileURL(path.join(chunks, f)).href);
-  themes = Object.values(m).find((v) => v && ['base', 'dark', 'forest', 'neutral', 'default'].every((t) => v[t]?.getThemeVariables));
-  if (themes) break;
-}
-if (!themes) throw new Error('no themes object in ' + chunks);
+const themes = await loadThemes(mermaidDir(process.argv[2]));
 
 let seed = 4242;
 const rnd = (n) => ((seed = (seed * 1103515245 + 12345) % 2147483648) % n);
@@ -45,15 +27,6 @@ const BASE = ['primaryColor', 'secondaryColor', 'tertiaryColor', 'background', '
   'textColor', 'primaryBorderColor', 'noteBkgColor', 'nodeBorder', 'clusterBkg', 'actorBkg', 'quadrant1Fill', 'cScale0', 'git0',
   'pie1', 'xyChart.titleColor', 'xyChart.plotColorPalette', 'radar.axisColor'];
 
-// flattened, as mtheme_get answers: strings as is, numbers and booleans as String(v), arrays String(arr)
-function flat(o, pre, out) {
-  for (const [k, v] of Object.entries(o)) {
-    if (v === undefined || v === null || typeof v === 'function') continue;
-    if (typeof v === 'object' && !Array.isArray(v)) flat(v, pre + k + '.', out);
-    else out[pre + k] = String(v);
-  }
-  return out;
-}
 // a YAML scalar as mermaid's config types it
 const typed = (v) => v === 'true' ? true : v === 'false' ? false : v.trim() !== '' && !Number.isNaN(Number(v)) ? Number(v) : v;
 // the flat overrides -> the object mermaid's config would hand over
@@ -77,7 +50,7 @@ for (const theme of ['default', 'base', 'dark', 'forest', 'neutral']) {
   for (const ov of sets) {
     let vars;
     const nested = ov.filter(([k]) => k.includes('.'));
-    try { vars = flat(themes[theme].getThemeVariables(object(ov.filter(([k]) => !k.includes('.')))), '', {}); } catch { vars = null; }
+    try { vars = flat(themes[theme].getThemeVariables(object(ov.filter(([k]) => !k.includes('.'))))); } catch { vars = null; }
     if (vars) for (const [k, v] of nested) vars[k] = String(typed(v));
     out.push(`= ${theme} ${ov.length}`);
     for (const [k, v] of ov) out.push(`${k}\t${v}`);
