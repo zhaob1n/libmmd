@@ -41,12 +41,12 @@ constexpr char CSS[] =
 /* the theme in effect's colour; where the source's value is none khroma reads, fall back to what
  * mtheme_gen.h derives cynefin.<field> from, so other themeVariables (primaryTextColor ...) stay */
 static Str theme_col(int i) {
-    bool dark;
+    MColor c;
     Str v = dcfg_theme_var(CVAR[i]);
-    if (v.n && mc_is_dark(v, &dark)) return v;
+    if (v.n && mc_parse(v, &c)) return v;
     if (CFALL[i][0] == '#') return (Str){.p = CFALL[i], .n = strlen(CFALL[i])};
     v = dcfg_theme_var(CFALL[i]);
-    return v.n && mc_is_dark(v, &dark) ? v : dcfg_preset_var(CFALL[i]);
+    return v.n && mc_parse(v, &c) ? v : dcfg_preset_var(CFALL[i]);
 }
 
 static double rnd(int64_t seed) { /* mermaid seededRandom (mulberry32 step) */

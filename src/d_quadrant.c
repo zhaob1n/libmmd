@@ -186,8 +186,11 @@ DIAG_FN(quadrant_render) {
      * but call khroma without an amount and get hsl(..., NaN%); 50 restores the contrast meant
      * (the default theme's #ECECFF gives #0000eb) */
     Str pfill = dcfg_theme_var("quadrantPointFill"), q1 = dcfg_theme_var("quadrant1Fill");
-    bool dk = false;
-    if (!safe_color(pfill) && !(mc_is_dark(q1, &dk) && (dk ? mc_lighten : mc_darken)(a, q1, 50, &pfill))) pfill = S("#0000eb");
+    MColor qc;
+    if (!safe_color(pfill)) {
+        if (mc_parse(q1, &qc)) mc_lighten(&qc, mc_is_dark(&qc) ? 50 : -50, &qc), pfill = mc_str(&qc);
+        else pfill = S("#0000eb");
+    }
     for (size_t i = 0; i < pts.n; i++) {
         const QPt *p = &pts.v[i];
         double cx = ox + p->x * SW, cy = oy + (1 - p->y) * SH;

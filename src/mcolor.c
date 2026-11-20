@@ -6,6 +6,7 @@
 #include "mcolor.h"
 
 #include <math.h>
+#include <stddef.h>
 #include <string.h>
 
 typedef struct MChannels {
@@ -582,146 +583,197 @@ static bool parse_keyword(Str s, MChannels c[static 1]) {
     return false;
 }
 
-static bool mc_parse(Str s, MChannels c[static 1]) {
+static bool mc_parse_ch(Str s, MChannels c[static 1]) {
     return parse_hex(s, c) || parse_rgb(s, c) || parse_hsl(s, c) || parse_keyword(s, c);
 }
 
-/* ---- stringifying ---- */
+/* ---- printing ---- */
 
-static Str num_str(Arena a[static 1], double v) {
-    char buf[32];
-    size_t n = fmt_js(v, buf);
-    return arena_strdup(a, (Str){.p = buf, .n = n});
+enum { FMT_HEX, FMT_RGB, FMT_HSL };
+
+/* fmt_js(lang_round(x)). The rounded value is k / 1e10, k an integer, and below 1e5 the double
+ * nearest k / 1e10 has no shorter text that reads back: any other decimal of ten places lies
+ * 1e-10 away, beyond its spacing (1.5e-11 at most). So it prints as k with the point ten digits
+ * from the right, but where fmt_js turns to an exponent (under 1e-6). */
+static size_t fmt_round(double x, char out[static 32]) {
+    double k = js_round(x * 1e10);
+    if (!(fabs(k) < 1e15) || (k != 0 && fabs(k) < 1e4)) return fmt_js(k / 1e10, out);
+    char *o = out;
+    if (k < 0) *o++ = '-';
+    uint64_t u = (uint64_t)fabs(k), frac = u % 10000000000u;
+    char d[20];
+    int n = 0;
+    for (uint64_t i = u / 10000000000u; n == 0 || i; i /= 10) d[n++] = (char)('0' + i % 10);
+    while (n) *o++ = d[--n];
+    if (frac) {
+        *o++ = '.';
+        for (uint64_t p = 1000000000u; frac; p /= 10) *o++ = (char)('0' + frac / p), frac %= p;
+    }
+    *o = 0;
+    return (size_t)(o - out);
 }
 
-static void dec2hex(double v, char out[static 2]) {
+static char *put_lit(char o[static 1], const char s[static 1]) {
+    size_t n = strlen(s);
+    memcpy(o, s, n);
+    return o + n;
+}
+
+static char *put_hex(char o[static 2], double v) {
+    constexpr char H[] = "0123456789abcdef";
     int i = (int)js_round(v);
-    static constexpr char H[] = "0123456789abcdef";
-    out[0] = H[(i >> 4) & 15];
-    out[1] = H[i & 15];
+    *o++ = H[(i >> 4) & 15];
+    *o++ = H[i & 15];
+    return o;
 }
 
 static bool is_int(double x) { return !isnan(x) && !isinf(x) && floor(x) == x; }
 
-static Str stringify_hsl(Arena a[static 1], MChannels c[static 1]) {
-    Str h = num_str(a, lang_round(get_h(c)));
-    Str s = num_str(a, lang_round(get_s(c)));
-    Str l = num_str(a, lang_round(get_l(c)));
-    if (c->a < 1) {
-        Str al = num_str(a, c->a);
-        return STR_CAT(a, S("hsla("), h, S(", "), s, S("%, "), l, S("%, "), al, S(")"));
+/* khroma's stringify, as fmt says: the channels in range (or NaN) keep it under MC_TEXT */
+static size_t print(MChannels c[static 1], unsigned fmt, char out[static MC_TEXT]) {
+    char *o = out;
+    if (fmt == FMT_HEX) {
+        *o++ = '#';
+        o = put_hex(put_hex(put_hex(o, get_r(c)), get_g(c)), get_b(c));
+        if (c->a < 1) o = put_hex(o, c->a * 255.0);
+    } else if (fmt == FMT_RGB) {
+        o = put_lit(o, c->a < 1 ? "rgba(" : "rgb(");
+        o += fmt_round(get_r(c), o), o = put_lit(o, ", ");
+        o += fmt_round(get_g(c), o), o = put_lit(o, ", ");
+        o += fmt_round(get_b(c), o);
+        if (c->a < 1) o = put_lit(o, ", "), o += fmt_round(c->a, o);
+        *o++ = ')';
+    } else {
+        o = put_lit(o, c->a < 1 ? "hsla(" : "hsl(");
+        o += fmt_round(get_h(c), o), o = put_lit(o, ", ");
+        o += fmt_round(get_s(c), o), o = put_lit(o, "%, ");
+        o += fmt_round(get_l(c), o), *o++ = '%';
+        if (c->a < 1) o = put_lit(o, ", "), o += fmt_js(c->a, o);
+        *o++ = ')';
     }
-    return STR_CAT(a, S("hsl("), h, S(", "), s, S("%, "), l, S("%)"));
+    return (size_t)(o - out);
 }
 
-static Str stringify_rgb(Arena a[static 1], MChannels c[static 1]) {
-    Str r = num_str(a, lang_round(get_r(c)));
-    Str g = num_str(a, lang_round(get_g(c)));
-    Str b = num_str(a, lang_round(get_b(c)));
-    if (c->a < 1) {
-        Str al = num_str(a, lang_round(c->a));
-        return STR_CAT(a, S("rgba("), r, S(", "), g, S(", "), b, S(", "), al, S(")"));
-    }
-    return STR_CAT(a, S("rgb("), r, S(", "), g, S(", "), b, S(")"));
+/* ---- colours ---- */
+
+static MChannels chan(const MColor m[static 1]) {
+    MChannels c = {.a = m->a, .type = TYPE_ALL};
+    if (m->hsl) c.has_h = c.has_s = c.has_l = true, c.h = m->c[0], c.s = m->c[1], c.l = m->c[2];
+    else c.has_r = c.has_g = c.has_b = true, c.r = m->c[0], c.g = m->c[1], c.b = m->c[2];
+    return c;
 }
 
-static Str stringify_hex(Arena a[static 1], MChannels c[static 1]) {
-    char hr[2], hg[2], hb[2], ha[2];
-    dec2hex(get_r(c), hr);
-    dec2hex(get_g(c), hg);
-    dec2hex(get_b(c), hb);
-    Str r = {.p = hr, .n = 2}, g = {.p = hg, .n = 2}, b = {.p = hb, .n = 2};
-    if (c->a < 1) {
-        dec2hex(c->a * 255.0, ha);
-        Str al = {.p = ha, .n = 2};
-        return STR_CAT(a, S("#"), r, g, b, al);
-    }
-    return STR_CAT(a, S("#"), r, g, b);
+/* a colour with no text yet; buf, of which only the n bytes printed are read, is left as it is */
+static void blank(MColor out[static 1]) { memset(out, 0, offsetof(MColor, buf)); }
+
+static void from_parse(const MChannels c[static 1], MColor out[static 1]) {
+    bool hsl = !c->has_r;
+    blank(out);
+    out->hsl = hsl, out->a = c->a;
+    out->c[0] = hsl ? c->h : c->r, out->c[1] = hsl ? c->s : c->g, out->c[2] = hsl ? c->l : c->b;
 }
 
-static Str stringify(Arena a[static 1], MChannels c[static 1]) {
-    if (!c->changed && c->color.n > 0) return c->color;
-    if (c->type == TYPE_HSL || !c->has_r) return stringify_hsl(a, c);
-    if (c->a < 1 || !is_int(get_r(c)) || !is_int(get_g(c)) || !is_int(get_b(c))) return stringify_rgb(a, c);
-    return stringify_hex(a, c);
+bool mc_parse(Str s, MColor out[static 1]) {
+    MChannels c;
+    if (!mc_parse_ch(s, &c)) return false;
+    from_parse(&c, out);
+    out->str = s;
+    if (c.color.p != s.p) out->kw = true, out->fmt = FMT_HEX; /* KEYWORDS[]' hex prints back as is */
+    return true;
+}
+
+/* an operation that changes nothing: khroma gives back the text it parsed, for a keyword its hex */
+static void same(const MColor col[static 1], MColor out[static 1]) {
+    if (out != col) memcpy(out, col, offsetof(MColor, buf) + col->n);
+    if (out->kw) out->str = (Str){}, out->kw = false;
+}
+
+/* a number fmt_js prints without an exponent, which the rgb() grammar needs (no e-7) */
+static bool plain(double x) { return x == 0 || (fabs(x) >= 1e-6 && fabs(x) < 1e21); }
+
+/* what khroma's next parse makes of the text stringify() would give: the printed numbers read
+ * back exactly (fmt_js is shortest round-trip), clamped as the parser clamps. Where that is not
+ * the number printed (a hue rounding to 360, a NaN), print the text and parse it. */
+static void settle(MChannels c[static 1], MColor out[static 1]) {
+    double p[3], pa = 1;
+    bool ok = true;
+    blank(out);
+    out->a = 1;
+    if (c->type == TYPE_HSL || !c->has_r) {
+        p[0] = lang_round(get_h(c)), p[1] = lang_round(get_s(c)), p[2] = lang_round(get_l(c));
+        out->hsl = true, out->fmt = FMT_HSL;
+        out->c[0] = fmod(p[0], 360.0) + 0.0, out->c[1] = clamp_100(p[1]) + 0.0, out->c[2] = clamp_100(p[2]) + 0.0;
+        if (c->a < 1) out->a = clamp_a(c->a), ok = out->a == c->a;
+    } else {
+        p[0] = get_r(c), p[1] = get_g(c), p[2] = get_b(c);
+        out->fmt = c->a < 1 || !is_int(p[0]) || !is_int(p[1]) || !is_int(p[2]) ? FMT_RGB : FMT_HEX;
+        if (out->fmt == FMT_RGB) {
+            for (int i = 0; i < 3; i++) p[i] = lang_round(p[i]), ok &= plain(p[i]);
+            if (c->a < 1) pa = lang_round(c->a), out->a = clamp_a(pa) + 0.0, ok &= plain(pa) && out->a == pa;
+        }
+        for (int i = 0; i < 3; i++) out->c[i] = clamp_255(p[i]) + 0.0;
+    }
+    for (int i = 0; i < 3; i++) ok &= isfinite(p[i]) && out->c[i] == p[i];
+    if (ok) return;
+    char b[MC_TEXT];
+    size_t n = print(c, out->fmt, b);
+    MChannels back;
+    if (mc_parse_ch((Str){.p = b, .n = n}, &back)) from_parse(&back, out);
+    else blank(out), out->bad = true;
+    memcpy(out->buf, b, n), out->n = (unsigned char)n;
+}
+
+Str mc_str(MColor c[static 1]) {
+    if (c->str.n) return c->str;
+    if (!c->n) {
+        MChannels ch = chan(c);
+        c->n = (unsigned char)print(&ch, c->fmt, c->buf);
+    }
+    return (Str){.p = c->buf, .n = c->n};
 }
 
 /* ---- the methods the themes call ---- */
 
-typedef struct {
-    bool has_h, has_s, has_l, has_r, has_g, has_b;
-    double h, s, l, r, g, b;
-} MChanges;
-
-static bool mc_change(Arena a[static 1], Str col, MChanges ch, Str out[static 1]) {
-    MChannels c;
-    if (!mc_parse(col, &c)) return false;
-    if (ch.has_h) set_h(&c, clamp_h(ch.h));
-    if (ch.has_s) set_s(&c, clamp_100(ch.s));
-    if (ch.has_l) set_l(&c, clamp_100(ch.l));
-    if (ch.has_r) set_r(&c, clamp_255(ch.r));
-    if (ch.has_g) set_g(&c, clamp_255(ch.g));
-    if (ch.has_b) set_b(&c, clamp_255(ch.b));
-    *out = stringify(a, &c);
-    return true;
+void mc_adjust(const MColor col[static 1], MCAmounts am, MColor out[static 1]) {
+    MChannels c = chan(col);
+    double v[6];
+    bool on[6];
+    /* khroma skips amounts that are falsy: 0 and NaN; every getter reads the colour as parsed */
+    const double amt[6] = {am.h, am.s, am.l, am.r, am.g, am.b};
+    double (*const get[6])(MChannels[static 1]) = {get_h, get_s, get_l, get_r, get_g, get_b};
+    for (int i = 0; i < 6; i++)
+        if ((on[i] = (am.mask >> i & 1) && amt[i] != 0 && !isnan(amt[i]))) v[i] = get[i](&c) + amt[i];
+    if (on[0]) set_h(&c, clamp_h(v[0]));
+    if (on[1]) set_s(&c, clamp_100(v[1]));
+    if (on[2]) set_l(&c, clamp_100(v[2]));
+    if (on[3]) set_r(&c, clamp_255(v[3]));
+    if (on[4]) set_g(&c, clamp_255(v[4]));
+    if (on[5]) set_b(&c, clamp_255(v[5]));
+    if (c.changed) settle(&c, out);
+    else same(col, out);
 }
 
-bool mc_adjust(Arena a[static 1], Str col, MCAmounts am, Str out[static 1]) {
-    MChannels c;
-    if (!mc_parse(col, &c)) return false;
-    MChanges ch = {};
-    /* khroma skips amounts that are falsy: 0 and NaN */
-    if ((am.mask & 1) && am.h != 0 && !isnan(am.h)) ch.has_h = true, ch.h = get_h(&c) + am.h;
-    if ((am.mask & 2) && am.s != 0 && !isnan(am.s)) ch.has_s = true, ch.s = get_s(&c) + am.s;
-    if ((am.mask & 4) && am.l != 0 && !isnan(am.l)) ch.has_l = true, ch.l = get_l(&c) + am.l;
-    if ((am.mask & 8) && am.r != 0 && !isnan(am.r)) ch.has_r = true, ch.r = get_r(&c) + am.r;
-    if ((am.mask & 16) && am.g != 0 && !isnan(am.g)) ch.has_g = true, ch.g = get_g(&c) + am.g;
-    if ((am.mask & 32) && am.b != 0 && !isnan(am.b)) ch.has_b = true, ch.b = get_b(&c) + am.b;
-    return mc_change(a, col, ch, out);
+void mc_lighten(const MColor col[static 1], double amount, MColor out[static 1]) {
+    MChannels c = chan(col);
+    double cur = get_l(&c), next = clamp_100(cur + amount);
+    if (cur == next) return same(col, out);
+    set_l(&c, next);
+    settle(&c, out);
 }
 
-static bool mc_adjust_channel(Arena a[static 1], Str col, int ch, double amount, Str out[static 1]) {
-    MChannels c;
-    if (!mc_parse(col, &c)) return false;
-    double cur = ch == 0 ? get_h(&c) : ch == 1 ? get_s(&c) : ch == 2 ? get_l(&c)
-                 : ch == 3 ? get_r(&c) : ch == 4 ? get_g(&c) : get_b(&c);
-    double next = ch == 0 ? clamp_h(cur + amount) : ch == 1 ? clamp_100(cur + amount)
-                 : ch == 2 ? clamp_100(cur + amount) : ch == 3 ? clamp_255(cur + amount)
-                 : ch == 4 ? clamp_255(cur + amount) : clamp_255(cur + amount);
-    if (cur != next) {
-        if (ch == 0) set_h(&c, next);
-        else if (ch == 1) set_s(&c, next);
-        else if (ch == 2) set_l(&c, next);
-        else if (ch == 3) set_r(&c, next);
-        else if (ch == 4) set_g(&c, next);
-        else set_b(&c, next);
-    }
-    *out = stringify(a, &c);
-    return true;
+void mc_rgba(double r, double g, double b, double alpha, MColor out[static 1]) {
+    MChannels c = {.has_r = true, .has_g = true, .has_b = true,
+                   .r = clamp_255(r), .g = clamp_255(g), .b = clamp_255(b), .a = clamp_a(alpha)};
+    settle(&c, out);
 }
 
-bool mc_lighten(Arena a[static 1], Str col, double amount, Str out[static 1]) {
-    return mc_adjust_channel(a, col, 2, amount, out);
-}
-
-bool mc_darken(Arena a[static 1], Str col, double amount, Str out[static 1]) {
-    return mc_adjust_channel(a, col, 2, -amount, out);
-}
-
-void mc_rgba(Arena a[static 1], double r, double g, double b, double alpha, Str out[static 1]) {
-    MChannels c = {};
-    c.has_r = c.has_g = c.has_b = true;
-    c.r = clamp_255(r);
-    c.g = clamp_255(g);
-    c.b = clamp_255(b);
-    c.a = clamp_a(alpha);
-    *out = stringify(a, &c);
-}
-
-static bool mc_mix(Arena a[static 1], MChannels c1[static 1], Str col2, double weight, Str out[static 1]) {
-    MChannels c2;
-    if (!mc_parse(col2, &c2)) return false;
-    double r1 = get_r(c1), g1 = get_g(c1), b1 = get_b(c1), a1 = c1->a;
+void mc_invert(const MColor col[static 1], double weight, MColor out[static 1]) {
+    MChannels c1 = chan(col), c2 = chan(col);
+    set_r(&c1, 255 - get_r(&c1));
+    set_g(&c1, 255 - get_g(&c1));
+    set_b(&c1, 255 - get_b(&c1));
+    /* khroma's mix(inverted, col, weight) */
+    double r1 = get_r(&c1), g1 = get_g(&c1), b1 = get_b(&c1), a1 = c1.a;
     double r2 = get_r(&c2), g2 = get_g(&c2), b2 = get_b(&c2), a2 = c2.a;
     double weight_scale = weight / 100.0;
     double weight_normalized = weight_scale * 2 - 1;
@@ -730,28 +782,12 @@ static bool mc_mix(Arena a[static 1], MChannels c1[static 1], Str col2, double w
                      ? weight_normalized
                      : (weight_normalized + alpha_delta) / (1 + weight_normalized * alpha_delta);
     double w1 = (w1c + 1) / 2, w2 = 1 - w1;
-    double r = r1 * w1 + r2 * w2;
-    double g = g1 * w1 + g2 * w2;
-    double b = b1 * w1 + b2 * w2;
-    double al = a1 * weight_scale + a2 * (1 - weight_scale);
-    mc_rgba(a, r, g, b, al, out);
-    return true;
+    mc_rgba(r1 * w1 + r2 * w2, g1 * w1 + g2 * w2, b1 * w1 + b2 * w2, a1 * weight_scale + a2 * (1 - weight_scale), out);
 }
 
-bool mc_invert(Arena a[static 1], Str col, double weight, Str out[static 1]) {
-    MChannels inv;
-    if (!mc_parse(col, &inv)) return false;
-    set_r(&inv, 255 - get_r(&inv));
-    set_g(&inv, 255 - get_g(&inv));
-    set_b(&inv, 255 - get_b(&inv));
-    return mc_mix(a, &inv, col, weight, out);
-}
-
-bool mc_is_dark(Str col, bool out[static 1]) {
-    MChannels c;
-    if (!mc_parse(col, &c)) return false;
+bool mc_is_dark(const MColor col[static 1]) {
+    MChannels c = chan(col);
     double r = get_r(&c), g = get_g(&c), b = get_b(&c);
     double lum = lang_round(0.2126 * to_linear(r) + 0.7152 * to_linear(g) + 0.0722 * to_linear(b));
-    *out = !(lum >= 0.5);
-    return true;
+    return !(lum >= 0.5);
 }

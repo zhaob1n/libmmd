@@ -107,8 +107,12 @@ DIAG_FN(kanban_render) {
         size_t ci = c % 10 + 2;
         char key[16];
         snprintf(key, sizeof key, "cScale%zu", ci);
-        Str sc = dcfg_theme_var(key), fill = S("#ECECFF"), f;
-        if (sc.n && (dcfg_dark() ? mc_darken : mc_lighten)(a, sc, 10, &f) && f.n) fill = f;
+        Str sc = dcfg_theme_var(key), fill = S("#ECECFF");
+        MColor m;
+        if (mc_parse(sc, &m)) {
+            mc_lighten(&m, dcfg_dark() ? -10 : 10, &m);
+            fill = mc_str(&m);
+        }
         /* mermaid sizes each column to its cards */
         buf_lit(out, "<rect class=\"kc\" x=\""); buf_num(out, x); buf_lit(out, "\" y=\""); buf_num(out, top);
         buf_lit(out, "\" width=\""); buf_num(out, CW); buf_lit(out, "\" height=\""); buf_num(out, ch[c] + 5);

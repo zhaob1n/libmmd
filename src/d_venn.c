@@ -320,8 +320,8 @@ DIAG_FN(venn_render) {
     if (css.oom) return MMD_ERR_NOMEM;
     Buf b = {};
     /* vennRenderer: a set's label is its colour lightened 30 on a dark background, darkened 30 otherwise */
-    bool dark;
-    if (!mc_is_dark(dcfg_theme_var("background"), &dark)) dark = false;
+    MColor bg;
+    bool dark = mc_parse(dcfg_theme_var("background"), &bg) && mc_is_dark(&bg);
     BBox bb = {0, 0, W, H};
     if (title.n) {
         buf_lit(&b, "<text class=\"vt\" font-size=\"32px\" text-anchor=\"middle\" dominant-baseline=\"middle\" x=\"");
@@ -341,7 +341,8 @@ DIAG_FN(venn_render) {
             const char *pal = dcfg_pal("venn", ci % 8 + 1, PAL[ci % 8]);
             Str base = cs->fill.n ? cs->fill : (Str){.p = pal, .n = strlen(pal)};
             Str txt = cs->color;
-            if (!txt.n && single && !(dark ? mc_lighten : mc_darken)(a, base, 30, &txt)) txt = (Str){};
+            MColor bc;
+            if (!txt.n && single && mc_parse(base, &bc)) mc_lighten(&bc, dark ? 30 : -30, &bc), txt = mc_str(&bc);
             buf_lit(&b, "<g class=\"venn-area "); if (single) buf_lit(&b, "venn-circle\">"); else buf_lit(&b, "venn-intersection\">");
             if (single) {
                 buf_lit(&b, "<circle cx=\""); buf_num(&b, X[si]); buf_lit(&b, "\" cy=\""); buf_num(&b, Y[si]); buf_lit(&b, "\" r=\""); buf_num(&b, R[si]);

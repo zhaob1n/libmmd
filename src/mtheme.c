@@ -183,19 +183,35 @@ static Val colour(MTheme t[static 1], bool ok, Str out) {
     if (!ok) { t->ok = false; return VUNDEF; }
     return vstr(out);
 }
-static Val cadjust(MTheme t[static 1], Str c, MCAmounts am) { Str o = {}; return colour(t, t->ok && mc_adjust(t->a, c, am, &o), o); }
-static Val clighten(MTheme t[static 1], Str c, double amt) { Str o = {}; return colour(t, t->ok && mc_lighten(t->a, c, amt, &o), o); }
-static Val cdarken(MTheme t[static 1], Str c, double amt) { Str o = {}; return colour(t, t->ok && mc_darken(t->a, c, amt, &o), o); }
-static Val cinvert(MTheme t[static 1], Str c) { Str o = {}; return colour(t, t->ok && mc_invert(t->a, c, 100, &o), o); }
+static Val text(MTheme t[static 1], MColor m[static 1]) {
+    Str o = arena_strdup(t->a, mc_str(m));
+    return colour(t, o.p, o);
+}
+static bool parse(MTheme t[static 1], Str c, MColor m[static 1]) {
+    if (t->ok && !mc_parse(c, m)) t->ok = false;
+    return t->ok;
+}
+static Val cadjust(MTheme t[static 1], Str c, MCAmounts am) {
+    MColor m;
+    return parse(t, c, &m) ? mc_adjust(&m, am, &m), text(t, &m) : VUNDEF;
+}
+static Val clighten(MTheme t[static 1], Str c, double amt) {
+    MColor m;
+    return parse(t, c, &m) ? mc_lighten(&m, amt, &m), text(t, &m) : VUNDEF;
+}
+static Val cdarken(MTheme t[static 1], Str c, double amt) { return clighten(t, c, -amt); }
+static Val cinvert(MTheme t[static 1], Str c) {
+    MColor m;
+    return parse(t, c, &m) ? mc_invert(&m, 100, &m), text(t, &m) : VUNDEF;
+}
 static Val cis_dark(MTheme t[static 1], Str c) {
-    bool d = false;
-    if (t->ok && !mc_is_dark(c, &d)) t->ok = false;
-    return vbool(d);
+    MColor m;
+    return vbool(parse(t, c, &m) && mc_is_dark(&m));
 }
 static Val crgba(MTheme t[static 1], double r, double g, double b, double a) {
-    Str o = {};
-    mc_rgba(t->a, r, g, b, a, &o);
-    return colour(t, o.p, o);
+    MColor m;
+    mc_rgba(r, g, b, a, &m);
+    return text(t, &m);
 }
 /* theme-helpers.js (gen_mtheme.mjs checks it has not changed) */
 static Val mkborder(MTheme t[static 1], Str c, bool dark) { return cadjust(t, c, (MCAmounts){.mask = 6, .s = -40, .l = dark ? 10 : -10}); }
